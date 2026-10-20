@@ -15,7 +15,7 @@ export interface Session {
   teamId: string | null
 }
 
-export interface Room {
+export interface Group {
   id: string
   name: string
   x: number
@@ -25,12 +25,12 @@ export interface Room {
   waitingNote?: string
 }
 
-/** 팀 = 같은 폴더의 세션 묶음. 방 안의 책상 섬. 소속은 서버가 cwd 로 판정해 Session.teamId 로 준다 */
+/** 팀 = 같은 폴더의 세션 묶음. 그룹 안의 책상 섬. 소속은 서버가 cwd 로 판정해 Session.teamId 로 준다 */
 export interface Team {
   id: string
   name: string
   cwd: string
-  roomId: string
+  groupId: string
   /** 섬 앵커 (타일) */
   x: number
   y: number
@@ -41,7 +41,7 @@ export interface Team {
 }
 
 export interface Office {
-  rooms: Room[]
+  groups: Group[]
   teams: Team[]
 }
 

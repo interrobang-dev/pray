@@ -3,7 +3,7 @@ import { Terminal } from './Terminal'
 import { Chat } from './Chat'
 import { Office } from './Office'
 import { UsagePanel } from './UsagePanel'
-import { statusLabel, type Office as OfficeData, type Room, type Session, type Team } from './types'
+import { statusLabel, type Office as OfficeData, type Group, type Session, type Team } from './types'
 import { avatarOf, cssColor } from './avatar'
 
 interface Snapshot {
@@ -11,7 +11,7 @@ interface Snapshot {
   sessions: Session[]
 }
 
-const EMPTY_OFFICE: OfficeData = { rooms: [{ id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }], teams: [] }
+const EMPTY_OFFICE: OfficeData = { groups: [{ id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }], teams: [] }
 
 
 function formatTime(iso: string | null): string {
@@ -77,7 +77,7 @@ export function App() {
   async function createTeam(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const response = await postJson('/api/team', 'POST', { name: form.get('name'), cwd: form.get('cwd'), roomId: form.get('roomId') })
+    const response = await postJson('/api/team', 'POST', { name: form.get('name'), cwd: form.get('cwd'), groupId: form.get('groupId') })
     if (!response.ok) {
       alert((await response.json()).message ?? '팀 생성 실패')
       return
@@ -97,20 +97,20 @@ export function App() {
     }
   }
 
-  function addRoom() {
-    const name = prompt('방(업무) 이름')
-    if (name?.trim()) void postJson('/api/rooms', 'POST', { name })
+  function addGroup() {
+    const name = prompt('그룹 이름')
+    if (name?.trim()) void postJson('/api/groups', 'POST', { name })
   }
 
-  function editRoom(room: Room) {
-    const waitingNote = prompt(`"${room.name}" 대기 메모 (비우면 삭제)`, room.waitingNote ?? '')
+  function editGroup(group: Group) {
+    const waitingNote = prompt(`"${group.name}" 대기 메모 (비우면 삭제)`, group.waitingNote ?? '')
     if (waitingNote === null) return
-    void postJson(`/api/rooms/${room.id}`, 'PATCH', { waitingNote })
+    void postJson(`/api/groups/${group.id}`, 'PATCH', { waitingNote })
   }
 
-  function updateRoomBounds(roomId: string, bounds: Pick<Room, 'x' | 'y' | 'w' | 'h'>) {
-    setOffice((prev) => ({ ...prev, rooms: prev.rooms.map((r) => (r.id === roomId ? { ...r, ...bounds } : r)) }))
-    void postJson(`/api/rooms/${roomId}`, 'PATCH', bounds)
+  function updateGroupBounds(groupId: string, bounds: Pick<Group, 'x' | 'y' | 'w' | 'h'>) {
+    setOffice((prev) => ({ ...prev, groups: prev.groups.map((r) => (r.id === groupId ? { ...r, ...bounds } : r)) }))
+    void postJson(`/api/groups/${groupId}`, 'PATCH', bounds)
   }
 
   function patchTeam(teamId: string, patch: Partial<Team>) {
@@ -123,7 +123,7 @@ export function App() {
     void postJson(`/api/team/${teamId}/desks/${sessionId}`, 'PUT', desk)
   }
 
-  function moveTeam(teamId: string, anchor: { roomId: string; x: number; y: number }) {
+  function moveTeam(teamId: string, anchor: { groupId: string; x: number; y: number }) {
     patchTeam(teamId, anchor)
     void postJson(`/api/team/${teamId}`, 'PATCH', anchor)
   }
@@ -169,16 +169,16 @@ export function App() {
             + 새 세션
           </button>
           <button onClick={() => setIsCreatingTeam(true)}>+ 팀</button>
-          <button onClick={addRoom}>+ 방</button>
+          <button onClick={addGroup}>+ 그룹</button>
         </div>
         {isCreatingTeam && (
           <form className="create" onSubmit={createTeam}>
             <input name="name" placeholder="팀 이름" required autoFocus />
             <input name="cwd" placeholder="작업 폴더 (예: D:\workspace\foo). 이 폴더의 세션이 팀이 됨" required />
-            <select name="roomId" defaultValue={office.rooms[0]?.id}>
-              {office.rooms.map((room) => (
-                <option key={room.id} value={room.id}>
-                  방: {room.name}
+            <select name="groupId" defaultValue={office.groups[0]?.id}>
+              {office.groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  그룹: {group.name}
                 </option>
               ))}
             </select>
@@ -257,8 +257,8 @@ export function App() {
         onMoveDesk={moveDesk}
         onMoveTeam={moveTeam}
         onEditTeam={editTeam}
-        onEditRoom={editRoom}
-        onUpdateRoomBounds={updateRoomBounds}
+        onEditGroup={editGroup}
+        onUpdateGroupBounds={updateGroupBounds}
       />
       {selected && (
         <section className="panel">

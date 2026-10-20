@@ -1,10 +1,10 @@
-/** 팀 = 같은 작업 폴더를 쓰는 세션 묶음. 방 안의 책상 섬. 세션의 소속은 저장하지 않고 cwd 로 판정한다 */
+/** 팀 = 같은 작업 폴더를 쓰는 세션 묶음. 그룹 안의 책상 섬. 세션의 소속은 저장하지 않고 cwd 로 판정한다 */
 export interface Team {
   id: string
   name: string
   /** 팀의 키. normalizeCwd 로 비교한다 */
   cwd: string
-  roomId: string
+  groupId: string
   /** 섬 앵커 (타일, 절대 좌표) */
   x: number
   y: number

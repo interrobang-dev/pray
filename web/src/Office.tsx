@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js'
-import type { Office as OfficeData, Room, Session, Team } from './types'
+import type { Office as OfficeData, Group, Session, Team } from './types'
 import { avatarOf, type Avatar } from './avatar'
 
 /**
@@ -10,14 +10,14 @@ import { avatarOf, type Avatar } from './avatar'
 const SCALE = 2
 const TILE = 16
 const WALL_H = 40
-/** 방·책상 원점. 바닥 격자가 x=0, y=WALL_H 부터 TILE 간격이라 둘 다 TILE 배수여야 격자선과 맞는다 */
+/** 그룹·책상 원점. 바닥 격자가 x=0, y=WALL_H 부터 TILE 간격이라 둘 다 TILE 배수여야 격자선과 맞는다 */
 const PAD_X = TILE
 const PAD_Y = WALL_H + TILE
 const SEAT_STEP = 3
 /** 책상 footprint (타일). 책상 그림 32x48px 가 이 칸에 꼭 맞는다 */
 const DESK_TILES_W = 2
 const DESK_TILES_H = 3
-const MIN_ROOM_SIZE = 4
+const MIN_GROUP_SIZE = 4
 
 const COLOR = {
   floor: 0xdcdde6,
@@ -61,10 +61,10 @@ interface Props {
   /** 팀 책상을 끌어 놓음. 앵커 기준 오프셋 */
   onMoveDesk: (teamId: string, sessionId: string, desk: { dx: number; dy: number }) => void
   /** 팀 섬을 끌어 놓음 */
-  onMoveTeam: (teamId: string, anchor: { roomId: string; x: number; y: number }) => void
+  onMoveTeam: (teamId: string, anchor: { groupId: string; x: number; y: number }) => void
   onEditTeam: (team: Team) => void
-  onEditRoom: (room: Room) => void
-  onUpdateRoomBounds: (roomId: string, bounds: Pick<Room, 'x' | 'y' | 'w' | 'h'>) => void
+  onEditGroup: (group: Group) => void
+  onUpdateGroupBounds: (groupId: string, bounds: Pick<Group, 'x' | 'y' | 'w' | 'h'>) => void
 }
 
 function label(text: string, size: number, color = COLOR.text, wrapWidth?: number): Text {
@@ -81,8 +81,8 @@ function label(text: string, size: number, color = COLOR.text, wrapWidth?: numbe
   })
 }
 
-function roomAt(rooms: Room[], tileX: number, tileY: number): Room | null {
-  return rooms.find((r) => tileX >= r.x && tileX < r.x + r.w && tileY >= r.y && tileY < r.y + r.h) ?? null
+function groupAt(groups: Group[], tileX: number, tileY: number): Group | null {
+  return groups.find((r) => tileX >= r.x && tileX < r.x + r.w && tileY >= r.y && tileY < r.y + r.h) ?? null
 }
 
 /** 책상 위치 (타일, 절대 좌표) */
@@ -104,9 +104,9 @@ interface Island {
 const ZONE_COLUMNS = 2
 const ZONE_W = 1 + ZONE_COLUMNS * SEAT_STEP + 1
 
-function externalZone(office: OfficeData, count: number): Room {
-  const x = Math.max(...office.rooms.map((r) => r.x + r.w)) + 1
-  const tallest = Math.max(...office.rooms.map((r) => r.y + r.h))
+function externalZone(office: OfficeData, count: number): Group {
+  const x = Math.max(...office.groups.map((r) => r.x + r.w)) + 1
+  const tallest = Math.max(...office.groups.map((r) => r.y + r.h))
   const rows = Math.max(1, Math.ceil(count / ZONE_COLUMNS))
   return { id: 'external', name: '파견 (터미널·IDE)', x, y: 0, w: ZONE_W, h: Math.max(tallest, rows * SEAT_STEP + 2) }
 }
@@ -115,7 +115,7 @@ function externalZone(office: OfficeData, count: number): Room {
  * 팀 세션: 앵커 + 저장된 오프셋, 없으면 섬 안 2열 자동 정렬.
  * 팀 없는 웹 세션: 로비 빈 칸. 팀 없는 외부 세션: 파견 구역.
  */
-function placeAll(office: OfficeData, sessions: Session[], zone: Room): { seats: Map<string, Placement>; islands: Island[] } {
+function placeAll(office: OfficeData, sessions: Session[], zone: Group): { seats: Map<string, Placement>; islands: Island[] } {
   const seats = new Map<string, Placement>()
   const taken = new Set<string>()
   const occupy = (p: Placement) => taken.add(`${p.x},${p.y}`)
@@ -152,7 +152,7 @@ function placeAll(office: OfficeData, sessions: Session[], zone: Room): { seats:
     islands.push({ team, x: minX - 1, y: minY - 1, w: maxX - minX + 2, h: maxY - minY + 2 })
   }
 
-  const lobby = office.rooms[0]
+  const lobby = office.groups[0]
   for (const session of sessions) {
     if (seats.has(session.id) || session.teamId || session.kind !== 'web') continue
     let p: Placement | null = null
@@ -245,21 +245,21 @@ function drawPlant(x: number, y: number, isLarge: boolean): Graphics {
   return g
 }
 
-// ---------- 방 ----------
+// ---------- 그룹 ----------
 
-interface RoomParts {
+interface GroupParts {
   container: Container
-  /** 끌면 방 이동 */
+  /** 끌면 그룹 이동 */
   sign: Graphics
   /** 끌면 크기 조절 */
   handle: Graphics
 }
 
-function drawRoom(room: Room, onEdit: () => void): RoomParts {
+function drawGroup(group: Group, onEdit: () => void): GroupParts {
   const container = new Container()
-  container.position.set(PAD_X + room.x * TILE, PAD_Y + room.y * TILE)
-  const w = room.w * TILE
-  const h = room.h * TILE
+  container.position.set(PAD_X + group.x * TILE, PAD_Y + group.y * TILE)
+  const w = group.w * TILE
+  const h = group.h * TILE
   const g = new Graphics()
   g.rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.25 })
   g.rect(0, 0, w, 3).fill(COLOR.partition).rect(0, 3, w, 1).fill(COLOR.partitionShadow)
@@ -268,7 +268,7 @@ function drawRoom(room: Room, onEdit: () => void): RoomParts {
   g.rect(0, h - 4, w, 2).fill(COLOR.partition).rect(0, h - 2, w, 2).fill(COLOR.green)
   container.addChild(g)
 
-  const name = label(room.name, 7)
+  const name = label(group.name, 7)
   const sign = new Graphics().rect(0, 0, name.width + 8, 11).fill(COLOR.partition).rect(0, 10, name.width + 8, 1).fill(COLOR.green)
   sign.position.set(6, 5)
   name.position.set(10, 6)
@@ -287,8 +287,8 @@ function drawRoom(room: Room, onEdit: () => void): RoomParts {
   handle.cursor = 'nwse-resize'
   container.addChild(handle)
 
-  if (room.waitingNote) {
-    const text = label(room.waitingNote, 6, COLOR.text, 70)
+  if (group.waitingNote) {
+    const text = label(group.waitingNote, 6, COLOR.text, 70)
     const note = new Graphics().rect(0, 0, text.width + 6, text.height + 5).fill(COLOR.postit)
     note.rect(0, 0, text.width + 6, 1).fill(0xe8cf4e)
     const x = w - 24 - text.width - 6
@@ -304,7 +304,7 @@ function drawRoom(room: Room, onEdit: () => void): RoomParts {
   return { container, sign, handle }
 }
 
-function drawZone(zone: Room): Container {
+function drawZone(zone: Group): Container {
   const container = new Container()
   container.position.set(PAD_X + zone.x * TILE, PAD_Y + zone.y * TILE)
   const w = zone.w * TILE
@@ -586,15 +586,15 @@ export function Office(props: Props) {
           islandBase: { x: number; y: number }
           deskBases: { container: Container; x: number; y: number }[]
         } | null = null
-        // 방 이동(이름표)·크기 조절(모서리 핸들). 끄는 동안 타일 단위로 방을 다시 그린다
-        let roomDrag: {
-          room: Room
+        // 그룹 이동(이름표)·크기 조절(모서리 핸들). 끄는 동안 타일 단위로 그룹을 다시 그린다
+        let groupDrag: {
+          group: Group
           mode: 'move' | 'resize'
           start: { x: number; y: number }
-          current: Pick<Room, 'x' | 'y' | 'w' | 'h'>
+          current: Pick<Group, 'x' | 'y' | 'w' | 'h'>
           isMoved: boolean
         } | null = null
-        const roomViews = new Map<string, RoomParts>()
+        const groupViews = new Map<string, GroupParts>()
 
         /** 화면 좌표 → world 아트 픽셀 */
         const toWorld = (event: FederatedPointerEvent) => ({
@@ -621,36 +621,36 @@ export function Office(props: Props) {
         removeWheel = () => host.removeEventListener('wheel', onWheel)
 
         const redraw = () => {
-          const { office, sessions, selectedId, onSelect, onEditRoom } = latest.current
+          const { office, sessions, selectedId, onSelect, onEditGroup } = latest.current
           world.removeChildren()
           desks.clear()
-          roomViews.clear()
+          groupViews.clear()
           working.clear()
           const alive = sessions.filter((s) => s.isAlive)
           const zone = externalZone(office, alive.filter((s) => s.kind === 'external').length)
           content.w = PAD_X * 2 + (zone.x + zone.w) * TILE
-          content.h = PAD_Y + 16 + Math.max(zone.y + zone.h, ...office.rooms.map((r) => r.y + r.h)) * TILE
+          content.h = PAD_Y + 16 + Math.max(zone.y + zone.h, ...office.groups.map((r) => r.y + r.h)) * TILE
           const bgW = Math.max(content.w, Math.ceil(app.screen.width / SCALE))
           const bgH = Math.max(content.h, Math.ceil(app.screen.height / SCALE))
           world.addChild(drawBackground(bgW, bgH))
-          for (const room of office.rooms) {
-            const parts = drawRoom(room, () => {
-              if (!roomDrag?.isMoved) onEditRoom(room)
+          for (const group of office.groups) {
+            const parts = drawGroup(group, () => {
+              if (!groupDrag?.isMoved) onEditGroup(group)
             })
-            const beginRoomDrag = (mode: 'move' | 'resize') => (event: FederatedPointerEvent) => {
+            const beginGroupDrag = (mode: 'move' | 'resize') => (event: FederatedPointerEvent) => {
               event.stopPropagation()
-              roomDrag = {
-                room,
+              groupDrag = {
+                group,
                 mode,
                 start: toWorld(event),
-                current: { x: room.x, y: room.y, w: room.w, h: room.h },
+                current: { x: group.x, y: group.y, w: group.w, h: group.h },
                 isMoved: false,
               }
             }
-            parts.sign.on('pointerdown', beginRoomDrag('move'))
-            parts.handle.on('pointerdown', beginRoomDrag('resize'))
+            parts.sign.on('pointerdown', beginGroupDrag('move'))
+            parts.handle.on('pointerdown', beginGroupDrag('resize'))
             world.addChild(parts.container)
-            roomViews.set(room.id, parts)
+            groupViews.set(group.id, parts)
           }
           world.addChild(drawZone(zone))
           clampPan()
@@ -710,32 +710,32 @@ export function Office(props: Props) {
         redrawRef.current = redraw
         app.renderer.on('resize', redraw)
 
-        /** 끄는 동안 방을 임시 크기·위치로 다시 그린다 (저장 전 미리보기) */
-        const previewRoom = () => {
-          if (!roomDrag) return
-          const view = roomViews.get(roomDrag.room.id)
+        /** 끄는 동안 그룹을 임시 크기·위치로 다시 그린다 (저장 전 미리보기) */
+        const previewGroup = () => {
+          if (!groupDrag) return
+          const view = groupViews.get(groupDrag.group.id)
           if (!view) return
-          const parts = drawRoom({ ...roomDrag.room, ...roomDrag.current }, () => {})
+          const parts = drawGroup({ ...groupDrag.group, ...groupDrag.current }, () => {})
           const index = world.getChildIndex(view.container)
           world.removeChildAt(index)
           world.addChildAt(parts.container, index)
-          roomViews.set(roomDrag.room.id, parts)
+          groupViews.set(groupDrag.group.id, parts)
         }
 
         app.stage.on('pointermove', (event: FederatedPointerEvent) => {
-          if (roomDrag) {
+          if (groupDrag) {
             const point = toWorld(event)
-            const dx = Math.round((point.x - roomDrag.start.x) / TILE)
-            const dy = Math.round((point.y - roomDrag.start.y) / TILE)
-            const { room, current } = roomDrag
+            const dx = Math.round((point.x - groupDrag.start.x) / TILE)
+            const dy = Math.round((point.y - groupDrag.start.y) / TILE)
+            const { group, current } = groupDrag
             const next =
-              roomDrag.mode === 'move'
-                ? { x: Math.max(0, room.x + dx), y: Math.max(0, room.y + dy), w: room.w, h: room.h }
-                : { x: room.x, y: room.y, w: Math.max(MIN_ROOM_SIZE, room.w + dx), h: Math.max(MIN_ROOM_SIZE, room.h + dy) }
+              groupDrag.mode === 'move'
+                ? { x: Math.max(0, group.x + dx), y: Math.max(0, group.y + dy), w: group.w, h: group.h }
+                : { x: group.x, y: group.y, w: Math.max(MIN_GROUP_SIZE, group.w + dx), h: Math.max(MIN_GROUP_SIZE, group.h + dy) }
             if (next.x === current.x && next.y === current.y && next.w === current.w && next.h === current.h) return
-            roomDrag.current = next
-            roomDrag.isMoved = true
-            previewRoom()
+            groupDrag.current = next
+            groupDrag.isMoved = true
+            previewGroup()
             return
           }
           if (teamDrag) {
@@ -763,10 +763,10 @@ export function Office(props: Props) {
           }
         })
         const endDrag = () => {
-          if (roomDrag) {
-            const finished = roomDrag
-            roomDrag = null
-            if (finished.isMoved) latest.current.onUpdateRoomBounds(finished.room.id, finished.current)
+          if (groupDrag) {
+            const finished = groupDrag
+            groupDrag = null
+            if (finished.isMoved) latest.current.onUpdateGroupBounds(finished.group.id, finished.current)
             return
           }
           if (teamDrag) {
@@ -776,8 +776,8 @@ export function Office(props: Props) {
             const { office, onMoveTeam } = latest.current
             const x = finished.team.x + finished.delta.dx
             const y = finished.team.y + finished.delta.dy
-            const room = roomAt(office.rooms, x, y)
-            onMoveTeam(finished.team.id, { roomId: room?.id ?? finished.team.roomId, x, y })
+            const group = groupAt(office.groups, x, y)
+            onMoveTeam(finished.team.id, { groupId: group?.id ?? finished.team.groupId, x, y })
             return
           }
           if (!drag) return

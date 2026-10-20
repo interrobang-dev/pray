@@ -38,7 +38,7 @@
 `hq.json` 의 팀 (`team-folder-design.md` 와 같음). 오케스트레이션이 쓰는 필드는 `id`·`cwd`·`leadSessionId` 뿐이다:
 
 ```ts
-teams: [{ id, name, cwd, roomId, x, y, leadSessionId?, desks, createdAt }]
+teams: [{ id, name, cwd, groupId, x, y, leadSessionId?, desks, createdAt }]
 ```
 
 서버 메모리 (재시작 시 초기화. 훅 상태와 같은 수명):

@@ -10,7 +10,7 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 | 핵심 목적 | 세션 관제판 |
 | 실행 환경 | Windows PC (이 PC) |
 | 세션 범위 | 웹 세션은 조작, 외부 세션은 훅 관찰만 |
-| 메인 화면 | 픽셀 가상 사무실 (방=업무, 책상=세션) |
+| 메인 화면 | 픽셀 가상 사무실 (그룹=업무, 책상=세션) |
 | 스택 | Node 서버 + React/Vite + 브라우저. PixiJS, xterm.js, node-pty |
 | MVP | 픽셀 사무실, 채팅 뷰, 세션 유지, 원격 접속(메일 인증) |
 | 세션 유지 | 서버와 세션 호스트 분리 (named pipe) |
@@ -40,8 +40,8 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 ```ts
 // hq.json
 {
-  rooms: [{ id, name, x, y, w, h, waitingNote? }],   // 방 = 업무
-  seats: { [sessionId]: { roomId, x, y, label? } },    // 책상 위치, 별명
+  groups: [{ id, name, x, y, w, h, waitingNote? }],   // 그룹 = 업무
+  seats: { [sessionId]: { groupId, x, y, label? } },    // 책상 위치, 별명
   webSessions: [{ sessionId, cwd, createdAt }],         // 재부팅 후 resume 목록
 }
 ```
@@ -53,7 +53,7 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 | id, cwd, 마지막 메시지 시각 | `~/.claude/projects/<cwd>/<id>.jsonl` |
 | status: working / my-turn / needs-approval / idle | 훅 이벤트 파일 (UserPromptSubmit→working, Stop→my-turn, PreToolUse 승인 대기→needs-approval, 무이벤트→idle) |
 | kind: web / external | 호스트 pty 목록에 있으면 web |
-| roomId, 좌표 | hq.json seats. 없으면 로비에 자동 배치 |
+| groupId, 좌표 | hq.json seats. 없으면 로비에 자동 배치 |
 
 - 훅 이벤트 파일: `~/.claude/jk-corp/hooks/<sessionId>.json`에 마지막 이벤트 하나만 덮어씀. 서버가 `fs.watch`로 감시해 SSE 전파
 - 대화 메시지: jsonl → `{ role, text, toolUses[], timestamp }` 정규화. 채팅 뷰 전용
@@ -89,12 +89,12 @@ pipe 프로토콜(JSON 라인):
 레이아웃: 좌측 사무실(PixiJS), 우측 패널(대화 탭 / 터미널 탭. 터미널은 웹 세션만).
 
 픽셀 사무실:
-- 32px 타일. 방은 사각형 + 이름표. 책상 + 캐릭터 = 세션
+- 32px 타일. 그룹은 사각형 + 이름표. 책상 + 캐릭터 = 세션
 - 상태: working 타자 애니메이션, my-turn 손 들기 + 말풍선(마지막 assistant 메시지 첫 줄), needs-approval 빨간 느낌표, idle 기댐
 - 외부 세션은 회색 계열 캐릭터
-- 드래그 → `PATCH /api/seats/:id`. 방 밖은 로비
-- 방 상단 `waitingNote` 포스트잇, 더블클릭 편집
-- 클릭 = 세션 선택. 빈 책상(+) 클릭 = 새 세션 다이얼로그(폴더·방·첫 지시)
+- 드래그 → `PATCH /api/seats/:id`. 그룹 밖은 로비
+- 그룹 상단 `waitingNote` 포스트잇, 더블클릭 편집
+- 클릭 = 세션 선택. 빈 책상(+) 클릭 = 새 세션 다이얼로그(폴더·그룹·첫 지시)
 - 캐릭터 외형은 세션 ID 해시로 고정
 
 채팅 뷰:
@@ -124,6 +124,6 @@ pipe 프로토콜(JSON 라인):
 1. 훅 6개 + 서버: 외부 세션 읽기 전용 목록 → 데이터 소스 검증
 2. 세션 호스트 + 터미널 탭: 웹 세션 생성·입력·서버 재시작 생존
 3. 채팅 뷰 + 승인 버튼
-4. 픽셀 사무실(방·책상·상태·드래그)
+4. 픽셀 사무실(그룹·책상·상태·드래그)
 5. 재부팅 resume + 작업 스케줄러 등록
 6. 메일 로그인

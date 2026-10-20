@@ -1,10 +1,10 @@
-# 방 → 팀 → 세션 구조 개편 설계
+# 그룹 → 팀 → 세션 구조 개편 설계
 
-방은 그래픽 공간일 뿐이고, 그 안에 **같은 작업 폴더를 쓰는 세션을 묶는 팀**이 있고, 팀 안에 세션(직원)이 있다. `2026-10-20-team-orchestration-design.md` 의 "팀장 + 명시적 팀원 목록" 을 이 구조로 흡수한다.
+그룹은 그래픽 공간일 뿐이고, 그 안에 **같은 작업 폴더를 쓰는 세션을 묶는 팀**이 있고, 팀 안에 세션(직원)이 있다. `2026-10-20-team-orchestration-design.md` 의 "팀장 + 명시적 팀원 목록" 을 이 구조로 흡수한다.
 
 ```
-방 (그래픽 공간)
- └─ 팀 (폴더 = 팀의 키. 방 안의 섬)
+그룹 (그래픽 공간)
+ └─ 팀 (폴더 = 팀의 키. 그룹 안의 섬)
      └─ 세션 = 직원 (책상)
 ```
 
@@ -24,9 +24,9 @@
 ## 1. 데이터 모델 (`hq.json`)
 
 ```ts
-rooms: [{ id, name, x, y, w, h, waitingNote? }]        // 그래픽 공간만
+groups: [{ id, name, x, y, w, h, waitingNote? }]        // 그래픽 공간만
 teams: [{
-  id, name, cwd, roomId, x, y,                         // 섬 앵커 (타일, 절대 좌표)
+  id, name, cwd, groupId, x, y,                         // 섬 앵커 (타일, 절대 좌표)
   leadSessionId?: string,
   desks: { [sessionId]: { dx, dy } },                  // 앵커 기준 오프셋. 끌어 놓았을 때만 저장
   createdAt
@@ -39,12 +39,12 @@ webSessions: [{ sessionId, cwd, createdAt, extraArgs? }]
 ## 2. 화면
 
 - 팀 섬 = 앵커 + 책상들의 경계 상자 + 1타일 여백. 연한 바닥색·점선 테두리, 왼쪽 위 팀 이름표 (폴더는 툴팁)
-- 이름표 드래그 = 섬 전체 이동. 다른 방 위에 놓으면 `roomId` 변경
+- 이름표 드래그 = 섬 전체 이동. 다른 그룹 위에 놓으면 `groupId` 변경
 - 책상 드래그 = `desks[sessionId]` 오프셋 저장. 섬 밖으로 끌어도 팀은 안 바뀌고 섬 경계가 늘어난다. 외부 세션 책상은 드래그 불가
 - 자리 없는 세션은 2열 자동 정렬 (저장 안 함)
 - 팀장 책상 금색 명패. 팀 섬 더블클릭 = 이름 변경·팀장 해제·삭제 (`prompt`). 팀 삭제는 세션을 죽이지 않는다
 - 목록은 팀별 그룹 + 무소속 + 파견
-- 방은 그대로 (이름표 끌기 이동, 핸들 크기 조절, 대기 메모)
+- 그룹은 그대로 (이름표 끌기 이동, 핸들 크기 조절, 대기 메모)
 
 ## 3. 오케스트레이션 매핑
 
@@ -57,9 +57,9 @@ webSessions: [{ sessionId, cwd, createdAt, extraArgs? }]
 
 | 메서드 | 경로 | 하는 일 |
 |---|---|---|
-| `GET` | `/api/office` | `{ rooms, teams }` |
-| `POST` | `/api/team` | `{ name, cwd, roomId? }`. 로비(또는 지정 방) 빈 자리에 앵커. 같은 cwd 면 409 |
-| `PATCH` | `/api/team/:id` | `{ name?, roomId?, x?, y?, leadSessionId?: string \| null }` |
+| `GET` | `/api/office` | `{ groups, teams }` |
+| `POST` | `/api/team` | `{ name, cwd, groupId? }`. 로비(또는 지정 그룹) 빈 자리에 앵커. 같은 cwd 면 409 |
+| `PATCH` | `/api/team/:id` | `{ name?, groupId?, x?, y?, leadSessionId?: string \| null }` |
 | `DELETE` | `/api/team/:id` | 팀 기록 삭제 |
 | `PUT` | `/api/team/:id/desks/:sessionId` | `{ dx, dy }` |
 | `POST` | `/api/team/:id/members` | `{ name, instruction? }` |
@@ -76,4 +76,4 @@ webSessions: [{ sessionId, cwd, createdAt, extraArgs? }]
 
 ## 버리는 것
 
-`seats`, `teams.members`, `addTeamMember`/`removeTeamMember`, "모든 외부 세션은 파견 구역" 규칙, 팀원의 "팀장 방 자동 배치".
+`seats`, `teams.members`, `addTeamMember`/`removeTeamMember`, "모든 외부 세션은 파견 구역" 규칙, 팀원의 "팀장 그룹 자동 배치".

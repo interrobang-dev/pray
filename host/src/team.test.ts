@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeCwd, roleOf, teamOf, type Team } from './team.js'
 
-const team: Team = { id: 't1', name: '개발', cwd: 'D:\\workspace\\foo', roomId: 'lobby', x: 1, y: 1, desks: {}, createdAt: '' }
+const team: Team = { id: 't1', name: '개발', cwd: 'D:\\workspace\\foo', groupId: 'lobby', x: 1, y: 1, desks: {}, createdAt: '' }
 
 describe('normalizeCwd', () => {
   it('ignores case, separators and trailing slash', () => {

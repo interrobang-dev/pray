@@ -14,8 +14,8 @@ export interface WebSessionRecord {
   extraArgs?: string[]
 }
 
-/** 방 = 그래픽 공간. 좌표·크기는 타일 단위 */
-export interface Room {
+/** 그룹 = 그래픽 공간. 좌표·크기는 타일 단위 */
+export interface Group {
   id: string
   name: string
   x: number
@@ -26,7 +26,7 @@ export interface Room {
 }
 
 export interface Office {
-  rooms: Room[]
+  groups: Group[]
   teams: Team[]
 }
 
@@ -34,7 +34,7 @@ interface HqFile extends Office {
   webSessions: WebSessionRecord[]
 }
 
-const LOBBY: Room = { id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }
+const LOBBY: Group = { id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }
 
 const hqDir = join(homedir(), '.claude', 'jk-corp')
 const hqPath = join(hqDir, 'hq.json')
@@ -46,14 +46,17 @@ function readHq(): HqFile {
   } catch {
     // 파일 없음 → 기본값
   }
-  const rooms = parsed.rooms?.length ? parsed.rooms : [LOBBY]
+  // 구 파일 이전: "방(rooms)" 이 "그룹(groups)" 으로 바뀌었고 seats 는 없어졌다. 읽을 때 옮기고 다음 쓰기 때 새 키로만 저장한다
+  const { rooms: legacyGroups, seats: _legacySeats, ...rest } = parsed as Partial<HqFile> & { rooms?: Group[]; seats?: unknown }
+  const groups = rest.groups?.length ? rest.groups : legacyGroups?.length ? legacyGroups : [LOBBY]
   // 모르는 키도 보존한다. 호스트·서버가 같은 파일을 쓰므로 한쪽이 구버전이어도 다른 쪽 데이터를 지우지 않게
-  return { ...parsed, rooms, webSessions: parsed.webSessions ?? [], teams: (parsed.teams ?? []).map(withDefaults) }
+  return { ...rest, groups, webSessions: rest.webSessions ?? [], teams: (rest.teams ?? []).map(withDefaults) }
 }
 
-/** 구버전 기록(desks 없음 등)을 읽어도 터지지 않게 */
-function withDefaults(team: Partial<Team> & Pick<Team, 'id' | 'name' | 'cwd'>): Team {
-  return { roomId: 'lobby', x: 1, y: 1, desks: {}, createdAt: '', ...team }
+/** 구버전 기록(desks 없음, roomId 등)을 읽어도 터지지 않게 */
+function withDefaults(team: Partial<Team> & Pick<Team, 'id' | 'name' | 'cwd'> & { roomId?: string }): Team {
+  const { roomId, ...rest } = team
+  return { groupId: roomId ?? 'lobby', x: 1, y: 1, desks: {}, createdAt: '', ...rest }
 }
 
 function writeHq(hq: HqFile): void {
@@ -78,41 +81,41 @@ export function removeWebSession(sessionId: string): void {
 }
 
 export function readOffice(): Office {
-  const { rooms, teams } = readHq()
-  return { rooms, teams }
+  const { groups, teams } = readHq()
+  return { groups, teams }
 }
 
-// ---------- 방 ----------
+// ---------- 그룹 ----------
 
-/** 기존 방들의 오른쪽 끝 옆에 새 방을 둔다 */
-export function addRoom(name: string): Room {
+/** 기존 그룹들의 오른쪽 끝 옆에 새 그룹을 둔다 */
+export function addGroup(name: string): Group {
   const hq = readHq()
-  const rightEdge = Math.max(...hq.rooms.map((r) => r.x + r.w))
-  const room: Room = { id: randomUUID().slice(0, 8), name, x: rightEdge + 1, y: 0, w: 10, h: 8 }
-  hq.rooms.push(room)
+  const rightEdge = Math.max(...hq.groups.map((r) => r.x + r.w))
+  const group: Group = { id: randomUUID().slice(0, 8), name, x: rightEdge + 1, y: 0, w: 10, h: 8 }
+  hq.groups.push(group)
   writeHq(hq)
-  return room
+  return group
 }
 
-export const MIN_ROOM_SIZE = 4
+export const MIN_GROUP_SIZE = 4
 
 function isTile(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0
 }
 
-/** 이름·메모·위치·크기 변경. 위치는 0 이상, 크기는 MIN_ROOM_SIZE 이상 타일 정수만 받는다 */
-export function updateRoom(id: string, patch: Partial<Omit<Room, 'id'>>): Room | null {
+/** 이름·메모·위치·크기 변경. 위치는 0 이상, 크기는 MIN_GROUP_SIZE 이상 타일 정수만 받는다 */
+export function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>): Group | null {
   const hq = readHq()
-  const room = hq.rooms.find((r) => r.id === id)
-  if (!room) return null
-  if (patch.name !== undefined) room.name = patch.name
-  if (patch.waitingNote !== undefined) room.waitingNote = patch.waitingNote || undefined
-  if (isTile(patch.x)) room.x = patch.x
-  if (isTile(patch.y)) room.y = patch.y
-  if (isTile(patch.w) && patch.w >= MIN_ROOM_SIZE) room.w = patch.w
-  if (isTile(patch.h) && patch.h >= MIN_ROOM_SIZE) room.h = patch.h
+  const group = hq.groups.find((r) => r.id === id)
+  if (!group) return null
+  if (patch.name !== undefined) group.name = patch.name
+  if (patch.waitingNote !== undefined) group.waitingNote = patch.waitingNote || undefined
+  if (isTile(patch.x)) group.x = patch.x
+  if (isTile(patch.y)) group.y = patch.y
+  if (isTile(patch.w) && patch.w >= MIN_GROUP_SIZE) group.w = patch.w
+  if (isTile(patch.h) && patch.h >= MIN_GROUP_SIZE) group.h = patch.h
   writeHq(hq)
-  return room
+  return group
 }
 
 // ---------- 팀 ----------
@@ -127,20 +130,20 @@ export class TeamConflictError extends Error {
   }
 }
 
-/** 방 안의 빈 자리에 앵커를 둔다. 같은 폴더의 팀이 있으면 거부 */
-export function addTeam(input: { name: string; cwd: string; roomId?: string }): Team {
+/** 그룹 안의 빈 자리에 앵커를 둔다. 같은 폴더의 팀이 있으면 거부 */
+export function addTeam(input: { name: string; cwd: string; groupId?: string }): Team {
   const hq = readHq()
   if (hq.teams.some((t) => normalizeCwd(t.cwd) === normalizeCwd(input.cwd))) throw new TeamConflictError(input.cwd)
-  const room = hq.rooms.find((r) => r.id === input.roomId) ?? hq.rooms[0]
-  const siblings = hq.teams.filter((t) => t.roomId === room.id)
-  // 섬 테두리(앵커 -1타일)가 방 벽과 겹치지 않게 +2. 같은 방의 팀들 아래에 둔다. 겹치면 사용자가 끌어 옮긴다
-  const y = siblings.length ? Math.max(...siblings.map((t) => t.y)) + 5 : room.y + 2
+  const group = hq.groups.find((r) => r.id === input.groupId) ?? hq.groups[0]
+  const siblings = hq.teams.filter((t) => t.groupId === group.id)
+  // 섬 테두리(앵커 -1타일)가 그룹 벽과 겹치지 않게 +2. 같은 그룹의 팀들 아래에 둔다. 겹치면 사용자가 끌어 옮긴다
+  const y = siblings.length ? Math.max(...siblings.map((t) => t.y)) + 5 : group.y + 2
   const team: Team = {
     id: randomUUID().slice(0, 8),
     name: input.name,
     cwd: input.cwd,
-    roomId: room.id,
-    x: room.x + 2,
+    groupId: group.id,
+    x: group.x + 2,
     y,
     desks: {},
     createdAt: new Date().toISOString(),
@@ -150,14 +153,14 @@ export function addTeam(input: { name: string; cwd: string; roomId?: string }): 
   return team
 }
 
-export type TeamPatch = Partial<Pick<Team, 'name' | 'roomId' | 'x' | 'y'>> & { leadSessionId?: string | null }
+export type TeamPatch = Partial<Pick<Team, 'name' | 'groupId' | 'x' | 'y'>> & { leadSessionId?: string | null }
 
 export function updateTeam(id: string, patch: TeamPatch): Team | null {
   const hq = readHq()
   const team = hq.teams.find((t) => t.id === id)
   if (!team) return null
   if (patch.name !== undefined && patch.name.trim()) team.name = patch.name.trim()
-  if (patch.roomId !== undefined && hq.rooms.some((r) => r.id === patch.roomId)) team.roomId = patch.roomId
+  if (patch.groupId !== undefined && hq.groups.some((r) => r.id === patch.groupId)) team.groupId = patch.groupId
   if (isTile(patch.x)) team.x = patch.x
   if (isTile(patch.y)) team.y = patch.y
   if (patch.leadSessionId === null) delete team.leadSessionId

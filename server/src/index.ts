@@ -5,16 +5,16 @@ import express from 'express'
 import type { Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
 import {
-  addRoom,
+  addGroup,
   addTeam,
   listTeams,
   readOffice,
   removeTeam,
   setDesk,
   TeamConflictError,
-  updateRoom,
+  updateGroup,
   updateTeam,
-  type Room,
+  type Group,
   type Team,
   type TeamPatch,
 } from '@jk-corp/host/hq'
@@ -270,13 +270,13 @@ async function assignTask(team: Team, sessionId: string, instruction: string, re
 }
 
 app.post('/api/team', (req, res) => {
-  const { name, cwd, roomId } = req.body as { name?: string; cwd?: string; roomId?: string }
+  const { name, cwd, groupId } = req.body as { name?: string; cwd?: string; groupId?: string }
   if (!name?.trim() || !cwd?.trim()) {
     res.status(400).json({ message: 'name, cwd 필요' })
     return
   }
   try {
-    res.json(addTeam({ name: name.trim(), cwd: cwd.trim(), roomId }))
+    res.json(addTeam({ name: name.trim(), cwd: cwd.trim(), groupId }))
   } catch (error) {
     if (error instanceof TeamConflictError) {
       res.status(409).json({ message: error.message })
@@ -414,23 +414,23 @@ app.get('/api/office', (_req, res) => {
   res.json(readOffice())
 })
 
-app.post('/api/rooms', (req, res) => {
+app.post('/api/groups', (req, res) => {
   const { name } = req.body as { name?: string }
   if (!name?.trim()) {
     res.status(400).json({ message: '이름 필요' })
     return
   }
-  res.json(addRoom(name.trim()))
+  res.json(addGroup(name.trim()))
   broadcastOffice()
 })
 
-app.patch('/api/rooms/:id', (req, res) => {
-  const room = updateRoom(req.params.id, req.body as Partial<Omit<Room, 'id'>>)
-  if (!room) {
+app.patch('/api/groups/:id', (req, res) => {
+  const group = updateGroup(req.params.id, req.body as Partial<Omit<Group, 'id'>>)
+  if (!group) {
     res.status(404).end()
     return
   }
-  res.json(room)
+  res.json(group)
   broadcastOffice()
 })
 
