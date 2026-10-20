@@ -50,7 +50,8 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 - `server/src/messages.ts` — jsonl → 채팅 메시지 배열. assistant 는 `message.id` 로 묶고 tool_result 를 tool_use 에 붙인다 (순수 함수)
 - `server/src/transcriptWatcher.ts` — `~/.claude/projects` 재귀 감시 → 전역 SSE `transcript {sessionId}` (300ms 디바운스)
 - `web/src/App.tsx` — 3열: 좌측 세션 목록, 가운데 사무실, 우측 패널 (세션 선택 시. 대화 탭 / 터미널 탭. 터미널은 웹 세션만)
-- `web/src/Office.tsx` — PixiJS 8 캔버스. 방=업무, 책상+캐릭터=살아 있는 세션. 스프라이트 없이 Graphics 로 그린다. 데이터가 바뀌면 전부 지우고 다시 그리고, 손 흔들기·타자 애니메이션만 ticker 로 움직인다
+- `web/src/Office.tsx` — PixiJS 8 캔버스. 방=업무, 책상+캐릭터=살아 있는 세션. 스프라이트 없이 Graphics 로 그린다. **모든 좌표는 아트 픽셀(타일 16px)이고 world 를 2배로 키워** 도트가 선명하다 (화면 타일 32px). 데이터가 바뀌면 전부 지우고 다시 그리고, 손 흔들기·타자 애니메이션만 ticker 로 움직인다. 그리기 함수(`drawFigure`·`drawDesk`·`drawRoom`·`drawPlant`)만 바꾸면 스프라이트로 교체할 수 있게 레이아웃·상태 로직과 분리돼 있다
+- `web/src/avatar.ts` — 세션 ID 해시 → 머리 스타일 6종·머리색·피부·셔츠. 사무실과 목록 아바타 칩이 같이 쓴다. 외부 세션도 색은 같고 **책상 측판·이름표 밑줄이 회색**인 것으로 구분 (캐릭터를 회색으로 하면 사무실이 죽어 보여서 바꿈)
 - `web/src/types.ts` — 서버 응답 타입 (server 쪽과 손으로 맞춘다)
 - `web/src/Chat.tsx` — 말풍선 뷰. 입력칸은 `텍스트` 후 `\r` 을 터미널 입력 API 로 보낸다. 승인 버튼은 Enter(승인)/Esc(거부) 키 전송
 - `web/src/Terminal.tsx` — xterm.js. 출력은 세션별 SSE, 입력·크기는 POST
@@ -70,7 +71,8 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 - **한 번도 대화하지 않은 세션은 resume 이 안 된다** (jsonl 이 없어 "No conversation found" 로 종료 → 기록 자동 삭제). 정상
 - 채팅 뷰는 별도 API 없이 **터미널 키 입력**으로 지시를 보낸다. 슬래시 명령은 자동완성이 Enter 를 먼저 먹어 두 번 눌러야 할 수 있다
 - 사무실 좌표는 타일(32px) 단위. 자리(`seats`)는 책상을 끌어 놓았을 때만 저장되고, 자리 없는 세션은 화면에서 로비 빈 칸에 3타일 간격으로 임시 배치한다 (저장 안 함)
-- 캐릭터 상태 표현: working 타자 애니메이션 + 모니터 켜짐, my-turn 손 들기 + 마지막 말 말풍선, needs-approval 손 들기 + 빨간 말풍선, idle/unknown 반투명, 외부 세션은 회색 계열
+- 캐릭터 상태 표현: working 타자 애니메이션 + 모니터 켜짐(파랑), my-turn 손 들기 + 마지막 말 말풍선, needs-approval 손 들기 + 빨간 말풍선 + 볼 홍조, idle/unknown/ended 눈 감음
+- 화면 테마는 라이트 고정 (`style.css` 의 `:root` 변수. 참고 이미지가 밝은 사무실이라). 터미널 탭만 어둡다. 제목 "jk-corp" 만 Google Fonts `Silkscreen` 도트 폰트, 한글은 시스템 폰트 (한글 도트 폰트가 Google Fonts 에 없음)
 - 방 더블클릭 = 대기 메모 편집(`prompt()`), "+ 방" = 기존 방 오른쪽에 추가. 방 이동·삭제·크기 조절은 없다
 
 ## 화면 확인 방법 (headless)

@@ -6,6 +6,7 @@ import './style.css'
 
 interface Me {
   isAuthenticated: boolean
+  isLocal: boolean
   canLogin: boolean
 }
 

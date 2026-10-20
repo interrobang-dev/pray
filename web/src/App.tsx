@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
 import { Terminal } from './Terminal'
 import { Chat } from './Chat'
 import { Office } from './Office'
 import { statusLabel, type Office as OfficeData, type Room, type Seat, type Session } from './types'
+import { avatarOf, cssColor } from './avatar'
 
 interface Snapshot {
   isHostReachable: boolean
@@ -115,6 +116,13 @@ export function App() {
               className={[session.id === selectedId ? 'selected' : '', session.isAlive ? '' : 'dead'].join(' ')}
               onClick={() => setSelectedId(session.id)}
             >
+              <span
+                className="avatar"
+                style={{
+                  '--hair': cssColor(avatarOf(session.id).hair),
+                  '--skin': cssColor(avatarOf(session.id).skin),
+                } as CSSProperties}
+              />
               <div className="row">
                 <span className={`badge ${session.status}`}>{statusLabel[session.status]}</span>
                 {session.kind === 'web' && <span className="kind">웹</span>}
