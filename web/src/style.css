@@ -630,56 +630,37 @@ header button.icon:hover:not(:disabled) {
   margin: 0;
 }
 
-/* 계정 사용량 (사이드바 하단 고정) */
+/* 계정 사용량 (사이드바 하단 한 줄. 남은 비율만, 리셋 시각은 툴팁) */
 .usage {
   margin-top: auto;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-top: 1px solid var(--line);
   display: flex;
-  flex-direction: column;
-  gap: 7px;
-  font-size: 12px;
-}
-.usage .usage-title {
-  display: flex;
   align-items: center;
+  gap: 4px;
+  font-size: 12px;
   color: var(--muted);
-}
-.usage .usage-title b {
-  color: var(--text);
-  margin-right: auto;
-}
-.usage .usage-title button {
-  padding: 1px 6px;
-  font-size: 11px;
-  color: var(--muted);
+  white-space: nowrap;
 }
 .usage .error {
   color: #b23b3b;
 }
-.usage-limit {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  row-gap: 3px;
+.usage-limit b {
+  color: var(--text);
 }
-.usage-limit .reset {
+.usage-limit i {
+  font-style: normal;
+  margin-right: 4px;
+}
+.usage-limit.warn b {
+  color: #e0a63a;
+}
+.usage-limit.danger b {
+  color: #d6453d;
+}
+.usage button {
+  margin-left: auto;
+  padding: 1px 6px;
+  font-size: 11px;
   color: var(--muted);
-}
-.usage-limit .bar {
-  grid-column: 1 / -1;
-  height: 6px;
-  background: var(--floor);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.usage-limit .bar i {
-  display: block;
-  height: 100%;
-  background: var(--green);
-}
-.usage-limit.warn .bar i {
-  background: #e0a63a;
-}
-.usage-limit.danger .bar i {
-  background: #d6453d;
 }

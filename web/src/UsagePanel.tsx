@@ -44,30 +44,21 @@ export function UsagePanel() {
 
   return (
     <div className="usage">
-      <div className="usage-title">
-        <b>계정 사용량</b>
-        {result?.ok && result.usage.plan && <span>{result.usage.plan}&nbsp;</span>}
-        <button onClick={load} title="새로 고침">
-          ↻
-        </button>
-      </div>
       {result === null && <span>불러오는 중…</span>}
       {result && !result.ok && <span className="error">{result.reason}</span>}
       {result?.ok &&
-        result.usage.limits.map((limit) => {
+        result.usage.limits.map((limit, index) => {
           const remaining = remainingOf(limit)
           return (
-            <div key={limit.label} className={`usage-limit ${levelOf(remaining)}`}>
-              <span>
-                {limit.label} <b>{remaining}%</b> 남음
-              </span>
-              <span className="reset">{remainingLabel(limit.resetsAt, now)}</span>
-              <span className="bar">
-                <i style={{ width: `${remaining}%` }} />
-              </span>
-            </div>
+            <span key={limit.label} className={`usage-limit ${levelOf(remaining)}`} title={remainingLabel(limit.resetsAt, now)}>
+              {index > 0 && <i>·</i>}
+              {limit.label} <b>{remaining}%</b>
+            </span>
           )
         })}
+      <button onClick={load} title="새로 고침">
+        ↻
+      </button>
     </div>
   )
 }
