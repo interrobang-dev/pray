@@ -1,0 +1,73 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+body {
+  margin: 0;
+  padding: 16px;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+h1 {
+  font-size: 18px;
+  margin: 0;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #999;
+}
+.dot.on {
+  background: #2ecc71;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 14px;
+}
+th,
+td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #8884;
+  vertical-align: top;
+}
+tr.dead {
+  opacity: 0.5;
+}
+.cwd,
+.last {
+  font-size: 12px;
+  opacity: 0.8;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #fff;
+  background: #777;
+}
+.badge.working {
+  background: #3498db;
+}
+.badge.my-turn {
+  background: #27ae60;
+}
+.badge.needs-approval {
+  background: #e74c3c;
+}
+.badge.idle {
+  background: #95a5a6;
+}
+.badge.ended {
+  background: #34495e;
+}
