@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js'
-import type { Office as OfficeData, Room, Seat, Session } from './types'
+import type { Office as OfficeData, Room, Session, Team } from './types'
 import { avatarOf, type Avatar } from './avatar'
 
 /**
@@ -58,7 +58,11 @@ interface Props {
   sessions: Session[]
   selectedId: string | null
   onSelect: (sessionId: string) => void
-  onMoveSeat: (sessionId: string, seat: Seat) => void
+  /** 팀 책상을 끌어 놓음. 앵커 기준 오프셋 */
+  onMoveDesk: (teamId: string, sessionId: string, desk: { dx: number; dy: number }) => void
+  /** 팀 섬을 끌어 놓음 */
+  onMoveTeam: (teamId: string, anchor: { roomId: string; x: number; y: number }) => void
+  onEditTeam: (team: Team) => void
   onEditRoom: (room: Room) => void
   onUpdateRoomBounds: (roomId: string, bounds: Pick<Room, 'x' | 'y' | 'w' | 'h'>) => void
 }
@@ -81,7 +85,22 @@ function roomAt(rooms: Room[], tileX: number, tileY: number): Room | null {
   return rooms.find((r) => tileX >= r.x && tileX < r.x + r.w && tileY >= r.y && tileY < r.y + r.h) ?? null
 }
 
-/** 파견 구역: 외부(터미널·IDE) 세션이 모이는 고정 구역. 방들의 오른쪽 끝에 붙는다 */
+/** 책상 위치 (타일, 절대 좌표) */
+interface Placement {
+  x: number
+  y: number
+}
+
+/** 팀 섬 경계 (타일) */
+interface Island {
+  team: Team
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/** 파견 구역: 팀 없는 외부(터미널·IDE) 세션이 모이는 고정 구역. 방들의 오른쪽 끝에 붙는다 */
 const ZONE_COLUMNS = 2
 const ZONE_W = 1 + ZONE_COLUMNS * SEAT_STEP + 1
 
@@ -92,47 +111,73 @@ function externalZone(office: OfficeData, count: number): Room {
   return { id: 'external', name: '파견 (터미널·IDE)', x, y: 0, w: ZONE_W, h: Math.max(tallest, rows * SEAT_STEP + 2) }
 }
 
-/** 웹 세션: 저장된 자리 또는 로비 빈 칸. 외부 세션: 파견 구역에 순서대로 (저장된 자리 무시) */
-function placeAll(office: OfficeData, sessions: Session[], zone: Room): Map<string, Seat> {
-  const seats = new Map<string, Seat>()
+/**
+ * 팀 세션: 앵커 + 저장된 오프셋, 없으면 섬 안 2열 자동 정렬.
+ * 팀 없는 웹 세션: 로비 빈 칸. 팀 없는 외부 세션: 파견 구역.
+ */
+function placeAll(office: OfficeData, sessions: Session[], zone: Room): { seats: Map<string, Placement>; islands: Island[] } {
+  const seats = new Map<string, Placement>()
   const taken = new Set<string>()
-  const externals = sessions.filter((s) => s.kind === 'external')
-  externals.forEach((session, index) => {
+  const occupy = (p: Placement) => taken.add(`${p.x},${p.y}`)
+  const islands: Island[] = []
+
+  for (const team of office.teams) {
+    const members = sessions.filter((s) => s.teamId === team.id)
+    const placed: Placement[] = []
+    for (const session of members) {
+      const desk = team.desks[session.id]
+      if (!desk) continue
+      const p = { x: team.x + desk.dx, y: team.y + desk.dy }
+      seats.set(session.id, p)
+      occupy(p)
+      placed.push(p)
+    }
+    let slot = 0
+    for (const session of members) {
+      if (seats.has(session.id)) continue
+      let p: Placement
+      do {
+        p = { x: team.x + (slot % 2) * SEAT_STEP, y: team.y + Math.floor(slot / 2) * SEAT_STEP }
+        slot += 1
+      } while (taken.has(`${p.x},${p.y}`))
+      seats.set(session.id, p)
+      occupy(p)
+      placed.push(p)
+    }
+    if (placed.length === 0) placed.push({ x: team.x, y: team.y })
+    const minX = Math.min(...placed.map((p) => p.x))
+    const minY = Math.min(...placed.map((p) => p.y))
+    const maxX = Math.max(...placed.map((p) => p.x)) + DESK_TILES_W
+    const maxY = Math.max(...placed.map((p) => p.y)) + DESK_TILES_H
+    islands.push({ team, x: minX - 1, y: minY - 1, w: maxX - minX + 2, h: maxY - minY + 2 })
+  }
+
+  const lobby = office.rooms[0]
+  for (const session of sessions) {
+    if (seats.has(session.id) || session.teamId || session.kind !== 'web') continue
+    let p: Placement | null = null
+    outer: for (let y = lobby.y + 1; y < lobby.y + lobby.h - 1; y += SEAT_STEP) {
+      for (let x = lobby.x + 1; x < lobby.x + lobby.w - 2; x += SEAT_STEP) {
+        if (taken.has(`${x},${y}`)) continue
+        p = { x, y }
+        break outer
+      }
+    }
+    p ??= { x: lobby.x, y: lobby.y }
+    seats.set(session.id, p)
+    occupy(p)
+  }
+
+  let index = 0
+  for (const session of sessions) {
+    if (seats.has(session.id) || session.teamId) continue
     seats.set(session.id, {
-      roomId: zone.id,
       x: zone.x + 1 + (index % ZONE_COLUMNS) * SEAT_STEP,
       y: zone.y + 1 + Math.floor(index / ZONE_COLUMNS) * SEAT_STEP,
     })
-  })
-  const webs = sessions.filter((s) => s.kind === 'web')
-  for (const session of webs) {
-    const seat = office.seats[session.id]
-    if (seat) {
-      seats.set(session.id, seat)
-      taken.add(`${seat.x},${seat.y}`)
-    }
+    index += 1
   }
-  const placeInRoom = (session: Session, room: Room) => {
-    for (let y = room.y + 1; y < room.y + room.h - 1; y += SEAT_STEP) {
-      for (let x = room.x + 1; x < room.x + room.w - 2; x += SEAT_STEP) {
-        if (taken.has(`${x},${y}`)) continue
-        taken.add(`${x},${y}`)
-        seats.set(session.id, { roomId: room.id, x, y })
-        return
-      }
-    }
-    seats.set(session.id, { roomId: room.id, x: room.x, y: room.y })
-  }
-  const lobby = office.rooms[0]
-  // 자리 없는 세션은 로비에. 팀원은 팀장 자리가 정해진 뒤 팀장과 같은 방에 놓이도록 뒤로 미룬다
-  const unplaced = webs.filter((s) => !seats.has(s.id)).sort((a, b) => Number(a.role === 'member') - Number(b.role === 'member'))
-  for (const session of unplaced) {
-    const lead = session.role === 'member' ? webs.find((s) => s.role === 'lead' && s.teamId === session.teamId) : undefined
-    const leadSeat = lead ? seats.get(lead.id) : undefined
-    const room = (leadSeat && office.rooms.find((r) => r.id === leadSeat.roomId)) || lobby
-    placeInRoom(session, room)
-  }
-  return seats
+  return { seats, islands }
 }
 
 // ---------- 배경 ----------
@@ -282,6 +327,37 @@ function drawZone(zone: Room): Container {
   return container
 }
 
+interface IslandParts {
+  container: Container
+  /** 끌면 섬(팀) 이동 */
+  sign: Graphics
+}
+
+/** 팀 섬: 연한 바닥 + 점선 테두리 + 팀 이름표 */
+function drawIsland(island: Island, onEdit: () => void): IslandParts {
+  const container = new Container()
+  container.position.set(PAD_X + island.x * TILE, PAD_Y + island.y * TILE)
+  const w = island.w * TILE
+  const h = island.h * TILE
+  const g = new Graphics()
+  g.rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.4 })
+  for (let x = 0; x < w; x += 4) g.rect(x, 0, 2, 1).fill(COLOR.greenDark).rect(x, h - 1, 2, 1).fill(COLOR.greenDark)
+  for (let y = 0; y < h; y += 4) g.rect(0, y, 1, 2).fill(COLOR.greenDark).rect(w - 1, y, 1, 2).fill(COLOR.greenDark)
+  container.addChild(g)
+  const name = label(island.team.name, 6, COLOR.text)
+  const sign = new Graphics().rect(0, 0, name.width + 6, 9).fill(0xffffff).rect(0, 8, name.width + 6, 1).fill(COLOR.greenDark)
+  sign.position.set(3, 3)
+  name.position.set(6, 4)
+  sign.eventMode = 'static'
+  sign.cursor = 'move'
+  container.addChild(sign, name)
+  container.eventMode = 'static'
+  container.on('pointertap', (event: FederatedPointerEvent) => {
+    if (event.detail === 2) onEdit()
+  })
+  return { container, sign }
+}
+
 // ---------- 캐릭터 ----------
 
 interface Figure {
@@ -372,7 +448,7 @@ interface DeskParts {
 const DESK_W = DESK_TILES_W * TILE
 const DESK_H = DESK_TILES_H * TILE
 
-function drawDesk(session: Session, seat: Seat, isSelected: boolean): DeskParts {
+function drawDesk(session: Session, seat: Placement, isSelected: boolean): DeskParts {
   const container = new Container()
   container.position.set(PAD_X + seat.x * TILE, PAD_Y + seat.y * TILE)
   const avatar = avatarOf(session.id)
@@ -460,11 +536,12 @@ function drawDesk(session: Session, seat: Seat, isSelected: boolean): DeskParts 
 
 // ---------- 컴포넌트 ----------
 
-export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onEditRoom, onUpdateRoomBounds }: Props) {
+export function Office(props: Props) {
+  const { office, sessions, selectedId } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<Application | null>(null)
-  const latest = useRef({ office, sessions, selectedId, onSelect, onMoveSeat, onEditRoom, onUpdateRoomBounds })
-  latest.current = { office, sessions, selectedId, onSelect, onMoveSeat, onEditRoom, onUpdateRoomBounds }
+  const latest = useRef(props)
+  latest.current = props
   const redrawRef = useRef<() => void>(() => {})
 
   useEffect(() => {
@@ -494,9 +571,20 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
 
         let drag: {
           sessionId: string
+          teamId: string
           start: { x: number; y: number }
           offset: { x: number; y: number }
           isMoved: boolean
+        } | null = null
+        // 팀 섬 이동: 섬과 소속 책상을 같이 옮긴다
+        let teamDrag: {
+          team: Team
+          start: { x: number; y: number }
+          delta: { dx: number; dy: number }
+          isMoved: boolean
+          island: Container
+          islandBase: { x: number; y: number }
+          deskBases: { container: Container; x: number; y: number }[]
         } | null = null
         // 방 이동(이름표)·크기 조절(모서리 핸들). 끄는 동안 타일 단위로 방을 다시 그린다
         let roomDrag: {
@@ -566,16 +654,41 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
           }
           world.addChild(drawZone(zone))
           clampPan()
-          const seats = placeAll(office, alive, zone)
+          const { seats, islands } = placeAll(office, alive, zone)
+          for (const island of islands) {
+            const parts = drawIsland(island, () => {
+              if (!teamDrag?.isMoved) latest.current.onEditTeam(island.team)
+            })
+            parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
+              event.stopPropagation()
+              const memberIds = alive.filter((s) => s.teamId === island.team.id).map((s) => s.id)
+              teamDrag = {
+                team: island.team,
+                start: toWorld(event),
+                delta: { dx: 0, dy: 0 },
+                isMoved: false,
+                island: parts.container,
+                islandBase: { x: parts.container.x, y: parts.container.y },
+                deskBases: memberIds
+                  .map((id) => desks.get(id)?.container)
+                  .filter((c): c is Container => Boolean(c))
+                  .map((container) => ({ container, x: container.x, y: container.y })),
+              }
+            })
+            world.addChild(parts.container)
+          }
           // 아래쪽 책상이 위쪽을 가리도록 y 순 정렬
           const ordered = [...alive].sort((a, b) => seats.get(a.id)!.y - seats.get(b.id)!.y)
           for (const session of ordered) {
             const seat = seats.get(session.id)!
             const parts = drawDesk(session, seat, session.id === selectedId)
-            if (session.kind === 'web') {
+            // 팀에 속한 웹 세션만 끌 수 있다 (오프셋을 저장할 곳이 팀이라서)
+            if (session.kind === 'web' && session.teamId) {
+              const teamId = session.teamId
               parts.container.on('pointerdown', (event: FederatedPointerEvent) => {
                 drag = {
                   sessionId: session.id,
+                  teamId,
                   start: { x: event.global.x, y: event.global.y },
                   offset: {
                     x: (event.global.x - world.x) / SCALE - parts.container.x,
@@ -625,6 +738,18 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
             previewRoom()
             return
           }
+          if (teamDrag) {
+            const point = toWorld(event)
+            const dx = Math.round((point.x - teamDrag.start.x) / TILE)
+            const dy = Math.round((point.y - teamDrag.start.y) / TILE)
+            const next = { dx: Math.max(-teamDrag.team.x, dx), dy: Math.max(-teamDrag.team.y, dy) }
+            if (next.dx === teamDrag.delta.dx && next.dy === teamDrag.delta.dy) return
+            teamDrag.delta = next
+            teamDrag.isMoved = true
+            teamDrag.island.position.set(teamDrag.islandBase.x + next.dx * TILE, teamDrag.islandBase.y + next.dy * TILE)
+            for (const desk of teamDrag.deskBases) desk.container.position.set(desk.x + next.dx * TILE, desk.y + next.dy * TILE)
+            return
+          }
           if (!drag) return
           const parts = desks.get(drag.sessionId)
           if (!parts) return
@@ -644,20 +769,29 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
             if (finished.isMoved) latest.current.onUpdateRoomBounds(finished.room.id, finished.current)
             return
           }
+          if (teamDrag) {
+            const finished = teamDrag
+            teamDrag = null
+            if (!finished.isMoved) return
+            const { office, onMoveTeam } = latest.current
+            const x = finished.team.x + finished.delta.dx
+            const y = finished.team.y + finished.delta.dy
+            const room = roomAt(office.rooms, x, y)
+            onMoveTeam(finished.team.id, { roomId: room?.id ?? finished.team.roomId, x, y })
+            return
+          }
           if (!drag) return
           const current = drag
           drag = null
           if (!current.isMoved) return
           const parts = desks.get(current.sessionId)
           if (!parts) return
-          const tileX = Math.round((parts.container.x - PAD_X) / TILE)
-          const tileY = Math.round((parts.container.y - PAD_Y) / TILE)
-          const { office, onMoveSeat } = latest.current
-          const room = roomAt(office.rooms, tileX, tileY) ?? office.rooms[0]
-          // 책상(2x3 타일)이 벽 안쪽 칸에만 놓이게
-          const x = Math.min(Math.max(tileX, room.x + 1), room.x + room.w - 1 - DESK_TILES_W)
-          const y = Math.min(Math.max(tileY, room.y + 1), room.y + room.h - 1 - DESK_TILES_H)
-          onMoveSeat(current.sessionId, { roomId: room.id, x, y })
+          const tileX = Math.max(0, Math.round((parts.container.x - PAD_X) / TILE))
+          const tileY = Math.max(0, Math.round((parts.container.y - PAD_Y) / TILE))
+          const { office, onMoveDesk } = latest.current
+          const team = office.teams.find((t) => t.id === current.teamId)
+          if (!team) return
+          onMoveDesk(team.id, current.sessionId, { dx: tileX - team.x, dy: tileY - team.y })
         }
         app.stage.on('pointerup', endDrag)
         app.stage.on('pointerupoutside', endDrag)

@@ -3,7 +3,7 @@ import { Terminal } from './Terminal'
 import { Chat } from './Chat'
 import { Office } from './Office'
 import { UsagePanel } from './UsagePanel'
-import { statusLabel, type Office as OfficeData, type Room, type Seat, type Session } from './types'
+import { statusLabel, type Office as OfficeData, type Room, type Session, type Team } from './types'
 import { avatarOf, cssColor } from './avatar'
 
 interface Snapshot {
@@ -11,12 +11,8 @@ interface Snapshot {
   sessions: Session[]
 }
 
-const EMPTY_OFFICE: OfficeData = { rooms: [{ id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }], seats: {} }
+const EMPTY_OFFICE: OfficeData = { rooms: [{ id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }], teams: [] }
 
-const GROUPS: { kind: Session['kind']; title: string }[] = [
-  { kind: 'web', title: '직원 (웹 세션)' },
-  { kind: 'external', title: '파견 (터미널·IDE)' },
-]
 
 function formatTime(iso: string | null): string {
   if (!iso) return '-'
@@ -91,9 +87,24 @@ export function App() {
     void postJson(`/api/rooms/${roomId}`, 'PATCH', bounds)
   }
 
-  function moveSeat(sessionId: string, seat: Seat) {
-    setOffice((prev) => ({ ...prev, seats: { ...prev.seats, [sessionId]: seat } }))
-    void postJson(`/api/seats/${sessionId}`, 'PUT', seat)
+  function patchTeam(teamId: string, patch: Partial<Team>) {
+    setOffice((prev) => ({ ...prev, teams: prev.teams.map((t) => (t.id === teamId ? { ...t, ...patch } : t)) }))
+  }
+
+  function moveDesk(teamId: string, sessionId: string, desk: { dx: number; dy: number }) {
+    const team = office.teams.find((t) => t.id === teamId)
+    if (team) patchTeam(teamId, { desks: { ...team.desks, [sessionId]: desk } })
+    void postJson(`/api/team/${teamId}/desks/${sessionId}`, 'PUT', desk)
+  }
+
+  function moveTeam(teamId: string, anchor: { roomId: string; x: number; y: number }) {
+    patchTeam(teamId, anchor)
+    void postJson(`/api/team/${teamId}`, 'PATCH', anchor)
+  }
+
+  function editTeam(team: Team) {
+    const name = prompt(`팀 이름 (폴더: ${team.cwd})`, team.name)
+    if (name?.trim()) void postJson(`/api/team/${team.id}`, 'PATCH', { name: name.trim() })
   }
 
   function renderSession(session: Session) {
@@ -151,16 +162,22 @@ export function App() {
           </form>
         )}
         <ul className="sessions">
-          {GROUPS.map((group) => {
-            const members = snapshot.sessions.filter((s) => s.kind === group.kind)
-            return [
-              <li key={group.kind} className="group">
-                {group.title} {members.length > 0 && <span className="count">{members.length}</span>}
-              </li>,
-              ...members.map(renderSession),
-              ...(members.length === 0 ? [<li key={`${group.kind}-empty`} className="empty">없음</li>] : []),
-            ]
-          })}
+          {[
+            ...office.teams.map((team) => ({
+              key: team.id,
+              title: team.name,
+              hint: team.cwd,
+              members: snapshot.sessions.filter((s) => s.teamId === team.id),
+            })),
+            { key: 'free', title: '무소속 (웹)', hint: '', members: snapshot.sessions.filter((s) => !s.teamId && s.kind === 'web') },
+            { key: 'external', title: '파견 (터미널·IDE)', hint: '', members: snapshot.sessions.filter((s) => !s.teamId && s.kind === 'external') },
+          ].map((group) => [
+            <li key={group.key} className="group" title={group.hint}>
+              {group.title} {group.members.length > 0 && <span className="count">{group.members.length}</span>}
+            </li>,
+            ...group.members.map(renderSession),
+            ...(group.members.length === 0 ? [<li key={`${group.key}-empty`} className="empty">없음</li>] : []),
+          ])}
         </ul>
         <UsagePanel />
       </aside>
@@ -169,7 +186,9 @@ export function App() {
         sessions={snapshot.sessions}
         selectedId={selectedId}
         onSelect={setSelectedId}
-        onMoveSeat={moveSeat}
+        onMoveDesk={moveDesk}
+        onMoveTeam={moveTeam}
+        onEditTeam={editTeam}
         onEditRoom={editRoom}
         onUpdateRoomBounds={updateRoomBounds}
       />

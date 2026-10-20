@@ -41,9 +41,10 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `desktop/src/children.ts` — 자식 프로세스 재시작 정책. `desktop/src/icon.ts` — 이미지 파일 없이 PNG 를 코드로 만든 트레이 아이콘
 - `desktop/tsconfig.json` 은 CommonJS 출력 (Electron main 을 단순하게). 빌드 결과 `desktop/dist/` 는 git 무시
 - `host/src/protocol.ts` — pipe 메시지 타입과 줄 단위 JSON 프레이밍. 서버가 `@jk-corp/host/protocol`로 import
-- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `rooms`·`seats`·`teams` 를 쓴다. 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. **`readHq` 는 모르는 키를 보존한다** — 한쪽 프로세스만 새 코드로 돌 때 다른 쪽 데이터(예: `teams`)가 지워진 적이 있다. 서버가 `@jk-corp/host/hq` 로 import
-- `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 사무실(방·자리) API + 팀 API(`/api/team/*`: 팀 생성·조회·삭제, 팀원 spawn·종료, task 지시·롱폴링 wait)
-- `server/src/lead.ts` — 팀장 세션 지침(`--append-system-prompt`)과 spawn 인자, `--mcp-config` JSON (아래 mcp 를 `node --import <tsx loader> mcp/src/index.ts` 로 띄우고 env 로 팀 ID·서버 주소를 넘김. node 는 서버의 `process.execPath`). `POST /api/sessions` 에 `teamName` 이 있으면 팀을 만들고 이 인자로 띄운다 (웹 "+ 새 세션" 폼의 "팀장으로" 체크)
+- `host/src/team.ts` — `Team` 타입(폴더·방·앵커·책상 오프셋·선택적 팀장)과 순수 함수 `normalizeCwd`·`teamOf`·`roleOf`. 서버가 `@jk-corp/host/team` 으로 import. 설계: `docs/plans/2026-10-20-team-folder-design.md`
+- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `rooms`·`teams` 를 쓴다 (`seats` 는 없어졌다. 책상 위치는 `teams[].desks`). 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. **`readHq` 는 모르는 키를 보존한다** — 한쪽 프로세스만 새 코드로 돌 때 다른 쪽 데이터(예: `teams`)가 지워진 적이 있다. 서버가 `@jk-corp/host/hq` 로 import
+- `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 방 API + 팀 API(`/api/team/*`: 생성(같은 폴더면 409)·조회·수정(이름·방·앵커·팀장)·삭제, 책상 오프셋, 팀 폴더로 팀원 spawn, task 지시·롱폴링 wait). `POST /api/sessions` 는 `cwd` 또는 `teamId`, `isLead` 면 그 팀의 팀장 (살아 있는 팀장이 있으면 409)
+- `server/src/lead.ts` — 팀장 세션 지침(`--append-system-prompt`)과 spawn 인자, `--mcp-config` JSON (아래 mcp 를 `node --import <tsx loader> mcp/src/index.ts` 로 띄우고 env 로 팀 ID·서버 주소를 넘김. node 는 서버의 `process.execPath`)
 - `mcp/src/index.ts` — 팀장 claude 에 붙는 stdio MCP 서버. 도구 `jk_spawn_member`·`jk_assign`·`jk_wait`·`jk_status`·`jk_dismiss` 가 서버 `/api/team/*` 를 호출한다 (`mcp/src/teamApi.ts`, fetch 주입). `jk_wait` 기본 120초 — 시간 안에 안 끝나면 null 을 주고 팀장이 다시 부른다
 - `server/src/teamState.ts` — 팀장이 팀원에게 준 task 의 상태 기계 (순수, 시계 주입). assign → running → Stop 훅이면 done(result = last_assistant_message), 5초 안에 UserPromptSubmit 이 안 오거나 세션이 exit 하면 failed. 같은 팀원에 running 이 있으면 assign 거부(409). 설계: `docs/plans/2026-10-20-team-orchestration-design.md`
 - `server/src/hostClient.ts` — pipe 클라이언트. 끊기면 3초마다 재연결
@@ -57,7 +58,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/transcript.ts` — jsonl → 제목·마지막 시각·마지막 assistant 텍스트 (순수 함수)
 - `server/src/messages.ts` — jsonl → 채팅 메시지 배열. assistant 는 `message.id` 로 묶고 tool_result 를 tool_use 에 붙인다 (순수 함수)
 - `server/src/transcriptWatcher.ts` — `~/.claude/projects` 재귀 감시 → 전역 SSE `transcript {sessionId}` (300ms 디바운스)
-- `web/src/App.tsx` — 3열: 좌측 세션 목록, 가운데 사무실, 우측 패널 (세션 선택 시. 대화 탭 / 터미널 탭. 터미널은 웹 세션만)
+- `web/src/App.tsx` — 3열: 좌측 세션 목록(팀별 그룹 → 무소속(웹) → 파견), 가운데 사무실, 우측 패널 (세션 선택 시. 대화 탭 / 터미널 탭. 터미널은 웹 세션만)
 - `web/src/Office.tsx` — PixiJS 8 캔버스. 방=업무, 책상+캐릭터=살아 있는 세션. 스프라이트 없이 Graphics 로 그린다. **모든 좌표는 아트 픽셀(타일 16px)이고 world 를 2배로 키워** 도트가 선명하다 (화면 타일 32px). 데이터가 바뀌면 전부 지우고 다시 그리고, 손 흔들기·타자 애니메이션만 ticker 로 움직인다. 그리기 함수(`drawFigure`·`drawDesk`·`drawRoom`·`drawPlant`)만 바꾸면 스프라이트로 교체할 수 있게 레이아웃·상태 로직과 분리돼 있다
 - `web/src/avatar.ts` — 세션 ID 해시 → 머리 스타일 6종·머리색·피부·셔츠. 사무실과 목록 아바타 칩이 같이 쓴다. 외부 세션도 색은 같고 **책상 측판·이름표 밑줄이 회색**인 것으로 구분 (캐릭터를 회색으로 하면 사무실이 죽어 보여서 바꿈)
 - `web/src/types.ts` — 서버 응답 타입 (server 쪽과 손으로 맞춘다)
@@ -80,12 +81,14 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - 호스트 자체가 죽으면 웹 세션도 죽는다. 허용한 설계. `hq.json.webSessions` = "호스트가 살려 둘 세션". claude 가 어떤 이유로든 나가면(exit) 기록을 지운다. 호스트 시작 시 남은 기록을 `--resume` 하고, 폴더가 없으면 건너뛰며 지운다
 - **한 번도 대화하지 않은 세션은 resume 이 안 된다** (jsonl 이 없어 "No conversation found" 로 종료 → 기록 자동 삭제). 정상
 - 채팅 뷰는 별도 API 없이 **터미널 키 입력**으로 지시를 보낸다. 슬래시 명령은 자동완성이 Enter 를 먼저 먹어 두 번 눌러야 할 수 있다
-- 사무실 좌표는 타일 단위. 자리(`seats`)는 책상을 끌어 놓았을 때만 저장되고, 자리 없는 웹 세션은 화면에서 로비 빈 칸에 3타일 간격으로 임시 배치한다 (저장 안 함). **팀원은 팀장이 있는 방**의 빈 칸에 놓인다 (팀장 자리가 없으면 로비)
+- **방 → 팀 → 세션.** 방은 그래픽 공간일 뿐이고, 팀은 같은 폴더의 세션 묶음(= 방 안의 책상 섬), 세션은 팀 안의 책상이다. 세션의 팀은 저장하지 않고 **cwd 로 매번 판정**한다 (`normalizeCwd`: 소문자·`/`·끝 슬래시 제거, 정확히 같은 폴더만). 팀은 사람이 "+ 팀" 으로만 만든다
+- 사무실 좌표는 타일 단위. 팀 섬은 앵커(`teams[].x,y`)를 갖고, 책상은 끌어 놓았을 때만 앵커 기준 오프셋(`desks`)이 저장된다. 오프셋 없는 세션은 섬 안에 2열 자동 정렬. 섬 경계 = 책상들의 경계 상자 + 1타일. 팀 이름표를 끌면 섬과 책상이 같이 움직이고 놓인 방으로 `roomId` 가 바뀐다. 팀 없는 웹 세션은 로비에 임시 배치(드래그 불가), 팀 없는 외부 세션은 파견 구역
 - **방·책상은 바닥 격자에 맞춘다.** 격자는 x=0, y=WALL_H 부터 16px 간격이라 `PAD_X`·`PAD_Y` 는 반드시 TILE 배수여야 한다 (아니면 벽이 타일 중간에 걸친다). 책상 그림은 2×3 타일(32×48px) 에 꼭 맞고, 끄는 동안에도 타일에 스냅된다
-- **외부 세션(터미널·IDE)은 "파견" 구역에 고정.** 방들의 오른쪽 끝에 점선 구역이 항상 있고 외부 세션은 거기에 2열로 순서대로 놓인다. 드래그 불가, `seats` 기록이 있어도 무시. 로비·업무 방은 웹 세션만. 목록도 "직원(웹)" / "파견" 으로 나뉜다
+- **외부 세션(터미널·IDE)** 은 폴더가 같은 팀이 있으면 그 팀 섬에 들어간다 (회색 측판, 관찰만, 드래그 불가, `role` 은 null 이라 지시 대상 아님). 팀 없는 외부 세션만 방들 오른쪽 끝 점선 "파견" 구역에 2열로 놓인다
 - 사무실이 화면보다 크면 휠로 패닝 (Shift+휠 또는 가로 휠 = 가로). 드래그 좌표는 `world.x/y` 를 빼고 계산한다
-- 캐릭터 상태 표현: working 타자 애니메이션 + 모니터 켜짐(파랑), my-turn 손 들기 + 마지막 말 말풍선, needs-approval 손 들기 + 빨간 말풍선 + 볼 홍조, idle/unknown/ended 눈 감음. 팀장은 이름표 밑줄 금색 + 책상 위 금색 명패, 목록에는 "팀장"/"팀원" 배지
+- 캐릭터 상태 표현: working 타자 애니메이션 + 모니터 켜짐(파랑), my-turn 손 들기 + 마지막 말 말풍선, needs-approval 손 들기 + 빨간 말풍선 + 볼 홍조, idle/unknown/ended 눈 감음. 팀장(`teams[].leadSessionId`)은 이름표 밑줄 금색 + 책상 위 금색 명패, 목록에는 "팀장"/"팀원" 배지
 - 화면 테마는 라이트 고정 (`style.css` 의 `:root` 변수. 참고 이미지가 밝은 사무실이라). 터미널 탭만 어둡다. 제목 "jk-corp" 만 Google Fonts `Silkscreen` 도트 폰트, 한글은 시스템 폰트 (한글 도트 폰트가 Google Fonts 에 없음)
+- 팀 섬 더블클릭 = 이름 변경(`prompt()`)
 - 방 더블클릭 = 대기 메모 편집(`prompt()`), "+ 방" = 기존 방 오른쪽에 추가. **이름표를 끌면 이동, 오른쪽 아래 모서리 핸들을 끌면 크기 조절** (타일 단위, 최소 4×4, `PATCH /api/rooms/:id` 에 x·y·w·h). 겹침 방지는 없고, 방을 줄여 책상이 밖에 남으면 사용자가 끌어 넣는다. 방 삭제는 없다
 
 ## 화면 확인 방법 (headless)

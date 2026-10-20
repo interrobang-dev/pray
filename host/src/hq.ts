@@ -133,14 +133,14 @@ export function addTeam(input: { name: string; cwd: string; roomId?: string }): 
   if (hq.teams.some((t) => normalizeCwd(t.cwd) === normalizeCwd(input.cwd))) throw new TeamConflictError(input.cwd)
   const room = hq.rooms.find((r) => r.id === input.roomId) ?? hq.rooms[0]
   const siblings = hq.teams.filter((t) => t.roomId === room.id)
-  // 같은 방의 팀들 아래에 1타일 띄워 둔다. 겹치면 사용자가 끌어 옮긴다
-  const y = siblings.length ? Math.max(...siblings.map((t) => t.y)) + 5 : room.y + 1
+  // 섬 테두리(앵커 -1타일)가 방 벽과 겹치지 않게 +2. 같은 방의 팀들 아래에 둔다. 겹치면 사용자가 끌어 옮긴다
+  const y = siblings.length ? Math.max(...siblings.map((t) => t.y)) + 5 : room.y + 2
   const team: Team = {
     id: randomUUID().slice(0, 8),
     name: input.name,
     cwd: input.cwd,
     roomId: room.id,
-    x: room.x + 1,
+    x: room.x + 2,
     y,
     desks: {},
     createdAt: new Date().toISOString(),

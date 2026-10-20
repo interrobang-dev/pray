@@ -25,16 +25,24 @@ export interface Room {
   waitingNote?: string
 }
 
-export interface Seat {
+/** 팀 = 같은 폴더의 세션 묶음. 방 안의 책상 섬. 소속은 서버가 cwd 로 판정해 Session.teamId 로 준다 */
+export interface Team {
+  id: string
+  name: string
+  cwd: string
   roomId: string
+  /** 섬 앵커 (타일) */
   x: number
   y: number
-  label?: string
+  leadSessionId?: string
+  /** 앵커 기준 책상 오프셋. 끌어 놓았을 때만 저장 */
+  desks: Record<string, { dx: number; dy: number }>
+  createdAt: string
 }
 
 export interface Office {
   rooms: Room[]
-  seats: Record<string, Seat>
+  teams: Team[]
 }
 
 export const statusLabel: Record<SessionStatus, string> = {
