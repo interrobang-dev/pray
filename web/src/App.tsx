@@ -11,7 +11,7 @@ interface Snapshot {
   sessions: Session[]
 }
 
-const EMPTY_OFFICE: OfficeData = { groups: [{ id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }], teams: [] }
+const EMPTY_OFFICE: OfficeData = { groups: [], teams: [] }
 
 
 function formatTime(iso: string | null): string {
@@ -30,7 +30,7 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** 팀 추가 폼. 그룹 헤더의 "+ 팀" 으로 열리며 그 그룹에 고정 */
   const [teamForm, setTeamForm] = useState<{ groupId: string } | null>(null)
-  /** 세션 추가 폼. 팀 헤더의 "+ 세션" 이면 그 팀에 고정, 툴바의 "+ 세션" 이면 무소속(폴더 직접 입력) */
+  /** 세션 추가 폼. 팀 헤더의 "+ 세션" 이면 그 팀에 고정, 툴바의 "+ 세션" 이면 로비(폴더 직접 입력) */
   const [sessionForm, setSessionForm] = useState<{ teamId: string | null } | null>(null)
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
@@ -107,6 +107,12 @@ export function App() {
     if (confirm(`"${team.name}" 팀을 지울까요? 세션은 종료되지 않고 무소속이 됩니다.`)) {
       void fetch(`/api/team/${team.id}`, { method: 'DELETE' })
     }
+  }
+
+  async function removeGroup(group: Group) {
+    if (!confirm(`"${group.name}" 그룹을 지울까요?`)) return
+    const response = await fetch(`/api/groups/${group.id}`, { method: 'DELETE' })
+    if (!response.ok) alert((await response.json()).message ?? '삭제 실패')
   }
 
   function addGroup() {
@@ -204,7 +210,7 @@ export function App() {
         <div className="toolbar">
           <button onClick={addGroup}>+ 그룹</button>
           <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable}>
-            + 세션 (무소속)
+            + 세션 (로비)
           </button>
         </div>
         {teamForm && (
@@ -228,7 +234,7 @@ export function App() {
                 <span className="cwd">{office.teams.find((t) => t.id === sessionForm.teamId)?.cwd}</span>
               </div>
             ) : (
-              <div className="create-title">무소속 세션</div>
+              <div className="create-title">로비 세션 (팀 없음)</div>
             )}
             {!sessionForm.teamId && <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />}
             <input name="prompt" placeholder="첫 지시 (선택)" autoFocus={Boolean(sessionForm.teamId)} />
@@ -256,6 +262,11 @@ export function App() {
                   <button onClick={() => openTeamForm(group.id)} title="이 그룹에 팀 추가">
                     + 팀
                   </button>
+                  {teams.length === 0 && (
+                    <button onClick={() => removeGroup(group)} title="그룹 삭제">
+                      삭제
+                    </button>
+                  )}
                 </span>
               </li>,
               ...teams.flatMap((team) => renderTeam(team)),
@@ -263,10 +274,7 @@ export function App() {
             ]
           })}
           {office.teams.filter((t) => !office.groups.some((g) => g.id === t.groupId)).flatMap((team) => renderTeam(team))}
-          {[
-            { key: 'free', title: '무소속 (웹)', members: snapshot.sessions.filter((s) => !s.teamId && s.kind === 'web') },
-            { key: 'external', title: '파견 (터미널·IDE)', members: snapshot.sessions.filter((s) => !s.teamId && s.kind === 'external') },
-          ].map((bucket) => [
+          {[{ key: 'lobby', title: '로비 (팀 없음)', members: snapshot.sessions.filter((s) => !s.teamId) }].map((bucket) => [
             <li key={bucket.key} className="group level-group">
               {bucket.title} {bucket.members.length > 0 && <span className="count">{bucket.members.length}</span>}
             </li>,

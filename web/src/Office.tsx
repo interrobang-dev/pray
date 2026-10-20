@@ -100,20 +100,20 @@ interface Island {
   h: number
 }
 
-/** 파견 구역: 팀 없는 외부(터미널·IDE) 세션이 모이는 고정 구역. 방들의 오른쪽 끝에 붙는다 */
+/** 로비: 팀 없는 세션(웹·외부)이 모이는 고정 구역. 그룹이 아니라 지울 수 없고, 그룹들의 오른쪽 끝에 붙는다 */
 const ZONE_COLUMNS = 2
 const ZONE_W = 1 + ZONE_COLUMNS * SEAT_STEP + 1
 
-function externalZone(office: OfficeData, count: number): Group {
-  const x = Math.max(...office.groups.map((r) => r.x + r.w)) + 1
-  const tallest = Math.max(...office.groups.map((r) => r.y + r.h))
+function lobbyZone(office: OfficeData, count: number): Group {
+  const x = office.groups.length ? Math.max(...office.groups.map((r) => r.x + r.w)) + 1 : 0
+  const tallest = office.groups.length ? Math.max(...office.groups.map((r) => r.y + r.h)) : 0
   const rows = Math.max(1, Math.ceil(count / ZONE_COLUMNS))
-  return { id: 'external', name: '파견 (터미널·IDE)', x, y: 0, w: ZONE_W, h: Math.max(tallest, rows * SEAT_STEP + 2) }
+  return { id: 'lobby', name: '로비', x, y: 0, w: ZONE_W, h: Math.max(tallest, rows * SEAT_STEP + 2) }
 }
 
 /**
  * 팀 세션: 앵커 + 저장된 오프셋, 없으면 섬 안 2열 자동 정렬.
- * 팀 없는 웹 세션: 로비 빈 칸. 팀 없는 외부 세션: 파견 구역.
+ * 팀 없는 세션: 로비 구역에 순서대로.
  */
 function placeAll(office: OfficeData, sessions: Session[], zone: Group): { seats: Map<string, Placement>; islands: Island[] } {
   const seats = new Map<string, Placement>()
@@ -150,22 +150,6 @@ function placeAll(office: OfficeData, sessions: Session[], zone: Group): { seats
     const maxX = Math.max(...placed.map((p) => p.x)) + DESK_TILES_W
     const maxY = Math.max(...placed.map((p) => p.y)) + DESK_TILES_H
     islands.push({ team, x: minX - 1, y: minY - 1, w: maxX - minX + 2, h: maxY - minY + 2 })
-  }
-
-  const lobby = office.groups[0]
-  for (const session of sessions) {
-    if (seats.has(session.id) || session.teamId || session.kind !== 'web') continue
-    let p: Placement | null = null
-    outer: for (let y = lobby.y + 1; y < lobby.y + lobby.h - 1; y += SEAT_STEP) {
-      for (let x = lobby.x + 1; x < lobby.x + lobby.w - 2; x += SEAT_STEP) {
-        if (taken.has(`${x},${y}`)) continue
-        p = { x, y }
-        break outer
-      }
-    }
-    p ??= { x: lobby.x, y: lobby.y }
-    seats.set(session.id, p)
-    occupy(p)
   }
 
   let index = 0
@@ -627,7 +611,7 @@ export function Office(props: Props) {
           groupViews.clear()
           working.clear()
           const alive = sessions.filter((s) => s.isAlive)
-          const zone = externalZone(office, alive.filter((s) => s.kind === 'external').length)
+          const zone = lobbyZone(office, alive.filter((s) => !s.teamId).length)
           content.w = PAD_X * 2 + (zone.x + zone.w) * TILE
           content.h = PAD_Y + 16 + Math.max(zone.y + zone.h, ...office.groups.map((r) => r.y + r.h)) * TILE
           const bgW = Math.max(content.w, Math.ceil(app.screen.width / SCALE))

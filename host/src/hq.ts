@@ -34,8 +34,6 @@ interface HqFile extends Office {
   webSessions: WebSessionRecord[]
 }
 
-const LOBBY: Group = { id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }
-
 const hqDir = join(homedir(), '.claude', 'jk-corp')
 const hqPath = join(hqDir, 'hq.json')
 
@@ -48,9 +46,13 @@ function readHq(): HqFile {
   }
   // 구 파일 이전: "방(rooms)" 이 "그룹(groups)" 으로 바뀌었고 seats 는 없어졌다. 읽을 때 옮기고 다음 쓰기 때 새 키로만 저장한다
   const { rooms: legacyGroups, seats: _legacySeats, ...rest } = parsed as Partial<HqFile> & { rooms?: Group[]; seats?: unknown }
-  const groups = rest.groups?.length ? rest.groups : legacyGroups?.length ? legacyGroups : [LOBBY]
+  const teams = (rest.teams ?? []).map(withDefaults)
+  // 예전 기본 그룹 "로비"(id lobby) 는 없어졌다. 로비 = 팀 없는 세션이 모이는 고정 구역. 팀이 안 들어 있으면 읽을 때 지운다
+  const groups = (rest.groups?.length ? rest.groups : (legacyGroups ?? [])).filter(
+    (g) => g.id !== 'lobby' || teams.some((t) => t.groupId === 'lobby'),
+  )
   // 모르는 키도 보존한다. 호스트·서버가 같은 파일을 쓰므로 한쪽이 구버전이어도 다른 쪽 데이터를 지우지 않게
-  return { ...rest, groups, webSessions: rest.webSessions ?? [], teams: (rest.teams ?? []).map(withDefaults) }
+  return { ...rest, groups, webSessions: rest.webSessions ?? [], teams }
 }
 
 /** 구버전 기록(desks 없음, roomId 등)을 읽어도 터지지 않게 */
@@ -90,8 +92,8 @@ export function readOffice(): Office {
 /** 기존 그룹들의 오른쪽 끝 옆에 새 그룹을 둔다 */
 export function addGroup(name: string): Group {
   const hq = readHq()
-  const rightEdge = Math.max(...hq.groups.map((r) => r.x + r.w))
-  const group: Group = { id: randomUUID().slice(0, 8), name, x: rightEdge + 1, y: 0, w: 10, h: 8 }
+  const rightEdge = hq.groups.length ? Math.max(...hq.groups.map((r) => r.x + r.w)) + 1 : 0
+  const group: Group = { id: randomUUID().slice(0, 8), name, x: rightEdge, y: 0, w: 10, h: 8 }
   hq.groups.push(group)
   writeHq(hq)
   return group
@@ -118,6 +120,23 @@ export function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>): Grou
   return group
 }
 
+export class GroupNotEmptyError extends Error {
+  constructor(name: string) {
+    super(`"${name}" 그룹에 팀이 있어 지울 수 없음. 팀을 먼저 옮기거나 지워라`)
+  }
+}
+
+/** 팀이 없는 그룹만 지운다 */
+export function removeGroup(id: string): boolean {
+  const hq = readHq()
+  const group = hq.groups.find((g) => g.id === id)
+  if (!group) return false
+  if (hq.teams.some((t) => t.groupId === id)) throw new GroupNotEmptyError(group.name)
+  hq.groups = hq.groups.filter((g) => g.id !== id)
+  writeHq(hq)
+  return true
+}
+
 // ---------- 팀 ----------
 
 export function listTeams(): Team[] {
@@ -131,10 +150,17 @@ export class TeamConflictError extends Error {
 }
 
 /** 그룹 안의 빈 자리에 앵커를 둔다. 같은 폴더의 팀이 있으면 거부 */
-export function addTeam(input: { name: string; cwd: string; groupId?: string }): Team {
+export class GroupNotFoundError extends Error {
+  constructor() {
+    super('그룹을 골라야 함')
+  }
+}
+
+export function addTeam(input: { name: string; cwd: string; groupId: string }): Team {
   const hq = readHq()
   if (hq.teams.some((t) => normalizeCwd(t.cwd) === normalizeCwd(input.cwd))) throw new TeamConflictError(input.cwd)
-  const group = hq.groups.find((r) => r.id === input.groupId) ?? hq.groups[0]
+  const group = hq.groups.find((r) => r.id === input.groupId)
+  if (!group) throw new GroupNotFoundError()
   const siblings = hq.teams.filter((t) => t.groupId === group.id)
   // 섬 테두리(앵커 -1타일)가 그룹 벽과 겹치지 않게 +2. 같은 그룹의 팀들 아래에 둔다. 겹치면 사용자가 끌어 옮긴다
   const y = siblings.length ? Math.max(...siblings.map((t) => t.y)) + 5 : group.y + 2

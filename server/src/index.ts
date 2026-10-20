@@ -11,6 +11,9 @@ import {
   readOffice,
   removeTeam,
   setDesk,
+  GroupNotEmptyError,
+  GroupNotFoundError,
+  removeGroup,
   TeamConflictError,
   updateGroup,
   updateTeam,
@@ -271,8 +274,8 @@ async function assignTask(team: Team, sessionId: string, instruction: string, re
 
 app.post('/api/team', (req, res) => {
   const { name, cwd, groupId } = req.body as { name?: string; cwd?: string; groupId?: string }
-  if (!name?.trim() || !cwd?.trim()) {
-    res.status(400).json({ message: 'name, cwd 필요' })
+  if (!name?.trim() || !cwd?.trim() || !groupId) {
+    res.status(400).json({ message: 'name, cwd, groupId 필요' })
     return
   }
   try {
@@ -280,6 +283,10 @@ app.post('/api/team', (req, res) => {
   } catch (error) {
     if (error instanceof TeamConflictError) {
       res.status(409).json({ message: error.message })
+      return
+    }
+    if (error instanceof GroupNotFoundError) {
+      res.status(400).json({ message: error.message })
       return
     }
     throw error
@@ -412,6 +419,24 @@ app.get('/api/team/:teamId/tasks/:taskId/wait', async (req, res) => {
 
 app.get('/api/office', (_req, res) => {
   res.json(readOffice())
+})
+
+/** 팀이 없는 그룹만 지운다 (팀이 있으면 409) */
+app.delete('/api/groups/:id', (req, res) => {
+  try {
+    if (!removeGroup(req.params.id)) {
+      res.status(404).json({ message: '그룹 없음' })
+      return
+    }
+  } catch (error) {
+    if (error instanceof GroupNotEmptyError) {
+      res.status(409).json({ message: error.message })
+      return
+    }
+    throw error
+  }
+  res.json({})
+  broadcastOffice()
 })
 
 app.post('/api/groups', (req, res) => {
