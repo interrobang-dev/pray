@@ -27,7 +27,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 개발 중 화면 작업: 트레이 앱(또는 스케줄러)의 호스트·서버는 그대로 두고 `npm run dev:web` 만 띄워 `http://localhost:4711` 로 본다 (Vite 가 IPv6 localhost 로 열려 `127.0.0.1` 로는 안 열림. `/api` 는 4710 으로 프록시). 서버·호스트 코드를 고쳤으면 트레이 메뉴의 재시작을 쓴다. `npm run dev` (셋 다 tsx 로 실행)는 트레이 앱을 종료한 상태에서만 쓴다. 훅은 Claude Code가 settings.json을 핫리로드하므로 세션 재시작 없이 반영된다.
 
-테스트: `npm test` (host·server의 vitest).
+테스트: `npm test` (host·server·mcp 의 vitest).
 
 **Claude Code 세션 안에서 호스트를 띄우지 말 것.** 띄우더라도 `ptyPool.ts`가 `CLAUDECODE`·`CLAUDE_*` 환경변수를 지우고 자식을 실행한다. 안 지우면 자식 claude가 중첩 실행으로 판단해 종료 코드 1로 죽는다.
 
@@ -43,7 +43,8 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `host/src/protocol.ts` — pipe 메시지 타입과 줄 단위 JSON 프레이밍. 서버가 `@jk-corp/host/protocol`로 import
 - `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `rooms`·`seats`·`teams` 를 쓴다. 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. **`readHq` 는 모르는 키를 보존한다** — 한쪽 프로세스만 새 코드로 돌 때 다른 쪽 데이터(예: `teams`)가 지워진 적이 있다. 서버가 `@jk-corp/host/hq` 로 import
 - `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 사무실(방·자리) API + 팀 API(`/api/team/*`: 팀 생성·조회·삭제, 팀원 spawn·종료, task 지시·롱폴링 wait)
-- `server/src/lead.ts` — 팀장 세션 지침(`--append-system-prompt`)과 spawn 인자. `POST /api/sessions` 에 `teamName` 이 있으면 팀을 만들고 이 인자로 띄운다 (웹 "+ 새 세션" 폼의 "팀장으로" 체크)
+- `server/src/lead.ts` — 팀장 세션 지침(`--append-system-prompt`)과 spawn 인자, `--mcp-config` JSON (아래 mcp 를 `node --import <tsx loader> mcp/src/index.ts` 로 띄우고 env 로 팀 ID·서버 주소를 넘김. node 는 서버의 `process.execPath`). `POST /api/sessions` 에 `teamName` 이 있으면 팀을 만들고 이 인자로 띄운다 (웹 "+ 새 세션" 폼의 "팀장으로" 체크)
+- `mcp/src/index.ts` — 팀장 claude 에 붙는 stdio MCP 서버. 도구 `jk_spawn_member`·`jk_assign`·`jk_wait`·`jk_status`·`jk_dismiss` 가 서버 `/api/team/*` 를 호출한다 (`mcp/src/teamApi.ts`, fetch 주입). `jk_wait` 기본 120초 — 시간 안에 안 끝나면 null 을 주고 팀장이 다시 부른다
 - `server/src/teamState.ts` — 팀장이 팀원에게 준 task 의 상태 기계 (순수, 시계 주입). assign → running → Stop 훅이면 done(result = last_assistant_message), 5초 안에 UserPromptSubmit 이 안 오거나 세션이 exit 하면 failed. 같은 팀원에 running 이 있으면 assign 거부(409). 설계: `docs/plans/2026-10-20-team-orchestration-design.md`
 - `server/src/hostClient.ts` — pipe 클라이언트. 끊기면 3초마다 재연결
 - `server/src/auth.ts` — 인증 코드·토큰 저장소(순수, 시계 주입), loopback 판정, 쿠키 파싱. `/api/*` 미들웨어는 index.ts 에 있고 `/api/auth/*` 와 `/api/hook` 은 예외
@@ -93,6 +94,6 @@ Vite 페이지는 SSE 때문에 `--virtual-time-budget` 방식이 멈춘다. `--
 
 ## 확인하지 못한 것
 
-- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력. 호스트를 새 코드로 재시작한 뒤 "팀장으로" 체크해 세션을 만들고 `POST /api/team/:id/members` 로 확인해야 한다 (지시 → 결과 수신 흐름 자체는 기존 세션으로 검증함)
+- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`, `--mcp-config`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력, 팀장 세션이 실제로 MCP 도구를 보고 쓰는지. 호스트를 새 코드로 재시작한 뒤 "팀장으로" 체크해 세션을 만들고 "팀원 둘에게 A·B 를 시키고 합쳐라" 로 확인해야 한다 (지시 → 결과 수신 흐름과 MCP 서버 단독 동작은 검증함). Claude Code 의 MCP 도구 호출 타임아웃이 `jk_wait` 120초보다 짧으면 기본값을 줄여야 한다
 - 다른 PC 에서 실제 접속 (방화벽 허용 여부). 서버 쪽 인증 흐름은 이 PC 의 LAN IP 로 검증했다
 - 로컬 접속의 "채팅 입력 → claude 응답" 전체 흐름 (API 비용 때문에 자동 검증은 `/help` 까지만 했다)

@@ -5,7 +5,8 @@
     "host",
     "server",
     "web",
-    "desktop"
+    "desktop",
+    "mcp"
   ],
   "scripts": {
     "dev": "concurrently -n host,server,web \"npm:dev:host\" \"npm:dev:server\" \"npm:dev:web\"",

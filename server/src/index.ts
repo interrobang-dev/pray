@@ -159,7 +159,7 @@ app.post('/api/sessions', (req, res) => {
       members: [],
     }
     addTeam(team)
-    extraArgs = leadExtraArgs(team)
+    extraArgs = leadExtraArgs(team, `http://127.0.0.1:${PORT}`)
   }
   host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
   res.json({ sessionId })
