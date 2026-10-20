@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { NEWLINE_KEYS } from './Terminal'
 
 interface ToolUse {
   id: string
@@ -60,13 +61,25 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, pendingTool, ver
       body: JSON.stringify({ data }),
     })
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function submit(event?: FormEvent) {
+    event?.preventDefault()
     const text = draft.trim()
     if (!text) return
     setDraft('')
-    await sendKeys(text)
+    // 줄마다 따로 보내고 줄 사이에 Claude Code 줄바꿈 키를 넣는다 (\n 을 그대로 보내면 줄바꿈으로 안 들어간다)
+    const lines = text.split(/\r?\n/)
+    for (const [index, line] of lines.entries()) {
+      if (index > 0) await sendKeys(NEWLINE_KEYS)
+      if (line) await sendKeys(line)
+    }
     await sendKeys('\r')
+  }
+
+  /** Enter = 보내기, Shift+Enter = 줄바꿈. 한글 조합 중 Enter 는 조합 확정이라 보내지 않는다 */
+  function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    void submit()
   }
 
   return (
@@ -104,10 +117,12 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, pendingTool, ver
       )}
       {isWritable ? (
         <form className="composer" onSubmit={submit}>
-          <input
+          <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="지시를 입력하고 Enter"
+            onKeyDown={onComposerKeyDown}
+            placeholder="지시를 입력하고 Enter (줄바꿈은 Shift+Enter)"
+            rows={Math.min(Math.max(draft.split('\n').length, 1), 8)}
             autoFocus
           />
           <button type="submit">보내기</button>

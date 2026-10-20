@@ -7,6 +7,9 @@ interface Props {
   sessionId: string
 }
 
+/** Claude Code 입력창의 줄바꿈 키 값. Alt+Enter 와 같고, /terminal-setup 이 VS Code 의 Shift+Enter 에 넣는 값과 같다 */
+export const NEWLINE_KEYS = '\x1b\r'
+
 export function Terminal({ sessionId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -28,6 +31,13 @@ export function Terminal({ sessionId }: Props) {
       })
 
     term.onData((data) => void post('input', { data }))
+    // xterm.js 는 Shift+Enter 도 Enter 와 같은 \r 을 보내 Claude Code 가 제출로 받는다. 줄바꿈 값으로 바꿔 보낸다
+    term.attachCustomKeyEventHandler((event) => {
+      const isShiftEnter = event.key === 'Enter' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
+      if (!isShiftEnter) return true
+      if (event.type === 'keydown') void post('input', { data: NEWLINE_KEYS })
+      return false
+    })
     term.onResize(({ cols, rows }) => void post('resize', { cols, rows }))
     void post('resize', { cols: term.cols, rows: term.rows })
 
