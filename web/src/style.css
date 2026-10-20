@@ -92,11 +92,6 @@ h1 {
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
-.toolbar button:first-child {
-  background: var(--green);
-  color: #fff;
-  border-color: var(--green);
-}
 .create {
   display: flex;
   flex-direction: column;
@@ -141,6 +136,33 @@ h1 {
 }
 .sessions li.group:hover {
   background: var(--bg);
+}
+.sessions li.group.level-team {
+  padding-left: 22px;
+  background: var(--panel);
+  font-weight: 500;
+  color: var(--text);
+  border-left: 3px solid var(--green-soft);
+}
+.sessions li.nested {
+  padding-left: 22px;
+  border-left: 3px solid var(--green-soft);
+}
+.sessions li.empty.nested {
+  padding-left: 32px;
+}
+.create .create-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.create .create-title .cwd {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sessions li.group .group-actions {
   float: right;
