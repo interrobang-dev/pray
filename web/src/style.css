@@ -338,6 +338,13 @@ header button.icon:hover:not(:disabled) {
 }
 .status-dot.working {
   background: #3b82d6;
+  animation: dot-breathe 1.6s ease-in-out infinite;
+}
+/* 작업 중 점의 숨쉬기. opacity 만 바꿔 줄 높이가 흔들리지 않는다 */
+@keyframes dot-breathe {
+  50% {
+    opacity: 0.35;
+  }
 }
 .status-dot.my-turn {
   background: var(--green);
