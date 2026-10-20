@@ -23,11 +23,11 @@ function findExe(name: string): string {
   }
 }
 
-/** 앱 자체가 Claude 세션 안에서 실행됐을 때 상속되는 변수를 지운다 (자식 claude 가 중첩 실행으로 종료됨) */
+/** 앱 자체가 Claude 세션 안에서 실행됐을 때 상속되는 변수를 지운다 (CLAUDE* 는 중첩 실행 종료, NO_COLOR 는 무색 렌더링) */
 function childEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_') || key.startsWith('ELECTRON_')) continue
+    if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_') || key.startsWith('ELECTRON_') || key === 'NO_COLOR') continue
     env[key] = value
   }
   return env

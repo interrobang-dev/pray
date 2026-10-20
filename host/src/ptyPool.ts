@@ -9,12 +9,15 @@ const RING_LIMIT = 200_000
 /** 작업 스케줄러 환경에는 사용자 PATH 가 없을 수 있어 설치 스크립트가 `--claude=<exe>` 로 넘긴다 */
 const CLAUDE_COMMAND = getArg('claude') ?? process.env.JK_CORP_CLAUDE ?? 'claude.exe'
 
-/** 호스트가 Claude 세션 안에서 실행됐을 때 상속되는 변수. 남겨두면 자식 claude 가 중첩 실행으로 판단해 종료한다. */
+/**
+ * 호스트가 Claude 세션 안에서 실행됐을 때 상속되는 변수.
+ * CLAUDE* 를 남겨두면 자식 claude 가 중첩 실행으로 판단해 종료하고, NO_COLOR 를 남겨두면 색 없이 렌더링한다.
+ */
 function childEnv(sessionId: string): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue
-    if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_')) continue
+    if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_') || key === 'NO_COLOR') continue
     env[key] = value
   }
   env.JK_CORP_SESSION = sessionId
