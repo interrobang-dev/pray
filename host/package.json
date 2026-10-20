@@ -5,7 +5,8 @@
   "exports": {
     "./protocol": "./src/protocol.ts",
     "./hq": "./src/hq.ts",
-    "./runtime": "./src/runtime.ts"
+    "./runtime": "./src/runtime.ts",
+    "./team": "./src/team.ts"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

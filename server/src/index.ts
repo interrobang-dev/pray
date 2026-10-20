@@ -7,16 +7,16 @@ import type { HostMessage } from '@jk-corp/host/protocol'
 import {
   addRoom,
   addTeam,
-  addTeamMember,
   listTeams,
   readOffice,
   removeTeam,
-  removeTeamMember,
-  setSeat,
+  setDesk,
+  TeamConflictError,
   updateRoom,
+  updateTeam,
   type Room,
-  type Seat,
   type Team,
+  type TeamPatch,
 } from '@jk-corp/host/hq'
 import { setupFileLog } from '@jk-corp/host/runtime'
 import { configDir, readConfig } from './config.js'
@@ -137,32 +137,45 @@ app.get('/api/sessions', async (_req, res) => {
 })
 
 /** teamName 이 있으면 팀장 세션: 팀을 만들고 팀장 지침·권한 인자를 붙여 띄운다 */
-app.post('/api/sessions', (req, res) => {
-  const { cwd, prompt, teamName } = req.body as { cwd?: string; prompt?: string; teamName?: string }
+/** teamId 가 있으면 그 팀 폴더로 띄운다. isLead 면 그 팀의 팀장으로 (살아 있는 팀장이 이미 있으면 거부) */
+app.post('/api/sessions', async (req, res) => {
+  const { cwd: rawCwd, teamId, prompt, isLead } = req.body as { cwd?: string; teamId?: string; prompt?: string; isLead?: boolean }
+  const team = teamId ? findTeam(teamId) : undefined
+  if (teamId && !team) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  const cwd = team?.cwd ?? rawCwd
   if (!cwd) {
-    res.status(400).json({ message: 'cwd 필요' })
+    res.status(400).json({ message: 'cwd 또는 teamId 필요' })
     return
   }
   if (!host.isReachable) {
     res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
     return
   }
-  const sessionId = randomUUID()
   let extraArgs: string[] | undefined
-  if (teamName?.trim()) {
-    const team: Team = {
-      id: randomUUID().slice(0, 8),
-      name: teamName.trim(),
-      cwd,
-      leadSessionId: sessionId,
-      createdAt: new Date().toISOString(),
-      members: [],
+  if (isLead) {
+    if (!team) {
+      res.status(400).json({ message: '팀장은 팀을 골라야 함' })
+      return
     }
-    addTeam(team)
-    extraArgs = leadExtraArgs(team, `http://127.0.0.1:${PORT}`)
+    if (team.leadSessionId) {
+      const { sessions } = await snapshotPayload()
+      if (sessions.some((s) => s.id === team.leadSessionId && s.isAlive)) {
+        res.status(409).json({ message: '이 팀에는 이미 팀장이 있음' })
+        return
+      }
+    }
+  }
+  const sessionId = randomUUID()
+  if (isLead && team) {
+    updateTeam(team.id, { leadSessionId: sessionId })
+    extraArgs = leadExtraArgs({ ...team, leadSessionId: sessionId }, `http://127.0.0.1:${PORT}`)
   }
   host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
   res.json({ sessionId })
+  if (isLead) broadcastOffice()
 })
 
 app.get('/api/sessions/:id/messages', async (req, res) => {
@@ -221,7 +234,7 @@ app.get('/api/usage', async (_req, res) => {
   res.json(await readUsage())
 })
 
-// ---------- 팀 (팀장 세션이 MCP 도구로 호출) ----------
+// ---------- 팀 (같은 폴더의 세션 묶음. 팀장 세션이 MCP 도구로도 호출) ----------
 
 const MAX_WAIT_SECONDS = 600
 const MEMBER_FIRST_INPUT_DELAY_MS = 4_000
@@ -230,10 +243,12 @@ function findTeam(teamId: string): Team | undefined {
   return listTeams().find((t) => t.id === teamId)
 }
 
-/** task 를 만들고 팀원 터미널에 지시문을 입력한다 */
-function assignTask(team: Team, sessionId: string, instruction: string, res: Response): void {
-  if (!team.members.some((m) => m.sessionId === sessionId)) {
-    res.status(404).json({ message: '팀원 아님' })
+/** task 를 만들고 팀원 터미널에 지시문을 입력한다. 팀원 = 그 팀 폴더의 웹 세션 */
+async function assignTask(team: Team, sessionId: string, instruction: string, res: Response): Promise<void> {
+  const { sessions } = await snapshotPayload()
+  const member = sessions.find((s) => s.id === sessionId)
+  if (!member || member.teamId !== team.id || member.role !== 'member') {
+    res.status(404).json({ message: '이 팀의 팀원(웹 세션)이 아님' })
     return
   }
   let task
@@ -255,22 +270,21 @@ function assignTask(team: Team, sessionId: string, instruction: string, res: Res
 }
 
 app.post('/api/team', (req, res) => {
-  const { name, cwd, leadSessionId } = req.body as { name?: string; cwd?: string; leadSessionId?: string }
-  if (!name?.trim() || !cwd || !leadSessionId) {
-    res.status(400).json({ message: 'name, cwd, leadSessionId 필요' })
+  const { name, cwd, roomId } = req.body as { name?: string; cwd?: string; roomId?: string }
+  if (!name?.trim() || !cwd?.trim()) {
+    res.status(400).json({ message: 'name, cwd 필요' })
     return
   }
-  const team: Team = {
-    id: randomUUID().slice(0, 8),
-    name: name.trim(),
-    cwd,
-    leadSessionId,
-    createdAt: new Date().toISOString(),
-    members: [],
+  try {
+    res.json(addTeam({ name: name.trim(), cwd: cwd.trim(), roomId }))
+  } catch (error) {
+    if (error instanceof TeamConflictError) {
+      res.status(409).json({ message: error.message })
+      return
+    }
+    throw error
   }
-  addTeam(team)
-  res.json(team)
-  void broadcast()
+  broadcastOffice()
 })
 
 app.get('/api/team/:teamId', async (req, res) => {
@@ -280,56 +294,74 @@ app.get('/api/team/:teamId', async (req, res) => {
     return
   }
   const { sessions } = await snapshotPayload()
-  const members = team.members.map((member) => {
-    const session = sessions.find((s) => s.id === member.sessionId)
-    return {
-      ...member,
-      status: session?.status ?? 'unknown',
-      isAlive: session?.isAlive ?? false,
-      lastAssistantText: session?.lastAssistantText ?? null,
-      pendingTool: session?.pendingTool ?? null,
-    }
-  })
+  const members = sessions
+    .filter((s) => s.teamId === team.id)
+    .map((s) => ({
+      sessionId: s.id,
+      name: s.title ?? s.id.slice(0, 8),
+      kind: s.kind,
+      role: s.role,
+      status: s.status,
+      isAlive: s.isAlive,
+      lastAssistantText: s.lastAssistantText,
+      pendingTool: s.pendingTool,
+    }))
   res.json({ ...team, members, tasks: tasks.listByTeam(team.id) })
 })
 
-app.delete('/api/team/:teamId', (req, res) => {
-  const team = findTeam(req.params.teamId)
+app.patch('/api/team/:teamId', (req, res) => {
+  const team = updateTeam(req.params.teamId, req.body as TeamPatch)
   if (!team) {
     res.status(404).json({ message: '팀 없음' })
     return
   }
-  for (const member of team.members) host.send({ type: 'kill', sessionId: member.sessionId })
-  removeTeam(team.id)
-  res.json({})
-  void broadcast()
+  res.json(team)
+  broadcastOffice()
 })
 
+/** 팀 기록만 지운다. 세션은 그대로 (무소속이 됨) */
+app.delete('/api/team/:teamId', (req, res) => {
+  if (!removeTeam(req.params.teamId)) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  res.json({})
+  broadcastOffice()
+})
+
+app.put('/api/team/:teamId/desks/:sessionId', (req, res) => {
+  const { dx, dy } = req.body as { dx?: number; dy?: number }
+  if (typeof dx !== 'number' || typeof dy !== 'number') {
+    res.status(400).end()
+    return
+  }
+  if (!setDesk(req.params.teamId, req.params.sessionId, { dx, dy })) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  res.json({})
+  broadcastOffice()
+})
+
+/** 팀 폴더로 세션을 띄운다. cwd 판정으로 자동 합류 */
 app.post('/api/team/:teamId/members', (req, res) => {
   const team = findTeam(req.params.teamId)
   if (!team) {
     res.status(404).json({ message: '팀 없음' })
     return
   }
-  const { name, cwd, instruction, permissionMode } = req.body as {
-    name?: string
-    cwd?: string
-    instruction?: string
-    permissionMode?: string
-  }
-  if (!name?.trim() || !cwd) {
-    res.status(400).json({ message: 'name, cwd 필요' })
+  const { name, instruction, permissionMode } = req.body as { name?: string; instruction?: string; permissionMode?: string }
+  if (!name?.trim()) {
+    res.status(400).json({ message: 'name 필요' })
     return
   }
   const sessionId = randomUUID()
   const extraArgs = ['--name', name.trim(), '--permission-mode', permissionMode ?? 'bypassPermissions']
-  if (!host.send({ type: 'spawn', sessionId, cwd, extraArgs })) {
+  if (!host.send({ type: 'spawn', sessionId, cwd: team.cwd, extraArgs })) {
     res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
     return
   }
-  const member = { sessionId, name: name.trim(), cwd, createdAt: new Date().toISOString() }
-  addTeamMember(team.id, member)
-  void broadcast()
+  const member = { sessionId, name: name.trim(), cwd: team.cwd }
   if (!instruction) {
     res.json({ member, task: null })
     return
@@ -342,19 +374,14 @@ app.post('/api/team/:teamId/members', (req, res) => {
   }, MEMBER_FIRST_INPUT_DELAY_MS)
 })
 
+/** 팀원 세션 종료 */
 app.delete('/api/team/:teamId/members/:sessionId', (req, res) => {
-  const team = removeTeamMember(req.params.teamId, req.params.sessionId)
-  if (!team) {
-    res.status(404).json({ message: '팀 없음' })
-    return
-  }
   host.send({ type: 'kill', sessionId: req.params.sessionId })
   tasks.markExited(req.params.sessionId)
   res.json({})
-  void broadcast()
 })
 
-app.post('/api/team/:teamId/tasks', (req, res) => {
+app.post('/api/team/:teamId/tasks', async (req, res) => {
   const team = findTeam(req.params.teamId)
   if (!team) {
     res.status(404).json({ message: '팀 없음' })
@@ -365,7 +392,7 @@ app.post('/api/team/:teamId/tasks', (req, res) => {
     res.status(400).json({ message: 'sessionId, instruction 필요' })
     return
   }
-  assignTask(team, sessionId, instruction.trim(), res)
+  await assignTask(team, sessionId, instruction.trim(), res)
 })
 
 /** task 완료까지 롱폴링. taskId 가 'any' 면 팀의 아무 task 하나. 타임아웃·모르는 task 는 { task: null } */
@@ -404,17 +431,6 @@ app.patch('/api/rooms/:id', (req, res) => {
     return
   }
   res.json(room)
-  broadcastOffice()
-})
-
-app.put('/api/seats/:sessionId', (req, res) => {
-  const seat = req.body as Seat
-  if (typeof seat?.roomId !== 'string' || typeof seat.x !== 'number' || typeof seat.y !== 'number') {
-    res.status(400).end()
-    return
-  }
-  setSeat(req.params.sessionId, { roomId: seat.roomId, x: seat.x, y: seat.y, label: seat.label })
-  res.json({})
   broadcastOffice()
 })
 

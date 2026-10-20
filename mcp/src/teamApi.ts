@@ -21,8 +21,8 @@ export class TeamApi {
     return body
   }
 
-  spawnMember(name: string, cwd: string, instruction?: string): Promise<unknown> {
-    return this.call(`/api/team/${this.teamId}/members`, { method: 'POST', body: JSON.stringify({ name, cwd, instruction }) })
+  spawnMember(name: string, instruction?: string): Promise<unknown> {
+    return this.call(`/api/team/${this.teamId}/members`, { method: 'POST', body: JSON.stringify({ name, instruction }) })
   }
 
   assign(sessionId: string, instruction: string): Promise<unknown> {

@@ -2,6 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { normalizeCwd, type Team } from './team.js'
+
+export type { Team } from './team.js'
 
 export interface WebSessionRecord {
   sessionId: string
@@ -11,7 +14,7 @@ export interface WebSessionRecord {
   extraArgs?: string[]
 }
 
-/** 방 = 업무. 좌표·크기는 타일 단위 */
+/** 방 = 그래픽 공간. 좌표·크기는 타일 단위 */
 export interface Room {
   id: string
   name: string
@@ -22,39 +25,13 @@ export interface Room {
   waitingNote?: string
 }
 
-/** 책상 위치. 타일 단위 절대 좌표 */
-export interface Seat {
-  roomId: string
-  x: number
-  y: number
-  label?: string
-}
-
 export interface Office {
   rooms: Room[]
-  seats: Record<string, Seat>
-}
-
-export interface TeamMember {
-  sessionId: string
-  name: string
-  cwd: string
-  createdAt: string
-}
-
-/** 팀 = 팀장 세션 하나 + 팀원 세션들. 팀장이 MCP 도구로 팀원을 다룬다 */
-export interface Team {
-  id: string
-  name: string
-  cwd: string
-  leadSessionId: string
-  createdAt: string
-  members: TeamMember[]
+  teams: Team[]
 }
 
 interface HqFile extends Office {
   webSessions: WebSessionRecord[]
-  teams: Team[]
 }
 
 const LOBBY: Room = { id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }
@@ -71,7 +48,12 @@ function readHq(): HqFile {
   }
   const rooms = parsed.rooms?.length ? parsed.rooms : [LOBBY]
   // 모르는 키도 보존한다. 호스트·서버가 같은 파일을 쓰므로 한쪽이 구버전이어도 다른 쪽 데이터를 지우지 않게
-  return { ...parsed, rooms, seats: parsed.seats ?? {}, webSessions: parsed.webSessions ?? [], teams: parsed.teams ?? [] }
+  return { ...parsed, rooms, webSessions: parsed.webSessions ?? [], teams: (parsed.teams ?? []).map(withDefaults) }
+}
+
+/** 구버전 기록(desks 없음 등)을 읽어도 터지지 않게 */
+function withDefaults(team: Partial<Team> & Pick<Team, 'id' | 'name' | 'cwd'>): Team {
+  return { roomId: 'lobby', x: 1, y: 1, desks: {}, createdAt: '', ...team }
 }
 
 function writeHq(hq: HqFile): void {
@@ -96,9 +78,11 @@ export function removeWebSession(sessionId: string): void {
 }
 
 export function readOffice(): Office {
-  const { rooms, seats } = readHq()
-  return { rooms, seats }
+  const { rooms, teams } = readHq()
+  return { rooms, teams }
 }
+
+// ---------- 방 ----------
 
 /** 기존 방들의 오른쪽 끝 옆에 새 방을 둔다 */
 export function addRoom(name: string): Room {
@@ -131,42 +115,71 @@ export function updateRoom(id: string, patch: Partial<Omit<Room, 'id'>>): Room |
   return room
 }
 
-export function setSeat(sessionId: string, seat: Seat): void {
-  const hq = readHq()
-  hq.seats[sessionId] = seat
-  writeHq(hq)
-}
+// ---------- 팀 ----------
 
 export function listTeams(): Team[] {
   return readHq().teams
 }
 
-export function addTeam(team: Team): void {
-  const hq = readHq()
-  hq.teams = [...hq.teams.filter((t) => t.id !== team.id), team]
-  writeHq(hq)
+export class TeamConflictError extends Error {
+  constructor(cwd: string) {
+    super(`같은 폴더의 팀이 이미 있음: ${cwd}`)
+  }
 }
 
-export function removeTeam(teamId: string): void {
+/** 방 안의 빈 자리에 앵커를 둔다. 같은 폴더의 팀이 있으면 거부 */
+export function addTeam(input: { name: string; cwd: string; roomId?: string }): Team {
   const hq = readHq()
-  hq.teams = hq.teams.filter((t) => t.id !== teamId)
-  writeHq(hq)
-}
-
-export function addTeamMember(teamId: string, member: TeamMember): Team | null {
-  const hq = readHq()
-  const team = hq.teams.find((t) => t.id === teamId)
-  if (!team) return null
-  team.members = [...team.members.filter((m) => m.sessionId !== member.sessionId), member]
+  if (hq.teams.some((t) => normalizeCwd(t.cwd) === normalizeCwd(input.cwd))) throw new TeamConflictError(input.cwd)
+  const room = hq.rooms.find((r) => r.id === input.roomId) ?? hq.rooms[0]
+  const siblings = hq.teams.filter((t) => t.roomId === room.id)
+  // 같은 방의 팀들 아래에 1타일 띄워 둔다. 겹치면 사용자가 끌어 옮긴다
+  const y = siblings.length ? Math.max(...siblings.map((t) => t.y)) + 5 : room.y + 1
+  const team: Team = {
+    id: randomUUID().slice(0, 8),
+    name: input.name,
+    cwd: input.cwd,
+    roomId: room.id,
+    x: room.x + 1,
+    y,
+    desks: {},
+    createdAt: new Date().toISOString(),
+  }
+  hq.teams.push(team)
   writeHq(hq)
   return team
 }
 
-export function removeTeamMember(teamId: string, sessionId: string): Team | null {
+export type TeamPatch = Partial<Pick<Team, 'name' | 'roomId' | 'x' | 'y'>> & { leadSessionId?: string | null }
+
+export function updateTeam(id: string, patch: TeamPatch): Team | null {
+  const hq = readHq()
+  const team = hq.teams.find((t) => t.id === id)
+  if (!team) return null
+  if (patch.name !== undefined && patch.name.trim()) team.name = patch.name.trim()
+  if (patch.roomId !== undefined && hq.rooms.some((r) => r.id === patch.roomId)) team.roomId = patch.roomId
+  if (isTile(patch.x)) team.x = patch.x
+  if (isTile(patch.y)) team.y = patch.y
+  if (patch.leadSessionId === null) delete team.leadSessionId
+  else if (typeof patch.leadSessionId === 'string') team.leadSessionId = patch.leadSessionId
+  writeHq(hq)
+  return team
+}
+
+export function removeTeam(teamId: string): boolean {
+  const hq = readHq()
+  const before = hq.teams.length
+  hq.teams = hq.teams.filter((t) => t.id !== teamId)
+  if (hq.teams.length === before) return false
+  writeHq(hq)
+  return true
+}
+
+export function setDesk(teamId: string, sessionId: string, desk: { dx: number; dy: number }): Team | null {
   const hq = readHq()
   const team = hq.teams.find((t) => t.id === teamId)
   if (!team) return null
-  team.members = team.members.filter((m) => m.sessionId !== sessionId)
+  team.desks[sessionId] = { dx: Math.round(desk.dx), dy: Math.round(desk.dy) }
   writeHq(hq)
   return team
 }

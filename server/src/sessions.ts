@@ -5,7 +5,7 @@ import type { Session } from './types.js'
 import type { HookState } from './hookState.js'
 import { summarizeTranscript } from './transcript.js'
 import { readLiveSessions } from './liveSessions.js'
-import type { Team } from '@jk-corp/host/hq'
+import { roleOf, teamOf, type Team } from '@jk-corp/host/team'
 
 const claudeDir = join(homedir(), '.claude')
 export const projectsDir = join(claudeDir, 'projects')
@@ -29,14 +29,6 @@ export async function findTranscript(sessionId: string): Promise<string | null> 
   return null
 }
 
-function roleOf(sessionId: string, teams: Team[]): Pick<Session, 'role' | 'teamId'> {
-  for (const team of teams) {
-    if (team.leadSessionId === sessionId) return { role: 'lead', teamId: team.id }
-    if (team.members.some((m) => m.sessionId === sessionId)) return { role: 'member', teamId: team.id }
-  }
-  return { role: null, teamId: null }
-}
-
 export async function listSessions(
   hookStates: Map<string, HookState>,
   webSessions: Map<string, string>,
@@ -51,17 +43,21 @@ export async function listSessions(
       const hook = hookStates.get(id)
       const jsonl = await findTranscript(id)
       const transcript = jsonl ? summarizeTranscript(jsonl) : null
+      const cwd = liveEntry?.cwd ?? hook?.cwd ?? webSessions.get(id) ?? ''
+      const isWeb = webSessions.has(id)
+      const team = teamOf(cwd, teams)
       return {
         id,
-        cwd: liveEntry?.cwd ?? hook?.cwd ?? webSessions.get(id) ?? '',
+        cwd,
         title: transcript?.title ?? null,
         status: hook?.status ?? 'unknown',
-        kind: webSessions.has(id) ? 'web' : 'external',
+        kind: isWeb ? 'web' : 'external',
         isAlive: liveEntry !== undefined || webSessions.has(id),
         lastAt: transcript?.lastAt ?? hook?.updatedAt ?? null,
         lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
         pendingTool: hook?.pendingTool ?? null,
-        ...roleOf(id, teams),
+        teamId: team?.id ?? null,
+        role: roleOf(id, isWeb, team),
       }
     }),
   )

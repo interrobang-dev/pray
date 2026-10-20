@@ -29,16 +29,15 @@ server.registerTool(
   'jk_spawn_member',
   {
     description:
-      '팀원 세션을 새로 만든다. 사무실에 책상이 생기고 사람이 볼 수 있다. instruction 을 주면 첫 지시로 보내고 task 를 돌려준다. 팀원 결과는 마지막 응답 텍스트 하나로만 돌아오니 지시에 "끝나면 결과 요약을 마지막 메시지로 써라" 를 넣어라.',
+      '팀 폴더에서 팀원 세션을 새로 만든다. 사무실에 책상이 생기고 사람이 볼 수 있다. instruction 을 주면 첫 지시로 보내고 task 를 돌려준다. 팀원 결과는 마지막 응답 텍스트 하나로만 돌아오니 지시에 "끝나면 결과 요약을 마지막 메시지로 써라" 를 넣어라.',
     inputSchema: {
       name: z.string().describe('팀원 이름 (예: 조사원 A)'),
-      cwd: z.string().describe('팀원이 일할 폴더 절대 경로. 보통 팀장과 같은 폴더'),
       instruction: z.string().optional().describe('첫 지시 (선택)'),
     },
   },
-  async ({ name, cwd, instruction }) => {
+  async ({ name, instruction }) => {
     try {
-      return text(await api.spawnMember(name, cwd, instruction))
+      return text(await api.spawnMember(name, instruction))
     } catch (error) {
       return failure(error)
     }
@@ -85,7 +84,7 @@ server.registerTool(
 server.registerTool(
   'jk_status',
   {
-    description: '팀원 목록과 각자의 상태(working / my-turn / needs-approval …), 마지막 말, task 목록을 본다.',
+    description: '팀의 세션 목록(역할·웹/외부·상태·마지막 말)과 task 목록을 본다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다.',
     inputSchema: {},
   },
   async () => {

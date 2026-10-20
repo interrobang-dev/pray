@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { leadExtraArgs, leadMcpConfig, leadSystemPrompt } from './lead.js'
 
-const team = { id: 'abc12345', name: '개발', cwd: 'D:/x', leadSessionId: 'lead', createdAt: '2026-10-20T00:00:00Z', members: [] }
+const team = { id: 'abc12345', name: '개발', cwd: 'D:/x', roomId: 'lobby', x: 1, y: 1, desks: {}, leadSessionId: 'lead', createdAt: '2026-10-20T00:00:00Z' }
 
 describe('lead', () => {
   it('prompt names the team and tells the lead how results come back', () => {
