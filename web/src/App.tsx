@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import { Terminal } from './Terminal'
 import { Chat } from './Chat'
 import { Office } from './Office'
@@ -201,50 +201,55 @@ export function App() {
     )
   }
 
-  /** 팀 헤더 + 소속 세션. 그룹 안에 중첩된다 */
+  /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 소속 세션. 폴더는 툴팁 */
   function renderTeam(team: Team) {
     const members = snapshot.sessions.filter((s) => s.teamId === team.id)
-    return [
-      <li key={team.id} className="group level-team" title={team.cwd}>
-        {team.name} {members.length > 0 && <span className="count">{members.length}</span>}
-        <span className="group-actions">
-          <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="이 팀에 세션 추가">
-            + 세션
-          </button>
-          {team.leadSessionId && (
-            <button onClick={() => releaseLead(team)} title="팀장 지정 해제">
-              팀장 해제
-            </button>
-          )}
-          <button onClick={() => removeTeam(team)} title="팀 삭제 (세션은 유지)">
-            삭제
-          </button>
-        </span>
-      </li>,
-      ...members.map((session) => renderSession(session, true)),
-      ...(members.length === 0 ? [<li key={`${team.id}-empty`} className="empty nested">세션 없음</li>] : []),
+    const menuItems = [
+      ...(team.leadSessionId ? [{ label: '팀장 해제', onClick: () => releaseLead(team) }] : []),
+      { label: '팀 삭제', onClick: () => removeTeam(team) },
     ]
-  }
-
-  function renderSession(session: Session, isNested = false) {
-    const avatar = avatarOf(session.id)
     return (
-      <li
-        key={session.id}
-        className={[session.id === selectedId ? 'selected' : '', session.isAlive ? '' : 'dead', isNested ? 'nested' : ''].join(' ')}
-        onClick={() => setSelectedId(session.id)}
-      >
-        <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
-        <div className="row">
-          <span className={`badge ${session.status}`}>{statusLabel[session.status]}</span>
-          {session.role && <span className={`badge role-${session.role}`}>{session.role === 'lead' ? '팀장' : '팀원'}</span>}
-          <span className="time">{formatTime(session.lastAt)}</span>
+      <div key={team.id} className="team" title={team.cwd}>
+        <div className="team-head">
+          <span className="name">{team.name}</span>
+          {members.length > 0 && <span className="count">{members.length}</span>}
+          <span className="actions">
+            <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="이 팀에 세션 추가">
+              +
+            </button>
+            <MoreMenu items={menuItems} />
+          </span>
         </div>
-        <div className="title">{session.title ?? session.id.slice(0, 8)}</div>
-        <div className="cwd">{session.cwd}</div>
-      </li>
+        {members.map((session) => renderSession(session, false))}
+      </div>
     )
   }
+
+  /** 세션 한 줄: 상태 점 · 아바타 · 제목 · (팀장 태그 · 승인 대기 배지 · 시각). 팀 안에서는 폴더를 숨긴다 (팀 = 폴더) */
+  function renderSession(session: Session, hasCwd: boolean) {
+    const avatar = avatarOf(session.id)
+    return (
+      <div
+        key={session.id}
+        className={['session', session.id === selectedId ? 'selected' : '', session.isAlive ? '' : 'dead'].join(' ')}
+        onClick={() => setSelectedId(session.id)}
+      >
+        <span className={`status-dot ${session.status}`} title={statusLabel[session.status]} />
+        <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
+        <div className="title">{session.title ?? session.id.slice(0, 8)}</div>
+        <div className="meta">
+          {session.role === 'lead' && <span className="badge role-lead">팀장</span>}
+          {session.status === 'needs-approval' && <span className="badge needs-approval">{statusLabel[session.status]}</span>}
+          <span className="time">{formatTime(session.lastAt)}</span>
+        </div>
+        {hasCwd && <div className="cwd">{session.cwd}</div>}
+      </div>
+    )
+  }
+
+  /** 그룹이 지워져 소속 그룹이 없는 팀. 라벨 없이 그대로 보여 준다 */
+  const orphanTeams = office.teams.filter((t) => !office.groups.some((g) => g.id === t.groupId))
+  const lobbySessions = snapshot.sessions.filter((s) => !s.teamId)
 
   return (
     <main className={selected ? 'layout with-panel' : 'layout'}>
@@ -266,32 +271,29 @@ export function App() {
         <ul className="sessions">
           {office.groups.map((group) => {
             const teams = office.teams.filter((t) => t.groupId === group.id)
-            return [
-              <li key={group.id} className="group level-group">
-                {group.name} {teams.length > 0 && <span className="count">{teams.length}</span>}
-                <span className="group-actions">
-                  <button onClick={() => openTeamForm(group.id)} title="이 그룹에 팀 추가">
-                    + 팀
-                  </button>
-                  {teams.length === 0 && (
-                    <button onClick={() => removeGroup(group)} title="그룹 삭제">
-                      삭제
+            return (
+              <li key={group.id} className="group">
+                <div className="group-label">
+                  <span className="name">{group.name}</span>
+                  <span className="actions">
+                    <button onClick={() => openTeamForm(group.id)} title="이 그룹에 팀 추가">
+                      +
                     </button>
-                  )}
-                </span>
-              </li>,
-              ...teams.flatMap((team) => renderTeam(team)),
-              ...(teams.length === 0 ? [<li key={`${group.id}-empty`} className="empty">팀 없음</li>] : []),
-            ]
+                    {teams.length === 0 && <MoreMenu items={[{ label: '그룹 삭제', onClick: () => removeGroup(group) }]} />}
+                  </span>
+                </div>
+                {teams.map((team) => renderTeam(team))}
+              </li>
+            )
           })}
-          {office.teams.filter((t) => !office.groups.some((g) => g.id === t.groupId)).flatMap((team) => renderTeam(team))}
-          {[{ key: 'lobby', title: '로비 (팀 없음)', members: snapshot.sessions.filter((s) => !s.teamId) }].map((bucket) => [
-            <li key={bucket.key} className="group level-group">
-              {bucket.title} {bucket.members.length > 0 && <span className="count">{bucket.members.length}</span>}
-            </li>,
-            ...bucket.members.map((session) => renderSession(session)),
-            ...(bucket.members.length === 0 ? [<li key={`${bucket.key}-empty`} className="empty">없음</li>] : []),
-          ])}
+          {orphanTeams.length > 0 && <li className="group">{orphanTeams.map((team) => renderTeam(team))}</li>}
+          <li className="group">
+            <div className="group-label">
+              <span className="name">로비</span>
+              {lobbySessions.length > 0 && <span className="count">{lobbySessions.length}</span>}
+            </div>
+            {lobbySessions.map((session) => renderSession(session, true))}
+          </li>
         </ul>
         <UsagePanel />
       </aside>
@@ -383,5 +385,50 @@ export function App() {
         </section>
       )}
     </main>
+  )
+}
+
+/** "⋯" 버튼 + 작은 드롭다운. 바깥 클릭·Esc 로 닫힌다 */
+function MoreMenu({ items }: { items: { label: string; onClick: () => void }[] }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const rootRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const onDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [isOpen])
+
+  return (
+    <span ref={rootRef} className={isOpen ? 'menu open' : 'menu'}>
+      <button onClick={() => setIsOpen((prev) => !prev)} title="더보기">
+        ⋯
+      </button>
+      {isOpen && (
+        <div className="menu-list">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => {
+                setIsOpen(false)
+                item.onClick()
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   )
 }
