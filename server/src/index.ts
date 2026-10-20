@@ -262,6 +262,32 @@ app.get('/api/usage', async (_req, res) => {
 
 const MAX_WAIT_SECONDS = 600
 const MEMBER_FIRST_INPUT_DELAY_MS = 4_000
+/** 지시문 전송 뒤 pty 출력이 이 시간 동안 없으면 "붙여넣기 처리가 끝났다" 로 보고 Enter 를 보낸다 */
+const SUBMIT_QUIET_MS = 700
+/** 출력이 계속 나와도 이 시간이 지나면 Enter 를 보낸다 */
+const SUBMIT_MAX_WAIT_MS = 8_000
+const SUBMIT_POLL_MS = 100
+/** 세션별 마지막 pty 출력 시각 (ms). 아래 host.on('message') 에서 기록 */
+const lastOutputAt = new Map<string, number>()
+
+/**
+ * 지시문을 팀원 터미널에 입력하고 제출한다. 지시문과 Enter 를 한 번에 보내면 긴 글을 Claude Code TUI 가
+ * 붙여넣기로 묶어 끝의 \r 까지 흡수해 제출되지 않고, 고정 간격(300ms~2초)도 불안정했다. TUI 가 붙여넣기를
+ * 처리하는 동안은 출력이 이어지므로, 출력이 SUBMIT_QUIET_MS 동안 멈춘 뒤 \r 을 보낸다 (상한 SUBMIT_MAX_WAIT_MS).
+ * 반환값은 지시문 전송 성공 여부 (호스트 연결 끊김이면 false)
+ */
+function submitInstruction(sessionId: string, instruction: string): boolean {
+  if (!host.send({ type: 'input', sessionId, data: instruction })) return false
+  const sentAt = Date.now()
+  const timer = setInterval(() => {
+    const now = Date.now()
+    const quietSince = Math.max(lastOutputAt.get(sessionId) ?? 0, sentAt)
+    if (now - quietSince < SUBMIT_QUIET_MS && now - sentAt < SUBMIT_MAX_WAIT_MS) return
+    clearInterval(timer)
+    host.send({ type: 'input', sessionId, data: '\r' })
+  }, SUBMIT_POLL_MS)
+  return true
+}
 
 function findTeam(teamId: string): Team | undefined {
   return listTeams().find((t) => t.id === teamId)
@@ -285,7 +311,7 @@ async function assignTask(team: Team, sessionId: string, instruction: string, re
     }
     throw error
   }
-  if (!host.send({ type: 'input', sessionId, data: `${instruction}\r` })) {
+  if (!submitInstruction(sessionId, instruction)) {
     tasks.markExited(sessionId)
     res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
     return
@@ -399,7 +425,7 @@ app.post('/api/team/:teamId/members', (req, res) => {
   // claude 가 뜨기 전에 입력하면 사라진다. 첫 프롬프트는 호스트가 띄운 뒤 보내도록 지연
   setTimeout(() => {
     const task = tasks.assign(team.id, sessionId, instruction)
-    host.send({ type: 'input', sessionId, data: `${instruction}\r` })
+    submitInstruction(sessionId, instruction)
     res.json({ member, task })
   }, MEMBER_FIRST_INPUT_DELAY_MS)
 })
@@ -513,7 +539,9 @@ app.get('/api/events', (req, res) => {
 
 host.on('reachable', () => void broadcast())
 host.on('message', (message: HostMessage) => {
+  if (message.type === 'output') lastOutputAt.set(message.sessionId, Date.now())
   if (message.type === 'exit') {
+    lastOutputAt.delete(message.sessionId)
     tasks.markExited(message.sessionId)
     setSessionName(message.sessionId, null)
   }

@@ -20,8 +20,11 @@ export interface Task {
   isDelivered: boolean
 }
 
-/** 지시를 보내고 이 시간 안에 UserPromptSubmit 이 안 오면 실패 (터미널이 입력을 못 받는 상태) */
-export const ACK_TIMEOUT_MS = 5_000
+/**
+ * 지시를 보내고 이 시간 안에 UserPromptSubmit 이 안 오면 실패 (터미널이 입력을 못 받는 상태).
+ * 서버가 Enter 를 출력 안정 뒤에 보내므로 그 최대 대기(8초) + 접수 여유 5초
+ */
+export const ACK_TIMEOUT_MS = 13_000
 
 type Waiter = { taskId: string | null; teamId: string; resolve: (task: Task | null) => void }
 

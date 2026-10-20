@@ -46,7 +46,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 그룹 API + 팀 API(`/api/team/*`: 생성(같은 폴더면 409)·조회·수정(이름·그룹·앵커·팀장)·삭제, 책상 오프셋, 팀 폴더로 팀원 spawn, task 지시·롱폴링 wait). `POST /api/sessions` 는 `cwd` 또는 `teamId`, `isLead` 면 그 팀의 팀장 (살아 있는 팀장이 있으면 409)
 - `server/src/lead.ts` — 팀장 세션 지침(`--append-system-prompt`)과 spawn 인자, `--mcp-config` JSON (아래 mcp 를 `node --import <tsx loader> mcp/src/index.ts` 로 띄우고 env 로 팀 ID·서버 주소를 넘김. node 는 서버의 `process.execPath`)
 - `mcp/src/index.ts` — 팀장 claude 에 붙는 stdio MCP 서버. 도구 `jk_spawn_member`·`jk_assign`·`jk_wait`·`jk_status`·`jk_dismiss` 가 서버 `/api/team/*` 를 호출한다 (`mcp/src/teamApi.ts`, fetch 주입). `jk_wait` 기본 120초 — 시간 안에 안 끝나면 null 을 주고 팀장이 다시 부른다
-- `server/src/teamState.ts` — 팀장이 팀원에게 준 task 의 상태 기계 (순수, 시계 주입). assign → running → Stop 훅이면 done(result = last_assistant_message), 5초 안에 UserPromptSubmit 이 안 오거나 세션이 exit 하면 failed. 같은 팀원에 running 이 있으면 assign 거부(409). 설계: `docs/plans/2026-10-20-team-orchestration-design.md`
+- `server/src/teamState.ts` — 팀장이 팀원에게 준 task 의 상태 기계 (순수, 시계 주입). assign → running → Stop 훅이면 done(result = last_assistant_message), 13초(`ACK_TIMEOUT_MS`) 안에 UserPromptSubmit 이 안 오거나 세션이 exit 하면 failed. 같은 팀원에 running 이 있으면 assign 거부(409). 설계: `docs/plans/2026-10-20-team-orchestration-design.md`
 - `server/src/hostClient.ts` — pipe 클라이언트. 끊기면 3초마다 재연결
 - `server/src/auth.ts` — 인증 코드·토큰 저장소(순수, 시계 주입), loopback 판정, 쿠키 파싱. `/api/*` 미들웨어는 index.ts 에 있고 `/api/auth/*` 와 `/api/hook` 은 예외
 - `server/src/mail.ts` — nodemailer 로 인증 메일 발송. `server/src/config.ts` — config.json 읽기
@@ -81,6 +81,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - 호스트 자체가 죽으면 웹 세션도 죽는다. 허용한 설계. `hq.json.webSessions` = "호스트가 살려 둘 세션". claude 가 어떤 이유로든 나가면(exit) 기록을 지운다. 호스트 시작 시 남은 기록을 `--resume` 하고, 폴더가 없으면 건너뛰며 지운다
 - **한 번도 대화하지 않은 세션은 resume 이 안 된다** (jsonl 이 없어 "No conversation found" 로 종료 → 기록 자동 삭제). 정상
 - 채팅 뷰는 별도 API 없이 **터미널 키 입력**으로 지시를 보낸다. 슬래시 명령은 자동완성이 Enter 를 먼저 먹어 두 번 눌러야 할 수 있다
+- **팀장 지시(`assignTask`·팀원 첫 지시)는 지시문과 Enter 를 따로 보낸다** (`submitInstruction`: 지시문 전송 → 그 세션의 pty 출력이 700ms 동안 없으면 `\r`, 출력이 계속 나와도 8초가 지나면 `\r`). 한 번에 보내거나 고정 간격(300ms~2초)으로 보내면 긴 지시문을 Claude Code TUI 가 붙여넣기로 처리하는 동안 `\r` 이 흡수돼 입력창에 남고(`[Pasted text #1 +1 lines]`), UserPromptSubmit 이 안 와 task 가 failed 가 된다. 그래서 접수 판정 `ACK_TIMEOUT_MS` 는 Enter 최대 대기 8초 + 5초 = 13초
 - **그룹 → 팀 → 세션.** 그룹은 그래픽 공간일 뿐이고, 팀은 같은 폴더의 세션 묶음(= 그룹 안의 책상 섬), 세션은 팀 안의 책상이다. 세션의 팀은 저장하지 않고 **cwd 로 매번 판정**한다 (`normalizeCwd`: 소문자·`/`·끝 슬래시 제거, 정확히 같은 폴더만). 팀은 사람이 "+ 팀" 으로만 만든다
 - 사무실 좌표는 타일 단위. 팀 섬은 앵커(`teams[].x,y`)를 갖고, 책상은 끌어 놓았을 때만 앵커 기준 오프셋(`desks`)이 저장된다. 오프셋 없는 세션은 섬 안에 2열 자동 정렬. 섬 경계 = 책상들의 경계 상자 + 1타일. 팀 이름표를 끌면 섬과 책상이 같이 움직이고 놓인 그룹으로 `groupId` 가 바뀐다
 - **로비 = 팀 없는 세션(웹·외부)이 모이는 고정 구역.** 그룹이 아니라 `hq.json` 에 없고 지울 수도 없다. 그룹들의 오른쪽 끝에 점선으로 그려지고 2열로 놓인다 (드래그 불가). 예전 기본 그룹 `lobby` 는 팀이 없으면 읽을 때 자동으로 지운다
