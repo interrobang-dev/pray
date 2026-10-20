@@ -33,6 +33,7 @@ export function App() {
   const [isConnected, setIsConnected] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [isLeadForm, setIsLeadForm] = useState(false)
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
 
@@ -59,7 +60,11 @@ export function App() {
   async function createSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const response = await postJson('/api/sessions', 'POST', { cwd: form.get('cwd'), prompt: form.get('prompt') })
+    const response = await postJson('/api/sessions', 'POST', {
+      cwd: form.get('cwd'),
+      prompt: form.get('prompt'),
+      teamName: form.get('isLead') ? form.get('teamName') : undefined,
+    })
     if (!response.ok) {
       alert((await response.json()).message ?? '생성 실패')
       return
@@ -131,6 +136,11 @@ export function App() {
           <form className="create" onSubmit={createSession}>
             <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />
             <input name="prompt" placeholder="첫 지시 (선택)" />
+            <label className="check">
+              <input type="checkbox" name="isLead" checked={isLeadForm} onChange={(e) => setIsLeadForm(e.target.checked)} />
+              팀장으로 (팀원을 만들어 일을 나눠 줄 수 있음)
+            </label>
+            {isLeadForm && <input name="teamName" placeholder="팀 이름" required />}
             <div>
               <button type="submit">시작</button>
               <button type="button" onClick={() => setIsCreating(false)}>

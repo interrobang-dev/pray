@@ -29,6 +29,7 @@ import { parseMessages } from './messages.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
+import { leadExtraArgs } from './lead.js'
 
 setupFileLog()
 const PORT = 4710
@@ -135,17 +136,32 @@ app.get('/api/sessions', async (_req, res) => {
   res.json(await snapshotPayload())
 })
 
+/** teamName 이 있으면 팀장 세션: 팀을 만들고 팀장 지침·권한 인자를 붙여 띄운다 */
 app.post('/api/sessions', (req, res) => {
-  const { cwd, prompt } = req.body as { cwd?: string; prompt?: string }
+  const { cwd, prompt, teamName } = req.body as { cwd?: string; prompt?: string; teamName?: string }
   if (!cwd) {
     res.status(400).json({ message: 'cwd 필요' })
     return
   }
-  const sessionId = randomUUID()
-  if (!host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined })) {
+  if (!host.isReachable) {
     res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
     return
   }
+  const sessionId = randomUUID()
+  let extraArgs: string[] | undefined
+  if (teamName?.trim()) {
+    const team: Team = {
+      id: randomUUID().slice(0, 8),
+      name: teamName.trim(),
+      cwd,
+      leadSessionId: sessionId,
+      createdAt: new Date().toISOString(),
+      members: [],
+    }
+    addTeam(team)
+    extraArgs = leadExtraArgs(team)
+  }
+  host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
   res.json({ sessionId })
 })
 

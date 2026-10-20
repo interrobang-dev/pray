@@ -80,7 +80,7 @@ function resumeWebSessions(): void {
       continue
     }
     try {
-      pool.spawn({ sessionId: record.sessionId, cwd: record.cwd, resume: true })
+      pool.spawn({ sessionId: record.sessionId, cwd: record.cwd, resume: true, extraArgs: record.extraArgs })
       console.log(`resume ${record.sessionId} cwd=${record.cwd}`)
     } catch (error) {
       console.error(`resume 실패 ${record.sessionId}`, error)

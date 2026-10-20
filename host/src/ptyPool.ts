@@ -66,7 +66,7 @@ export class PtyPool extends EventEmitter {
     })
     const ring = new RingBuffer(RING_LIMIT)
     this.entries.set(sessionId, { pty: child, ring, cwd })
-    if (!resume) addWebSession({ sessionId, cwd, createdAt: new Date().toISOString() })
+    if (!resume) addWebSession({ sessionId, cwd, createdAt: new Date().toISOString(), extraArgs: extraArgs.length ? extraArgs : undefined })
 
     child.onData((data) => {
       ring.push(data)

@@ -7,6 +7,8 @@ export interface WebSessionRecord {
   sessionId: string
   cwd: string
   createdAt: string
+  /** spawn 때 claude 에 넘긴 추가 인자. resume 때 다시 넘긴다 (--name, --permission-mode, --append-system-prompt 등) */
+  extraArgs?: string[]
 }
 
 /** 방 = 업무. 좌표·크기는 타일 단위 */
