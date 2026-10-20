@@ -97,6 +97,7 @@ Vite 페이지는 SSE 때문에 `--virtual-time-budget` 방식이 멈춘다. `--
 
 ## 확인하지 못한 것
 
-- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`, `--mcp-config`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력, 팀장 세션이 실제로 MCP 도구를 보고 쓰는지. 호스트를 새 코드로 재시작한 뒤 "팀장으로" 체크해 세션을 만들고 "팀원 둘에게 A·B 를 시키고 합쳐라" 로 확인해야 한다 (지시 → 결과 수신 흐름과 MCP 서버 단독 동작은 검증함). Claude Code 의 MCP 도구 호출 타임아웃이 `jk_wait` 120초보다 짧으면 기본값을 줄여야 한다
+- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`, `--mcp-config`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력, 팀장 세션이 실제로 MCP 도구를 보고 쓰는지. **호스트를 새 코드로 재시작**한 뒤 "+ 팀"(이름·폴더·방) → "+ 새 세션" 에서 그 팀 선택 + "팀장으로" → 팀장에게 "팀원 둘에게 A·B 를 시키고 합쳐라" 로 확인해야 한다 (지시 → 결과 수신 흐름, 팀 API, MCP 서버 단독 동작은 검증함). 구 호스트는 `extraArgs` 를 무시하고 `hq.json` 의 `teams` 를 지운다. Claude Code 의 MCP 도구 호출 타임아웃이 `jk_wait` 120초보다 짧으면 기본값을 줄여야 한다
+- 섬·책상 마우스 드래그 (headless 로 검증 못 함. API 는 검증함)
 - 다른 PC 에서 실제 접속 (방화벽 허용 여부). 서버 쪽 인증 흐름은 이 PC 의 LAN IP 로 검증했다
 - 로컬 접속의 "채팅 입력 → claude 응답" 전체 흐름 (API 비용 때문에 자동 검증은 `/help` 까지만 했다)
