@@ -1,19 +1,36 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+  font-size: 14px;
 }
-body {
+html,
+body,
+#root {
   margin: 0;
-  padding: 16px;
+  height: 100%;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: 100%;
+}
+aside {
+  border-right: 1px solid #8884;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 header {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #8884;
 }
 h1 {
-  font-size: 18px;
+  font-size: 16px;
   margin: 0;
+  margin-right: auto;
 }
 .dot {
   width: 10px;
@@ -24,27 +41,59 @@ h1 {
 .dot.on {
   background: #2ecc71;
 }
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 12px;
-  font-size: 14px;
-}
-th,
-td {
-  text-align: left;
-  padding: 6px 8px;
+.create {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
   border-bottom: 1px solid #8884;
-  vertical-align: top;
 }
-tr.dead {
+.create input {
+  padding: 6px;
+}
+.sessions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+.sessions li {
+  padding: 8px 12px;
+  border-bottom: 1px solid #8882;
+  cursor: pointer;
+}
+.sessions li.selected {
+  background: #3498db22;
+}
+.sessions li.dead {
   opacity: 0.5;
 }
-.cwd,
-.last {
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.time {
+  margin-left: auto;
   font-size: 12px;
-  opacity: 0.8;
-  max-width: 320px;
+  opacity: 0.7;
+}
+.kind {
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid #8888;
+  border-radius: 8px;
+}
+.title {
+  margin-top: 4px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cwd {
+  font-size: 12px;
+  opacity: 0.7;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -70,4 +119,34 @@ tr.dead {
 }
 .badge.ended {
   background: #34495e;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #8884;
+}
+.panel-header .cwd {
+  flex: 1;
+}
+.hint {
+  padding: 16px;
+  opacity: 0.8;
+}
+.hint pre {
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+.terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 4px;
+  background: #000;
 }

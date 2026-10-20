@@ -1,17 +1,101 @@
+import { randomUUID } from 'node:crypto'
 import express from 'express'
 import type { Response } from 'express'
+import type { HostMessage } from '@jk-corp/host/protocol'
 import { applyHook, type HookPayload, type HookState } from './hookState.js'
 import { listSessions } from './sessions.js'
+import { HostClient } from './hostClient.js'
 
 const PORT = 4710
 const hookStates = new Map<string, HookState>()
 const subscribers = new Set<Response>()
+const host = new HostClient()
 
 const app = express()
 app.use(express.json({ limit: '1mb' }))
 
+function openSse(res: Response): void {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  })
+  res.flushHeaders()
+}
+
+function sendSse(res: Response, event: string, data: unknown): void {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+}
+
+async function snapshotPayload() {
+  const webSessions = new Map(host.sessions.map((s) => [s.sessionId, s.cwd]))
+  return {
+    isHostReachable: host.isReachable,
+    sessions: await listSessions(hookStates, webSessions),
+  }
+}
+
+async function broadcast() {
+  if (subscribers.size === 0) return
+  const payload = await snapshotPayload()
+  for (const res of subscribers) sendSse(res, 'sessions', payload)
+}
+
 app.get('/api/sessions', async (_req, res) => {
-  res.json(await listSessions(hookStates))
+  res.json(await snapshotPayload())
+})
+
+app.post('/api/sessions', (req, res) => {
+  const { cwd, prompt } = req.body as { cwd?: string; prompt?: string }
+  if (!cwd) {
+    res.status(400).json({ message: 'cwd 필요' })
+    return
+  }
+  const sessionId = randomUUID()
+  if (!host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined })) {
+    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    return
+  }
+  res.json({ sessionId })
+})
+
+app.delete('/api/sessions/:id', (req, res) => {
+  host.send({ type: 'kill', sessionId: req.params.id })
+  res.json({})
+})
+
+app.post('/api/sessions/:id/input', (req, res) => {
+  const { data } = req.body as { data?: string }
+  if (typeof data !== 'string') {
+    res.status(400).end()
+    return
+  }
+  host.send({ type: 'input', sessionId: req.params.id, data })
+  res.json({})
+})
+
+app.post('/api/sessions/:id/resize', (req, res) => {
+  const { cols, rows } = req.body as { cols?: number; rows?: number }
+  if (typeof cols !== 'number' || typeof rows !== 'number') {
+    res.status(400).end()
+    return
+  }
+  host.send({ type: 'resize', sessionId: req.params.id, cols, rows })
+  res.json({})
+})
+
+app.get('/api/sessions/:id/stream', (req, res) => {
+  const sessionId = req.params.id
+  openSse(res)
+  const onMessage = (message: HostMessage) => {
+    if (!('sessionId' in message) || message.sessionId !== sessionId) return
+    if (message.type === 'snapshot' || message.type === 'output') sendSse(res, message.type, message.data)
+    if (message.type === 'exit') sendSse(res, 'exit', message.exitCode)
+    if (message.type === 'error') sendSse(res, 'error', message.message)
+  }
+  host.on('message', onMessage)
+  req.on('close', () => host.off('message', onMessage))
+  if (!host.send({ type: 'attach', sessionId })) sendSse(res, 'error', '세션 호스트에 연결되지 않음')
 })
 
 app.post('/api/hook', (req, res) => {
@@ -27,22 +111,17 @@ app.post('/api/hook', (req, res) => {
 })
 
 app.get('/api/events', (req, res) => {
-  res.set({
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-  })
-  res.flushHeaders()
+  openSse(res)
   subscribers.add(res)
   req.on('close', () => subscribers.delete(res))
   void broadcast()
 })
 
-async function broadcast() {
-  if (subscribers.size === 0) return
-  const data = JSON.stringify(await listSessions(hookStates))
-  for (const res of subscribers) res.write(`event: sessions\ndata: ${data}\n\n`)
-}
+host.on('reachable', () => void broadcast())
+host.on('message', (message: HostMessage) => {
+  if (message.type === 'sessions' || message.type === 'exit') void broadcast()
+})
+host.start()
 
 setInterval(() => void broadcast(), 5000)
 

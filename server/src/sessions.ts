@@ -28,9 +28,12 @@ async function findTranscript(sessionId: string): Promise<string | null> {
   return null
 }
 
-export async function listSessions(hookStates: Map<string, HookState>): Promise<Session[]> {
+export async function listSessions(
+  hookStates: Map<string, HookState>,
+  webSessions: Map<string, string>,
+): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
-  const ids = new Set<string>([...live.map((s) => s.sessionId), ...hookStates.keys()])
+  const ids = new Set<string>([...live.map((s) => s.sessionId), ...hookStates.keys(), ...webSessions.keys()])
 
   const sessions = await Promise.all(
     [...ids].map(async (id): Promise<Session> => {
@@ -40,11 +43,11 @@ export async function listSessions(hookStates: Map<string, HookState>): Promise<
       const transcript = jsonl ? summarizeTranscript(jsonl) : null
       return {
         id,
-        cwd: liveEntry?.cwd ?? hook?.cwd ?? '',
+        cwd: liveEntry?.cwd ?? hook?.cwd ?? webSessions.get(id) ?? '',
         title: transcript?.title ?? null,
         status: hook?.status ?? 'unknown',
-        kind: 'external',
-        isAlive: liveEntry !== undefined,
+        kind: webSessions.has(id) ? 'web' : 'external',
+        isAlive: liveEntry !== undefined || webSessions.has(id),
         lastAt: transcript?.lastAt ?? hook?.updatedAt ?? null,
         lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
         pendingTool: hook?.pendingTool ?? null,

@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@jk-corp/host": "*",
     "express": "^5.1.0"
   },
   "devDependencies": {

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Terminal } from './Terminal'
 
 type SessionStatus = 'working' | 'my-turn' | 'needs-approval' | 'idle' | 'ended' | 'unknown'
 
@@ -12,6 +13,11 @@ interface Session {
   lastAt: string | null
   lastAssistantText: string | null
   pendingTool: string | null
+}
+
+interface Snapshot {
+  isHostReachable: boolean
+  sessions: Session[]
 }
 
 const statusLabel: Record<SessionStatus, string> = {
@@ -29,55 +35,114 @@ function formatTime(iso: string | null): string {
 }
 
 export function App() {
-  const [sessions, setSessions] = useState<Session[]>([])
+  const [snapshot, setSnapshot] = useState<Snapshot>({ isHostReachable: false, sessions: [] })
   const [isConnected, setIsConnected] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
 
   useEffect(() => {
     const source = new EventSource('/api/events')
     source.addEventListener('sessions', (event) => {
-      setSessions(JSON.parse((event as MessageEvent).data))
+      setSnapshot(JSON.parse((event as MessageEvent).data))
       setIsConnected(true)
     })
     source.onerror = () => setIsConnected(false)
     return () => source.close()
   }, [])
 
+  const selected = snapshot.sessions.find((s) => s.id === selectedId) ?? null
+
+  async function createSession(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const response = await fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd: form.get('cwd'), prompt: form.get('prompt') }),
+    })
+    if (!response.ok) {
+      alert((await response.json()).message ?? '생성 실패')
+      return
+    }
+    const { sessionId } = await response.json()
+    setSelectedId(sessionId)
+    setIsCreating(false)
+  }
+
   return (
-    <main>
-      <header>
-        <h1>jk-corp</h1>
-        <span className={isConnected ? 'dot on' : 'dot'} title={isConnected ? '연결됨' : '끊김'} />
-      </header>
-      <table>
-        <thead>
-          <tr>
-            <th>상태</th>
-            <th>제목</th>
-            <th>폴더</th>
-            <th>마지막 활동</th>
-            <th>마지막 말</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sessions.map((session) => (
-            <tr key={session.id} className={session.isAlive ? '' : 'dead'}>
-              <td>
+    <main className="layout">
+      <aside>
+        <header>
+          <h1>jk-corp</h1>
+          <span className={isConnected ? 'dot on' : 'dot'} title={isConnected ? '서버 연결됨' : '서버 끊김'} />
+          <span
+            className={snapshot.isHostReachable ? 'dot on' : 'dot'}
+            title={snapshot.isHostReachable ? '세션 호스트 연결됨' : '세션 호스트 끊김'}
+          />
+          <button onClick={() => setIsCreating(true)} disabled={!snapshot.isHostReachable}>
+            + 새 세션
+          </button>
+        </header>
+        {isCreating && (
+          <form className="create" onSubmit={createSession}>
+            <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />
+            <input name="prompt" placeholder="첫 지시 (선택)" />
+            <div>
+              <button type="submit">시작</button>
+              <button type="button" onClick={() => setIsCreating(false)}>
+                취소
+              </button>
+            </div>
+          </form>
+        )}
+        <ul className="sessions">
+          {snapshot.sessions.map((session) => (
+            <li
+              key={session.id}
+              className={[session.id === selectedId ? 'selected' : '', session.isAlive ? '' : 'dead'].join(' ')}
+              onClick={() => setSelectedId(session.id)}
+            >
+              <div className="row">
                 <span className={`badge ${session.status}`}>{statusLabel[session.status]}</span>
-                {session.pendingTool && <small> {session.pendingTool}</small>}
-              </td>
-              <td>{session.title ?? session.id.slice(0, 8)}</td>
-              <td className="cwd">{session.cwd}</td>
-              <td>{formatTime(session.lastAt)}</td>
-              <td className="last">{session.lastAssistantText?.split('\n')[0] ?? ''}</td>
-            </tr>
+                {session.kind === 'web' && <span className="kind">웹</span>}
+                <span className="time">{formatTime(session.lastAt)}</span>
+              </div>
+              <div className="title">{session.title ?? session.id.slice(0, 8)}</div>
+              <div className="cwd">{session.cwd}</div>
+            </li>
           ))}
-          {sessions.length === 0 && (
-            <tr>
-              <td colSpan={5}>세션 없음</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+          {snapshot.sessions.length === 0 && <li>세션 없음</li>}
+        </ul>
+      </aside>
+      <section className="panel">
+        {!selected && <p className="hint">세션을 선택하세요</p>}
+        {selected && selected.kind === 'external' && (
+          <div className="hint">
+            <p>
+              <b>{selected.title ?? selected.id}</b>
+            </p>
+            <p>터미널·IDE에서 띄운 세션이라 관찰만 가능합니다.</p>
+            {selected.pendingTool && <p>승인 대기 중인 도구: {selected.pendingTool}</p>}
+            <pre>{selected.lastAssistantText}</pre>
+          </div>
+        )}
+        {selected && selected.kind === 'web' && (
+          <>
+            <div className="panel-header">
+              <b>{selected.title ?? selected.id.slice(0, 8)}</b>
+              <span className="cwd">{selected.cwd}</span>
+              <button
+                onClick={() => {
+                  if (confirm('세션을 종료할까요?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
+                }}
+              >
+                종료
+              </button>
+            </div>
+            <Terminal sessionId={selected.id} />
+          </>
+        )}
+      </section>
     </main>
   )
 }
