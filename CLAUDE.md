@@ -8,11 +8,12 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 npm install
 npm run hooks:install     # ~/.claude/settings.json 에 http 훅 6개 추가 (한 번만. 기존 훅은 안 건드림)
 npm run build             # web/dist 생성. 서버가 이걸 정적으로 제공한다
-npm run startup:install   # 작업 스케줄러에 jk-corp-host / jk-corp-server 등록 (로그인 시 자동 실행)
-Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 바로 시작
+npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으로 띄우고 창에 사무실을 연다)
 ```
 
-평소 접속: `http://127.0.0.1:4710` (스케줄러로 뜬 서버 + 빌드된 웹). 로그: `~/.claude/jk-corp/logs/*.log`.
+**평소에는 트레이 앱으로 쓴다.** 바탕화면 `jk-corp.lnk` (= `node_modules\electron\dist\electron.exe desktop`, 작업 폴더 저장소). 트레이 아이콘: 클릭 = 창 열기, 우클릭 = 상태·서버/호스트 재시작·로그 폴더·로그인 시 자동 실행·종료. 창 X 는 숨기기이고 **트레이 "종료"만이 진짜 종료**(호스트가 꺼져 웹 세션이 끊기고 다음 실행 때 `--resume`). 승인 대기 세션이 있으면 아이콘에 빨간 점. 자식이 죽으면 3초 뒤 재시작, 1분에 5번 넘으면 포기하고 알림. 설치 파일(electron-builder)은 만들지 않았다 — 저장소에서 실행한다.
+
+브라우저로도 `http://127.0.0.1:4710` 접속 가능. 로그: `~/.claude/jk-corp/logs/*.log`.
 
 설정: `~/.claude/jk-corp/config.json` (저장소 밖. SMTP 비밀번호가 들어 있으니 절대 커밋·출력하지 않는다)
 
@@ -22,9 +23,9 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 
 파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP>:4710` → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 토큰은 `~/.claude/jk-corp/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
 
-**멈출 때는 반드시 `scripts/stop.ps1`.** 작업은 `wscript launch-hidden.vbs` 래퍼로 node 를 창 없이 띄우는데(창 없이 띄우는 S4U 방식은 관리자 권한 필요. PowerShell `-WindowStyle Hidden` 은 대화형 작업에서 콘솔 창이 그대로 보여 사용자가 닫아 버리는 사고가 두 번 났다), `Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남아 다음 시작이 pipe/포트 충돌로 죽는다. stop.ps1 은 wscript 와 node 까지 죽인다. 호스트를 멈추면 웹 세션도 죽고, 다음 시작 때 `hq.json.webSessions` 를 읽어 `--resume` 한다.
+**트레이 앱 없이 쓰는 대안: 작업 스케줄러.** `npm run startup:install` 이 `jk-corp-host`/`jk-corp-server` 작업을 등록한다(`wscript launch-hidden.vbs` 래퍼로 창 없이. S4U 는 관리자 권한 필요. PowerShell `-WindowStyle Hidden` 은 대화형 작업에서 콘솔 창이 보여 사용자가 닫는 사고가 두 번 났다). 멈출 때는 반드시 `scripts/stop.ps1` (`Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남는다). **트레이 앱과 스케줄러를 같이 쓰면 pipe·포트가 충돌한다** — 지금은 스케줄러 작업을 제거한 상태.
 
-개발 중 화면 작업: 스케줄러 호스트·서버는 그대로 두고 `npm run dev:web` 만 띄워 `http://localhost:4711` 로 본다 (Vite 가 IPv6 localhost 로 열려 `127.0.0.1` 로는 안 열림. `/api` 는 4710 으로 프록시). 서버·호스트 코드를 고쳤으면 `scripts/stop.ps1` 후 작업을 다시 Start 한다. `npm run dev` (셋 다 tsx 로 실행)는 스케줄러 작업을 멈춘 상태에서만 쓴다. 훅은 Claude Code가 settings.json을 핫리로드하므로 세션 재시작 없이 반영된다.
+개발 중 화면 작업: 트레이 앱(또는 스케줄러)의 호스트·서버는 그대로 두고 `npm run dev:web` 만 띄워 `http://localhost:4711` 로 본다 (Vite 가 IPv6 localhost 로 열려 `127.0.0.1` 로는 안 열림. `/api` 는 4710 으로 프록시). 서버·호스트 코드를 고쳤으면 트레이 메뉴의 재시작을 쓴다. `npm run dev` (셋 다 tsx 로 실행)는 트레이 앱을 종료한 상태에서만 쓴다. 훅은 Claude Code가 settings.json을 핫리로드하므로 세션 재시작 없이 반영된다.
 
 테스트: `npm test` (host·server의 vitest).
 
@@ -36,6 +37,9 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 - `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid>` 실행, 세션별 200KB 링버퍼. claude 경로는 `--claude=` 인자 (스케줄러 환경엔 사용자 PATH 가 없어 설치 스크립트가 넘김)
 - `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=<path>` 면 console 을 파일로 (스케줄러는 환경변수를 못 넘기므로 전부 인자)
 - `scripts/install-startup.ps1` · `stop.ps1` · `uninstall-startup.ps1` — 작업 스케줄러 등록·중지·제거. UTF-8 BOM 필수 (Windows PowerShell 5.1 이 BOM 없는 .ps1 을 ANSI 로 읽어 한글이 깨짐)
+- `desktop/src/main.ts` — Electron 트레이 앱. 호스트·서버를 `node --import tsx src/index.ts` 로 자식 실행(tsx CLI 는 자식 node 를 하나 더 만들어 kill 때 고아가 남으므로 쓰지 않음), 5초마다 `/api/sessions` 로 상태 폴링해 아이콘·툴팁 갱신. `node`·`claude` 경로는 `where` 로 찾고 자식 env 에서 `CLAUDE*`·`ELECTRON_*` 를 지운다
+- `desktop/src/children.ts` — 자식 프로세스 재시작 정책. `desktop/src/icon.ts` — 이미지 파일 없이 PNG 를 코드로 만든 트레이 아이콘
+- `desktop/tsconfig.json` 은 CommonJS 출력 (Electron main 을 단순하게). 빌드 결과 `desktop/dist/` 는 git 무시
 - `host/src/protocol.ts` — pipe 메시지 타입과 줄 단위 JSON 프레이밍. 서버가 `@jk-corp/host/protocol`로 import
 - `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `rooms`·`seats` 를 쓴다. 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. 서버가 `@jk-corp/host/hq` 로 import
 - `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 사무실(방·자리) API

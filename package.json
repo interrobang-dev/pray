@@ -4,7 +4,8 @@
   "workspaces": [
     "host",
     "server",
-    "web"
+    "web",
+    "desktop"
   ],
   "scripts": {
     "dev": "concurrently -n host,server,web \"npm:dev:host\" \"npm:dev:server\" \"npm:dev:web\"",
@@ -13,6 +14,7 @@
     "dev:web": "npm run dev --workspace web",
     "test": "npm test --workspaces --if-present",
     "build": "npm run build --workspace web",
+    "desktop": "npm run start --workspace desktop",
     "hooks:install": "node hooks/install.mjs",
     "startup:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-startup.ps1",
     "startup:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-startup.ps1"
@@ -21,6 +23,7 @@
     "concurrently": "^9.2.0"
   },
   "allowScripts": {
-    "node-pty@1.1.0": true
+    "node-pty@1.1.0": true,
+    "electron@44.9.1": true
   }
 }
