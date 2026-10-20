@@ -86,6 +86,19 @@ h1 {
 .dot.on {
   background: var(--green);
 }
+header button.icon {
+  padding: 0 5px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+header button.icon:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--text);
+}
 .toolbar {
   display: flex;
   gap: 6px;

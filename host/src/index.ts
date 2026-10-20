@@ -8,6 +8,8 @@ import { setupFileLog } from './runtime.js'
 setupFileLog()
 const pool = new PtyPool()
 const clients = new Set<Socket>()
+/** restart 요청 때의 종료 코드. 0 은 "의도한 중지" 라 트레이가 다시 띄우지 않는다 */
+const RESTART_EXIT_CODE = 2
 
 function send(socket: Socket, message: HostMessage): void {
   if (!socket.destroyed) socket.write(encode(message))
@@ -55,6 +57,11 @@ function handle(socket: Socket, message: ClientMessage): void {
       return
     case 'kill':
       pool.kill(message.sessionId)
+      return
+    case 'restart':
+      // 웹 세션은 호스트와 함께 끊기고, 다시 뜰 때 webSessions 를 --resume 한다
+      console.log(`restart 요청 → 종료 코드 ${RESTART_EXIT_CODE} 로 나감 (트레이 앱이 다시 띄움)`)
+      setTimeout(() => process.exit(RESTART_EXIT_CODE), 100)
       return
   }
 }

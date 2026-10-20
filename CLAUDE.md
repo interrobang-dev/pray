@@ -13,7 +13,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 **평소에는 트레이 앱으로 쓴다.** 바탕화면 `jk-corp.lnk` (= `node_modules\electron\dist\electron.exe desktop`, 작업 폴더 저장소). 트레이 아이콘: 클릭 = 창 열기, 우클릭 = 상태·서버/호스트 재시작·로그 폴더·로그인 시 자동 실행·종료. 창 X 는 숨기기이고 **트레이 "종료"만이 진짜 종료**(호스트가 꺼져 웹 세션이 끊기고 다음 실행 때 `--resume`). 승인 대기 세션이 있으면 아이콘에 빨간 점. 자식이 죽으면 3초 뒤 재시작, 1분에 5번 넘으면 포기하고 알림. 설치 파일(electron-builder)은 만들지 않았다 — 저장소에서 실행한다.
 
-브라우저로도 `http://127.0.0.1:4710` 접속 가능. 로그: `~/.claude/jk-corp/logs/*.log`.
+브라우저로도 `http://127.0.0.1:4710` 접속 가능. 로그: `~/.claude/jk-corp/logs/*.log`. 화면 헤더의 `↻` 는 호스트 재시작 (`POST /api/host/restart` → 호스트가 스스로 종료 → 트레이가 새 코드로 재시작. **작업 스케줄러 방식에서는 종료만 되고 다시 뜨지 않는다**). 웹 세션은 끊겼다가 `--resume` 된다.
 
 설정: `~/.claude/jk-corp/config.json` (저장소 밖. SMTP 비밀번호가 들어 있으니 절대 커밋·출력하지 않는다)
 
@@ -33,7 +33,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 ## 구조
 
-- `host/src/index.ts` — named pipe `\\.\pipe\jk-corp-host` 서버. 연결된 모든 클라이언트에 모든 세션 출력을 보낸다 (구독 관리 없음)
+- `host/src/index.ts` — named pipe `\\.\pipe\jk-corp-host` 서버. 연결된 모든 클라이언트에 모든 세션 출력을 보낸다 (구독 관리 없음). `restart` 메시지를 받으면 종료 코드 2 로 나가고 트레이 앱이 다시 띄운다 (0 은 "의도한 중지" 라 안 살린다)
 - `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid>` 실행, 세션별 200KB 링버퍼. `spawn.extraArgs` 로 `--name`·`--permission-mode` 등 추가 인자를 넘기고 `webSessions` 에 같이 저장해 resume 때도 넘긴다. claude 경로는 `--claude=` 인자 (스케줄러 환경엔 사용자 PATH 가 없어 설치 스크립트가 넘김)
 - `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=<path>` 면 console 을 파일로 (스케줄러는 환경변수를 못 넘기므로 전부 인자)
 - `scripts/install-startup.ps1` · `stop.ps1` · `uninstall-startup.ps1` — 작업 스케줄러 등록·중지·제거. UTF-8 BOM 필수 (Windows PowerShell 5.1 이 BOM 없는 .ps1 을 ANSI 로 읽어 한글이 깨짐)
@@ -98,7 +98,7 @@ Vite 페이지는 SSE 때문에 `--virtual-time-budget` 방식이 멈춘다. `--
 
 ## 확인하지 못한 것
 
-- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`, `--mcp-config`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력, 팀장 세션이 실제로 MCP 도구를 보고 쓰는지. **호스트를 새 코드로 재시작**한 뒤 "+ 팀"(이름·폴더·그룹) → "+ 새 세션" 에서 그 팀 선택 + "팀장으로" → 팀장에게 "팀원 둘에게 A·B 를 시키고 합쳐라" 로 확인해야 한다 (지시 → 결과 수신 흐름, 팀 API, MCP 서버 단독 동작은 검증함). 구 호스트는 `extraArgs` 를 무시하고 `hq.json` 의 `teams` 를 지운다. Claude Code 의 MCP 도구 호출 타임아웃이 `jk_wait` 120초보다 짧으면 기본값을 줄여야 한다
+- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`, `--mcp-config`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력, 팀장 세션이 실제로 MCP 도구를 보고 쓰는지. **호스트를 새 코드로 재시작**한 뒤 "+ 팀"(이름·폴더·그룹) → "+ 새 세션" 에서 그 팀 선택 + "팀장으로" → 팀장에게 "팀원 둘에게 A·B 를 시키고 합쳐라" 로 확인해야 한다 (지시 → 결과 수신 흐름, 팀 API, MCP 서버 단독 동작은 검증함). 구 호스트는 `extraArgs` 를 무시하고 `hq.json` 의 `teams` 를 지우며 `restart` 메시지도 무시하므로 **첫 한 번은 트레이 메뉴로** 재시작해야 한다. 화면 `↻` 버튼의 실제 재시작도 그 뒤에 확인할 수 있다 (이 세션에서는 자기 자신이 끊겨 검증 못 함). Claude Code 의 MCP 도구 호출 타임아웃이 `jk_wait` 120초보다 짧으면 기본값을 줄여야 한다
 - 섬·책상 마우스 드래그 (headless 로 검증 못 함. API 는 검증함)
 - 다른 PC 에서 실제 접속 (방화벽 허용 여부). 서버 쪽 인증 흐름은 이 PC 의 LAN IP 로 검증했다
 - 로컬 접속의 "채팅 입력 → claude 응답" 전체 흐름 (API 비용 때문에 자동 검증은 `/help` 까지만 했다)

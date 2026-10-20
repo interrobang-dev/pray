@@ -440,6 +440,15 @@ app.get('/api/team/:teamId/tasks/:taskId/wait', async (req, res) => {
   res.json({ task })
 })
 
+/** 호스트에게 스스로 종료하라고 보낸다. 트레이 앱이 새 코드로 다시 띄운다 (작업 스케줄러 방식에서는 다시 뜨지 않음) */
+app.post('/api/host/restart', (_req, res) => {
+  if (!host.send({ type: 'restart' })) {
+    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    return
+  }
+  res.json({})
+})
+
 app.get('/api/office', (_req, res) => {
   res.json(readOffice())
 })

@@ -109,6 +109,12 @@ export function App() {
     setIsGroupForm(false)
   }
 
+  async function restartHost() {
+    if (!confirm('호스트를 재시작하면 웹 세션이 모두 끊깁니다. 다시 뜰 때 --resume 으로 복구됩니다. 재시작할까요?')) return
+    const response = await postJson('/api/host/restart', 'POST', {})
+    if (!response.ok) alert((await response.json()).message ?? '호스트 재시작 실패')
+  }
+
   async function renameSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!renameTarget) return
@@ -282,6 +288,9 @@ export function App() {
             className={snapshot.isHostReachable ? 'dot on' : 'dot'}
             title={snapshot.isHostReachable ? '세션 호스트 연결됨' : '세션 호스트 끊김'}
           />
+          <button className="icon" onClick={restartHost} disabled={!snapshot.isHostReachable} title="호스트 재시작 (웹 세션 끊김)">
+            ↻
+          </button>
         </header>
         <div className="toolbar">
           <button onClick={() => setIsGroupForm(true)}>+ 그룹</button>

@@ -13,6 +13,8 @@ export type ClientMessage =
   | { type: 'input'; sessionId: string; data: string }
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
   | { type: 'kill'; sessionId: string }
+  /** 호스트 스스로 종료 (0 이 아닌 코드). 트레이 앱이 3초 뒤 새 코드로 다시 띄운다 */
+  | { type: 'restart' }
 
 export type HostMessage =
   | { type: 'sessions'; sessions: HostSession[] }
