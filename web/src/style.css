@@ -357,6 +357,15 @@ header button.icon:hover:not(:disabled) {
   font-size: 11px;
   color: var(--muted);
 }
+.session .time {
+  color: var(--text);
+}
+.session .time.recent {
+  font-weight: 600;
+}
+.session .time.stale {
+  color: var(--muted);
+}
 .session .cwd {
   grid-column: 3 / -1;
   margin-top: 1px;

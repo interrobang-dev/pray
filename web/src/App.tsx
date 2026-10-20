@@ -20,9 +20,15 @@ function displayName(session: Session): string {
   return session.name ?? session.title ?? session.id.slice(0, 8)
 }
 
-function formatTime(iso: string | null): string {
-  if (!iso) return '-'
-  return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+/** 마지막 활동부터 지금까지를 "now"·"3m"·"2h"·"1d" 처럼 단위 하나로. 15분 미만은 recent, 2시간 초과는 stale */
+function formatElapsed(iso: string | null, now: number): { text: string; className: string; title: string } {
+  if (!iso) return { text: '-', className: '', title: '' }
+  const date = new Date(iso)
+  const minutes = Math.floor(Math.max(0, now - date.getTime()) / 60_000)
+  const text =
+    minutes < 1 ? 'now' : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`
+  const className = minutes < 15 ? 'recent' : minutes > 120 ? 'stale' : ''
+  return { text, className, title: date.toLocaleString('ko-KR') }
 }
 
 async function postJson(url: string, method: string, body: unknown): Promise<Response> {
@@ -44,6 +50,13 @@ export function App() {
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
+  /** 목록의 경과 시간을 1분마다 다시 계산하기 위한 현재 시각 */
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     fetch('/api/office')
@@ -255,6 +268,7 @@ export function App() {
   /** 세션 한 줄: 상태 점 · 아바타 · 제목 · (팀장 태그 · 승인 대기 배지 · 시각). 팀 안에서는 폴더를 숨긴다 (팀 = 폴더) */
   function renderSession(session: Session, hasCwd: boolean) {
     const avatar = avatarOf(session.id)
+    const elapsed = formatElapsed(session.lastAt, now)
     return (
       <div
         key={session.id}
@@ -267,7 +281,9 @@ export function App() {
         <div className="meta">
           {session.role === 'lead' && <span className="badge role-lead">팀장</span>}
           {session.status === 'needs-approval' && <span className="badge needs-approval">{statusLabel[session.status]}</span>}
-          <span className="time">{formatTime(session.lastAt)}</span>
+          <span className={`time ${elapsed.className}`} title={elapsed.title}>
+            {elapsed.text}
+          </span>
         </div>
         {hasCwd && <div className="cwd">{session.cwd}</div>}
       </div>
