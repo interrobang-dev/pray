@@ -7,10 +7,10 @@ import { summarizeTranscript } from './transcript.js'
 import { readLiveSessions } from './liveSessions.js'
 
 const claudeDir = join(homedir(), '.claude')
-const projectsDir = join(claudeDir, 'projects')
+export const projectsDir = join(claudeDir, 'projects')
 const sessionsDir = join(claudeDir, 'sessions')
 
-async function findTranscript(sessionId: string): Promise<string | null> {
+export async function findTranscript(sessionId: string): Promise<string | null> {
   let projectNames: string[]
   try {
     projectNames = await readdir(projectsDir)

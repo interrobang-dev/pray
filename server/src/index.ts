@@ -3,8 +3,10 @@ import express from 'express'
 import type { Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
 import { applyHook, type HookPayload, type HookState } from './hookState.js'
-import { listSessions } from './sessions.js'
+import { findTranscript, listSessions, projectsDir } from './sessions.js'
 import { HostClient } from './hostClient.js'
+import { parseMessages } from './messages.js'
+import { TranscriptWatcher } from './transcriptWatcher.js'
 
 const PORT = 4710
 const hookStates = new Map<string, HookState>()
@@ -57,6 +59,11 @@ app.post('/api/sessions', (req, res) => {
     return
   }
   res.json({ sessionId })
+})
+
+app.get('/api/sessions/:id/messages', async (req, res) => {
+  const jsonl = await findTranscript(req.params.id)
+  res.json(jsonl ? parseMessages(jsonl) : [])
 })
 
 app.delete('/api/sessions/:id', (req, res) => {
@@ -122,6 +129,11 @@ host.on('message', (message: HostMessage) => {
   if (message.type === 'sessions' || message.type === 'exit') void broadcast()
 })
 host.start()
+
+const watcher = new TranscriptWatcher(projectsDir)
+watcher.on('change', (sessionId: string) => {
+  for (const res of subscribers) sendSse(res, 'transcript', { sessionId })
+})
 
 setInterval(() => void broadcast(), 5000)
 

@@ -29,7 +29,10 @@ npm run dev               # host(named pipe) + server(4710) + web(4711) 동시 �
 - `server/src/liveSessions.ts` — `~/.claude/sessions/<pid>.json` 읽고 pid 생존 확인
 - `server/src/hookState.ts` — 훅 이벤트 → 상태 매핑 (순수 함수)
 - `server/src/transcript.ts` — jsonl → 제목·마지막 시각·마지막 assistant 텍스트 (순수 함수)
-- `web/src/App.tsx` — 좌측 세션 목록, 우측 패널 (웹 세션은 터미널, 외부 세션은 관찰 안내)
+- `server/src/messages.ts` — jsonl → 채팅 메시지 배열. assistant 는 `message.id` 로 묶고 tool_result 를 tool_use 에 붙인다 (순수 함수)
+- `server/src/transcriptWatcher.ts` — `~/.claude/projects` 재귀 감시 → 전역 SSE `transcript {sessionId}` (300ms 디바운스)
+- `web/src/App.tsx` — 좌측 세션 목록, 우측 패널 (대화 탭 / 터미널 탭. 터미널은 웹 세션만)
+- `web/src/Chat.tsx` — 말풍선 뷰. 입력칸은 `텍스트` 후 `\r` 을 터미널 입력 API 로 보낸다. 승인 버튼은 Enter(승인)/Esc(거부) 키 전송
 - `web/src/Terminal.tsx` — xterm.js. 출력은 세션별 SSE, 입력·크기는 POST
 - `hooks/install.mjs` — settings.json 훅 설치 스크립트
 
@@ -44,11 +47,11 @@ npm run dev               # host(named pipe) + server(4710) + web(4711) 동시 �
 - 터미널 스트림은 `attach` 요청에 호스트가 링버퍼 스냅샷을 한 번 주고(`snapshot` 이벤트, 화면 reset 후 그림), 이후 `output`을 잇는다. 서버만 재시작해도 브라우저가 SSE 재연결하면 같은 경로로 복원된다
 - 새 폴더에서 claude를 띄우면 신뢰 확인 대화상자가 뜨고 **기본 선택이 "No, exit"**다. 사용자가 터미널에서 ↓ Enter를 눌러야 한다. 자동 테스트에서 Enter만 보내면 종료 코드 1로 죽는 게 정상이다
 - 호스트 자체가 죽으면 웹 세션도 죽는다. 허용한 설계
+- 채팅 뷰는 별도 API 없이 **터미널 키 입력**으로 지시를 보낸다. 슬래시 명령은 자동완성이 Enter 를 먼저 먹어 두 번 눌러야 할 수 있다
 
 ## 남은 일 (설계서 구현 순서)
 
 - hq.json `webSessions`에서 claude가 스스로 종료한(exit) 세션 기록을 지울지, 재부팅 resume 대상으로 남길지 미정. 지금은 kill 때만 지운다
-3. 채팅 뷰 + 승인 버튼
 4. 픽셀 사무실
 5. 재부팅 resume + 작업 스케줄러
 6. 메일 로그인

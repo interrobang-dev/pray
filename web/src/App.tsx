@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Terminal } from './Terminal'
+import { Chat } from './Chat'
 
 type SessionStatus = 'working' | 'my-turn' | 'needs-approval' | 'idle' | 'ended' | 'unknown'
 
@@ -39,12 +40,18 @@ export function App() {
   const [isConnected, setIsConnected] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
+  const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
 
   useEffect(() => {
     const source = new EventSource('/api/events')
     source.addEventListener('sessions', (event) => {
       setSnapshot(JSON.parse((event as MessageEvent).data))
       setIsConnected(true)
+    })
+    source.addEventListener('transcript', (event) => {
+      const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
+      setTranscriptVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
     })
     source.onerror = () => setIsConnected(false)
     return () => source.close()
@@ -66,6 +73,7 @@ export function App() {
     }
     const { sessionId } = await response.json()
     setSelectedId(sessionId)
+    setTab('terminal')
     setIsCreating(false)
   }
 
@@ -116,30 +124,42 @@ export function App() {
       </aside>
       <section className="panel">
         {!selected && <p className="hint">세션을 선택하세요</p>}
-        {selected && selected.kind === 'external' && (
-          <div className="hint">
-            <p>
-              <b>{selected.title ?? selected.id}</b>
-            </p>
-            <p>터미널·IDE에서 띄운 세션이라 관찰만 가능합니다.</p>
-            {selected.pendingTool && <p>승인 대기 중인 도구: {selected.pendingTool}</p>}
-            <pre>{selected.lastAssistantText}</pre>
-          </div>
-        )}
-        {selected && selected.kind === 'web' && (
+        {selected && (
           <>
             <div className="panel-header">
               <b>{selected.title ?? selected.id.slice(0, 8)}</b>
               <span className="cwd">{selected.cwd}</span>
-              <button
-                onClick={() => {
-                  if (confirm('세션을 종료할까요?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
-                }}
-              >
-                종료
-              </button>
+              <nav className="tabs">
+                <button className={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>
+                  대화
+                </button>
+                {selected.kind === 'web' && (
+                  <button className={tab === 'terminal' ? 'on' : ''} onClick={() => setTab('terminal')}>
+                    터미널
+                  </button>
+                )}
+              </nav>
+              {selected.kind === 'web' && (
+                <button
+                  onClick={() => {
+                    if (confirm('세션을 종료할까요?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
+                  }}
+                >
+                  종료
+                </button>
+              )}
             </div>
-            <Terminal sessionId={selected.id} />
+            {tab === 'terminal' && selected.kind === 'web' ? (
+              <Terminal sessionId={selected.id} />
+            ) : (
+              <Chat
+                sessionId={selected.id}
+                isWritable={selected.kind === 'web'}
+                isApprovalNeeded={selected.status === 'needs-approval'}
+                pendingTool={selected.pendingTool}
+                version={transcriptVersions[selected.id] ?? 0}
+              />
+            )}
           </>
         )}
       </section>
