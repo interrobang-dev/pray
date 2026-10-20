@@ -10,9 +10,14 @@ import { avatarOf, type Avatar } from './avatar'
 const SCALE = 2
 const TILE = 16
 const WALL_H = 40
-const PAD_X = 8
-const PAD_Y = WALL_H + 28
+/** 방·책상 원점. 바닥 격자가 x=0, y=WALL_H 부터 TILE 간격이라 둘 다 TILE 배수여야 격자선과 맞는다 */
+const PAD_X = TILE
+const PAD_Y = WALL_H + TILE
 const SEAT_STEP = 3
+/** 책상 footprint (타일). 책상 그림 32x48px 가 이 칸에 꼭 맞는다 */
+const DESK_TILES_W = 2
+const DESK_TILES_H = 3
+const MIN_ROOM_SIZE = 4
 
 const COLOR = {
   floor: 0xdcdde6,
@@ -54,6 +59,7 @@ interface Props {
   onSelect: (sessionId: string) => void
   onMoveSeat: (sessionId: string, seat: Seat) => void
   onEditRoom: (room: Room) => void
+  onUpdateRoomBounds: (roomId: string, bounds: Pick<Room, 'x' | 'y' | 'w' | 'h'>) => void
 }
 
 function label(text: string, size: number, color = COLOR.text, wrapWidth?: number): Text {
@@ -188,7 +194,15 @@ function drawPlant(x: number, y: number, isLarge: boolean): Graphics {
 
 // ---------- 방 ----------
 
-function drawRoom(room: Room, onEdit: () => void): Container {
+interface RoomParts {
+  container: Container
+  /** 끌면 방 이동 */
+  sign: Graphics
+  /** 끌면 크기 조절 */
+  handle: Graphics
+}
+
+function drawRoom(room: Room, onEdit: () => void): RoomParts {
   const container = new Container()
   container.position.set(PAD_X + room.x * TILE, PAD_Y + room.y * TILE)
   const w = room.w * TILE
@@ -207,8 +221,18 @@ function drawRoom(room: Room, onEdit: () => void): Container {
   name.position.set(10, 6)
   container.addChild(sign, name)
 
+  sign.eventMode = 'static'
+  sign.cursor = 'move'
+
   container.addChild(drawPlant(w - 14, 8, true))
   container.addChild(drawPlant(6, h - 14, false))
+
+  // 오른쪽 아래 모서리 크기 조절 핸들
+  const handle = new Graphics().rect(0, 0, 7, 7).fill(COLOR.partition).rect(2, 2, 3, 3).fill(COLOR.green)
+  handle.position.set(w - 10, h - 11)
+  handle.eventMode = 'static'
+  handle.cursor = 'nwse-resize'
+  container.addChild(handle)
 
   if (room.waitingNote) {
     const text = label(room.waitingNote, 6, COLOR.text, 70)
@@ -224,7 +248,7 @@ function drawRoom(room: Room, onEdit: () => void): Container {
   container.on('pointertap', (event: FederatedPointerEvent) => {
     if (event.detail === 2) onEdit()
   })
-  return container
+  return { container, sign, handle }
 }
 
 function drawZone(zone: Room): Container {
@@ -337,8 +361,8 @@ interface DeskParts {
   figure: Figure
 }
 
-const DESK_W = 36
-const DESK_H = 46
+const DESK_W = DESK_TILES_W * TILE
+const DESK_H = DESK_TILES_H * TILE
 
 function drawDesk(session: Session, seat: Seat, isSelected: boolean): DeskParts {
   const container = new Container()
@@ -367,10 +391,10 @@ function drawDesk(session: Session, seat: Seat, isSelected: boolean): DeskParts 
 
   // 모니터 (책상 오른쪽)
   const monitor = new Graphics()
-  monitor.rect(23, 10, 12, 9).fill(COLOR.bezel)
-  monitor.rect(24, 11, 10, 7).fill(isWorking ? COLOR.screenOn : COLOR.screenOff)
-  if (isWorking) monitor.rect(25, 12, 4, 3).fill(0xdff0ff).rect(30, 13, 3, 2).fill(0xdff0ff)
-  monitor.rect(28, 19, 2, 2).fill(COLOR.bezel).rect(26, 21, 6, 1).fill(COLOR.bezel)
+  monitor.rect(22, 10, 10, 9).fill(COLOR.bezel)
+  monitor.rect(23, 11, 8, 7).fill(isWorking ? COLOR.screenOn : COLOR.screenOff)
+  if (isWorking) monitor.rect(24, 12, 3, 3).fill(0xdff0ff).rect(28, 13, 2, 2).fill(0xdff0ff)
+  monitor.rect(26, 19, 2, 2).fill(COLOR.bezel).rect(24, 21, 6, 1).fill(COLOR.bezel)
   container.addChild(monitor)
 
   // 소품: 연필꽂이 또는 작은 화분
@@ -386,7 +410,8 @@ function drawDesk(session: Session, seat: Seat, isSelected: boolean): DeskParts 
 
   // 이름표
   const name = label(session.title ?? session.id.slice(0, 8), 6, isExternal ? 0x7a7f8e : COLOR.text)
-  const tagW = Math.min(name.width + 4, DESK_W)
+  // 자리 간격(3타일)보다 조금 좁게. 책상보다 넓어도 옆 책상과 안 겹친다
+  const tagW = Math.min(name.width + 4, SEAT_STEP * TILE - 4)
   const tag = new Graphics().rect(0, 0, tagW, 9).fill(0xffffff).rect(0, 8, tagW, 1).fill(isExternal ? COLOR.chairLine : COLOR.green)
   tag.position.set(Math.floor((DESK_W - tagW) / 2), 39)
   name.position.set(tag.x + 2, 40)
@@ -422,11 +447,11 @@ function drawDesk(session: Session, seat: Seat, isSelected: boolean): DeskParts 
 
 // ---------- 컴포넌트 ----------
 
-export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onEditRoom }: Props) {
+export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onEditRoom, onUpdateRoomBounds }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<Application | null>(null)
-  const latest = useRef({ office, sessions, selectedId, onSelect, onMoveSeat, onEditRoom })
-  latest.current = { office, sessions, selectedId, onSelect, onMoveSeat, onEditRoom }
+  const latest = useRef({ office, sessions, selectedId, onSelect, onMoveSeat, onEditRoom, onUpdateRoomBounds })
+  latest.current = { office, sessions, selectedId, onSelect, onMoveSeat, onEditRoom, onUpdateRoomBounds }
   const redrawRef = useRef<() => void>(() => {})
 
   useEffect(() => {
@@ -460,6 +485,21 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
           offset: { x: number; y: number }
           isMoved: boolean
         } | null = null
+        // 방 이동(이름표)·크기 조절(모서리 핸들). 끄는 동안 타일 단위로 방을 다시 그린다
+        let roomDrag: {
+          room: Room
+          mode: 'move' | 'resize'
+          start: { x: number; y: number }
+          current: Pick<Room, 'x' | 'y' | 'w' | 'h'>
+          isMoved: boolean
+        } | null = null
+        const roomViews = new Map<string, RoomParts>()
+
+        /** 화면 좌표 → world 아트 픽셀 */
+        const toWorld = (event: FederatedPointerEvent) => ({
+          x: (event.global.x - world.x) / SCALE,
+          y: (event.global.y - world.y) / SCALE,
+        })
 
         // 휠로 사무실 패닝. 내용이 화면보다 클 때만 움직인다
         const content = { w: 0, h: 0 }
@@ -483,6 +523,7 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
           const { office, sessions, selectedId, onSelect, onEditRoom } = latest.current
           world.removeChildren()
           desks.clear()
+          roomViews.clear()
           working.clear()
           const alive = sessions.filter((s) => s.isAlive)
           const zone = externalZone(office, alive.filter((s) => s.kind === 'external').length)
@@ -491,7 +532,25 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
           const bgW = Math.max(content.w, Math.ceil(app.screen.width / SCALE))
           const bgH = Math.max(content.h, Math.ceil(app.screen.height / SCALE))
           world.addChild(drawBackground(bgW, bgH))
-          for (const room of office.rooms) world.addChild(drawRoom(room, () => onEditRoom(room)))
+          for (const room of office.rooms) {
+            const parts = drawRoom(room, () => {
+              if (!roomDrag?.isMoved) onEditRoom(room)
+            })
+            const beginRoomDrag = (mode: 'move' | 'resize') => (event: FederatedPointerEvent) => {
+              event.stopPropagation()
+              roomDrag = {
+                room,
+                mode,
+                start: toWorld(event),
+                current: { x: room.x, y: room.y, w: room.w, h: room.h },
+                isMoved: false,
+              }
+            }
+            parts.sign.on('pointerdown', beginRoomDrag('move'))
+            parts.handle.on('pointerdown', beginRoomDrag('resize'))
+            world.addChild(parts.container)
+            roomViews.set(room.id, parts)
+          }
           world.addChild(drawZone(zone))
           clampPan()
           const seats = placeAll(office, alive, zone)
@@ -525,19 +584,53 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
         redrawRef.current = redraw
         app.renderer.on('resize', redraw)
 
+        /** 끄는 동안 방을 임시 크기·위치로 다시 그린다 (저장 전 미리보기) */
+        const previewRoom = () => {
+          if (!roomDrag) return
+          const view = roomViews.get(roomDrag.room.id)
+          if (!view) return
+          const parts = drawRoom({ ...roomDrag.room, ...roomDrag.current }, () => {})
+          const index = world.getChildIndex(view.container)
+          world.removeChildAt(index)
+          world.addChildAt(parts.container, index)
+          roomViews.set(roomDrag.room.id, parts)
+        }
+
         app.stage.on('pointermove', (event: FederatedPointerEvent) => {
+          if (roomDrag) {
+            const point = toWorld(event)
+            const dx = Math.round((point.x - roomDrag.start.x) / TILE)
+            const dy = Math.round((point.y - roomDrag.start.y) / TILE)
+            const { room, current } = roomDrag
+            const next =
+              roomDrag.mode === 'move'
+                ? { x: Math.max(0, room.x + dx), y: Math.max(0, room.y + dy), w: room.w, h: room.h }
+                : { x: room.x, y: room.y, w: Math.max(MIN_ROOM_SIZE, room.w + dx), h: Math.max(MIN_ROOM_SIZE, room.h + dy) }
+            if (next.x === current.x && next.y === current.y && next.w === current.w && next.h === current.h) return
+            roomDrag.current = next
+            roomDrag.isMoved = true
+            previewRoom()
+            return
+          }
           if (!drag) return
           const parts = desks.get(drag.sessionId)
           if (!parts) return
           if (Math.hypot(event.global.x - drag.start.x, event.global.y - drag.start.y) > 4) drag.isMoved = true
           if (drag.isMoved) {
-            parts.container.position.set(
-              Math.round((event.global.x - world.x) / SCALE - drag.offset.x),
-              Math.round((event.global.y - world.y) / SCALE - drag.offset.y),
-            )
+            // 끄는 동안에도 타일에 스냅해서 놓일 자리가 미리 보이게
+            const point = toWorld(event)
+            const tileX = Math.round((point.x - drag.offset.x - PAD_X) / TILE)
+            const tileY = Math.round((point.y - drag.offset.y - PAD_Y) / TILE)
+            parts.container.position.set(PAD_X + tileX * TILE, PAD_Y + tileY * TILE)
           }
         })
         const endDrag = () => {
+          if (roomDrag) {
+            const finished = roomDrag
+            roomDrag = null
+            if (finished.isMoved) latest.current.onUpdateRoomBounds(finished.room.id, finished.current)
+            return
+          }
           if (!drag) return
           const current = drag
           drag = null
@@ -548,8 +641,9 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
           const tileY = Math.round((parts.container.y - PAD_Y) / TILE)
           const { office, onMoveSeat } = latest.current
           const room = roomAt(office.rooms, tileX, tileY) ?? office.rooms[0]
-          const x = Math.min(Math.max(tileX, room.x), room.x + room.w - 3)
-          const y = Math.min(Math.max(tileY, room.y), room.y + room.h - 3)
+          // 책상(2x3 타일)이 벽 안쪽 칸에만 놓이게
+          const x = Math.min(Math.max(tileX, room.x + 1), room.x + room.w - 1 - DESK_TILES_W)
+          const y = Math.min(Math.max(tileY, room.y + 1), room.y + room.h - 1 - DESK_TILES_H)
           onMoveSeat(current.sessionId, { roomId: room.id, x, y })
         }
         app.stage.on('pointerup', endDrag)

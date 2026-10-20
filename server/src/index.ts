@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import express from 'express'
 import type { Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
-import { addRoom, readOffice, setSeat, updateRoom, type Seat } from '@jk-corp/host/hq'
+import { addRoom, readOffice, setSeat, updateRoom, type Room, type Seat } from '@jk-corp/host/hq'
 import { setupFileLog } from '@jk-corp/host/runtime'
 import { configDir, readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
@@ -205,7 +205,7 @@ app.post('/api/rooms', (req, res) => {
 })
 
 app.patch('/api/rooms/:id', (req, res) => {
-  const room = updateRoom(req.params.id, req.body as { name?: string; waitingNote?: string })
+  const room = updateRoom(req.params.id, req.body as Partial<Omit<Room, 'id'>>)
   if (!room) {
     res.status(404).end()
     return

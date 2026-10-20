@@ -81,6 +81,11 @@ export function App() {
     void postJson(`/api/rooms/${room.id}`, 'PATCH', { waitingNote })
   }
 
+  function updateRoomBounds(roomId: string, bounds: Pick<Room, 'x' | 'y' | 'w' | 'h'>) {
+    setOffice((prev) => ({ ...prev, rooms: prev.rooms.map((r) => (r.id === roomId ? { ...r, ...bounds } : r)) }))
+    void postJson(`/api/rooms/${roomId}`, 'PATCH', bounds)
+  }
+
   function moveSeat(sessionId: string, seat: Seat) {
     setOffice((prev) => ({ ...prev, seats: { ...prev.seats, [sessionId]: seat } }))
     void postJson(`/api/seats/${sessionId}`, 'PUT', seat)
@@ -155,6 +160,7 @@ export function App() {
         onSelect={setSelectedId}
         onMoveSeat={moveSeat}
         onEditRoom={editRoom}
+        onUpdateRoomBounds={updateRoomBounds}
       />
       {selected && (
         <section className="panel">

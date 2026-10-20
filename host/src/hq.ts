@@ -89,12 +89,23 @@ export function addRoom(name: string): Room {
   return room
 }
 
-export function updateRoom(id: string, patch: Partial<Pick<Room, 'name' | 'waitingNote'>>): Room | null {
+export const MIN_ROOM_SIZE = 4
+
+function isTile(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 0
+}
+
+/** 이름·메모·위치·크기 변경. 위치는 0 이상, 크기는 MIN_ROOM_SIZE 이상 타일 정수만 받는다 */
+export function updateRoom(id: string, patch: Partial<Omit<Room, 'id'>>): Room | null {
   const hq = readHq()
   const room = hq.rooms.find((r) => r.id === id)
   if (!room) return null
   if (patch.name !== undefined) room.name = patch.name
   if (patch.waitingNote !== undefined) room.waitingNote = patch.waitingNote || undefined
+  if (isTile(patch.x)) room.x = patch.x
+  if (isTile(patch.y)) room.y = patch.y
+  if (isTile(patch.w) && patch.w >= MIN_ROOM_SIZE) room.w = patch.w
+  if (isTile(patch.h) && patch.h >= MIN_ROOM_SIZE) room.h = patch.h
   writeHq(hq)
   return room
 }
