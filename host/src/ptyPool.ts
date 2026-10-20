@@ -3,9 +3,11 @@ import * as pty from 'node-pty'
 import { RingBuffer } from './ringBuffer.js'
 import type { HostSession } from './protocol.js'
 import { addWebSession, removeWebSession } from './hq.js'
+import { getArg } from './runtime.js'
 
 const RING_LIMIT = 200_000
-const CLAUDE_COMMAND = process.env.JK_CORP_CLAUDE ?? 'claude.exe'
+/** 작업 스케줄러 환경에는 사용자 PATH 가 없을 수 있어 설치 스크립트가 `--claude=<exe>` 로 넘긴다 */
+const CLAUDE_COMMAND = getArg('claude') ?? process.env.JK_CORP_CLAUDE ?? 'claude.exe'
 
 /** 호스트가 Claude 세션 안에서 실행됐을 때 상속되는 변수. 남겨두면 자식 claude 가 중첩 실행으로 판단해 종료한다. */
 function childEnv(sessionId: string): Record<string, string> {
@@ -66,6 +68,7 @@ export class PtyPool extends EventEmitter {
     })
     child.onExit(({ exitCode }) => {
       this.entries.delete(sessionId)
+      removeWebSession(sessionId)
       this.emit('exit', sessionId, exitCode)
       this.emit('change')
     })

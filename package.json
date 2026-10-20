@@ -12,7 +12,10 @@
     "dev:server": "npm run dev --workspace server",
     "dev:web": "npm run dev --workspace web",
     "test": "npm test --workspaces --if-present",
-    "hooks:install": "node hooks/install.mjs"
+    "build": "npm run build --workspace web",
+    "hooks:install": "node hooks/install.mjs",
+    "startup:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-startup.ps1",
+    "startup:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-startup.ps1"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"

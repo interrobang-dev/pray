@@ -1,14 +1,18 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import express from 'express'
 import type { Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
 import { addRoom, readOffice, setSeat, updateRoom, type Seat } from '@jk-corp/host/hq'
+import { setupFileLog } from '@jk-corp/host/runtime'
 import { applyHook, type HookPayload, type HookState } from './hookState.js'
 import { findTranscript, listSessions, projectsDir } from './sessions.js'
 import { HostClient } from './hostClient.js'
 import { parseMessages } from './messages.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 
+setupFileLog()
 const PORT = 4710
 const hookStates = new Map<string, HookState>()
 const subscribers = new Set<Response>()
@@ -177,6 +181,13 @@ watcher.on('change', (sessionId: string) => {
 })
 
 setInterval(() => void broadcast(), 5000)
+
+// 빌드된 웹이 있으면 서버 하나로 화면까지 제공한다 (개발 중에는 Vite 4711 을 쓴다)
+const webDist = join(import.meta.dirname, '..', '..', 'web', 'dist')
+if (existsSync(webDist)) {
+  app.use(express.static(webDist))
+  app.get('/{*path}', (_req, res) => res.sendFile(join(webDist, 'index.html')))
+}
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`jk-corp server http://127.0.0.1:${PORT}`)

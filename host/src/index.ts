@@ -1,7 +1,11 @@
 import { createServer, type Socket } from 'node:net'
+import { existsSync } from 'node:fs'
 import { PIPE_PATH, LineDecoder, encode, type ClientMessage, type HostMessage } from './protocol.js'
 import { PtyPool } from './ptyPool.js'
+import { listWebSessions, removeWebSession } from './hq.js'
+import { setupFileLog } from './runtime.js'
 
+setupFileLog()
 const pool = new PtyPool()
 const clients = new Set<Socket>()
 
@@ -30,6 +34,7 @@ function handle(socket: Socket, message: ClientMessage): void {
         pool.spawn(message)
         console.log(`spawn ${message.sessionId} cwd=${message.cwd}`)
       } catch (error) {
+        console.error(`spawn 실패 ${message.sessionId}`, error)
         send(socket, { type: 'error', sessionId: message.sessionId, message: String(error) })
       }
       return
@@ -66,6 +71,24 @@ const server = createServer((socket) => {
   send(socket, { type: 'sessions', sessions: pool.list() })
 })
 
+/** 지난번 호스트가 살려 두던 웹 세션을 --resume 으로 되살린다 */
+function resumeWebSessions(): void {
+  for (const record of listWebSessions()) {
+    if (!existsSync(record.cwd)) {
+      console.log(`resume 건너뜀 (폴더 없음) ${record.sessionId} ${record.cwd}`)
+      removeWebSession(record.sessionId)
+      continue
+    }
+    try {
+      pool.spawn({ sessionId: record.sessionId, cwd: record.cwd, resume: true })
+      console.log(`resume ${record.sessionId} cwd=${record.cwd}`)
+    } catch (error) {
+      console.error(`resume 실패 ${record.sessionId}`, error)
+    }
+  }
+}
+
 server.listen(PIPE_PATH, () => {
   console.log(`jk-corp host listening on ${PIPE_PATH}`)
+  resumeWebSessions()
 })

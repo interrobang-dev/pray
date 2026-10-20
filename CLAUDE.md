@@ -7,11 +7,16 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 ```
 npm install
 npm run hooks:install     # ~/.claude/settings.json 에 http 훅 6개 추가 (한 번만. 기존 훅은 안 건드림)
-npm run dev               # host(named pipe) + server(4710) + web(4711) 동시 실행
+npm run build             # web/dist 생성. 서버가 이걸 정적으로 제공한다
+npm run startup:install   # 작업 스케줄러에 jk-corp-host / jk-corp-server 등록 (로그인 시 자동 실행)
+Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 바로 시작
 ```
 
-브라우저: `http://localhost:4711` (Vite가 IPv6 localhost로 열려 `127.0.0.1`로는 안 열림). `/api`는 Vite 프록시로 서버에 전달.
-서버 코드는 `tsx watch`라 저장하면 재시작되고, 세션 호스트는 별도 프로세스라 서버 재시작에 영향받지 않는다. 호스트는 watch 가 아니다 (재시작하면 웹 세션이 다 죽으므로 일부러). 훅은 Claude Code가 settings.json을 핫리로드하므로 세션 재시작 없이 반영된다.
+평소 접속: `http://127.0.0.1:4710` (스케줄러로 뜬 서버 + 빌드된 웹). 로그: `~/.claude/jk-corp/logs/*.log`.
+
+**멈출 때는 반드시 `scripts/stop.ps1`.** 작업은 숨김 PowerShell 래퍼로 node 를 띄우는데(창 없이 띄우는 S4U 방식은 관리자 권한 필요), `Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남아 다음 시작이 pipe/포트 충돌로 죽는다. stop.ps1 은 node 까지 죽인다. 호스트를 멈추면 웹 세션도 죽고, 다음 시작 때 `hq.json.webSessions` 를 읽어 `--resume` 한다.
+
+개발 중 화면 작업: 스케줄러 호스트·서버는 그대로 두고 `npm run dev:web` 만 띄워 `http://localhost:4711` 로 본다 (Vite 가 IPv6 localhost 로 열려 `127.0.0.1` 로는 안 열림. `/api` 는 4710 으로 프록시). 서버·호스트 코드를 고쳤으면 `scripts/stop.ps1` 후 작업을 다시 Start 한다. `npm run dev` (셋 다 tsx 로 실행)는 스케줄러 작업을 멈춘 상태에서만 쓴다. 훅은 Claude Code가 settings.json을 핫리로드하므로 세션 재시작 없이 반영된다.
 
 테스트: `npm test` (host·server의 vitest).
 
@@ -20,7 +25,9 @@ npm run dev               # host(named pipe) + server(4710) + web(4711) 동시 �
 ## 구조
 
 - `host/src/index.ts` — named pipe `\\.\pipe\jk-corp-host` 서버. 연결된 모든 클라이언트에 모든 세션 출력을 보낸다 (구독 관리 없음)
-- `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid>` 실행, 세션별 200KB 링버퍼
+- `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid>` 실행, 세션별 200KB 링버퍼. claude 경로는 `--claude=` 인자 (스케줄러 환경엔 사용자 PATH 가 없어 설치 스크립트가 넘김)
+- `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=<path>` 면 console 을 파일로 (스케줄러는 환경변수를 못 넘기므로 전부 인자)
+- `scripts/install-startup.ps1` · `stop.ps1` · `uninstall-startup.ps1` — 작업 스케줄러 등록·중지·제거. UTF-8 BOM 필수 (Windows PowerShell 5.1 이 BOM 없는 .ps1 을 ANSI 로 읽어 한글이 깨짐)
 - `host/src/protocol.ts` — pipe 메시지 타입과 줄 단위 JSON 프레이밍. 서버가 `@jk-corp/host/protocol`로 import
 - `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `rooms`·`seats` 를 쓴다. 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. 서버가 `@jk-corp/host/hq` 로 import
 - `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 사무실(방·자리) API
@@ -48,7 +55,8 @@ npm run dev               # host(named pipe) + server(4710) + web(4711) 동시 �
 - **웹 세션 = 호스트 pty 목록에 있는 세션.** `--session-id`로 UUID를 넘겨 pty·jsonl·훅이 같은 키로 묶인다
 - 터미널 스트림은 `attach` 요청에 호스트가 링버퍼 스냅샷을 한 번 주고(`snapshot` 이벤트, 화면 reset 후 그림), 이후 `output`을 잇는다. 서버만 재시작해도 브라우저가 SSE 재연결하면 같은 경로로 복원된다
 - 새 폴더에서 claude를 띄우면 신뢰 확인 대화상자가 뜨고 **기본 선택이 "No, exit"**다. 사용자가 터미널에서 ↓ Enter를 눌러야 한다. 자동 테스트에서 Enter만 보내면 종료 코드 1로 죽는 게 정상이다
-- 호스트 자체가 죽으면 웹 세션도 죽는다. 허용한 설계
+- 호스트 자체가 죽으면 웹 세션도 죽는다. 허용한 설계. `hq.json.webSessions` = "호스트가 살려 둘 세션". claude 가 어떤 이유로든 나가면(exit) 기록을 지운다. 호스트 시작 시 남은 기록을 `--resume` 하고, 폴더가 없으면 건너뛰며 지운다
+- **한 번도 대화하지 않은 세션은 resume 이 안 된다** (jsonl 이 없어 "No conversation found" 로 종료 → 기록 자동 삭제). 정상
 - 채팅 뷰는 별도 API 없이 **터미널 키 입력**으로 지시를 보낸다. 슬래시 명령은 자동완성이 Enter 를 먼저 먹어 두 번 눌러야 할 수 있다
 - 사무실 좌표는 타일(32px) 단위. 자리(`seats`)는 책상을 끌어 놓았을 때만 저장되고, 자리 없는 세션은 화면에서 로비 빈 칸에 3타일 간격으로 임시 배치한다 (저장 안 함)
 - 캐릭터 상태 표현: working 타자 애니메이션 + 모니터 켜짐, my-turn 손 들기 + 마지막 말 말풍선, needs-approval 손 들기 + 빨간 말풍선, idle/unknown 반투명, 외부 세션은 회색 계열
@@ -60,7 +68,4 @@ Vite 페이지는 SSE 때문에 `--virtual-time-budget` 방식이 멈춘다. `--
 
 ## 남은 일 (설계서 구현 순서)
 
-- hq.json `webSessions`에서 claude가 스스로 종료한(exit) 세션 기록을 지울지, 재부팅 resume 대상으로 남길지 미정. 지금은 kill 때만 지운다
-4. 픽셀 사무실
-5. 재부팅 resume + 작업 스케줄러
-6. 메일 로그인
+6. 메일 인증 로그인 (원격 접속). 지금은 서버가 127.0.0.1 에만 바인딩
