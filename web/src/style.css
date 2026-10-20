@@ -252,6 +252,14 @@ h1 {
   background: #e4e5ec;
   color: #5b6070;
 }
+.badge.role-lead {
+  background: #fbf0d2;
+  color: #9a6b00;
+}
+.badge.role-member {
+  background: #eceef3;
+  color: #5b6070;
+}
 .office {
   min-width: 0;
   min-height: 0;

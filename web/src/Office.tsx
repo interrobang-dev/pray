@@ -50,6 +50,7 @@ const COLOR = {
   alert: 0xffd3d3,
   alertLine: 0xe05a5a,
   select: 0x3f9c4b,
+  gold: 0xd9a63a,
 }
 
 interface Props {
@@ -111,18 +112,25 @@ function placeAll(office: OfficeData, sessions: Session[], zone: Room): Map<stri
       taken.add(`${seat.x},${seat.y}`)
     }
   }
-  const lobby = office.rooms[0]
-  for (const session of webs) {
-    if (seats.has(session.id)) continue
-    outer: for (let y = lobby.y + 1; y < lobby.y + lobby.h - 1; y += SEAT_STEP) {
-      for (let x = lobby.x + 1; x < lobby.x + lobby.w - 2; x += SEAT_STEP) {
+  const placeInRoom = (session: Session, room: Room) => {
+    for (let y = room.y + 1; y < room.y + room.h - 1; y += SEAT_STEP) {
+      for (let x = room.x + 1; x < room.x + room.w - 2; x += SEAT_STEP) {
         if (taken.has(`${x},${y}`)) continue
         taken.add(`${x},${y}`)
-        seats.set(session.id, { roomId: lobby.id, x, y })
-        break outer
+        seats.set(session.id, { roomId: room.id, x, y })
+        return
       }
     }
-    if (!seats.has(session.id)) seats.set(session.id, { roomId: lobby.id, x: lobby.x, y: lobby.y })
+    seats.set(session.id, { roomId: room.id, x: room.x, y: room.y })
+  }
+  const lobby = office.rooms[0]
+  // 자리 없는 세션은 로비에. 팀원은 팀장 자리가 정해진 뒤 팀장과 같은 방에 놓이도록 뒤로 미룬다
+  const unplaced = webs.filter((s) => !seats.has(s.id)).sort((a, b) => Number(a.role === 'member') - Number(b.role === 'member'))
+  for (const session of unplaced) {
+    const lead = session.role === 'member' ? webs.find((s) => s.role === 'lead' && s.teamId === session.teamId) : undefined
+    const leadSeat = lead ? seats.get(lead.id) : undefined
+    const room = (leadSeat && office.rooms.find((r) => r.id === leadSeat.roomId)) || lobby
+    placeInRoom(session, room)
   }
   return seats
 }
@@ -409,12 +417,17 @@ function drawDesk(session: Session, seat: Seat, isSelected: boolean): DeskParts 
   }
 
   // 이름표
+  const isLead = session.role === 'lead'
   const name = label(session.title ?? session.id.slice(0, 8), 6, isExternal ? 0x7a7f8e : COLOR.text)
   // 자리 간격(3타일)보다 조금 좁게. 책상보다 넓어도 옆 책상과 안 겹친다
   const tagW = Math.min(name.width + 4, SEAT_STEP * TILE - 4)
-  const tag = new Graphics().rect(0, 0, tagW, 9).fill(0xffffff).rect(0, 8, tagW, 1).fill(isExternal ? COLOR.chairLine : COLOR.green)
+  // 이름표 밑줄: 외부 회색, 팀장 금색, 그 외 초록
+  const underline = isExternal ? COLOR.chairLine : isLead ? COLOR.gold : COLOR.green
+  const tag = new Graphics().rect(0, 0, tagW, 9).fill(0xffffff).rect(0, 8, tagW, 1).fill(underline)
   tag.position.set(Math.floor((DESK_W - tagW) / 2), 39)
   name.position.set(tag.x + 2, 40)
+  // 팀장: 책상 앞판 위에 금색 명패
+  if (isLead) container.addChild(new Graphics().rect(10, 30, 12, 3).fill(COLOR.gold).rect(11, 31, 10, 1).fill(0xf4d77a))
   const mask = new Graphics().rect(tag.x, 39, tagW, 9).fill(0xffffff)
   name.mask = mask
   container.addChild(tag, mask, name)

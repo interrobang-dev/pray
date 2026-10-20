@@ -107,6 +107,7 @@ export function App() {
         <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
         <div className="row">
           <span className={`badge ${session.status}`}>{statusLabel[session.status]}</span>
+          {session.role && <span className={`badge role-${session.role}`}>{session.role === 'lead' ? '팀장' : '팀원'}</span>}
           <span className="time">{formatTime(session.lastAt)}</span>
         </div>
         <div className="title">{session.title ?? session.id.slice(0, 8)}</div>
