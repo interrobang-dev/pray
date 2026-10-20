@@ -119,6 +119,33 @@ h1 {
   border-bottom: 1px solid var(--line);
   cursor: pointer;
 }
+.sessions li.group {
+  display: block;
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--bg);
+  cursor: default;
+}
+.sessions li.group:hover {
+  background: var(--bg);
+}
+.sessions li.group .count {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--line);
+  color: var(--text);
+  font-weight: 500;
+}
+.sessions li.empty {
+  display: block;
+  padding: 6px 12px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: default;
+}
 .sessions li:hover {
   background: var(--bg);
 }

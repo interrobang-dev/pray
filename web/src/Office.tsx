@@ -74,11 +74,31 @@ function roomAt(rooms: Room[], tileX: number, tileY: number): Room | null {
   return rooms.find((r) => tileX >= r.x && tileX < r.x + r.w && tileY >= r.y && tileY < r.y + r.h) ?? null
 }
 
-/** 자리가 없는 세션은 로비(첫 방)의 빈 칸에 임시 배치 */
-function placeAll(office: OfficeData, sessions: Session[]): Map<string, Seat> {
+/** 파견 구역: 외부(터미널·IDE) 세션이 모이는 고정 구역. 방들의 오른쪽 끝에 붙는다 */
+const ZONE_COLUMNS = 2
+const ZONE_W = 1 + ZONE_COLUMNS * SEAT_STEP + 1
+
+function externalZone(office: OfficeData, count: number): Room {
+  const x = Math.max(...office.rooms.map((r) => r.x + r.w)) + 1
+  const tallest = Math.max(...office.rooms.map((r) => r.y + r.h))
+  const rows = Math.max(1, Math.ceil(count / ZONE_COLUMNS))
+  return { id: 'external', name: '파견 (터미널·IDE)', x, y: 0, w: ZONE_W, h: Math.max(tallest, rows * SEAT_STEP + 2) }
+}
+
+/** 웹 세션: 저장된 자리 또는 로비 빈 칸. 외부 세션: 파견 구역에 순서대로 (저장된 자리 무시) */
+function placeAll(office: OfficeData, sessions: Session[], zone: Room): Map<string, Seat> {
   const seats = new Map<string, Seat>()
   const taken = new Set<string>()
-  for (const session of sessions) {
+  const externals = sessions.filter((s) => s.kind === 'external')
+  externals.forEach((session, index) => {
+    seats.set(session.id, {
+      roomId: zone.id,
+      x: zone.x + 1 + (index % ZONE_COLUMNS) * SEAT_STEP,
+      y: zone.y + 1 + Math.floor(index / ZONE_COLUMNS) * SEAT_STEP,
+    })
+  })
+  const webs = sessions.filter((s) => s.kind === 'web')
+  for (const session of webs) {
     const seat = office.seats[session.id]
     if (seat) {
       seats.set(session.id, seat)
@@ -86,7 +106,7 @@ function placeAll(office: OfficeData, sessions: Session[]): Map<string, Seat> {
     }
   }
   const lobby = office.rooms[0]
-  for (const session of sessions) {
+  for (const session of webs) {
     if (seats.has(session.id)) continue
     outer: for (let y = lobby.y + 1; y < lobby.y + lobby.h - 1; y += SEAT_STEP) {
       for (let x = lobby.x + 1; x < lobby.x + lobby.w - 2; x += SEAT_STEP) {
@@ -204,6 +224,29 @@ function drawRoom(room: Room, onEdit: () => void): Container {
   container.on('pointertap', (event: FederatedPointerEvent) => {
     if (event.detail === 2) onEdit()
   })
+  return container
+}
+
+function drawZone(zone: Room): Container {
+  const container = new Container()
+  container.position.set(PAD_X + zone.x * TILE, PAD_Y + zone.y * TILE)
+  const w = zone.w * TILE
+  const h = zone.h * TILE
+  const g = new Graphics()
+  g.rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.12 })
+  // 점선 파티션
+  for (let x = 0; x < w; x += 4) {
+    g.rect(x, 0, 2, 2).fill(COLOR.partitionShadow).rect(x, h - 2, 2, 2).fill(COLOR.partitionShadow)
+  }
+  for (let y = 0; y < h; y += 4) {
+    g.rect(0, y, 2, 2).fill(COLOR.partitionShadow).rect(w - 2, y, 2, 2).fill(COLOR.partitionShadow)
+  }
+  container.addChild(g)
+  const name = label(zone.name, 7, 0x7a7f8e)
+  const sign = new Graphics().rect(0, 0, name.width + 8, 11).fill(0xf4f4f7).rect(0, 10, name.width + 8, 1).fill(COLOR.partitionShadow)
+  sign.position.set(6, 5)
+  name.position.set(10, 6)
+  container.addChild(sign, name)
   return container
 }
 
@@ -394,6 +437,7 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
     const desks = new Map<string, DeskParts>()
     const working = new Set<string>()
     let frame = 0
+    let removeWheel = () => {}
 
     void app
       .init({ resizeTo: host, background: COLOR.floor, antialias: false, roundPixels: true, resolution: 1 })
@@ -417,29 +461,59 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
           isMoved: boolean
         } | null = null
 
+        // 휠로 사무실 패닝. 내용이 화면보다 클 때만 움직인다
+        const content = { w: 0, h: 0 }
+        const clampPan = () => {
+          const minX = Math.min(0, app.screen.width - content.w * SCALE)
+          const minY = Math.min(0, app.screen.height - content.h * SCALE)
+          world.x = Math.round(Math.max(minX, Math.min(0, world.x)))
+          world.y = Math.round(Math.max(minY, Math.min(0, world.y)))
+        }
+        const onWheel = (event: WheelEvent) => {
+          event.preventDefault()
+          const isHorizontal = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          if (isHorizontal) world.x -= event.deltaX || event.deltaY
+          else world.y -= event.deltaY
+          clampPan()
+        }
+        host.addEventListener('wheel', onWheel, { passive: false })
+        removeWheel = () => host.removeEventListener('wheel', onWheel)
+
         const redraw = () => {
           const { office, sessions, selectedId, onSelect, onEditRoom } = latest.current
           world.removeChildren()
           desks.clear()
           working.clear()
-          world.addChild(drawBackground(Math.ceil(app.screen.width / SCALE), Math.ceil(app.screen.height / SCALE)))
-          for (const room of office.rooms) world.addChild(drawRoom(room, () => onEditRoom(room)))
           const alive = sessions.filter((s) => s.isAlive)
-          const seats = placeAll(office, alive)
+          const zone = externalZone(office, alive.filter((s) => s.kind === 'external').length)
+          content.w = PAD_X * 2 + (zone.x + zone.w) * TILE
+          content.h = PAD_Y + 16 + Math.max(zone.y + zone.h, ...office.rooms.map((r) => r.y + r.h)) * TILE
+          const bgW = Math.max(content.w, Math.ceil(app.screen.width / SCALE))
+          const bgH = Math.max(content.h, Math.ceil(app.screen.height / SCALE))
+          world.addChild(drawBackground(bgW, bgH))
+          for (const room of office.rooms) world.addChild(drawRoom(room, () => onEditRoom(room)))
+          world.addChild(drawZone(zone))
+          clampPan()
+          const seats = placeAll(office, alive, zone)
           // 아래쪽 책상이 위쪽을 가리도록 y 순 정렬
           const ordered = [...alive].sort((a, b) => seats.get(a.id)!.y - seats.get(b.id)!.y)
           for (const session of ordered) {
             const seat = seats.get(session.id)!
             const parts = drawDesk(session, seat, session.id === selectedId)
-            parts.container.on('pointerdown', (event: FederatedPointerEvent) => {
-              drag = {
-                sessionId: session.id,
-                start: { x: event.global.x, y: event.global.y },
-                offset: { x: event.global.x / SCALE - parts.container.x, y: event.global.y / SCALE - parts.container.y },
-                isMoved: false,
-              }
-              world.setChildIndex(parts.container, world.children.length - 1)
-            })
+            if (session.kind === 'web') {
+              parts.container.on('pointerdown', (event: FederatedPointerEvent) => {
+                drag = {
+                  sessionId: session.id,
+                  start: { x: event.global.x, y: event.global.y },
+                  offset: {
+                    x: (event.global.x - world.x) / SCALE - parts.container.x,
+                    y: (event.global.y - world.y) / SCALE - parts.container.y,
+                  },
+                  isMoved: false,
+                }
+                world.setChildIndex(parts.container, world.children.length - 1)
+              })
+            }
             parts.container.on('pointertap', () => {
               if (!drag?.isMoved) onSelect(session.id)
             })
@@ -458,8 +532,8 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
           if (Math.hypot(event.global.x - drag.start.x, event.global.y - drag.start.y) > 4) drag.isMoved = true
           if (drag.isMoved) {
             parts.container.position.set(
-              Math.round(event.global.x / SCALE - drag.offset.x),
-              Math.round(event.global.y / SCALE - drag.offset.y),
+              Math.round((event.global.x - world.x) / SCALE - drag.offset.x),
+              Math.round((event.global.y - world.y) / SCALE - drag.offset.y),
             )
           }
         })
@@ -502,6 +576,8 @@ export function Office({ office, sessions, selectedId, onSelect, onMoveSeat, onE
 
     return () => {
       isDisposed = true
+      removeWheel()
+      host.replaceChildren()
       if (appRef.current) {
         appRef.current.destroy(true, { children: true })
         appRef.current = null

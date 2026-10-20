@@ -12,6 +12,11 @@ interface Snapshot {
 
 const EMPTY_OFFICE: OfficeData = { rooms: [{ id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }], seats: {} }
 
+const GROUPS: { kind: Session['kind']; title: string }[] = [
+  { kind: 'web', title: '직원 (웹 세션)' },
+  { kind: 'external', title: '파견 (터미널·IDE)' },
+]
+
 function formatTime(iso: string | null): string {
   if (!iso) return '-'
   return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
@@ -80,6 +85,25 @@ export function App() {
     void postJson(`/api/seats/${sessionId}`, 'PUT', seat)
   }
 
+  function renderSession(session: Session) {
+    const avatar = avatarOf(session.id)
+    return (
+      <li
+        key={session.id}
+        className={[session.id === selectedId ? 'selected' : '', session.isAlive ? '' : 'dead'].join(' ')}
+        onClick={() => setSelectedId(session.id)}
+      >
+        <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
+        <div className="row">
+          <span className={`badge ${session.status}`}>{statusLabel[session.status]}</span>
+          <span className="time">{formatTime(session.lastAt)}</span>
+        </div>
+        <div className="title">{session.title ?? session.id.slice(0, 8)}</div>
+        <div className="cwd">{session.cwd}</div>
+      </li>
+    )
+  }
+
   return (
     <main className={selected ? 'layout with-panel' : 'layout'}>
       <aside>
@@ -110,29 +134,16 @@ export function App() {
           </form>
         )}
         <ul className="sessions">
-          {snapshot.sessions.map((session) => (
-            <li
-              key={session.id}
-              className={[session.id === selectedId ? 'selected' : '', session.isAlive ? '' : 'dead'].join(' ')}
-              onClick={() => setSelectedId(session.id)}
-            >
-              <span
-                className="avatar"
-                style={{
-                  '--hair': cssColor(avatarOf(session.id).hair),
-                  '--skin': cssColor(avatarOf(session.id).skin),
-                } as CSSProperties}
-              />
-              <div className="row">
-                <span className={`badge ${session.status}`}>{statusLabel[session.status]}</span>
-                {session.kind === 'web' && <span className="kind">웹</span>}
-                <span className="time">{formatTime(session.lastAt)}</span>
-              </div>
-              <div className="title">{session.title ?? session.id.slice(0, 8)}</div>
-              <div className="cwd">{session.cwd}</div>
-            </li>
-          ))}
-          {snapshot.sessions.length === 0 && <li>세션 없음</li>}
+          {GROUPS.map((group) => {
+            const members = snapshot.sessions.filter((s) => s.kind === group.kind)
+            return [
+              <li key={group.kind} className="group">
+                {group.title} {members.length > 0 && <span className="count">{members.length}</span>}
+              </li>,
+              ...members.map(renderSession),
+              ...(members.length === 0 ? [<li key={`${group.kind}-empty`} className="empty">없음</li>] : []),
+            ]
+          })}
         </ul>
       </aside>
       <Office
