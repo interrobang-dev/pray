@@ -22,7 +22,7 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 
 파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP>:4710` → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 토큰은 `~/.claude/jk-corp/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
 
-**멈출 때는 반드시 `scripts/stop.ps1`.** 작업은 숨김 PowerShell 래퍼로 node 를 띄우는데(창 없이 띄우는 S4U 방식은 관리자 권한 필요), `Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남아 다음 시작이 pipe/포트 충돌로 죽는다. stop.ps1 은 node 까지 죽인다. 호스트를 멈추면 웹 세션도 죽고, 다음 시작 때 `hq.json.webSessions` 를 읽어 `--resume` 한다.
+**멈출 때는 반드시 `scripts/stop.ps1`.** 작업은 `wscript launch-hidden.vbs` 래퍼로 node 를 창 없이 띄우는데(창 없이 띄우는 S4U 방식은 관리자 권한 필요. PowerShell `-WindowStyle Hidden` 은 대화형 작업에서 콘솔 창이 그대로 보여 사용자가 닫아 버리는 사고가 두 번 났다), `Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남아 다음 시작이 pipe/포트 충돌로 죽는다. stop.ps1 은 wscript 와 node 까지 죽인다. 호스트를 멈추면 웹 세션도 죽고, 다음 시작 때 `hq.json.webSessions` 를 읽어 `--resume` 한다.
 
 개발 중 화면 작업: 스케줄러 호스트·서버는 그대로 두고 `npm run dev:web` 만 띄워 `http://localhost:4711` 로 본다 (Vite 가 IPv6 localhost 로 열려 `127.0.0.1` 로는 안 열림. `/api` 는 4710 으로 프록시). 서버·호스트 코드를 고쳤으면 `scripts/stop.ps1` 후 작업을 다시 Start 한다. `npm run dev` (셋 다 tsx 로 실행)는 스케줄러 작업을 멈춘 상태에서만 쓴다. 훅은 Claude Code가 settings.json을 핫리로드하므로 세션 재시작 없이 반영된다.
 
