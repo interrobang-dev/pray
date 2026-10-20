@@ -1,7 +1,8 @@
 ﻿# 로그인 시 세션 호스트와 서버가 자동으로 뜨도록 작업 스케줄러에 등록한다.
 # 다시 실행하면 같은 이름의 작업을 덮어쓴다. 중지는 stop.ps1, 제거는 uninstall-startup.ps1.
 #
-# - 대화형 로그온 + 숨김 PowerShell 래퍼. 창 없이 띄우는 다른 방법(S4U)은 관리자 권한이 필요하다
+# - 대화형 로그온 + wscript(launch-hidden.vbs) 래퍼. 창 없이 띄우는 다른 방법(S4U)은 관리자 권한이 필요하다
+#   PowerShell -WindowStyle Hidden 은 대화형 작업에서 콘솔 창이 그대로 보여서 사용자가 닫아 버리는 사고가 났다
 # - 래퍼 때문에 Stop-ScheduledTask 는 래퍼만 죽이고 node 는 남는다 → 반드시 stop.ps1 로 멈춘다
 # - 래퍼는 node 의 종료 코드를 그대로 돌려줘서 node 가 죽으면 스케줄러가 1분 뒤 다시 띄운다 (3회)
 # - 스케줄러 환경에는 사용자 PATH 가 없을 수 있어 claude.exe 경로를 인자로 넘긴다. 로그는 node 가 직접 쓴다
@@ -23,19 +24,21 @@ $settings = New-ScheduledTaskSettingsSet `
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 
+$launcher = Join-Path $PSScriptRoot 'launch-hidden.vbs'
+
 function Register-JkTask {
-    param([string]$Name, [string]$WorkDir, [string]$ExtraArgs, [string]$Description)
+    param([string]$Name, [string]$WorkDir, [string[]]$ExtraArgs, [string]$Description)
     $log = Join-Path $logDir "$Name.log"
-    $command = "& '$node' '$tsx' src/index.ts --log='$log' $ExtraArgs; exit `$LASTEXITCODE"
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-        -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -Command `"$command`"" `
-        -WorkingDirectory $WorkDir
+    # 인자마다 따옴표로 감싸 wscript 에 넘기고, VBS 가 다시 따옴표를 붙여 node 명령줄을 만든다 (중첩 따옴표 회피)
+    $pieces = @($launcher, $WorkDir, $node, $tsx, 'src/index.ts', "--log=$log") + $ExtraArgs
+    $argument = '//B //Nologo ' + (($pieces | ForEach-Object { '"' + $_ + '"' }) -join ' ')
+    $action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument $argument -WorkingDirectory $WorkDir
     Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description $Description -Force | Out-Null
     Write-Host "등록: $Name ($WorkDir)"
 }
 
-Register-JkTask -Name 'jk-corp-host' -WorkDir (Join-Path $repo 'host') -ExtraArgs "--claude='$claude'" -Description 'jk-corp 세션 호스트 (claude 프로세스 보관)'
-Register-JkTask -Name 'jk-corp-server' -WorkDir (Join-Path $repo 'server') -ExtraArgs '' -Description 'jk-corp 서버 (http://127.0.0.1:4710)'
+Register-JkTask -Name 'jk-corp-host' -WorkDir (Join-Path $repo 'host') -ExtraArgs @("--claude=$claude") -Description 'jk-corp 세션 호스트 (claude 프로세스 보관)'
+Register-JkTask -Name 'jk-corp-server' -WorkDir (Join-Path $repo 'server') -ExtraArgs @() -Description 'jk-corp 서버 (http://127.0.0.1:4710)'
 
 Write-Host "로그: $logDir"
 Write-Host '지금 시작: Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server'

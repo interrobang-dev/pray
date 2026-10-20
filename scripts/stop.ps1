@@ -4,6 +4,9 @@ foreach ($name in 'jk-corp-server', 'jk-corp-host') {
     Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
 }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+Get-CimInstance Win32_Process -Filter "Name='wscript.exe'" |
+    Where-Object { $_.CommandLine -like "*launch-hidden.vbs*" -and $_.CommandLine -like "*$repo*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
     Where-Object { $_.CommandLine -like "*$repo*" -and $_.CommandLine -like '*src/index.ts*' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host "종료: node $($_.ProcessId)" }
