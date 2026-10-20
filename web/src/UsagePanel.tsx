@@ -11,9 +11,14 @@ function remainingLabel(resetsAt: string, now: number): string {
   return `${Math.floor(hours / 24)}일 ${hours % 24}시간 후 리셋`
 }
 
-function levelOf(limit: UsageLimit): string {
-  if (limit.percent >= 90) return 'danger'
-  if (limit.percent >= 70) return 'warn'
+/** 서버는 사용률을 주고, 화면은 남은 비율로 보여 준다 */
+function remainingOf(limit: UsageLimit): number {
+  return Math.max(0, 100 - limit.percent)
+}
+
+function levelOf(remaining: number): string {
+  if (remaining <= 10) return 'danger'
+  if (remaining <= 30) return 'warn'
   return ''
 }
 
@@ -49,17 +54,20 @@ export function UsagePanel() {
       {result === null && <span>불러오는 중…</span>}
       {result && !result.ok && <span className="error">{result.reason}</span>}
       {result?.ok &&
-        result.usage.limits.map((limit) => (
-          <div key={limit.label} className={`usage-limit ${levelOf(limit)}`}>
-            <span>
-              {limit.label} <b>{limit.percent}%</b>
-            </span>
-            <span className="reset">{remainingLabel(limit.resetsAt, now)}</span>
-            <span className="bar">
-              <i style={{ width: `${Math.min(100, limit.percent)}%` }} />
-            </span>
-          </div>
-        ))}
+        result.usage.limits.map((limit) => {
+          const remaining = remainingOf(limit)
+          return (
+            <div key={limit.label} className={`usage-limit ${levelOf(remaining)}`}>
+              <span>
+                {limit.label} <b>{remaining}%</b> 남음
+              </span>
+              <span className="reset">{remainingLabel(limit.resetsAt, now)}</span>
+              <span className="bar">
+                <i style={{ width: `${remaining}%` }} />
+              </span>
+            </div>
+          )
+        })}
     </div>
   )
 }

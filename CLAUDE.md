@@ -56,7 +56,7 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 - `web/src/types.ts` — 서버 응답 타입 (server 쪽과 손으로 맞춘다)
 - `web/src/Chat.tsx` — 말풍선 뷰. 입력칸은 `텍스트` 후 `\r` 을 터미널 입력 API 로 보낸다. 승인 버튼은 Enter(승인)/Esc(거부) 키 전송
 - `web/src/Terminal.tsx` — xterm.js. 출력은 세션별 SSE, 입력·크기는 POST
-- `web/src/UsagePanel.tsx` — 사이드바 하단 고정 사용량 게이지. 60초 폴링, 70%↑ 노랑·90%↑ 빨강
+- `web/src/UsagePanel.tsx` — 사이드바 하단 고정 게이지. 서버가 주는 사용률을 **남은 비율**로 바꿔 보여 준다. 60초 폴링, 남은 30%↓ 노랑·10%↓ 빨강
 - `hooks/install.mjs` — settings.json 훅 설치 스크립트
 
 ## 핵심 개념
