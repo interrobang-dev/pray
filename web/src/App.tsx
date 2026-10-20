@@ -29,7 +29,9 @@ export function App() {
   const [isConnected, setIsConnected] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
-  const [isLeadForm, setIsLeadForm] = useState(false)
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false)
+  /** 새 세션 폼에서 고른 팀. '' 이면 폴더 직접 입력 */
+  const [formTeamId, setFormTeamId] = useState('')
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
 
@@ -57,9 +59,10 @@ export function App() {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const response = await postJson('/api/sessions', 'POST', {
-      cwd: form.get('cwd'),
+      cwd: formTeamId ? undefined : form.get('cwd'),
+      teamId: formTeamId || undefined,
       prompt: form.get('prompt'),
-      teamName: form.get('isLead') ? form.get('teamName') : undefined,
+      isLead: Boolean(formTeamId && form.get('isLead')),
     })
     if (!response.ok) {
       alert((await response.json()).message ?? '생성 실패')
@@ -69,6 +72,29 @@ export function App() {
     setSelectedId(sessionId)
     setTab('terminal')
     setIsCreating(false)
+  }
+
+  async function createTeam(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const response = await postJson('/api/team', 'POST', { name: form.get('name'), cwd: form.get('cwd'), roomId: form.get('roomId') })
+    if (!response.ok) {
+      alert((await response.json()).message ?? '팀 생성 실패')
+      return
+    }
+    setIsCreatingTeam(false)
+  }
+
+  function releaseLead(team: Team) {
+    if (confirm(`"${team.name}" 팀장 지정을 해제할까요? (세션은 그대로 남고 팀원이 됩니다)`)) {
+      void postJson(`/api/team/${team.id}`, 'PATCH', { leadSessionId: null })
+    }
+  }
+
+  function removeTeam(team: Team) {
+    if (confirm(`"${team.name}" 팀을 지울까요? 세션은 종료되지 않고 무소속이 됩니다.`)) {
+      void fetch(`/api/team/${team.id}`, { method: 'DELETE' })
+    }
   }
 
   function addRoom() {
@@ -142,17 +168,46 @@ export function App() {
           <button onClick={() => setIsCreating(true)} disabled={!snapshot.isHostReachable}>
             + 새 세션
           </button>
+          <button onClick={() => setIsCreatingTeam(true)}>+ 팀</button>
           <button onClick={addRoom}>+ 방</button>
         </div>
+        {isCreatingTeam && (
+          <form className="create" onSubmit={createTeam}>
+            <input name="name" placeholder="팀 이름" required autoFocus />
+            <input name="cwd" placeholder="작업 폴더 (예: D:\workspace\foo). 이 폴더의 세션이 팀이 됨" required />
+            <select name="roomId" defaultValue={office.rooms[0]?.id}>
+              {office.rooms.map((room) => (
+                <option key={room.id} value={room.id}>
+                  방: {room.name}
+                </option>
+              ))}
+            </select>
+            <div>
+              <button type="submit">만들기</button>
+              <button type="button" onClick={() => setIsCreatingTeam(false)}>
+                취소
+              </button>
+            </div>
+          </form>
+        )}
         {isCreating && (
           <form className="create" onSubmit={createSession}>
-            <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />
+            <select value={formTeamId} onChange={(e) => setFormTeamId(e.target.value)}>
+              <option value="">폴더 직접 입력 (무소속)</option>
+              {office.teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  팀: {team.name} — {team.cwd}
+                </option>
+              ))}
+            </select>
+            {!formTeamId && <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />}
             <input name="prompt" placeholder="첫 지시 (선택)" />
-            <label className="check">
-              <input type="checkbox" name="isLead" checked={isLeadForm} onChange={(e) => setIsLeadForm(e.target.checked)} />
-              팀장으로 (팀원을 만들어 일을 나눠 줄 수 있음)
-            </label>
-            {isLeadForm && <input name="teamName" placeholder="팀 이름" required />}
+            {formTeamId && (
+              <label className="check">
+                <input type="checkbox" name="isLead" />
+                팀장으로 (팀원을 만들어 일을 나눠 줄 수 있음)
+              </label>
+            )}
             <div>
               <button type="submit">시작</button>
               <button type="button" onClick={() => setIsCreating(false)}>
@@ -167,13 +222,26 @@ export function App() {
               key: team.id,
               title: team.name,
               hint: team.cwd,
+              team,
               members: snapshot.sessions.filter((s) => s.teamId === team.id),
             })),
-            { key: 'free', title: '무소속 (웹)', hint: '', members: snapshot.sessions.filter((s) => !s.teamId && s.kind === 'web') },
-            { key: 'external', title: '파견 (터미널·IDE)', hint: '', members: snapshot.sessions.filter((s) => !s.teamId && s.kind === 'external') },
+            { key: 'free', title: '무소속 (웹)', hint: '', team: null, members: snapshot.sessions.filter((s) => !s.teamId && s.kind === 'web') },
+            { key: 'external', title: '파견 (터미널·IDE)', hint: '', team: null, members: snapshot.sessions.filter((s) => !s.teamId && s.kind === 'external') },
           ].map((group) => [
             <li key={group.key} className="group" title={group.hint}>
               {group.title} {group.members.length > 0 && <span className="count">{group.members.length}</span>}
+              {group.team && (
+                <span className="group-actions">
+                  {group.team.leadSessionId && (
+                    <button onClick={() => releaseLead(group.team)} title="팀장 지정 해제">
+                      팀장 해제
+                    </button>
+                  )}
+                  <button onClick={() => removeTeam(group.team)} title="팀 삭제 (세션은 유지)">
+                    삭제
+                  </button>
+                </span>
+              )}
             </li>,
             ...group.members.map(renderSession),
             ...(group.members.length === 0 ? [<li key={`${group.key}-empty`} className="empty">없음</li>] : []),
