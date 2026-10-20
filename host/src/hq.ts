@@ -33,8 +33,26 @@ export interface Office {
   seats: Record<string, Seat>
 }
 
+export interface TeamMember {
+  sessionId: string
+  name: string
+  cwd: string
+  createdAt: string
+}
+
+/** 팀 = 팀장 세션 하나 + 팀원 세션들. 팀장이 MCP 도구로 팀원을 다룬다 */
+export interface Team {
+  id: string
+  name: string
+  cwd: string
+  leadSessionId: string
+  createdAt: string
+  members: TeamMember[]
+}
+
 interface HqFile extends Office {
   webSessions: WebSessionRecord[]
+  teams: Team[]
 }
 
 const LOBBY: Room = { id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }
@@ -50,7 +68,8 @@ function readHq(): HqFile {
     // 파일 없음 → 기본값
   }
   const rooms = parsed.rooms?.length ? parsed.rooms : [LOBBY]
-  return { rooms, seats: parsed.seats ?? {}, webSessions: parsed.webSessions ?? [] }
+  // 모르는 키도 보존한다. 호스트·서버가 같은 파일을 쓰므로 한쪽이 구버전이어도 다른 쪽 데이터를 지우지 않게
+  return { ...parsed, rooms, seats: parsed.seats ?? {}, webSessions: parsed.webSessions ?? [], teams: parsed.teams ?? [] }
 }
 
 function writeHq(hq: HqFile): void {
@@ -114,4 +133,38 @@ export function setSeat(sessionId: string, seat: Seat): void {
   const hq = readHq()
   hq.seats[sessionId] = seat
   writeHq(hq)
+}
+
+export function listTeams(): Team[] {
+  return readHq().teams
+}
+
+export function addTeam(team: Team): void {
+  const hq = readHq()
+  hq.teams = [...hq.teams.filter((t) => t.id !== team.id), team]
+  writeHq(hq)
+}
+
+export function removeTeam(teamId: string): void {
+  const hq = readHq()
+  hq.teams = hq.teams.filter((t) => t.id !== teamId)
+  writeHq(hq)
+}
+
+export function addTeamMember(teamId: string, member: TeamMember): Team | null {
+  const hq = readHq()
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team) return null
+  team.members = [...team.members.filter((m) => m.sessionId !== member.sessionId), member]
+  writeHq(hq)
+  return team
+}
+
+export function removeTeamMember(teamId: string, sessionId: string): Team | null {
+  const hq = readHq()
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team) return null
+  team.members = team.members.filter((m) => m.sessionId !== sessionId)
+  writeHq(hq)
+  return team
 }

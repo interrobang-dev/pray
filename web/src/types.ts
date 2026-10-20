@@ -10,6 +10,9 @@ export interface Session {
   lastAt: string | null
   lastAssistantText: string | null
   pendingTool: string | null
+  /** 팀에 속하면 팀장/팀원. 아니면 null */
+  role: 'lead' | 'member' | null
+  teamId: string | null
 }
 
 export interface Room {

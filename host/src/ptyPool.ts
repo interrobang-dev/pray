@@ -35,6 +35,8 @@ export interface SpawnOptions {
   cwd: string
   prompt?: string
   resume?: boolean
+  /** claude 에 추가로 넘길 인자 (--name, --permission-mode, --mcp-config 등) */
+  extraArgs?: string[]
 }
 
 /** 이벤트: output(sessionId, data), exit(sessionId, exitCode), change() */
@@ -49,9 +51,10 @@ export class PtyPool extends EventEmitter {
     return this.entries.has(sessionId)
   }
 
-  spawn({ sessionId, cwd, prompt, resume }: SpawnOptions): void {
+  spawn({ sessionId, cwd, prompt, resume, extraArgs = [] }: SpawnOptions): void {
     if (this.entries.has(sessionId)) throw new Error(`이미 실행 중: ${sessionId}`)
     const args = resume ? ['--resume', sessionId] : ['--session-id', sessionId]
+    args.push(...extraArgs)
     if (prompt) args.push(prompt)
 
     const child = pty.spawn(CLAUDE_COMMAND, args, {

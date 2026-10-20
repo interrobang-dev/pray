@@ -4,7 +4,20 @@ import { join } from 'node:path'
 import express from 'express'
 import type { Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
-import { addRoom, readOffice, setSeat, updateRoom, type Room, type Seat } from '@jk-corp/host/hq'
+import {
+  addRoom,
+  addTeam,
+  addTeamMember,
+  listTeams,
+  readOffice,
+  removeTeam,
+  removeTeamMember,
+  setSeat,
+  updateRoom,
+  type Room,
+  type Seat,
+  type Team,
+} from '@jk-corp/host/hq'
 import { setupFileLog } from '@jk-corp/host/runtime'
 import { configDir, readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
@@ -15,12 +28,14 @@ import { HostClient } from './hostClient.js'
 import { parseMessages } from './messages.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
+import { TaskConflictError, TaskStore } from './teamState.js'
 
 setupFileLog()
 const PORT = 4710
 const hookStates = new Map<string, HookState>()
 const subscribers = new Set<Response>()
 const host = new HostClient()
+const tasks = new TaskStore()
 
 const config = readConfig()
 const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
@@ -106,7 +121,7 @@ async function snapshotPayload() {
   const webSessions = new Map(host.sessions.map((s) => [s.sessionId, s.cwd]))
   return {
     isHostReachable: host.isReachable,
-    sessions: await listSessions(hookStates, webSessions),
+    sessions: await listSessions(hookStates, webSessions, listTeams()),
   }
 }
 
@@ -190,6 +205,168 @@ app.get('/api/usage', async (_req, res) => {
   res.json(await readUsage())
 })
 
+// ---------- 팀 (팀장 세션이 MCP 도구로 호출) ----------
+
+const MAX_WAIT_SECONDS = 600
+const MEMBER_FIRST_INPUT_DELAY_MS = 4_000
+
+function findTeam(teamId: string): Team | undefined {
+  return listTeams().find((t) => t.id === teamId)
+}
+
+/** task 를 만들고 팀원 터미널에 지시문을 입력한다 */
+function assignTask(team: Team, sessionId: string, instruction: string, res: Response): void {
+  if (!team.members.some((m) => m.sessionId === sessionId)) {
+    res.status(404).json({ message: '팀원 아님' })
+    return
+  }
+  let task
+  try {
+    task = tasks.assign(team.id, sessionId, instruction)
+  } catch (error) {
+    if (error instanceof TaskConflictError) {
+      res.status(409).json({ message: error.message })
+      return
+    }
+    throw error
+  }
+  if (!host.send({ type: 'input', sessionId, data: `${instruction}\r` })) {
+    tasks.markExited(sessionId)
+    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    return
+  }
+  res.json(task)
+}
+
+app.post('/api/team', (req, res) => {
+  const { name, cwd, leadSessionId } = req.body as { name?: string; cwd?: string; leadSessionId?: string }
+  if (!name?.trim() || !cwd || !leadSessionId) {
+    res.status(400).json({ message: 'name, cwd, leadSessionId 필요' })
+    return
+  }
+  const team: Team = {
+    id: randomUUID().slice(0, 8),
+    name: name.trim(),
+    cwd,
+    leadSessionId,
+    createdAt: new Date().toISOString(),
+    members: [],
+  }
+  addTeam(team)
+  res.json(team)
+  void broadcast()
+})
+
+app.get('/api/team/:teamId', async (req, res) => {
+  const team = findTeam(req.params.teamId)
+  if (!team) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  const { sessions } = await snapshotPayload()
+  const members = team.members.map((member) => {
+    const session = sessions.find((s) => s.id === member.sessionId)
+    return {
+      ...member,
+      status: session?.status ?? 'unknown',
+      isAlive: session?.isAlive ?? false,
+      lastAssistantText: session?.lastAssistantText ?? null,
+      pendingTool: session?.pendingTool ?? null,
+    }
+  })
+  res.json({ ...team, members, tasks: tasks.listByTeam(team.id) })
+})
+
+app.delete('/api/team/:teamId', (req, res) => {
+  const team = findTeam(req.params.teamId)
+  if (!team) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  for (const member of team.members) host.send({ type: 'kill', sessionId: member.sessionId })
+  removeTeam(team.id)
+  res.json({})
+  void broadcast()
+})
+
+app.post('/api/team/:teamId/members', (req, res) => {
+  const team = findTeam(req.params.teamId)
+  if (!team) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  const { name, cwd, instruction, permissionMode } = req.body as {
+    name?: string
+    cwd?: string
+    instruction?: string
+    permissionMode?: string
+  }
+  if (!name?.trim() || !cwd) {
+    res.status(400).json({ message: 'name, cwd 필요' })
+    return
+  }
+  const sessionId = randomUUID()
+  const extraArgs = ['--name', name.trim(), '--permission-mode', permissionMode ?? 'bypassPermissions']
+  if (!host.send({ type: 'spawn', sessionId, cwd, extraArgs })) {
+    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    return
+  }
+  const member = { sessionId, name: name.trim(), cwd, createdAt: new Date().toISOString() }
+  addTeamMember(team.id, member)
+  void broadcast()
+  if (!instruction) {
+    res.json({ member, task: null })
+    return
+  }
+  // claude 가 뜨기 전에 입력하면 사라진다. 첫 프롬프트는 호스트가 띄운 뒤 보내도록 지연
+  setTimeout(() => {
+    const task = tasks.assign(team.id, sessionId, instruction)
+    host.send({ type: 'input', sessionId, data: `${instruction}\r` })
+    res.json({ member, task })
+  }, MEMBER_FIRST_INPUT_DELAY_MS)
+})
+
+app.delete('/api/team/:teamId/members/:sessionId', (req, res) => {
+  const team = removeTeamMember(req.params.teamId, req.params.sessionId)
+  if (!team) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  host.send({ type: 'kill', sessionId: req.params.sessionId })
+  tasks.markExited(req.params.sessionId)
+  res.json({})
+  void broadcast()
+})
+
+app.post('/api/team/:teamId/tasks', (req, res) => {
+  const team = findTeam(req.params.teamId)
+  if (!team) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  const { sessionId, instruction } = req.body as { sessionId?: string; instruction?: string }
+  if (!sessionId || !instruction?.trim()) {
+    res.status(400).json({ message: 'sessionId, instruction 필요' })
+    return
+  }
+  assignTask(team, sessionId, instruction.trim(), res)
+})
+
+/** task 완료까지 롱폴링. taskId 가 'any' 면 팀의 아무 task 하나. 타임아웃·모르는 task 는 { task: null } */
+app.get('/api/team/:teamId/tasks/:taskId/wait', async (req, res) => {
+  const team = findTeam(req.params.teamId)
+  if (!team) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  const requested = Number(req.query.timeoutSec ?? MAX_WAIT_SECONDS)
+  const timeoutSec = Math.min(MAX_WAIT_SECONDS, Math.max(1, Number.isFinite(requested) ? requested : MAX_WAIT_SECONDS))
+  req.socket.setTimeout(0)
+  const taskId = req.params.taskId === 'any' ? null : req.params.taskId
+  const task = await tasks.wait(team.id, taskId, timeoutSec * 1000)
+  res.json({ task })
+})
+
 app.get('/api/office', (_req, res) => {
   res.json(readOffice())
 })
@@ -233,6 +410,7 @@ app.post('/api/hook', (req, res) => {
   }
   const next = applyHook(hookStates.get(payload.session_id), payload)
   if (next) hookStates.set(payload.session_id, next)
+  tasks.applyHook(payload)
   res.json({})
   void broadcast()
 })
@@ -246,6 +424,7 @@ app.get('/api/events', (req, res) => {
 
 host.on('reachable', () => void broadcast())
 host.on('message', (message: HostMessage) => {
+  if (message.type === 'exit') tasks.markExited(message.sessionId)
   if (message.type === 'sessions' || message.type === 'exit') void broadcast()
 })
 host.start()
@@ -256,6 +435,7 @@ watcher.on('change', (sessionId: string) => {
 })
 
 setInterval(() => void broadcast(), 5000)
+setInterval(() => tasks.expireUnacknowledged(), 1000)
 
 // 빌드된 웹이 있으면 서버 하나로 화면까지 제공한다 (개발 중에는 Vite 4711 을 쓴다)
 const webDist = join(import.meta.dirname, '..', '..', 'web', 'dist')

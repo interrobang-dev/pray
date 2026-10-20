@@ -34,15 +34,16 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 ## 구조
 
 - `host/src/index.ts` — named pipe `\\.\pipe\jk-corp-host` 서버. 연결된 모든 클라이언트에 모든 세션 출력을 보낸다 (구독 관리 없음)
-- `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid>` 실행, 세션별 200KB 링버퍼. claude 경로는 `--claude=` 인자 (스케줄러 환경엔 사용자 PATH 가 없어 설치 스크립트가 넘김)
+- `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid>` 실행, 세션별 200KB 링버퍼. `spawn.extraArgs` 로 `--name`·`--permission-mode` 등 추가 인자를 넘긴다 (resume 때는 안 넘어감). claude 경로는 `--claude=` 인자 (스케줄러 환경엔 사용자 PATH 가 없어 설치 스크립트가 넘김)
 - `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=<path>` 면 console 을 파일로 (스케줄러는 환경변수를 못 넘기므로 전부 인자)
 - `scripts/install-startup.ps1` · `stop.ps1` · `uninstall-startup.ps1` — 작업 스케줄러 등록·중지·제거. UTF-8 BOM 필수 (Windows PowerShell 5.1 이 BOM 없는 .ps1 을 ANSI 로 읽어 한글이 깨짐)
 - `desktop/src/main.ts` — Electron 트레이 앱. 호스트·서버를 `node --import tsx src/index.ts` 로 자식 실행(tsx CLI 는 자식 node 를 하나 더 만들어 kill 때 고아가 남으므로 쓰지 않음), 5초마다 `/api/sessions` 로 상태 폴링해 아이콘·툴팁 갱신. `node`·`claude` 경로는 `where` 로 찾고 자식 env 에서 `CLAUDE*`·`ELECTRON_*` 를 지운다
 - `desktop/src/children.ts` — 자식 프로세스 재시작 정책. `desktop/src/icon.ts` — 이미지 파일 없이 PNG 를 코드로 만든 트레이 아이콘
 - `desktop/tsconfig.json` 은 CommonJS 출력 (Electron main 을 단순하게). 빌드 결과 `desktop/dist/` 는 git 무시
 - `host/src/protocol.ts` — pipe 메시지 타입과 줄 단위 JSON 프레이밍. 서버가 `@jk-corp/host/protocol`로 import
-- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `rooms`·`seats` 를 쓴다. 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. 서버가 `@jk-corp/host/hq` 로 import
-- `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 사무실(방·자리) API
+- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `rooms`·`seats`·`teams` 를 쓴다. 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. **`readHq` 는 모르는 키를 보존한다** — 한쪽 프로세스만 새 코드로 돌 때 다른 쪽 데이터(예: `teams`)가 지워진 적이 있다. 서버가 `@jk-corp/host/hq` 로 import
+- `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 사무실(방·자리) API + 팀 API(`/api/team/*`: 팀 생성·조회·삭제, 팀원 spawn·종료, task 지시·롱폴링 wait)
+- `server/src/teamState.ts` — 팀장이 팀원에게 준 task 의 상태 기계 (순수, 시계 주입). assign → running → Stop 훅이면 done(result = last_assistant_message), 5초 안에 UserPromptSubmit 이 안 오거나 세션이 exit 하면 failed. 같은 팀원에 running 이 있으면 assign 거부(409). 설계: `docs/plans/2026-10-20-team-orchestration-design.md`
 - `server/src/hostClient.ts` — pipe 클라이언트. 끊기면 3초마다 재연결
 - `server/src/auth.ts` — 인증 코드·토큰 저장소(순수, 시계 주입), loopback 판정, 쿠키 파싱. `/api/*` 미들웨어는 index.ts 에 있고 `/api/auth/*` 와 `/api/hook` 은 예외
 - `server/src/mail.ts` — nodemailer 로 인증 메일 발송. `server/src/config.ts` — config.json 읽기
@@ -91,5 +92,6 @@ Vite 페이지는 SSE 때문에 `--virtual-time-budget` 방식이 멈춘다. `--
 
 ## 확인하지 못한 것
 
+- 팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`) 와 첫 지시 4초 지연 입력. 호스트를 새 코드로 재시작한 뒤 `POST /api/team/:id/members` 로 확인해야 한다 (지시 → 결과 수신 흐름 자체는 기존 세션으로 검증함)
 - 다른 PC 에서 실제 접속 (방화벽 허용 여부). 서버 쪽 인증 흐름은 이 PC 의 LAN IP 로 검증했다
 - 로컬 접속의 "채팅 입력 → claude 응답" 전체 흐름 (API 비용 때문에 자동 검증은 `/help` 까지만 했다)

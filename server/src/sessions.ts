@@ -5,6 +5,7 @@ import type { Session } from './types.js'
 import type { HookState } from './hookState.js'
 import { summarizeTranscript } from './transcript.js'
 import { readLiveSessions } from './liveSessions.js'
+import type { Team } from '@jk-corp/host/hq'
 
 const claudeDir = join(homedir(), '.claude')
 export const projectsDir = join(claudeDir, 'projects')
@@ -28,9 +29,18 @@ export async function findTranscript(sessionId: string): Promise<string | null> 
   return null
 }
 
+function roleOf(sessionId: string, teams: Team[]): Pick<Session, 'role' | 'teamId'> {
+  for (const team of teams) {
+    if (team.leadSessionId === sessionId) return { role: 'lead', teamId: team.id }
+    if (team.members.some((m) => m.sessionId === sessionId)) return { role: 'member', teamId: team.id }
+  }
+  return { role: null, teamId: null }
+}
+
 export async function listSessions(
   hookStates: Map<string, HookState>,
   webSessions: Map<string, string>,
+  teams: Team[] = [],
 ): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
   const ids = new Set<string>([...live.map((s) => s.sessionId), ...hookStates.keys(), ...webSessions.keys()])
@@ -51,6 +61,7 @@ export async function listSessions(
         lastAt: transcript?.lastAt ?? hook?.updatedAt ?? null,
         lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
         pendingTool: hook?.pendingTool ?? null,
+        ...roleOf(id, teams),
       }
     }),
   )

@@ -8,7 +8,7 @@ export interface HostSession {
 
 export type ClientMessage =
   | { type: 'list' }
-  | { type: 'spawn'; sessionId: string; cwd: string; prompt?: string; resume?: boolean }
+  | { type: 'spawn'; sessionId: string; cwd: string; prompt?: string; resume?: boolean; extraArgs?: string[] }
   | { type: 'attach'; sessionId: string }
   | { type: 'input'; sessionId: string; data: string }
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
