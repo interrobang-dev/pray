@@ -9,6 +9,7 @@ describe('lead', () => {
     expect(prompt).toContain('"개발" 팀 팀장')
     expect(prompt).toContain('abc12345')
     expect(prompt).toContain('마지막 메시지')
+    expect(prompt).toContain('팀원 정리 규칙')
   })
 
   it('extra args carry name, permission mode and the prompt', () => {
