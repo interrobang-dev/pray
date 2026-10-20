@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 
 export interface UsageLimit {
-  /** 사용자에게 보여줄 이름 (예: "5시간", "주간", "주간 Fable") */
+  /** 사용자에게 보여줄 이름 (예: "5h", "W", "W Fable") */
   label: string
   percent: number
   resetsAt: string
@@ -30,15 +30,15 @@ interface RawLimit {
 }
 
 const KIND_LABELS: Record<string, string> = {
-  session: '5시간',
-  weekly_all: '주간',
+  session: '5h',
+  weekly_all: 'W',
 }
 
 function labelOf(limit: RawLimit): string {
   const fixed = KIND_LABELS[limit.kind]
   if (fixed) return fixed
   const model = limit.scope?.model?.display_name
-  if (model) return `주간 ${model}`
+  if (model) return `W ${model}`
   return limit.kind
 }
 

@@ -44,6 +44,7 @@ export function UsagePanel() {
 
   return (
     <div className="usage">
+      <span className="usage-prefix">Remaining</span>
       {result === null && <span>불러오는 중…</span>}
       {result && !result.ok && <span className="error">{result.reason}</span>}
       {result?.ok &&

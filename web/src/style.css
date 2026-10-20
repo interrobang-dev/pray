@@ -642,6 +642,9 @@ header button.icon:hover:not(:disabled) {
   color: var(--muted);
   white-space: nowrap;
 }
+.usage-prefix {
+  margin-right: 4px;
+}
 .usage .error {
   color: #b23b3b;
 }
