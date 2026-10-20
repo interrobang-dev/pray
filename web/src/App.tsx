@@ -4,7 +4,7 @@ import { Chat } from './Chat'
 import { Office } from './Office'
 import { UsagePanel } from './UsagePanel'
 import { Modal, Segmented } from './Modal'
-import { statusLabel, type Office as OfficeData, type Group, type Session, type Team } from './types'
+import { statusLabel, type Office as OfficeData, type Group, type Session, type SessionStatus, type Team } from './types'
 import { avatarOf, cssColor } from './avatar'
 
 interface Snapshot {
@@ -29,6 +29,16 @@ function formatElapsed(iso: string | null, now: number): { text: string; classNa
     minutes < 1 ? 'now' : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`
   const className = minutes < 15 ? 'recent' : minutes > 120 ? 'stale' : ''
   return { text, className, title: date.toLocaleString('ko-KR') }
+}
+
+/** 팀 카드 안 세션 줄의 정렬 순위. 작을수록 위. 승인 대기 → 내 차례 → 작업 중 → 나머지 (팀장도 상태로만 정렬) */
+const statusOrder: Record<SessionStatus, number> = {
+  'needs-approval': 0,
+  'my-turn': 1,
+  working: 2,
+  idle: 3,
+  unknown: 3,
+  ended: 3,
 }
 
 async function postJson(url: string, method: string, body: unknown): Promise<Response> {
@@ -243,7 +253,9 @@ export function App() {
 
   /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 소속 세션. 폴더는 툴팁 */
   function renderTeam(team: Team) {
-    const members = snapshot.sessions.filter((s) => s.teamId === team.id)
+    const members = snapshot.sessions
+      .filter((s) => s.teamId === team.id)
+      .sort((a, b) => statusOrder[a.status] - statusOrder[b.status])
     const menuItems = [
       ...(team.leadSessionId ? [{ label: '팀장 해제', onClick: () => releaseLead(team) }] : []),
       { label: '팀 삭제', onClick: () => removeTeam(team) },
