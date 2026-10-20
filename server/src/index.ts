@@ -7,8 +7,10 @@ import type { HostMessage } from '@jk-corp/host/protocol'
 import {
   addGroup,
   addTeam,
+  listSessionNames,
   listTeams,
   readOffice,
+  setSessionName,
   removeTeam,
   setDesk,
   GroupNotEmptyError,
@@ -125,7 +127,7 @@ async function snapshotPayload() {
   const webSessions = new Map(host.sessions.map((s) => [s.sessionId, s.cwd]))
   return {
     isHostReachable: host.isReachable,
-    sessions: await listSessions(hookStates, webSessions, listTeams()),
+    sessions: await listSessions(hookStates, webSessions, listTeams(), listSessionNames()),
   }
 }
 
@@ -142,7 +144,13 @@ app.get('/api/sessions', async (_req, res) => {
 /** teamName 이 있으면 팀장 세션: 팀을 만들고 팀장 지침·권한 인자를 붙여 띄운다 */
 /** teamId 가 있으면 그 팀 폴더로 띄운다. isLead 면 그 팀의 팀장으로 (살아 있는 팀장이 이미 있으면 거부) */
 app.post('/api/sessions', async (req, res) => {
-  const { cwd: rawCwd, teamId, prompt, isLead } = req.body as { cwd?: string; teamId?: string; prompt?: string; isLead?: boolean }
+  const { cwd: rawCwd, teamId, prompt, isLead, name } = req.body as {
+    cwd?: string
+    teamId?: string
+    prompt?: string
+    isLead?: boolean
+    name?: string
+  }
   const team = teamId ? findTeam(teamId) : undefined
   if (teamId && !team) {
     res.status(404).json({ message: '팀 없음' })
@@ -176,6 +184,7 @@ app.post('/api/sessions', async (req, res) => {
     updateTeam(team.id, { leadSessionId: sessionId })
     extraArgs = leadExtraArgs({ ...team, leadSessionId: sessionId }, `http://127.0.0.1:${PORT}`)
   }
+  if (name?.trim()) setSessionName(sessionId, name)
   host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
   res.json({ sessionId })
   if (isLead) broadcastOffice()
@@ -184,6 +193,18 @@ app.post('/api/sessions', async (req, res) => {
 app.get('/api/sessions/:id/messages', async (req, res) => {
   const jsonl = await findTranscript(req.params.id)
   res.json(jsonl ? parseMessages(jsonl) : [])
+})
+
+/** 세션 이름 지정. 빈 문자열이면 지워서 자동 제목(ai-title)으로 돌아간다. 외부 세션에도 붙일 수 있다 */
+app.patch('/api/sessions/:id', (req, res) => {
+  const { name } = req.body as { name?: unknown }
+  if (typeof name !== 'string') {
+    res.status(400).json({ message: 'name 필요 (빈 문자열이면 삭제)' })
+    return
+  }
+  setSessionName(req.params.id, name)
+  res.json({})
+  void broadcast()
 })
 
 app.delete('/api/sessions/:id', (req, res) => {
@@ -305,7 +326,7 @@ app.get('/api/team/:teamId', async (req, res) => {
     .filter((s) => s.teamId === team.id)
     .map((s) => ({
       sessionId: s.id,
-      name: s.title ?? s.id.slice(0, 8),
+      name: s.name ?? s.title ?? s.id.slice(0, 8),
       kind: s.kind,
       role: s.role,
       status: s.status,
@@ -368,6 +389,8 @@ app.post('/api/team/:teamId/members', (req, res) => {
     res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
     return
   }
+  // 팀장이 붙인 팀원 이름을 화면에도 보이게
+  setSessionName(sessionId, name)
   const member = { sessionId, name: name.trim(), cwd: team.cwd }
   if (!instruction) {
     res.json({ member, task: null })
@@ -481,7 +504,10 @@ app.get('/api/events', (req, res) => {
 
 host.on('reachable', () => void broadcast())
 host.on('message', (message: HostMessage) => {
-  if (message.type === 'exit') tasks.markExited(message.sessionId)
+  if (message.type === 'exit') {
+    tasks.markExited(message.sessionId)
+    setSessionName(message.sessionId, null)
+  }
   if (message.type === 'sessions' || message.type === 'exit') void broadcast()
 })
 host.start()

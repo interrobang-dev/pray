@@ -15,6 +15,11 @@ interface Snapshot {
 const EMPTY_OFFICE: OfficeData = { groups: [], teams: [] }
 
 
+/** 화면에 쓰는 세션 이름: 사용자 지정 → 자동 제목 → ID 앞 8자리 */
+function displayName(session: Session): string {
+  return session.name ?? session.title ?? session.id.slice(0, 8)
+}
+
 function formatTime(iso: string | null): string {
   if (!iso) return '-'
   return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
@@ -35,6 +40,8 @@ export function App() {
   /** 세션 추가 모달. 팀 헤더의 "+ 세션" 이면 그 팀에 고정, 툴바의 "+ 세션" 이면 로비(폴더 직접 입력) */
   const [sessionForm, setSessionForm] = useState<{ teamId: string | null } | null>(null)
   const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
+  /** 이름 변경 모달의 대상 세션 */
+  const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
 
@@ -66,6 +73,7 @@ export function App() {
       cwd: sessionForm.teamId ? undefined : form.get('cwd'),
       teamId: sessionForm.teamId ?? undefined,
       prompt: form.get('prompt'),
+      name: form.get('name'),
       isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
     })
     if (!response.ok) {
@@ -99,6 +107,18 @@ export function App() {
       return
     }
     setIsGroupForm(false)
+  }
+
+  async function renameSession(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!renameTarget) return
+    const form = new FormData(event.currentTarget)
+    const response = await postJson(`/api/sessions/${renameTarget.id}`, 'PATCH', { name: form.get('name') })
+    if (!response.ok) {
+      alert((await response.json()).message ?? '이름 변경 실패')
+      return
+    }
+    setRenameTarget(null)
   }
 
   function openTeamForm(groupId: string) {
@@ -187,7 +207,8 @@ export function App() {
             />
           )}
           {!team && <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />}
-          <input name="prompt" placeholder="첫 지시 (선택)" autoFocus={Boolean(team)} />
+          <input name="name" placeholder="세션 이름 (선택. 비우면 대화 내용으로 자동 제목)" autoFocus={Boolean(team)} />
+          <input name="prompt" placeholder="첫 지시 (선택)" />
           <div className="actions">
             <button type="submit" className="primary">
               시작
@@ -213,7 +234,7 @@ export function App() {
         <div className="team-head">
           <span className="name">{team.name}</span>
           {members.length > 0 && <span className="count">{members.length}</span>}
-          <span className="actions">
+          <span className="head-actions">
             <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="이 팀에 세션 추가">
               +
             </button>
@@ -236,7 +257,7 @@ export function App() {
       >
         <span className={`status-dot ${session.status}`} title={statusLabel[session.status]} />
         <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
-        <div className="title">{session.title ?? session.id.slice(0, 8)}</div>
+        <div className="title">{displayName(session)}</div>
         <div className="meta">
           {session.role === 'lead' && <span className="badge role-lead">팀장</span>}
           {session.status === 'needs-approval' && <span className="badge needs-approval">{statusLabel[session.status]}</span>}
@@ -275,7 +296,7 @@ export function App() {
               <li key={group.id} className="group">
                 <div className="group-label">
                   <span className="name">{group.name}</span>
-                  <span className="actions">
+                  <span className="head-actions">
                     <button onClick={() => openTeamForm(group.id)} title="이 그룹에 팀 추가">
                       +
                     </button>
@@ -332,6 +353,26 @@ export function App() {
         </Modal>
       )}
       {sessionForm && renderSessionModal(sessionForm.teamId)}
+      {renameTarget && (
+        <Modal title="세션 이름 변경" subtitle={renameTarget.title ?? renameTarget.id} onClose={() => setRenameTarget(null)}>
+          <form className="create" onSubmit={renameSession}>
+            <input
+              name="name"
+              defaultValue={renameTarget.name ?? ''}
+              placeholder="비우면 자동 제목으로 돌아감"
+              autoFocus
+            />
+            <div className="actions">
+              <button type="submit" className="primary">
+                저장
+              </button>
+              <button type="button" onClick={() => setRenameTarget(null)}>
+                취소
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
       <Office
         office={office}
         sessions={snapshot.sessions}
@@ -346,7 +387,10 @@ export function App() {
       {selected && (
         <section className="panel">
           <div className="panel-header">
-            <b>{selected.title ?? selected.id.slice(0, 8)}</b>
+            <b>{displayName(selected)}</b>
+            <button className="rename" title="이름 변경" onClick={() => setRenameTarget(selected)}>
+              ✎
+            </button>
             <span className="cwd">{selected.cwd}</span>
             <nav className="tabs">
               <button className={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>

@@ -33,6 +33,7 @@ export async function listSessions(
   hookStates: Map<string, HookState>,
   webSessions: Map<string, string>,
   teams: Team[] = [],
+  names: Record<string, string> = {},
 ): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
   const ids = new Set<string>([...live.map((s) => s.sessionId), ...hookStates.keys(), ...webSessions.keys()])
@@ -49,6 +50,7 @@ export async function listSessions(
       return {
         id,
         cwd,
+        name: names[id] ?? null,
         title: transcript?.title ?? null,
         status: hook?.status ?? 'unknown',
         kind: isWeb ? 'web' : 'external',

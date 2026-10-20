@@ -32,6 +32,8 @@ export interface Office {
 
 interface HqFile extends Office {
   webSessions: WebSessionRecord[]
+  /** 사용자가 직접 붙인 세션 이름. 없으면 화면은 jsonl 의 ai-title 을 쓴다. 외부 세션에도 붙일 수 있어 webSessions 와 별도 */
+  sessionNames: Record<string, string>
 }
 
 const hqDir = join(homedir(), '.claude', 'jk-corp')
@@ -52,7 +54,7 @@ function readHq(): HqFile {
     (g) => g.id !== 'lobby' || teams.some((t) => t.groupId === 'lobby'),
   )
   // 모르는 키도 보존한다. 호스트·서버가 같은 파일을 쓰므로 한쪽이 구버전이어도 다른 쪽 데이터를 지우지 않게
-  return { ...rest, groups, webSessions: rest.webSessions ?? [], teams }
+  return { ...rest, groups, webSessions: rest.webSessions ?? [], teams, sessionNames: rest.sessionNames ?? {} }
 }
 
 /** 구버전 기록(desks 없음, roomId 등)을 읽어도 터지지 않게 */
@@ -79,6 +81,19 @@ export function addWebSession(record: WebSessionRecord): void {
 export function removeWebSession(sessionId: string): void {
   const hq = readHq()
   hq.webSessions = hq.webSessions.filter((s) => s.sessionId !== sessionId)
+  writeHq(hq)
+}
+
+export function listSessionNames(): Record<string, string> {
+  return readHq().sessionNames
+}
+
+/** 빈 이름이나 null 이면 지운다 (자동 제목으로 복귀) */
+export function setSessionName(sessionId: string, name: string | null): void {
+  const hq = readHq()
+  const trimmed = name?.trim()
+  if (trimmed) hq.sessionNames[sessionId] = trimmed
+  else delete hq.sessionNames[sessionId]
   writeHq(hq)
 }
 

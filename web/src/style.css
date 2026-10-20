@@ -218,20 +218,20 @@ h1 {
   font-size: 11px;
   font-weight: 500;
 }
-/* 관리 버튼은 헤더에 마우스를 올렸을 때만 (메뉴가 열려 있으면 유지) */
-.actions {
+/* 관리 버튼은 헤더에 마우스를 올렸을 때만 (메뉴가 열려 있으면 유지). 모달 폼의 .create .actions 와는 다른 클래스 */
+.head-actions {
   display: flex;
   gap: 2px;
   margin-left: auto;
   opacity: 0;
   transition: opacity 0.12s;
 }
-.group-label:hover .actions,
-.team-head:hover .actions,
-.actions:has(.menu.open) {
+.group-label:hover .head-actions,
+.team-head:hover .head-actions,
+.head-actions:has(.menu.open) {
   opacity: 1;
 }
-.actions button {
+.head-actions button {
   padding: 0 6px;
   font-size: 13px;
   line-height: 18px;
@@ -239,7 +239,7 @@ h1 {
   background: transparent;
   border-color: transparent;
 }
-.actions button:hover:not(:disabled) {
+.head-actions button:hover:not(:disabled) {
   background: var(--bg);
   border-color: var(--line);
   color: var(--text);
@@ -440,6 +440,19 @@ h1 {
 }
 .panel-header .cwd {
   flex: 1;
+}
+.panel-header .rename {
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+.panel-header .rename:hover {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--text);
 }
 .tabs {
   display: flex;

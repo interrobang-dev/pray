@@ -42,7 +42,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `desktop/tsconfig.json` 은 CommonJS 출력 (Electron main 을 단순하게). 빌드 결과 `desktop/dist/` 는 git 무시
 - `host/src/protocol.ts` — pipe 메시지 타입과 줄 단위 JSON 프레이밍. 서버가 `@jk-corp/host/protocol`로 import
 - `host/src/team.ts` — `Team` 타입(폴더·그룹·앵커·책상 오프셋·선택적 팀장)과 순수 함수 `normalizeCwd`·`teamOf`·`roleOf`. 서버가 `@jk-corp/host/team` 으로 import. 설계: `docs/plans/2026-10-20-team-folder-design.md`
-- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `groups`·`teams` 를 쓴다 (`seats` 와 기본 그룹 `lobby` 는 없어졌다. 책상 위치는 `teams[].desks`). 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. **`readHq` 는 모르는 키를 보존한다** — 한쪽 프로세스만 새 코드로 돌 때 다른 쪽 데이터(예: `teams`)가 지워진 적이 있다. 서버가 `@jk-corp/host/hq` 로 import
+- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `groups`·`teams`·`sessionNames` 를 쓴다 (`seats` 와 기본 그룹 `lobby` 는 없어졌다. 책상 위치는 `teams[].desks`). 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. **`readHq` 는 모르는 키를 보존한다** — 한쪽 프로세스만 새 코드로 돌 때 다른 쪽 데이터(예: `teams`)가 지워진 적이 있다. 서버가 `@jk-corp/host/hq` 로 import
 - `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 그룹 API + 팀 API(`/api/team/*`: 생성(같은 폴더면 409)·조회·수정(이름·그룹·앵커·팀장)·삭제, 책상 오프셋, 팀 폴더로 팀원 spawn, task 지시·롱폴링 wait). `POST /api/sessions` 는 `cwd` 또는 `teamId`, `isLead` 면 그 팀의 팀장 (살아 있는 팀장이 있으면 409)
 - `server/src/lead.ts` — 팀장 세션 지침(`--append-system-prompt`)과 spawn 인자, `--mcp-config` JSON (아래 mcp 를 `node --import <tsx loader> mcp/src/index.ts` 로 띄우고 env 로 팀 ID·서버 주소를 넘김. node 는 서버의 `process.execPath`)
 - `mcp/src/index.ts` — 팀장 claude 에 붙는 stdio MCP 서버. 도구 `jk_spawn_member`·`jk_assign`·`jk_wait`·`jk_status`·`jk_dismiss` 가 서버 `/api/team/*` 를 호출한다 (`mcp/src/teamApi.ts`, fetch 주입). `jk_wait` 기본 120초 — 시간 안에 안 끝나면 null 을 주고 팀장이 다시 부른다
@@ -73,7 +73,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - **상태**는 훅 이벤트로만 바뀐다. `UserPromptSubmit`→working, `PermissionRequest`→needs-approval, `PostToolUse`→working(승인 해제), `Stop`→my-turn, `SessionEnd`→ended. 훅이 한 번도 안 온 세션은 `unknown`
 - 훅은 `type: "http"`로 서버에 직접 POST 한다. 서버가 꺼져 있으면 그 사이 이벤트는 유실되고 Claude Code 쪽엔 영향 없다 (non-blocking). timeout 2초
 - 훅 상태는 서버 메모리에만 있다. 서버 재시작 시 전부 `unknown`에서 다시 시작
-- 세션 제목은 jsonl의 `ai-title` 줄에서 가져온다
+- **세션 이름은 사용자 지정(`hq.json.sessionNames`) → jsonl 의 `ai-title`(Claude Code 가 첫 대화 뒤 자동으로 붙이는 요약 제목) → ID 앞 8자리 순.** 패널 헤더의 ✎ 로 모달에서 바꾸고 비우면 자동 제목으로 돌아간다 (`PATCH /api/sessions/:id {name}`). 외부 세션에도 붙일 수 있다. 세션 추가 모달의 "세션 이름" 과 팀장이 `jk_spawn_member` 로 준 팀원 이름도 여기에 저장한다. 웹 세션이 exit 하면 서버가 지운다 (외부 세션 것은 남는다). Claude Code 의 `/rename`·`--name` 은 jsonl 에 안 남아 화면에 영향 없다
 - **사용량 토큰은 갱신하지 않는다.** 액세스 토큰(약 8시간)은 Claude Code 가 실행 중일 때 스스로 갱신해 파일에 다시 쓴다. 서버는 호출마다 파일을 다시 읽고 401 이면 "토큰 만료" 로 표시한다. refresh token 으로 직접 갱신하면 Claude Code 쪽 토큰과 충돌할 수 있어 일부러 안 한다
 - **웹 세션 = 호스트 pty 목록에 있는 세션.** `--session-id`로 UUID를 넘겨 pty·jsonl·훅이 같은 키로 묶인다
 - 터미널 스트림은 `attach` 요청에 호스트가 링버퍼 스냅샷을 한 번 주고(`snapshot` 이벤트, 화면 reset 후 그림), 이후 `output`을 잇는다. 서버만 재시작해도 브라우저가 SSE 재연결하면 같은 경로로 복원된다

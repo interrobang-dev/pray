@@ -478,7 +478,7 @@ function drawDesk(session: Session, seat: Placement, isSelected: boolean): DeskP
 
   // 이름표
   const isLead = session.role === 'lead'
-  const name = label(session.title ?? session.id.slice(0, 8), 6, isExternal ? 0x7a7f8e : COLOR.text)
+  const name = label(session.name ?? session.title ?? session.id.slice(0, 8), 6, isExternal ? 0x7a7f8e : COLOR.text)
   // 자리 간격(3타일)보다 조금 좁게. 책상보다 넓어도 옆 책상과 안 겹친다
   const tagW = Math.min(name.width + 4, SEAT_STEP * TILE - 4)
   // 이름표 밑줄: 외부 회색, 팀장 금색, 그 외 초록
