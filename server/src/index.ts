@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import express from 'express'
 import type { Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
+import { addRoom, readOffice, setSeat, updateRoom, type Seat } from '@jk-corp/host/hq'
 import { applyHook, type HookPayload, type HookState } from './hookState.js'
 import { findTranscript, listSessions, projectsDir } from './sessions.js'
 import { HostClient } from './hostClient.js'
@@ -103,6 +104,46 @@ app.get('/api/sessions/:id/stream', (req, res) => {
   host.on('message', onMessage)
   req.on('close', () => host.off('message', onMessage))
   if (!host.send({ type: 'attach', sessionId })) sendSse(res, 'error', '세션 호스트에 연결되지 않음')
+})
+
+function broadcastOffice(): void {
+  const office = readOffice()
+  for (const res of subscribers) sendSse(res, 'office', office)
+}
+
+app.get('/api/office', (_req, res) => {
+  res.json(readOffice())
+})
+
+app.post('/api/rooms', (req, res) => {
+  const { name } = req.body as { name?: string }
+  if (!name?.trim()) {
+    res.status(400).json({ message: '이름 필요' })
+    return
+  }
+  res.json(addRoom(name.trim()))
+  broadcastOffice()
+})
+
+app.patch('/api/rooms/:id', (req, res) => {
+  const room = updateRoom(req.params.id, req.body as { name?: string; waitingNote?: string })
+  if (!room) {
+    res.status(404).end()
+    return
+  }
+  res.json(room)
+  broadcastOffice()
+})
+
+app.put('/api/seats/:sessionId', (req, res) => {
+  const seat = req.body as Seat
+  if (typeof seat?.roomId !== 'string' || typeof seat.x !== 'number' || typeof seat.y !== 'number') {
+    res.status(400).end()
+    return
+  }
+  setSeat(req.params.sessionId, { roomId: seat.roomId, x: seat.x, y: seat.y, label: seat.label })
+  res.json({})
+  broadcastOffice()
 })
 
 app.post('/api/hook', (req, res) => {

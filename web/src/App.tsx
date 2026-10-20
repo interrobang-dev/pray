@@ -1,42 +1,28 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Terminal } from './Terminal'
 import { Chat } from './Chat'
-
-type SessionStatus = 'working' | 'my-turn' | 'needs-approval' | 'idle' | 'ended' | 'unknown'
-
-interface Session {
-  id: string
-  cwd: string
-  title: string | null
-  status: SessionStatus
-  kind: 'web' | 'external'
-  isAlive: boolean
-  lastAt: string | null
-  lastAssistantText: string | null
-  pendingTool: string | null
-}
+import { Office } from './Office'
+import { statusLabel, type Office as OfficeData, type Room, type Seat, type Session } from './types'
 
 interface Snapshot {
   isHostReachable: boolean
   sessions: Session[]
 }
 
-const statusLabel: Record<SessionStatus, string> = {
-  working: '작업중',
-  'my-turn': '내 차례',
-  'needs-approval': '승인 필요',
-  idle: '대기',
-  ended: '종료',
-  unknown: '알 수 없음',
-}
+const EMPTY_OFFICE: OfficeData = { rooms: [{ id: 'lobby', name: '로비', x: 0, y: 0, w: 16, h: 10 }], seats: {} }
 
 function formatTime(iso: string | null): string {
   if (!iso) return '-'
   return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
 }
 
+async function postJson(url: string, method: string, body: unknown): Promise<Response> {
+  return fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+
 export function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>({ isHostReachable: false, sessions: [] })
+  const [office, setOffice] = useState<OfficeData>(EMPTY_OFFICE)
   const [isConnected, setIsConnected] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
@@ -44,11 +30,15 @@ export function App() {
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
 
   useEffect(() => {
+    fetch('/api/office')
+      .then((r) => r.json())
+      .then(setOffice)
     const source = new EventSource('/api/events')
     source.addEventListener('sessions', (event) => {
       setSnapshot(JSON.parse((event as MessageEvent).data))
       setIsConnected(true)
     })
+    source.addEventListener('office', (event) => setOffice(JSON.parse((event as MessageEvent).data)))
     source.addEventListener('transcript', (event) => {
       const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
       setTranscriptVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
@@ -62,11 +52,7 @@ export function App() {
   async function createSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const response = await fetch('/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cwd: form.get('cwd'), prompt: form.get('prompt') }),
-    })
+    const response = await postJson('/api/sessions', 'POST', { cwd: form.get('cwd'), prompt: form.get('prompt') })
     if (!response.ok) {
       alert((await response.json()).message ?? '생성 실패')
       return
@@ -77,8 +63,24 @@ export function App() {
     setIsCreating(false)
   }
 
+  function addRoom() {
+    const name = prompt('방(업무) 이름')
+    if (name?.trim()) void postJson('/api/rooms', 'POST', { name })
+  }
+
+  function editRoom(room: Room) {
+    const waitingNote = prompt(`"${room.name}" 대기 메모 (비우면 삭제)`, room.waitingNote ?? '')
+    if (waitingNote === null) return
+    void postJson(`/api/rooms/${room.id}`, 'PATCH', { waitingNote })
+  }
+
+  function moveSeat(sessionId: string, seat: Seat) {
+    setOffice((prev) => ({ ...prev, seats: { ...prev.seats, [sessionId]: seat } }))
+    void postJson(`/api/seats/${sessionId}`, 'PUT', seat)
+  }
+
   return (
-    <main className="layout">
+    <main className={selected ? 'layout with-panel' : 'layout'}>
       <aside>
         <header>
           <h1>jk-corp</h1>
@@ -87,10 +89,13 @@ export function App() {
             className={snapshot.isHostReachable ? 'dot on' : 'dot'}
             title={snapshot.isHostReachable ? '세션 호스트 연결됨' : '세션 호스트 끊김'}
           />
+        </header>
+        <div className="toolbar">
           <button onClick={() => setIsCreating(true)} disabled={!snapshot.isHostReachable}>
             + 새 세션
           </button>
-        </header>
+          <button onClick={addRoom}>+ 방</button>
+        </div>
         {isCreating && (
           <form className="create" onSubmit={createSession}>
             <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />
@@ -122,47 +127,55 @@ export function App() {
           {snapshot.sessions.length === 0 && <li>세션 없음</li>}
         </ul>
       </aside>
-      <section className="panel">
-        {!selected && <p className="hint">세션을 선택하세요</p>}
-        {selected && (
-          <>
-            <div className="panel-header">
-              <b>{selected.title ?? selected.id.slice(0, 8)}</b>
-              <span className="cwd">{selected.cwd}</span>
-              <nav className="tabs">
-                <button className={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>
-                  대화
-                </button>
-                {selected.kind === 'web' && (
-                  <button className={tab === 'terminal' ? 'on' : ''} onClick={() => setTab('terminal')}>
-                    터미널
-                  </button>
-                )}
-              </nav>
+      <Office
+        office={office}
+        sessions={snapshot.sessions}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onMoveSeat={moveSeat}
+        onEditRoom={editRoom}
+      />
+      {selected && (
+        <section className="panel">
+          <div className="panel-header">
+            <b>{selected.title ?? selected.id.slice(0, 8)}</b>
+            <span className="cwd">{selected.cwd}</span>
+            <nav className="tabs">
+              <button className={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>
+                대화
+              </button>
               {selected.kind === 'web' && (
-                <button
-                  onClick={() => {
-                    if (confirm('세션을 종료할까요?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
-                  }}
-                >
-                  종료
+                <button className={tab === 'terminal' ? 'on' : ''} onClick={() => setTab('terminal')}>
+                  터미널
                 </button>
               )}
-            </div>
-            {tab === 'terminal' && selected.kind === 'web' ? (
-              <Terminal sessionId={selected.id} />
-            ) : (
-              <Chat
-                sessionId={selected.id}
-                isWritable={selected.kind === 'web'}
-                isApprovalNeeded={selected.status === 'needs-approval'}
-                pendingTool={selected.pendingTool}
-                version={transcriptVersions[selected.id] ?? 0}
-              />
+            </nav>
+            {selected.kind === 'web' && (
+              <button
+                onClick={() => {
+                  if (confirm('세션을 종료할까요?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
+                }}
+              >
+                종료
+              </button>
             )}
-          </>
-        )}
-      </section>
+            <button onClick={() => setSelectedId(null)} title="닫기">
+              ×
+            </button>
+          </div>
+          {tab === 'terminal' && selected.kind === 'web' ? (
+            <Terminal sessionId={selected.id} />
+          ) : (
+            <Chat
+              sessionId={selected.id}
+              isWritable={selected.kind === 'web'}
+              isApprovalNeeded={selected.status === 'needs-approval'}
+              pendingTool={selected.pendingTool}
+              version={transcriptVersions[selected.id] ?? 0}
+            />
+          )}
+        </section>
+      )}
     </main>
   )
 }

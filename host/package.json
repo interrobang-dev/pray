@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./protocol": "./src/protocol.ts"
+    "./protocol": "./src/protocol.ts",
+    "./hq": "./src/hq.ts"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

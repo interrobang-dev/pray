@@ -22,8 +22,8 @@ npm run dev               # host(named pipe) + server(4710) + web(4711) 동시 �
 - `host/src/index.ts` — named pipe `\\.\pipe\jk-corp-host` 서버. 연결된 모든 클라이언트에 모든 세션 출력을 보낸다 (구독 관리 없음)
 - `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid>` 실행, 세션별 200KB 링버퍼
 - `host/src/protocol.ts` — pipe 메시지 타입과 줄 단위 JSON 프레이밍. 서버가 `@jk-corp/host/protocol`로 import
-- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json`의 `webSessions` 기록 (spawn 시 추가, kill 시 제거)
-- `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림
+- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `rooms`·`seats` 를 쓴다. 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. 서버가 `@jk-corp/host/hq` 로 import
+- `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 사무실(방·자리) API
 - `server/src/hostClient.ts` — pipe 클라이언트. 끊기면 3초마다 재연결
 - `server/src/sessions.ts` — 살아 있는 세션 + 훅 상태 + 호스트 목록 + 대화 요약을 합쳐 `Session[]` 생성
 - `server/src/liveSessions.ts` — `~/.claude/sessions/<pid>.json` 읽고 pid 생존 확인
@@ -31,7 +31,9 @@ npm run dev               # host(named pipe) + server(4710) + web(4711) 동시 �
 - `server/src/transcript.ts` — jsonl → 제목·마지막 시각·마지막 assistant 텍스트 (순수 함수)
 - `server/src/messages.ts` — jsonl → 채팅 메시지 배열. assistant 는 `message.id` 로 묶고 tool_result 를 tool_use 에 붙인다 (순수 함수)
 - `server/src/transcriptWatcher.ts` — `~/.claude/projects` 재귀 감시 → 전역 SSE `transcript {sessionId}` (300ms 디바운스)
-- `web/src/App.tsx` — 좌측 세션 목록, 우측 패널 (대화 탭 / 터미널 탭. 터미널은 웹 세션만)
+- `web/src/App.tsx` — 3열: 좌측 세션 목록, 가운데 사무실, 우측 패널 (세션 선택 시. 대화 탭 / 터미널 탭. 터미널은 웹 세션만)
+- `web/src/Office.tsx` — PixiJS 8 캔버스. 방=업무, 책상+캐릭터=살아 있는 세션. 스프라이트 없이 Graphics 로 그린다. 데이터가 바뀌면 전부 지우고 다시 그리고, 손 흔들기·타자 애니메이션만 ticker 로 움직인다
+- `web/src/types.ts` — 서버 응답 타입 (server 쪽과 손으로 맞춘다)
 - `web/src/Chat.tsx` — 말풍선 뷰. 입력칸은 `텍스트` 후 `\r` 을 터미널 입력 API 로 보낸다. 승인 버튼은 Enter(승인)/Esc(거부) 키 전송
 - `web/src/Terminal.tsx` — xterm.js. 출력은 세션별 SSE, 입력·크기는 POST
 - `hooks/install.mjs` — settings.json 훅 설치 스크립트
@@ -48,6 +50,13 @@ npm run dev               # host(named pipe) + server(4710) + web(4711) 동시 �
 - 새 폴더에서 claude를 띄우면 신뢰 확인 대화상자가 뜨고 **기본 선택이 "No, exit"**다. 사용자가 터미널에서 ↓ Enter를 눌러야 한다. 자동 테스트에서 Enter만 보내면 종료 코드 1로 죽는 게 정상이다
 - 호스트 자체가 죽으면 웹 세션도 죽는다. 허용한 설계
 - 채팅 뷰는 별도 API 없이 **터미널 키 입력**으로 지시를 보낸다. 슬래시 명령은 자동완성이 Enter 를 먼저 먹어 두 번 눌러야 할 수 있다
+- 사무실 좌표는 타일(32px) 단위. 자리(`seats`)는 책상을 끌어 놓았을 때만 저장되고, 자리 없는 세션은 화면에서 로비 빈 칸에 3타일 간격으로 임시 배치한다 (저장 안 함)
+- 캐릭터 상태 표현: working 타자 애니메이션 + 모니터 켜짐, my-turn 손 들기 + 마지막 말 말풍선, needs-approval 손 들기 + 빨간 말풍선, idle/unknown 반투명, 외부 세션은 회색 계열
+- 방 더블클릭 = 대기 메모 편집(`prompt()`), "+ 방" = 기존 방 오른쪽에 추가. 방 이동·삭제·크기 조절은 없다
+
+## 화면 확인 방법 (headless)
+
+Vite 페이지는 SSE 때문에 `--virtual-time-budget` 방식이 멈춘다. `--remote-debugging-port` 로 Edge 를 띄우고 CDP 로 N초 뒤 캡처하는 스크립트를 쓴다 (`scratchpad/cdp-shot.mjs` 패턴: `Page.navigate` → sleep → `Page.captureScreenshot`, 콘솔 오류도 수집). 기존 Edge 와 프로필이 겹치지 않게 `--user-data-dir` 을 따로 준다
 
 ## 남은 일 (설계서 구현 순서)
 
