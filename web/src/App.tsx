@@ -60,6 +60,8 @@ export function App() {
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
+  /** 목록 맨 아래 "휴무"(죽은 세션) 구역을 펼쳤는지. 기본 접힘 */
+  const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
   /** 목록의 경과 시간을 1분마다 다시 계산하기 위한 현재 시각 */
   const [now, setNow] = useState(() => Date.now())
 
@@ -254,7 +256,7 @@ export function App() {
   /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 소속 세션. 폴더는 툴팁 */
   function renderTeam(team: Team) {
     const members = snapshot.sessions
-      .filter((s) => s.teamId === team.id)
+      .filter((s) => s.teamId === team.id && s.isAlive)
       .sort((a, b) => statusOrder[a.status] - statusOrder[b.status])
     const menuItems = [
       ...(team.leadSessionId ? [{ label: '팀장 해제', onClick: () => releaseLead(team) }] : []),
@@ -304,7 +306,9 @@ export function App() {
 
   /** 그룹이 지워져 소속 그룹이 없는 팀. 라벨 없이 그대로 보여 준다 */
   const orphanTeams = office.teams.filter((t) => !office.groups.some((g) => g.id === t.groupId))
-  const lobbySessions = snapshot.sessions.filter((s) => !s.teamId)
+  const lobbySessions = snapshot.sessions.filter((s) => !s.teamId && s.isAlive)
+  /** 죽은 세션은 팀·로비에서 빼고 맨 아래 "휴무" 에 모은다. 서버가 준 순서(최근 활동 순) 그대로 */
+  const offDutySessions = snapshot.sessions.filter((s) => !s.isAlive)
 
   return (
     <main className={selected ? 'layout with-panel' : 'layout'}>
@@ -352,6 +356,17 @@ export function App() {
             </div>
             {lobbySessions.map((session) => renderSession(session, true))}
           </li>
+          {offDutySessions.length > 0 && (
+            <li className="group">
+              <div className="group-label toggle" onClick={() => setIsOffDutyOpen(!isOffDutyOpen)}>
+                <span className="name">
+                  {isOffDutyOpen ? '▾' : '▸'} 휴무
+                </span>
+                <span className="count">{offDutySessions.length}</span>
+              </div>
+              {isOffDutyOpen && offDutySessions.map((session) => renderSession(session, true))}
+            </li>
+          )}
         </ul>
         <UsagePanel />
       </aside>

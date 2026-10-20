@@ -58,7 +58,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/transcript.ts` — jsonl → 제목·마지막 시각·마지막 assistant 텍스트 (순수 함수)
 - `server/src/messages.ts` — jsonl → 채팅 메시지 배열. assistant 는 `message.id` 로 묶고 tool_result 를 tool_use 에 붙인다 (순수 함수)
 - `server/src/transcriptWatcher.ts` — `~/.claude/projects` 재귀 감시 → 전역 SSE `transcript {sessionId}` (300ms 디바운스)
-- `web/src/App.tsx` — 3열: 좌측 목록(그룹 라벨 → 팀 카드 → 세션 줄, 맨 아래 로비. 세션 줄은 상태 색 점·아바타·제목·시각이고 **팀 안 세션은 폴더를 숨긴다**(팀 = 폴더). 글자 배지는 승인 대기와 팀장만), 가운데 사무실, 우측 패널 (세션 선택 시. 대화 탭 / 터미널 탭. 터미널은 웹 세션만)
+- `web/src/App.tsx` — 3열: 좌측 목록(그룹 라벨 → 팀 카드 → 세션 줄, 맨 아래 로비, 그 아래 휴무(죽은 세션, 기본 접힘·라벨 클릭으로 펼침. 팀 카드·로비에는 살아 있는 세션만). 세션 줄은 상태 색 점·아바타·제목·시각이고 **팀 안 세션은 폴더를 숨긴다**(팀 = 폴더). 글자 배지는 승인 대기와 팀장만), 가운데 사무실, 우측 패널 (세션 선택 시. 대화 탭 / 터미널 탭. 터미널은 웹 세션만)
 - `web/src/Office.tsx` — PixiJS 8 캔버스. 그룹=그래픽 공간, 팀=책상 섬, 책상+캐릭터=살아 있는 세션. 스프라이트 없이 Graphics 로 그린다. **모든 좌표는 아트 픽셀(타일 16px)이고 world 를 2배로 키워** 도트가 선명하다 (화면 타일 32px). 데이터가 바뀌면 전부 지우고 다시 그리고, 손 흔들기·타자 애니메이션만 ticker 로 움직인다. 그리기 함수(`drawFigure`·`drawDesk`·`drawGroup`·`drawIsland`·`drawPlant`)만 바꾸면 스프라이트로 교체할 수 있게 레이아웃·상태 로직과 분리돼 있다
 - `web/src/avatar.ts` — 세션 ID 해시 → 머리 스타일 6종·머리색·피부·셔츠. 사무실과 목록 아바타 칩이 같이 쓴다. 외부 세션도 색은 같고 **책상 측판·이름표 밑줄이 회색**인 것으로 구분 (캐릭터를 회색으로 하면 사무실이 죽어 보여서 바꿈)
 - `web/src/types.ts` — 서버 응답 타입 (server 쪽과 손으로 맞춘다)

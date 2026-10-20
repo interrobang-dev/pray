@@ -223,6 +223,11 @@ header button.icon:hover:not(:disabled) {
   text-transform: uppercase;
   color: var(--muted);
 }
+/* 접고 펼치는 라벨 (휴무 구역) */
+.group-label.toggle {
+  cursor: pointer;
+  user-select: none;
+}
 .count {
   padding: 0 6px;
   border-radius: 8px;
@@ -615,8 +620,19 @@ header button.icon:hover:not(:disabled) {
   border-top: 1px solid var(--line);
   background: var(--panel);
 }
-.composer input {
+.composer {
+  align-items: flex-end;
+}
+.composer textarea {
   flex: 1;
+  resize: none;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  line-height: 1.4;
 }
 .composer button {
   background: var(--green);
