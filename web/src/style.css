@@ -25,6 +25,25 @@ body,
 .office canvas {
   display: block;
 }
+.login {
+  max-width: 360px;
+  margin: 20vh auto;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.login form {
+  display: flex;
+  gap: 8px;
+}
+.login input {
+  flex: 1;
+  padding: 8px;
+}
+.login .message {
+  opacity: 0.8;
+}
 .toolbar {
   display: flex;
   gap: 6px;

@@ -6,6 +6,9 @@ import type { Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
 import { addRoom, readOffice, setSeat, updateRoom, type Seat } from '@jk-corp/host/hq'
 import { setupFileLog } from '@jk-corp/host/runtime'
+import { configDir, readConfig } from './config.js'
+import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
+import { makeSendCode } from './mail.js'
 import { applyHook, type HookPayload, type HookState } from './hookState.js'
 import { findTranscript, listSessions, projectsDir } from './sessions.js'
 import { HostClient } from './hostClient.js'
@@ -18,8 +21,72 @@ const hookStates = new Map<string, HookState>()
 const subscribers = new Set<Response>()
 const host = new HostClient()
 
+const config = readConfig()
+const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
+const sendCode = makeSendCode(config.smtp)
+const COOKIE = 'jk_session'
+
 const app = express()
 app.use(express.json({ limit: '1mb' }))
+
+// 로컬(127.0.0.1)은 무인증. 그 외는 로그인 쿠키 필요. 훅·인증 API 는 예외
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/') || req.path === '/hook') return next()
+  if (isLoopback(req.socket.remoteAddress)) return next()
+  if (auth.emailOf(parseCookie(req.headers.cookie, COOKIE))) return next()
+  res.status(401).json({ message: '로그인 필요' })
+})
+
+app.get('/api/auth/me', (req, res) => {
+  const isLocal = isLoopback(req.socket.remoteAddress)
+  const email = auth.emailOf(parseCookie(req.headers.cookie, COOKIE))
+  res.json({ isAuthenticated: isLocal || email !== null, isLocal, email, canLogin: sendCode !== null })
+})
+
+app.post('/api/auth/request', async (req, res) => {
+  const { email } = req.body as { email?: string }
+  if (typeof email !== 'string' || !sendCode) {
+    res.status(400).json({ message: '메일 로그인이 설정되지 않음' })
+    return
+  }
+  const { result, code } = auth.requestCode(email)
+  if (result === 'too-soon') {
+    res.status(429).json({ message: '잠시 후 다시 요청하세요' })
+    return
+  }
+  // 허용되지 않은 주소에도 같은 응답 (주소 유출 방지)
+  if (result === 'sent' && code) {
+    try {
+      await sendCode(email, code)
+    } catch (error) {
+      console.error('인증 메일 발송 실패', error)
+      res.status(502).json({ message: '메일 발송 실패' })
+      return
+    }
+  }
+  res.json({})
+})
+
+app.post('/api/auth/verify', (req, res) => {
+  const { email, code } = req.body as { email?: string; code?: string }
+  if (typeof email !== 'string' || typeof code !== 'string') {
+    res.status(400).end()
+    return
+  }
+  const verified = auth.verifyCode(email, code)
+  if (!verified.ok) {
+    res.status(401).json({ message: verified.reason })
+    return
+  }
+  res.setHeader('Set-Cookie', `${COOKIE}=${verified.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${TOKEN_TTL_SECONDS}`)
+  res.json({})
+})
+
+app.post('/api/auth/logout', (req, res) => {
+  auth.revoke(parseCookie(req.headers.cookie, COOKIE))
+  res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`)
+  res.json({})
+})
 
 function openSse(res: Response): void {
   res.set({
@@ -189,6 +256,6 @@ if (existsSync(webDist)) {
   app.get('/{*path}', (_req, res) => res.sendFile(join(webDist, 'index.html')))
 }
 
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`jk-corp server http://127.0.0.1:${PORT}`)
+app.listen(PORT, config.bind, () => {
+  console.log(`jk-corp server http://${config.bind}:${PORT} (메일 로그인 ${sendCode ? '사용' : '미설정'})`)
 })

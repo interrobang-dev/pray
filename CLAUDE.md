@@ -14,6 +14,14 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 
 평소 접속: `http://127.0.0.1:4710` (스케줄러로 뜬 서버 + 빌드된 웹). 로그: `~/.claude/jk-corp/logs/*.log`.
 
+설정: `~/.claude/jk-corp/config.json` (저장소 밖. SMTP 비밀번호가 들어 있으니 절대 커밋·출력하지 않는다)
+
+```json
+{ "bind": "0.0.0.0", "loginEmails": ["..."], "smtp": { "host", "port", "user", "pass" } }
+```
+
+파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP>:4710` → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 토큰은 `~/.claude/jk-corp/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
+
 **멈출 때는 반드시 `scripts/stop.ps1`.** 작업은 숨김 PowerShell 래퍼로 node 를 띄우는데(창 없이 띄우는 S4U 방식은 관리자 권한 필요), `Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남아 다음 시작이 pipe/포트 충돌로 죽는다. stop.ps1 은 node 까지 죽인다. 호스트를 멈추면 웹 세션도 죽고, 다음 시작 때 `hq.json.webSessions` 를 읽어 `--resume` 한다.
 
 개발 중 화면 작업: 스케줄러 호스트·서버는 그대로 두고 `npm run dev:web` 만 띄워 `http://localhost:4711` 로 본다 (Vite 가 IPv6 localhost 로 열려 `127.0.0.1` 로는 안 열림. `/api` 는 4710 으로 프록시). 서버·호스트 코드를 고쳤으면 `scripts/stop.ps1` 후 작업을 다시 Start 한다. `npm run dev` (셋 다 tsx 로 실행)는 스케줄러 작업을 멈춘 상태에서만 쓴다. 훅은 Claude Code가 settings.json을 핫리로드하므로 세션 재시작 없이 반영된다.
@@ -32,6 +40,9 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 - `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가, kill 시 제거), 서버는 `rooms`·`seats` 를 쓴다. 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. 서버가 `@jk-corp/host/hq` 로 import
 - `server/src/index.ts` — Express. 세션 목록·전역 SSE·훅 수신 + 웹 세션 생성/입력/크기/종료/터미널 스트림 + 사무실(방·자리) API
 - `server/src/hostClient.ts` — pipe 클라이언트. 끊기면 3초마다 재연결
+- `server/src/auth.ts` — 인증 코드·토큰 저장소(순수, 시계 주입), loopback 판정, 쿠키 파싱. `/api/*` 미들웨어는 index.ts 에 있고 `/api/auth/*` 와 `/api/hook` 은 예외
+- `server/src/mail.ts` — nodemailer 로 인증 메일 발송. `server/src/config.ts` — config.json 읽기
+- `web/src/main.tsx` — `/api/auth/me` 로 인증 상태를 보고 `Login` 또는 `App` 을 띄운다
 - `server/src/sessions.ts` — 살아 있는 세션 + 훅 상태 + 호스트 목록 + 대화 요약을 합쳐 `Session[]` 생성
 - `server/src/liveSessions.ts` — `~/.claude/sessions/<pid>.json` 읽고 pid 생존 확인
 - `server/src/hookState.ts` — 훅 이벤트 → 상태 매핑 (순수 함수)
@@ -66,6 +77,7 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 
 Vite 페이지는 SSE 때문에 `--virtual-time-budget` 방식이 멈춘다. `--remote-debugging-port` 로 Edge 를 띄우고 CDP 로 N초 뒤 캡처하는 스크립트를 쓴다 (`scratchpad/cdp-shot.mjs` 패턴: `Page.navigate` → sleep → `Page.captureScreenshot`, 콘솔 오류도 수집). 기존 Edge 와 프로필이 겹치지 않게 `--user-data-dir` 을 따로 준다
 
-## 남은 일 (설계서 구현 순서)
+## 확인하지 못한 것
 
-6. 메일 인증 로그인 (원격 접속). 지금은 서버가 127.0.0.1 에만 바인딩
+- 다른 PC 에서 실제 접속 (방화벽 허용 여부). 서버 쪽 인증 흐름은 이 PC 의 LAN IP 로 검증했다
+- 로컬 접속의 "채팅 입력 → claude 응답" 전체 흐름 (API 비용 때문에 자동 검증은 `/help` 까지만 했다)
