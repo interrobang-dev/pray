@@ -3,6 +3,7 @@ import { Terminal } from './Terminal'
 import { Chat } from './Chat'
 import { Office } from './Office'
 import { UsagePanel } from './UsagePanel'
+import { Modal, Segmented } from './Modal'
 import { statusLabel, type Office as OfficeData, type Group, type Session, type Team } from './types'
 import { avatarOf, cssColor } from './avatar'
 
@@ -28,10 +29,12 @@ export function App() {
   const [office, setOffice] = useState<OfficeData>(EMPTY_OFFICE)
   const [isConnected, setIsConnected] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  /** 팀 추가 폼. 그룹 헤더의 "+ 팀" 으로 열리며 그 그룹에 고정 */
+  const [isGroupForm, setIsGroupForm] = useState(false)
+  /** 팀 추가 모달. 그룹 헤더의 "+ 팀" 으로 열리며 그 그룹에 고정 */
   const [teamForm, setTeamForm] = useState<{ groupId: string } | null>(null)
-  /** 세션 추가 폼. 팀 헤더의 "+ 세션" 이면 그 팀에 고정, 툴바의 "+ 세션" 이면 로비(폴더 직접 입력) */
+  /** 세션 추가 모달. 팀 헤더의 "+ 세션" 이면 그 팀에 고정, 툴바의 "+ 세션" 이면 로비(폴더 직접 입력) */
   const [sessionForm, setSessionForm] = useState<{ teamId: string | null } | null>(null)
+  const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
 
@@ -63,7 +66,7 @@ export function App() {
       cwd: sessionForm.teamId ? undefined : form.get('cwd'),
       teamId: sessionForm.teamId ?? undefined,
       prompt: form.get('prompt'),
-      isLead: Boolean(sessionForm.teamId && form.get('isLead')),
+      isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
     })
     if (!response.ok) {
       alert((await response.json()).message ?? '생성 실패')
@@ -87,6 +90,17 @@ export function App() {
     setTeamForm(null)
   }
 
+  async function createGroup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const response = await postJson('/api/groups', 'POST', { name: form.get('name') })
+    if (!response.ok) {
+      alert((await response.json()).message ?? '그룹 생성 실패')
+      return
+    }
+    setIsGroupForm(false)
+  }
+
   function openTeamForm(groupId: string) {
     setSessionForm(null)
     setTeamForm({ groupId })
@@ -94,6 +108,7 @@ export function App() {
 
   function openSessionForm(teamId: string | null) {
     setTeamForm(null)
+    setSessionRole('member')
     setSessionForm({ teamId })
   }
 
@@ -113,11 +128,6 @@ export function App() {
     if (!confirm(`"${group.name}" 그룹을 지울까요?`)) return
     const response = await fetch(`/api/groups/${group.id}`, { method: 'DELETE' })
     if (!response.ok) alert((await response.json()).message ?? '삭제 실패')
-  }
-
-  function addGroup() {
-    const name = prompt('그룹 이름')
-    if (name?.trim()) void postJson('/api/groups', 'POST', { name })
   }
 
   function editGroup(group: Group) {
@@ -149,6 +159,46 @@ export function App() {
   function editTeam(team: Team) {
     const name = prompt(`팀 이름 (폴더: ${team.cwd})`, team.name)
     if (name?.trim()) void postJson(`/api/team/${team.id}`, 'PATCH', { name: name.trim() })
+  }
+
+  function renderSessionModal(teamId: string | null) {
+    const team = teamId ? office.teams.find((t) => t.id === teamId) : undefined
+    const hasLiveLead = Boolean(team?.leadSessionId && snapshot.sessions.some((s) => s.id === team.leadSessionId && s.isAlive))
+    return (
+      <Modal
+        title={team ? `세션 추가 — 팀 「${team.name}」` : '세션 추가 — 로비 (팀 없음)'}
+        subtitle={team?.cwd}
+        onClose={() => setSessionForm(null)}
+      >
+        <form className="create" onSubmit={createSession}>
+          {team && (
+            <Segmented
+              value={sessionRole}
+              onChange={setSessionRole}
+              options={[
+                { value: 'member', label: '팀원', hint: '팀장의 지시를 받아 일한다' },
+                {
+                  value: 'lead',
+                  label: '팀장',
+                  isDisabled: hasLiveLead,
+                  hint: hasLiveLead ? '이 팀에는 이미 팀장이 있음' : '팀원을 만들어 일을 나눠 준다 (MCP 도구 장착)',
+                },
+              ]}
+            />
+          )}
+          {!team && <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />}
+          <input name="prompt" placeholder="첫 지시 (선택)" autoFocus={Boolean(team)} />
+          <div className="actions">
+            <button type="submit" className="primary">
+              시작
+            </button>
+            <button type="button" onClick={() => setSessionForm(null)}>
+              취소
+            </button>
+          </div>
+        </form>
+      </Modal>
+    )
   }
 
   /** 팀 헤더 + 소속 세션. 그룹 안에 중첩된다 */
@@ -208,50 +258,11 @@ export function App() {
           />
         </header>
         <div className="toolbar">
-          <button onClick={addGroup}>+ 그룹</button>
+          <button onClick={() => setIsGroupForm(true)}>+ 그룹</button>
           <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable}>
             + 세션 (로비)
           </button>
         </div>
-        {teamForm && (
-          <form className="create" onSubmit={createTeam}>
-            <div className="create-title">그룹 「{office.groups.find((g) => g.id === teamForm.groupId)?.name}」 에 팀 추가</div>
-            <input name="name" placeholder="팀 이름" required autoFocus />
-            <input name="cwd" placeholder="작업 폴더 (예: D:\workspace\foo). 이 폴더의 세션이 팀이 됨" required />
-            <div>
-              <button type="submit">만들기</button>
-              <button type="button" onClick={() => setTeamForm(null)}>
-                취소
-              </button>
-            </div>
-          </form>
-        )}
-        {sessionForm && (
-          <form className="create" onSubmit={createSession}>
-            {sessionForm.teamId ? (
-              <div className="create-title">
-                팀 「{office.teams.find((t) => t.id === sessionForm.teamId)?.name}」 에 세션 추가
-                <span className="cwd">{office.teams.find((t) => t.id === sessionForm.teamId)?.cwd}</span>
-              </div>
-            ) : (
-              <div className="create-title">로비 세션 (팀 없음)</div>
-            )}
-            {!sessionForm.teamId && <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />}
-            <input name="prompt" placeholder="첫 지시 (선택)" autoFocus={Boolean(sessionForm.teamId)} />
-            {sessionForm.teamId && (
-              <label className="check">
-                <input type="checkbox" name="isLead" />
-                팀장으로 (팀원을 만들어 일을 나눠 줄 수 있음)
-              </label>
-            )}
-            <div>
-              <button type="submit">시작</button>
-              <button type="button" onClick={() => setSessionForm(null)}>
-                취소
-              </button>
-            </div>
-          </form>
-        )}
         <ul className="sessions">
           {office.groups.map((group) => {
             const teams = office.teams.filter((t) => t.groupId === group.id)
@@ -284,6 +295,41 @@ export function App() {
         </ul>
         <UsagePanel />
       </aside>
+      {isGroupForm && (
+        <Modal title="그룹 추가" onClose={() => setIsGroupForm(false)}>
+          <form className="create" onSubmit={createGroup}>
+            <input name="name" placeholder="그룹 이름" required autoFocus />
+            <div className="actions">
+              <button type="submit" className="primary">
+                만들기
+              </button>
+              <button type="button" onClick={() => setIsGroupForm(false)}>
+                취소
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {teamForm && (
+        <Modal
+          title={`팀 추가 — 그룹 「${office.groups.find((g) => g.id === teamForm.groupId)?.name ?? ''}」`}
+          onClose={() => setTeamForm(null)}
+        >
+          <form className="create" onSubmit={createTeam}>
+            <input name="name" placeholder="팀 이름" required autoFocus />
+            <input name="cwd" placeholder="작업 폴더 (예: D:\workspace\foo). 이 폴더의 세션이 팀이 됨" required />
+            <div className="actions">
+              <button type="submit" className="primary">
+                만들기
+              </button>
+              <button type="button" onClick={() => setTeamForm(null)}>
+                취소
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {sessionForm && renderSessionModal(sessionForm.teamId)}
       <Office
         office={office}
         sessions={snapshot.sessions}

@@ -92,13 +92,78 @@ h1 {
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
+/* 모달 안의 폼 */
 .create {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+.create .actions {
+  display: flex;
   gap: 6px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.create button.primary {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 47, 58, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.modal {
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.modal-title .cwd {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.segmented {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.segmented button {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--muted);
+}
+.segmented button + button {
+  border-left: 1px solid var(--line);
+}
+.segmented button.on {
+  background: var(--green);
+  color: #fff;
+}
+.segmented button:disabled {
+  opacity: 0.45;
 }
 .create .check {
   display: flex;
@@ -150,19 +215,6 @@ h1 {
 }
 .sessions li.empty.nested {
   padding-left: 32px;
-}
-.create .create-title {
-  font-size: 12px;
-  font-weight: 600;
-}
-.create .create-title .cwd {
-  display: block;
-  font-weight: 400;
-  color: var(--muted);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .sessions li.group .group-actions {
   float: right;
