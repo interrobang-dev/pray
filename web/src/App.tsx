@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
 import { Terminal } from './Terminal'
 import { Chat } from './Chat'
 import { Office } from './Office'
+import { UsagePanel } from './UsagePanel'
 import { statusLabel, type Office as OfficeData, type Room, type Seat, type Session } from './types'
 import { avatarOf, cssColor } from './avatar'
 
@@ -145,6 +146,7 @@ export function App() {
             ]
           })}
         </ul>
+        <UsagePanel />
       </aside>
       <Office
         office={office}

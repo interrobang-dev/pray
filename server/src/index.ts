@@ -14,6 +14,7 @@ import { findTranscript, listSessions, projectsDir } from './sessions.js'
 import { HostClient } from './hostClient.js'
 import { parseMessages } from './messages.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
+import { makeUsageCache } from './usage.js'
 
 setupFileLog()
 const PORT = 4710
@@ -181,6 +182,13 @@ function broadcastOffice(): void {
   const office = readOffice()
   for (const res of subscribers) sendSse(res, 'office', office)
 }
+
+const readUsage = makeUsageCache(60_000)
+
+// 계정 사용량 (5시간·주간 한도). 비공식 OAuth 엔드포인트, 60초 캐시
+app.get('/api/usage', async (_req, res) => {
+  res.json(await readUsage())
+})
 
 app.get('/api/office', (_req, res) => {
   res.json(readOffice())

@@ -110,6 +110,7 @@ h1 {
   margin: 0;
   padding: 0;
   overflow-y: auto;
+  flex: 1;
 }
 .sessions li {
   display: grid;
@@ -430,4 +431,58 @@ h1 {
 .login .message {
   color: var(--muted);
   margin: 0;
+}
+
+/* 계정 사용량 (사이드바 하단 고정) */
+.usage {
+  margin-top: auto;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+}
+.usage .usage-title {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+.usage .usage-title b {
+  color: var(--text);
+  margin-right: auto;
+}
+.usage .usage-title button {
+  padding: 1px 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.usage .error {
+  color: #b23b3b;
+}
+.usage-limit {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 3px;
+}
+.usage-limit .reset {
+  color: var(--muted);
+}
+.usage-limit .bar {
+  grid-column: 1 / -1;
+  height: 6px;
+  background: var(--floor);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.usage-limit .bar i {
+  display: block;
+  height: 100%;
+  background: var(--green);
+}
+.usage-limit.warn .bar i {
+  background: #e0a63a;
+}
+.usage-limit.danger .bar i {
+  background: #d6453d;
 }

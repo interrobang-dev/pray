@@ -42,6 +42,7 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 - `server/src/hostClient.ts` — pipe 클라이언트. 끊기면 3초마다 재연결
 - `server/src/auth.ts` — 인증 코드·토큰 저장소(순수, 시계 주입), loopback 판정, 쿠키 파싱. `/api/*` 미들웨어는 index.ts 에 있고 `/api/auth/*` 와 `/api/hook` 은 예외
 - `server/src/mail.ts` — nodemailer 로 인증 메일 발송. `server/src/config.ts` — config.json 읽기
+- `server/src/usage.ts` — 계정 사용량(5시간·주간 한도) 조회. `~/.claude/.credentials.json` 의 OAuth 토큰으로 `api.anthropic.com/api/oauth/usage` 호출 (`/usage` 명령과 같은 데이터, 비공식). `GET /api/usage`, 60초 캐시
 - `web/src/main.tsx` — `/api/auth/me` 로 인증 상태를 보고 `Login` 또는 `App` 을 띄운다
 - `server/src/sessions.ts` — 살아 있는 세션 + 훅 상태 + 호스트 목록 + 대화 요약을 합쳐 `Session[]` 생성
 - `server/src/liveSessions.ts` — `~/.claude/sessions/<pid>.json` 읽고 pid 생존 확인
@@ -55,6 +56,7 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 - `web/src/types.ts` — 서버 응답 타입 (server 쪽과 손으로 맞춘다)
 - `web/src/Chat.tsx` — 말풍선 뷰. 입력칸은 `텍스트` 후 `\r` 을 터미널 입력 API 로 보낸다. 승인 버튼은 Enter(승인)/Esc(거부) 키 전송
 - `web/src/Terminal.tsx` — xterm.js. 출력은 세션별 SSE, 입력·크기는 POST
+- `web/src/UsagePanel.tsx` — 사이드바 하단 고정 사용량 게이지. 60초 폴링, 70%↑ 노랑·90%↑ 빨강
 - `hooks/install.mjs` — settings.json 훅 설치 스크립트
 
 ## 핵심 개념
@@ -64,6 +66,7 @@ Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server   # 지금 
 - 훅은 `type: "http"`로 서버에 직접 POST 한다. 서버가 꺼져 있으면 그 사이 이벤트는 유실되고 Claude Code 쪽엔 영향 없다 (non-blocking). timeout 2초
 - 훅 상태는 서버 메모리에만 있다. 서버 재시작 시 전부 `unknown`에서 다시 시작
 - 세션 제목은 jsonl의 `ai-title` 줄에서 가져온다
+- **사용량 토큰은 갱신하지 않는다.** 액세스 토큰(약 8시간)은 Claude Code 가 실행 중일 때 스스로 갱신해 파일에 다시 쓴다. 서버는 호출마다 파일을 다시 읽고 401 이면 "토큰 만료" 로 표시한다. refresh token 으로 직접 갱신하면 Claude Code 쪽 토큰과 충돌할 수 있어 일부러 안 한다
 - **웹 세션 = 호스트 pty 목록에 있는 세션.** `--session-id`로 UUID를 넘겨 pty·jsonl·훅이 같은 키로 묶인다
 - 터미널 스트림은 `attach` 요청에 호스트가 링버퍼 스냅샷을 한 번 주고(`snapshot` 이벤트, 화면 reset 후 그림), 이후 `output`을 잇는다. 서버만 재시작해도 브라우저가 SSE 재연결하면 같은 경로로 복원된다
 - 새 폴더에서 claude를 띄우면 신뢰 확인 대화상자가 뜨고 **기본 선택이 "No, exit"**다. 사용자가 터미널에서 ↓ Enter를 눌러야 한다. 자동 테스트에서 Enter만 보내면 종료 코드 1로 죽는 게 정상이다

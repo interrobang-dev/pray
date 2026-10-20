@@ -42,3 +42,18 @@ export const statusLabel: Record<SessionStatus, string> = {
   ended: '종료',
   unknown: '알 수 없음',
 }
+
+export interface UsageLimit {
+  label: string
+  percent: number
+  resetsAt: string
+  severity: string
+}
+
+export interface Usage {
+  plan: string | null
+  limits: UsageLimit[]
+  fetchedAt: string
+}
+
+export type UsageResult = { ok: true; usage: Usage } | { ok: false; reason: string }
