@@ -34,13 +34,77 @@ const ASSIGN_TOOL = 'mcp__jk-corp__jk_assign'
 const WAIT_TOOL = 'mcp__jk-corp__jk_wait'
 /** jk_spawn_member 결과의 첫 sessionId = 새 팀원 */
 const SPAWNED_SESSION_ID = /"sessionId":\s*"([^"]+)"/
-/** 120초를 넘긴 jk_wait 는 백그라운드로 넘어가고, 결과는 나중에 이 꼴의 알림 메시지(system)로 온다 */
-const WAIT_NOTIFICATION = /^<task-notification>[\s\S]*\(jk-corp\/jk_wait\) completed\.<\/summary>\s*<result>\n([\s\S]*)\n<\/result>\s*<\/task-notification>\s*$/
+/**
+ * 백그라운드 작업(명령·MCP 호출·에이전트·모니터)이 끝나면 오는 알림. 작업 중에 오면 system 메시지 글에 이 꼴로 들어 있다.
+ * 120초를 넘긴 jk_wait 도 백그라운드로 넘어가 결과가 이 알림으로 온다
+ */
+const TASK_NOTIFICATION = /<task-notification>[\s\S]*?<\/task-notification>/g
 const XML_ENTITIES: Record<string, string> = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" }
+/** 알림 status → 한 줄 표시. 실제 jsonl 에 나온 값은 이 셋뿐이고 모니터 이벤트는 status 가 없다 */
+const NOTIFICATION_STATUS_LABELS: Record<string, string> = { completed: '완료', failed: '실패', killed: '중단' }
 
-/** 알림의 결과 JSON. Claude Code 가 <result> 안의 `<`·`>` 를 엔티티로 바꿔 넣으므로 되돌린다 (한 번에 바꿔 `&amp;lt;` 가 두 번 풀리지 않게) */
-function waitNotificationResult(text: string): string {
-  return (text.match(WAIT_NOTIFICATION)?.[1] ?? '').replace(/&(lt|gt|amp|quot|apos);/g, (_, entity: string) => XML_ENTITIES[entity])
+interface TaskNotification {
+  /** 원문 그대로 (펼치면 보인다) */
+  raw: string
+  status: string | null
+  summary: string
+  result: string | null
+}
+
+/** 알림 안의 태그 값. Claude Code 가 값 안의 `<`·`>` 를 엔티티로 바꿔 넣으므로 되돌린다 (한 번에 바꿔 `&amp;lt;` 가 두 번 풀리지 않게) */
+function notificationField(raw: string, tag: string): string | null {
+  const value = raw.match(new RegExp(`<${tag}>\\n?([\\s\\S]*?)\\n?</${tag}>`))?.[1]
+  return value === undefined ? null : value.replace(/&(lt|gt|amp|quot|apos);/g, (_, entity: string) => XML_ENTITIES[entity])
+}
+
+/** system 글을 알림과 그 앞뒤 글로 나눈다. 알림이 없으면 null */
+function splitNotifications(text: string): (string | TaskNotification)[] | null {
+  const parts: (string | TaskNotification)[] = []
+  let end = 0
+  for (const match of text.matchAll(TASK_NOTIFICATION)) {
+    const before = text.slice(end, match.index).trim()
+    if (before) parts.push(before)
+    const raw = match[0]
+    parts.push({ raw, status: notificationField(raw, 'status'), summary: notificationField(raw, 'summary') ?? '', result: notificationField(raw, 'result') })
+    end = match.index + raw.length
+  }
+  if (end === 0) return null
+  const after = text.slice(end).trim()
+  if (after) parts.push(after)
+  return parts
+}
+
+function isWaitNotification(notification: TaskNotification): boolean {
+  return notification.status === 'completed' && notification.summary.includes('(jk-corp/jk_wait)')
+}
+
+/** jk_wait 결과의 task 가 null = 시간 안에 끝난 팀원이 없다 (기다릴 task 가 없을 때도 null 이지만 그건 바로 돌아와 백그라운드 알림이 되지 않는다) */
+function isWaitTimeout(json: string | null): boolean {
+  try {
+    return json !== null && (JSON.parse(json) as { task?: unknown }).task === null
+  } catch {
+    return false
+  }
+}
+
+/** "백그라운드 작업 완료 · MCP task … (jk-corp/jk_wait)". 요약 끝의 상태 낱말은 앞에서 한국어로 말했으니 뺀다 */
+function notificationTitle(notification: TaskNotification): string {
+  const { status, summary } = notification
+  if (isWaitNotification(notification) && isWaitTimeout(notification.result)) return '팀원 결과 기다림 · 시간 초과'
+  const heading = status ? `백그라운드 작업 ${NOTIFICATION_STATUS_LABELS[status] ?? status}` : '백그라운드 알림'
+  const shortSummary = status && summary.endsWith(` ${status}.`) ? summary.slice(0, -(status.length + 2)) : summary
+  return shortSummary ? `${heading} · ${shortSummary}` : heading
+}
+
+/** 보고 말풍선이 되지 않는 알림 한 줄. 원문은 접어 둔다 (글자 그대로. HTML 로 꽂지 않는다) */
+function NotificationLine({ notification }: { notification: TaskNotification }) {
+  const title = notificationTitle(notification)
+  return (
+    <details className={`msg notice${notification.status === 'failed' ? ' failed' : ''}`}>
+      <summary title={title}>{title}</summary>
+      <pre>{notification.raw}</pre>
+    </details>
+  )
 }
 
 /** 팀장↔팀원이 주고받은 글: 팀장 → 팀원 지시, 팀원 → 팀장 보고 */
@@ -567,20 +631,36 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
                 </div>
               )
             }
-            // 팀장 대화: 백그라운드로 넘어간 jk_wait 의 결과 알림
-            const notified = message.role === 'system' ? waitReport(waitNotificationResult(message.text)) : null
-            if (notified) {
+            // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 말풍선, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
+            const parts = message.role === 'system' ? splitNotifications(message.text) : null
+            if (parts) {
               return (
-                <div key={message.id} className="msg relay">
-                  <div className="relay-label">{memberNameOf(notified.memberSessionId)} →</div>
-                  <MarkdownText text={notified.result} />
-                  <details className="tool">
-                    <summary>
-                      <code>task-notification</code> jk_wait 결과
-                    </summary>
-                    <pre className="result">{message.text}</pre>
-                  </details>
-                </div>
+                <Fragment key={message.id}>
+                  {parts.map((part, index) => {
+                    const key = `${message.id}:${index}`
+                    if (typeof part === 'string') {
+                      return (
+                        <div key={key} className="msg system">
+                          <div className="text">{part}</div>
+                        </div>
+                      )
+                    }
+                    const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
+                    if (!report) return <NotificationLine key={key} notification={part} />
+                    return (
+                      <div key={key} className="msg relay">
+                        <div className="relay-label">{memberNameOf(report.memberSessionId)} →</div>
+                        <MarkdownText text={report.result} />
+                        <details className="tool">
+                          <summary>
+                            <code>task-notification</code> jk_wait 결과
+                          </summary>
+                          <pre className="result">{part.raw}</pre>
+                        </details>
+                      </div>
+                    )
+                  })}
+                </Fragment>
               )
             }
             // 팀장 대화의 지시·보고 도구 호출은 말풍선으로, AskUserQuestion 은 질문 → 답 카드로 빼고 원래 도구 블록은 그 안에 접어 둔다
