@@ -448,7 +448,17 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
             rows={Math.min(Math.max(draft.split('\n').length, 1), 8)}
             autoFocus
           />
-          <button type="submit">보내기</button>
+          <button type="submit" className="send" disabled={!draft.trim()} aria-label="보내기" title="보내기 (Enter)">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path
+                d="M3 3.5 21.5 12 3 20.5 3 13.6 14 12 3 10.4Z"
+                fill="currentColor"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
         </form>
       ) : (
         <p className="hint">터미널·IDE에서 띄운 세션이라 관찰만 가능합니다</p>

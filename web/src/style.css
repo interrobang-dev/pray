@@ -916,10 +916,36 @@ header button.icon:hover:not(:disabled) {
   resize: none;
   line-height: 1.4;
 }
-.composer button {
+/* 보내기: 종이비행기 아이콘의 둥근 정사각형. 한 변 = 한 줄 입력칸 높이(줄 높이 1.4em + 위아래 padding 7px·border 1px).
+   em 이라 입력칸과 글자 크기가 같아야 맞는다 */
+.composer .send {
+  flex-shrink: 0;
+  width: calc(1.4em + 16px);
+  height: calc(1.4em + 16px);
+  padding: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--green);
   color: #fff;
   border-color: var(--green);
+}
+/* 종이비행기는 무게가 꼬리(왼쪽)에 있어 오른쪽으로 조금 옮겨야 가운데로 보인다 */
+.composer .send svg {
+  transform: translateX(1px);
+}
+.composer .send:hover:not(:disabled) {
+  background: #388c43;
+  border-color: #388c43;
+}
+.composer .send:active:not(:disabled) {
+  background: #317a3a;
+  border-color: #317a3a;
+}
+.composer .send:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
 }
 .login {
   max-width: 360px;
@@ -1031,6 +1057,10 @@ header button.icon:hover:not(:disabled) {
   .composer textarea::placeholder {
     white-space: nowrap;
     overflow: hidden;
+  }
+  /* 보내기 버튼 크기가 em 이라 입력칸과 같은 16px 이어야 높이가 맞는다 */
+  .composer .send {
+    font-size: 16px;
   }
   .modal {
     box-sizing: border-box;
