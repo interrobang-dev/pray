@@ -2,7 +2,7 @@
 
 팀장 Claude 세션이 팀원 Claude 세션을 만들고 지시하고 결과를 모은다. 사람은 팀장에게만 말한다. 기존 관제판(사무실·채팅·터미널) 위에 얹는다.
 
-팀 자체(폴더 단위 세션 묶음, 섬 배치)는 `2026-10-20-team-folder-design.md` 가 정의한다. 이 문서는 그 팀 위에서 도는 팀장·팀원 동작만 다룬다.
+팀 자체(폴더 단위 세션 묶음, 섬 배치)는 `2026-10-20-team-folder-design.md` 가 정의한다. 이 문서는 그 팀 위에서 도는 팀장·팀원 동작만 다룬다. 팀 안의 파트와 파트장은 `2026-10-21-team-parts-design.md` 가 정의하고, 파트장은 이 문서의 팀장 동작을 자기 파트 안에서 그대로 한다.
 
 ## 결정 사항
 
@@ -13,7 +13,8 @@
 | 팀장→팀원 지시 | 기존 터미널 입력 API 재사용 (`텍스트 + \r`) |
 | 팀원→팀장 결과 | 기존 `Stop` 훅의 `last_assistant_message` |
 | 도구 승인 | 팀장·팀원 모두 기본 `--permission-mode bypassPermissions`. 생성 시 `permissionMode` 로 변경 가능 |
-| 팀·팀원 판정 | 팀 = 폴더. 팀원 = 그 팀 폴더의 나머지 웹 세션 (저장하지 않고 cwd 로 판정) |
+| 팀·팀원 판정 | 팀 = 폴더. 팀원 = 같은 지휘 단위(팀 직속 또는 파트)의 나머지 웹 세션 (팀은 cwd 로 판정, 파트는 worktree 폴더 또는 `partOf` 기록) |
+| 지휘 단위 | 팀장 = 팀 직속만, 파트장 = 자기 파트만. task·wait·status 는 단위로 거르고 다른 단위에 지시하면 403 |
 | 외부 세션 | 같은 폴더면 팀에 보이지만 지시 대상이 아니다 (`role: null`, 입력 경로 없음) |
 
 ## 1. 구조
@@ -30,7 +31,7 @@
 
 - 팀원은 자기가 팀원인지 몰라도 된다. 결과 형식이 필요하면 지시문에 넣는다
 - 팀장만 특별하다. 생성 시 `--mcp-config` 로 jk-corp MCP 서버를 붙이고 `--append-system-prompt` 로 팀장 지침을 준다
-- MCP 서버는 서버의 `/api/team/*` 를 호출하는 얇은 stdio 어댑터 (`mcp/` 워크스페이스). 설정 JSON 에 `teamId` 와 서버 주소가 들어가 팀장은 자기 팀만 다룬다
+- MCP 서버는 서버의 `/api/team/*` 를 호출하는 얇은 stdio 어댑터 (`mcp/` 워크스페이스). 설정 JSON 에 `teamId` 와 서버 주소가 들어가 팀장은 자기 팀만 다룬다. 파트장은 `JK_CORP_PART_ID` 를 더 받아 모든 호출에 `?partId=` 를 붙인다
 - 호스트 프로토콜의 `spawn` 에 `extraArgs: string[]` 필드 하나만 추가한다
 
 ## 2. 데이터 모델
@@ -45,7 +46,8 @@ teams: [{ id, name, cwd, groupId, x, y, leadSessionId?, desks, createdAt }]
 
 ```ts
 tasks: Map<taskId, {
-  teamId, memberSessionId, instruction, createdAt,
+  teamId, partId,          // partId null = 팀 직속
+  memberSessionId, instruction, createdAt,
   status: 'running' | 'done' | 'failed',
   result: string | null   // Stop 훅의 last_assistant_message
   error: string | null
@@ -91,7 +93,7 @@ MCP 설정은 서버의 node(`process.execPath`)로 `node --import <tsx loader> 
 
 - 서버 재시작 시 task 전부 소실. `jk_wait` 는 "모르는 task" 로 반환하고 팀장은 `jk_status` 로 다시 판단
 - 사람이 팀원 터미널에 직접 끼어들어도 막지 않는다. 그 뒤 오는 `Stop` 은 running task 의 결과로 잡힌다 (관제판 철학)
-- 결과는 마지막 assistant 텍스트뿐. 파일 산출물은 cwd 공유로 받는다 (같은 폴더 또는 git worktree. worktree 생성은 범위 밖)
+- 결과는 마지막 assistant 텍스트뿐. 파일 산출물은 cwd 공유로 받는다 (같은 폴더, 또는 worktree 파트면 그 파트의 worktree 폴더)
 - bypassPermissions 라 팀원이 위험한 명령도 실행한다. 사용자 결정 사항
 
 ## 7. 검증

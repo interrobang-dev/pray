@@ -18,7 +18,7 @@
 | 지휘 | **지휘 단위마다 지시자 한 명.** 팀장 = 팀 직속 팀원만, 파트장 = 자기 파트 팀원만. 2단 지휘(팀장 → 파트장)는 하지 않는다 |
 | 같은 폴더 동시 수정 | 파트를 만들 때 작업 위치를 고른다: 팀 폴더 그대로 / 새 git worktree |
 | worktree 위치 | 저장소 옆 형제 폴더 `<부모>/<저장소>.worktrees/<슬러그>`, 브랜치 `part/<슬러그>` |
-| 파트 삭제 | 파트 기록만 지운다. worktree 폴더·브랜치는 남긴다 (병합 안 된 작업 보호). 소속 세션은 팀 직속이 된다 |
+| 파트 삭제 | 파트 기록만 지운다. worktree 폴더·브랜치는 남긴다 (병합 안 된 작업 보호). 폴더 파트 세션은 팀 직속이 되고, worktree 파트 세션은 팀 폴더 밖이라 로비로 간다 |
 | 신뢰 확인 창 | worktree 를 만들 때 서버가 `~/.claude.json` 의 `projects["<worktree 경로>"].hasTrustDialogAccepted = true` 를 기록한다 (사용자 승인함) |
 
 ## 1. 데이터 모델 (`hq.json`)
@@ -52,14 +52,14 @@ Part {
 
 - `TaskStore` 의 task 에 `partId` 를 더하고, `wait(any)` 와 목록을 **지휘 단위로** 거른다. 팀으로만 거르면 한 지시자가 다른 단위의 결과를 가로챈다
 - `assign` 은 지시 대상이 같은 단위의 팀원일 때만 받는다 (아니면 403)
-- 팀장 MCP 는 지금처럼 `JK_CORP_TEAM_ID` 만, 파트장 MCP 는 `JK_CORP_PART_ID` 를 더 받는다. MCP 의 모든 호출이 `partId` 를 실어 보낸다
+- 팀장 MCP 는 지금처럼 `JK_CORP_TEAM_ID` 만, 파트장 MCP 는 `JK_CORP_PART_ID` 를 더 받는다. 지휘 단위는 팀 API 의 `?partId=` 쿼리로 정하고 (없으면 팀 직속), 파트장 MCP 는 모든 호출에 붙인다
 - `jk_spawn_member` 는 자기 단위로 띄운다: 파트면 `partOf` 기록, worktree 파트면 그 폴더에서 spawn (폴더로 소속이 정해지므로 기록 불필요)
 - `jk_status` 는 자기 단위의 팀원만 보여 준다
 
 ## 4. worktree 생성
 
 1. 팀 폴더가 git 저장소인지 확인 (`git -C <team.cwd> rev-parse --show-toplevel`). 아니면 400
-2. 슬러그 = 파트 이름의 영문·숫자·하이픈. 비면 파트 ID
+2. 슬러그 = 파트 이름의 영문·숫자·하이픈. 비면 임의 8자 (파트 ID 는 worktree 를 만든 뒤에 생기므로)
 3. `git -C <team.cwd> worktree add <부모>/<저장소>.worktrees/<슬러그> -b part/<슬러그>` (현재 HEAD 기준). 실패하면 git 메시지를 그대로 409 로 돌려준다 (폴더·브랜치가 이미 있는 경우 등)
 4. `~/.claude.json` 에 신뢰 표시 기록. 이 파일은 Claude Code 가 수시로 다시 쓰므로 **읽기 직후 그 키 하나만 바꿔 바로 쓴다**. 파싱이 실패하면 쓰지 않고 경고만 남긴다 (사용자가 터미널에서 직접 허용)
 5. 병합은 하지 않는다. 파트장이나 사람이 git 으로 한다
@@ -68,19 +68,20 @@ Part {
 
 | 메서드 | 경로 | 하는 일 |
 |---|---|---|
-| `POST` | `/api/team/:id/parts` | `{ name, isWorktree, leadPrompt?, isLeadSpawned? }`. 파트 생성(+worktree), 원하면 파트장도 바로 띄운다 |
+| `POST` | `/api/team/:id/parts` | `{ name, isWorktree }` → `{ part, isTrusted }`. 파트 생성(+worktree·신뢰 기록). 파트장은 화면이 이어서 `POST /api/sessions { teamId, partId, isLead }` 로 띄운다 (팀장·파트장 생성 로직을 한 곳에 둔다) |
 | `PATCH` | `/api/team/:id/parts/:partId` | `{ name?, leadSessionId?: string \| null }` |
 | `DELETE` | `/api/team/:id/parts/:partId` | 파트 기록·`partOf` 정리. worktree 는 남김 |
-| `PUT` | `/api/team/:id/partOf/:sessionId` | `{ partId: string \| null }`. 팀 폴더 세션의 파트 이동 (worktree 세션은 폴더로 정해져 거부) |
+| `PUT` | `/api/team/:id/partOf/:sessionId` | `{ partId: string \| null }`. 팀 폴더 세션의 파트 이동. worktree 세션(폴더로 정해짐)·worktree 파트로의 이동·팀장·파트장(옮기면 지휘를 잃음)은 409 |
 | `POST` | `/api/sessions` | `partId?` 추가. `isLead` + `partId` 면 그 파트의 파트장 (살아 있는 파트장이 있으면 409) |
-| `POST` | `/api/team/:id/members` | `partId?` 추가 (MCP 가 채움) |
-| `GET/POST` | `/api/team/:id/tasks*` | `partId` 쿼리·본문으로 지휘 단위 지정 |
+| `POST` | `/api/team/:id/members` | `?partId=` (MCP 가 채움). worktree 파트면 그 폴더로, 폴더 파트면 `partOf` 기록 |
+| `GET` | `/api/team/:id` | `?partId=` 단위의 세션·task 만 (`jk_status`) |
+| `GET/POST` | `/api/team/:id/tasks*` | `?partId=` 로 지휘 단위 지정. 다른 단위의 세션에 지시하면 403 |
 
 ## 6. 화면
 
 - **목록**: 팀 카드 안에서 팀 직속 세션 → 파트 소제목(이름, worktree 면 브랜치 표시, hover `+`·`⋯`) → 파트 세션 순. 파트장은 "파트장" 태그
 - **추가**: 팀 `⋯` 메뉴 "파트 추가" 모달 = 이름 + 작업 위치 세그먼트 "팀 폴더 | 새 worktree" + "파트장 바로 띄우기"와 첫 지시. 파트 `+` = 그 파트에 세션 추가 (세그먼트 "팀원 | 파트장")
-- **사무실**: 팀 섬 안에 파트별 하위 구역(옅은 테두리 + 파트 이름표). 팀 직속 책상은 섬 위쪽. 책상 오프셋(`desks`)은 지금처럼 팀 앵커 기준
+- **사무실**: 팀 섬 안에 파트별 하위 구역(옅은 테두리 + 파트 이름표). 팀 직속 책상은 섬 위쪽. 책상 오프셋(`desks`)은 지금처럼 팀 앵커 기준. 세션 없는 파트는 그리지 않는다
 - 파트장 책상은 팀장과 같은 금색 명패, 밑줄은 은색으로 구분
 
 ## 7. 기존 데이터
@@ -96,7 +97,11 @@ Part {
 5. 사무실 — 섬 안 파트 구역
 6. `CLAUDE.md`·오케스트레이션 설계 문서 갱신
 
+## 확인 결과
+
+- 형제 폴더 worktree 에서 신뢰 표시만으로 확인 창이 안 뜬다 (기본 권한 모드로 띄운 세션에서 확인)
+- 같은 브랜치가 이미 있으면 409 로 git 메시지(`fatal: a branch named 'part/…' already exists`)가 그대로 간다
+
 ## 확인할 것
 
-- 형제 폴더 worktree 에서 신뢰 표시만으로 확인 창이 안 뜨는지 (bypassPermissions 경고 창이 따로 뜨는지 포함)
-- 같은 브랜치·폴더가 이미 있을 때 git 오류가 사용자에게 읽히는지
+- bypassPermissions 로 띄운 파트장·팀원이 worktree 폴더에서 경고 창을 따로 띄우는지 (호스트를 새 코드로 재시작한 뒤에만 볼 수 있다)
