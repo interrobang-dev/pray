@@ -5,6 +5,8 @@ import { homedir } from 'node:os'
 
 const HOOK_URL = 'http://127.0.0.1:4710/api/hook'
 const EVENTS = ['SessionStart', 'UserPromptSubmit', 'PermissionRequest', 'PostToolUse', 'Stop', 'SessionEnd']
+/** AskUserQuestion 을 웹에서 답할 때까지 서버가 붙잡는 훅. 위 상태용 훅과 따로 둔다 (timeout 1시간) */
+const ASK_HOOK_URL = 'http://127.0.0.1:4710/api/hook/ask'
 
 const settingsPath = join(homedir(), '.claude', 'settings.json')
 const settings = JSON.parse(readFileSync(settingsPath, 'utf8'))
@@ -16,6 +18,13 @@ for (const event of EVENTS) {
   const hasHook = groups.some((group) => group.hooks?.some((hook) => hook.type === 'http' && hook.url === HOOK_URL))
   if (hasHook) continue
   groups.push({ hooks: [{ type: 'http', url: HOOK_URL, timeout: 2 }] })
+  addedCount += 1
+}
+
+const askGroups = (settings.hooks.PermissionRequest ??= [])
+const hasAskHook = askGroups.some((group) => group.hooks?.some((hook) => hook.type === 'http' && hook.url === ASK_HOOK_URL))
+if (!hasAskHook) {
+  askGroups.push({ matcher: 'AskUserQuestion', hooks: [{ type: 'http', url: ASK_HOOK_URL, timeout: 3600 }] })
   addedCount += 1
 }
 

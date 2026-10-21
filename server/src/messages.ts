@@ -3,6 +3,8 @@ export interface ToolUse {
   name: string
   input: unknown
   result: string | null
+  /** AskUserQuestion 에 답한 기록 ({ 질문문: 답 }). 결과 줄의 toolUseResult.answers */
+  answers?: Record<string, string>
 }
 
 export interface ChatMessage {
@@ -49,6 +51,14 @@ function resultToText(content: unknown): string {
       .join('\n')
   }
   return ''
+}
+
+/** AskUserQuestion 결과 줄의 toolUseResult({ questions, answers, annotations })에서 답만. 문자열 아닌 값은 뺀다 */
+function askAnswers(toolUseResult: unknown): Record<string, string> | null {
+  const answers = (toolUseResult as { answers?: unknown } | undefined)?.answers
+  if (typeof answers !== 'object' || answers === null || Array.isArray(answers)) return null
+  const entries = Object.entries(answers).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+  return entries.length > 0 ? Object.fromEntries(entries) : null
 }
 
 /**
@@ -131,6 +141,10 @@ export function parseMessages(jsonl: string): ChatMessage[] {
             if (!toolUse) continue
             const result = resultToText(block.content)
             toolUse.result = toolUse.name.startsWith(UNLIMITED_RESULT_PREFIX) ? result : result.slice(0, RESULT_LIMIT)
+            if (toolUse.name === 'AskUserQuestion') {
+              const answers = askAnswers(record.toolUseResult)
+              if (answers) toolUse.answers = answers
+            }
           }
         }
       }

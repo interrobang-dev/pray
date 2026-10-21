@@ -68,6 +68,45 @@ describe('parseMessages', () => {
     const [message] = parseMessages(jsonl)
     expect(message.toolUses.map((t) => t.result?.length)).toEqual([5000, 2000])
   })
+
+  it('puts toolUseResult.answers on AskUserQuestion tool uses only', () => {
+    const questions = [{ question: '어디서?', header: 'H', options: [{ label: 'main', description: '' }], multiSelect: false }]
+    const jsonl = [
+      line({
+        type: 'assistant',
+        uuid: 'a1',
+        message: {
+          id: 'm1',
+          content: [
+            { type: 'tool_use', id: 'ask', name: 'AskUserQuestion', input: { questions } },
+            { type: 'tool_use', id: 'ask2', name: 'AskUserQuestion', input: { questions } },
+            { type: 'tool_use', id: 'bash', name: 'Bash', input: {} },
+          ],
+        },
+      }),
+      line({
+        type: 'user',
+        uuid: 'u1',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'ask', content: 'Your questions have been answered: ...' }] },
+        toolUseResult: { questions, answers: { '어디서?': 'main', 깨진: 3 }, annotations: {} },
+      }),
+      line({
+        type: 'user',
+        uuid: 'u2',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'ask2', content: 'User declined', is_error: true }] },
+        toolUseResult: 'Error: User declined',
+      }),
+      line({
+        type: 'user',
+        uuid: 'u3',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'bash', content: 'ok' }] },
+        toolUseResult: { answers: { x: 'y' } },
+      }),
+    ].join('\n')
+
+    const [message] = parseMessages(jsonl)
+    expect(message.toolUses.map((t) => t.answers)).toEqual([{ '어디서?': 'main' }, undefined, undefined])
+  })
 })
 
 describe('parseMessages: messages sent while claude is working', () => {

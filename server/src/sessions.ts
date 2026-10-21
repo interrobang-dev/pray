@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import type { Session } from './types.js'
+import type { AskQuestion, Session } from './types.js'
 import type { HookState } from './hookState.js'
 import { summarizeTranscript } from './transcript.js'
 import { readLiveSessions } from './liveSessions.js'
@@ -34,6 +34,8 @@ export async function listSessions(
   webSessions: Map<string, string>,
   teams: Team[] = [],
   names: Record<string, string> = {},
+  /** 서버가 붙잡고 있는 AskUserQuestion (세션 ID → 질문) */
+  questions: ReadonlyMap<string, AskQuestion[]> = new Map(),
 ): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
   const ids = new Set<string>([...live.map((s) => s.sessionId), ...hookStates.keys(), ...webSessions.keys()])
@@ -48,6 +50,7 @@ export async function listSessions(
       const isWeb = webSessions.has(id)
       const team = teamOf(cwd, teams)
       const part = partOfSession(id, cwd, team)
+      const heldQuestions = questions.get(id)
       return {
         id,
         cwd,
@@ -63,6 +66,7 @@ export async function listSessions(
         teamId: team?.id ?? null,
         partId: part?.id ?? null,
         role: roleOf(id, isWeb, team, part),
+        question: heldQuestions ? { questions: heldQuestions } : null,
       }
     }),
   )

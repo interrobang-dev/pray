@@ -25,4 +25,14 @@ export interface Session {
   teamId: string | null
   /** 팀 안의 파트. null 이면 팀 직속 */
   partId: string | null
+  /** 서버가 이 세션의 AskUserQuestion 을 붙잡고 있을 때만 있다 (웹 세션만). 답하기는 POST /api/sessions/:id/answer */
+  question: { questions: AskQuestion[] } | null
+}
+
+/** AskUserQuestion 의 질문 하나 (tool_input.questions[]) */
+export interface AskQuestion {
+  question: string
+  header: string
+  options: { label: string; description: string; preview?: string }[]
+  multiSelect: boolean
 }

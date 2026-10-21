@@ -48,6 +48,16 @@ import { makeUsageCache } from './usage.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
 import { createWorktree, markTrusted, worktreeSlug, WorktreeError } from './worktree.js'
+import {
+  allowDecision,
+  buildAnswers,
+  CANCEL_MESSAGE,
+  chatMessage,
+  denyDecision,
+  parseQuestions,
+  type PermissionDecision,
+} from './askQuestion.js'
+import type { AskQuestion } from './types.js'
 
 setupFileLog()
 const PORT = 4710
@@ -57,6 +67,14 @@ const host = new HostClient()
 const tasks = new TaskStore()
 /** exit 한 웹 세션의 이름 (hq.json 에서는 지운다). 메모리라 서버 재시작 때 사라지지만 휴무 목록도 메모리의 훅 상태 기반이라 같이 비워지므로 수명이 같다 */
 const exitedSessionNames = new Map<string, string>()
+/**
+ * 웹 세션의 AskUserQuestion PermissionRequest 훅 요청을 응답하지 않고 붙잡아 둔 것 (세션당 하나).
+ * 답하기 API 가 이 응답으로 결정을 돌려준다. 터미널 화면과 경쟁해 먼저 결정한 쪽이 이긴다
+ */
+const heldQuestions = new Map<
+  string,
+  { questions: AskQuestion[]; toolInput: Record<string, unknown>; res: Response; at: string }
+>()
 
 const config = readConfig()
 const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
@@ -79,7 +97,7 @@ app.use(express.json({ limit: '1mb' }))
 
 // 로컬(127.0.0.1)은 무인증. 그 외는 로그인 쿠키 필요. 훅·인증 API 는 예외
 app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/auth/') || req.path === '/hook') return next()
+  if (req.path.startsWith('/auth/') || req.path === '/hook' || req.path === '/hook/ask') return next()
   if (isLoopback(req.socket.remoteAddress)) return next()
   if (auth.emailOf(parseCookie(req.headers.cookie, COOKIE))) return next()
   res.status(401).json({ message: '로그인 필요' })
@@ -157,10 +175,27 @@ function sessionNames(): Record<string, string> {
 async function snapshotPayload() {
   const webSessions = new Map(host.sessions.map((s) => [s.sessionId, s.cwd]))
   const names = sessionNames()
+  const questions = new Map([...heldQuestions].map(([id, held]) => [id, held.questions]))
   return {
     isHostReachable: host.isReachable,
-    sessions: await listSessions(hookStates, webSessions, listTeams(), names),
+    sessions: await listSessions(hookStates, webSessions, listTeams(), names, questions),
   }
+}
+
+/**
+ * 붙잡은 질문 훅에 응답하고 지운다 (기본 {} = 결정 없음, 터미널 화면에 맡김). 없으면 false.
+ * 이벤트 처리기(호스트 exit 등)에서도 부르므로 던지지 않는다. 화면 갱신(broadcast)은 부른 쪽이 한다
+ */
+function releaseQuestion(sessionId: string, decision: PermissionDecision | Record<string, never> = {}): boolean {
+  const held = heldQuestions.get(sessionId)
+  if (!held) return false
+  heldQuestions.delete(sessionId)
+  try {
+    if (!held.res.headersSent) held.res.json(decision)
+  } catch (error) {
+    console.error(`질문 훅 응답 실패 (${sessionId.slice(0, 8)}): ${error}`)
+  }
+  return true
 }
 
 /** hq.json 을 못 읽어 갱신을 건너뛰는 중. 5초마다 같은 로그가 쌓이지 않게 상태가 바뀔 때만 로그를 남긴다 */
@@ -301,6 +336,34 @@ app.post('/api/sessions/:id/input', (req, res) => {
   }
   host.send({ type: 'input', sessionId: req.params.id, data })
   res.json({})
+})
+
+/**
+ * 붙잡은 AskUserQuestion 에 답한다. { answers: { [질문문]: string[] } } = 고른 라벨·직접 입력한 글,
+ * { cancel: true } = 질문 취소, { chat: true } = 선택지 대신 대화로 답하기 (둘 다 deny)
+ */
+app.post('/api/sessions/:id/answer', (req, res) => {
+  const sessionId = req.params.id
+  const held = heldQuestions.get(sessionId)
+  if (!held) {
+    res.status(409).json({ message: '답할 질문 없음' })
+    return
+  }
+  const { answers, cancel, chat } = (req.body ?? {}) as { answers?: unknown; cancel?: unknown; chat?: unknown }
+  let decision: PermissionDecision
+  if (cancel === true) decision = denyDecision(CANCEL_MESSAGE)
+  else if (chat === true) decision = denyDecision(chatMessage(held.questions))
+  else {
+    const built = buildAnswers(held.questions, answers)
+    if (!built.ok) {
+      res.status(400).json({ message: built.message })
+      return
+    }
+    decision = allowDecision(held.toolInput, built.answers)
+  }
+  releaseQuestion(sessionId, decision)
+  res.json({})
+  void broadcast()
 })
 
 app.post('/api/sessions/:id/resize', (req, res) => {
@@ -741,7 +804,43 @@ app.post('/api/hook', (req, res) => {
   const next = applyHook(hookStates.get(payload.session_id), payload)
   if (next) hookStates.set(payload.session_id, next)
   tasks.applyHook(payload)
+  // 질문 도구가 끝났거나(터미널에서 먼저 답한 경우 포함) 차례·세션이 끝나면 붙잡은 질문은 쓸모없다
+  const event = payload.hook_event_name
+  if ((event === 'PostToolUse' && payload.tool_name === 'AskUserQuestion') || event === 'Stop' || event === 'SessionEnd') {
+    releaseQuestion(payload.session_id)
+  }
   res.json({})
+  void broadcast()
+})
+
+/**
+ * PermissionRequest(matcher AskUserQuestion) 훅. 웹 세션이면 응답하지 않고 붙잡아 두고 답하기 API 를 기다린다
+ * (훅 timeout 1시간). 외부 세션은 관찰만이라 바로 {} (결정 없음 → 터미널 화면이 받는다)
+ */
+app.post('/api/hook/ask', (req, res) => {
+  const payload = (req.body ?? {}) as Partial<HookPayload> & { tool_input?: unknown }
+  const sessionId = payload.session_id
+  const questions = parseQuestions(payload.tool_input)
+  const isAsk = payload.hook_event_name === 'PermissionRequest' && payload.tool_name === 'AskUserQuestion'
+  const isWeb = host.sessions.some((s) => s.sessionId === sessionId)
+  if (!sessionId || !isAsk || !questions || !isWeb) {
+    res.json({})
+    return
+  }
+  req.socket.setTimeout(0)
+  releaseQuestion(sessionId)
+  heldQuestions.set(sessionId, {
+    questions,
+    toolInput: payload.tool_input as Record<string, unknown>,
+    res,
+    at: new Date().toISOString(),
+  })
+  // 응답 전에 연결이 닫히면(훅 timeout·Claude Code 가 요청 취소) 지우기만 한다. 응답한 뒤의 close 는 이미 지워져 무시된다
+  res.on('close', () => {
+    if (heldQuestions.get(sessionId)?.res !== res) return
+    heldQuestions.delete(sessionId)
+    void broadcast()
+  })
   void broadcast()
 })
 
@@ -758,6 +857,7 @@ host.on('message', (message: HostMessage) => {
   if (message.type === 'exit') {
     lastOutputAt.delete(message.sessionId)
     tasks.markExited(message.sessionId)
+    releaseQuestion(message.sessionId)
     // 이벤트 처리기라 던지면 서버가 죽는다. 실패하면 이름이 hq.json 에 남는다
     try {
       const name = listSessionNames()[message.sessionId]
