@@ -59,6 +59,7 @@ import {
   type PermissionDecision,
 } from './askQuestion.js'
 import type { AskQuestion } from './types.js'
+import { serialRunner } from './serialRunner.js'
 
 setupFileLog()
 const PORT = 4710
@@ -202,8 +203,15 @@ function releaseQuestion(sessionId: string, decision: PermissionDecision | Recor
 /** hq.json 을 못 읽어 갱신을 건너뛰는 중. 5초마다 같은 로그가 쌓이지 않게 상태가 바뀔 때만 로그를 남긴다 */
 let isBroadcastFailing = false
 
-/** 요청 처리 밖(5초 주기·SSE 접속·훅·호스트 이벤트)에서 `void` 로 불리므로 던지면 서버가 죽는다. 실패하면 그 회차만 건너뛴다 */
-async function broadcast() {
+/**
+ * 세션 목록을 모든 구독자에게 보낸다. 요청 처리 밖(5초 주기·SSE 접속·훅·호스트 이벤트)에서 `void` 로 불리므로 던지지 않는다.
+ * 겹쳐 돌면 먼저 시작한 옛 스냅숏이 나중에 끝나 새 스냅숏을 덮어써서(질문이 붙잡힌 직후 question: null 이 온 적이 있다)
+ * 한 번에 하나만 돌리고, 도는 중에 온 요청은 끝난 뒤 한 번으로 합쳐 최신 상태로 다시 돈다
+ */
+const broadcast = serialRunner(broadcastOnce, (error) => console.error(`세션 목록 보내기 실패: ${error}`))
+
+/** hq.json 을 못 읽으면 그 회차만 건너뛴다 */
+async function broadcastOnce(): Promise<void> {
   if (subscribers.size === 0) return
   const payload = await snapshotPayload().catch((error: unknown) => {
     if (!isBroadcastFailing) console.error(`hq.json 을 읽지 못해 갱신 건너뜀: ${error}`)
