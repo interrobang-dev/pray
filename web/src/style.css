@@ -198,6 +198,10 @@ header button.icon:hover:not(:disabled) {
 .create .check input {
   margin: 0;
 }
+.create .form-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
 /* 좌측 목록: 그룹 라벨 → 팀 카드 → 세션 줄. 로비는 라벨 아래 세션이 바로 온다 */
 .sessions {
   list-style: none;
@@ -248,6 +252,7 @@ header button.icon:hover:not(:disabled) {
 }
 .group-label:hover .head-actions,
 .team-head:hover .head-actions,
+.part-head:hover .head-actions,
 .head-actions:has(.menu.open) {
   opacity: 1;
 }
@@ -323,6 +328,36 @@ header button.icon:hover:not(:disabled) {
   border-top: 1px solid var(--line);
 }
 .team .session:last-child {
+  border-radius: 0 0 8px 8px;
+}
+/* 파트: 팀 카드 안의 소제목 + 한 단계 들여 쓴 세션 */
+.part-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.part-head .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.part-head .branch {
+  font-weight: 400;
+  white-space: nowrap;
+}
+.part .session {
+  padding-left: 18px;
+}
+.team .part:not(:last-child) .session:last-child {
+  border-radius: 0;
+}
+.team .part:last-child .part-head:last-child {
   border-radius: 0 0 8px 8px;
 }
 .group > .session {
@@ -448,6 +483,10 @@ header button.icon:hover:not(:disabled) {
 .badge.role-lead {
   background: #fbf0d2;
   color: #9a6b00;
+}
+.badge.role-part-lead {
+  background: #eceef3;
+  color: #5d6675;
 }
 .office {
   min-width: 0;

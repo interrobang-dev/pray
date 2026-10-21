@@ -12,9 +12,11 @@ export interface Session {
   lastAt: string | null
   lastAssistantText: string | null
   pendingTool: string | null
-  /** 팀에 속하면 팀장/팀원. 아니면 null */
+  /** 팀에 속하면 자기 지휘 단위의 지시자(팀장·파트장)/팀원. 아니면 null */
   role: 'lead' | 'member' | null
   teamId: string | null
+  /** 팀 안의 파트. null 이면 팀 직속 */
+  partId: string | null
 }
 
 export interface Group {
@@ -25,6 +27,15 @@ export interface Group {
   w: number
   h: number
   waitingNote?: string
+}
+
+/** 파트 = 팀 안의 선택적 지휘 단위 (파트장 + 파트 팀원). worktree 가 있으면 그 폴더에서 일한다 */
+export interface Part {
+  id: string
+  name: string
+  leadSessionId?: string
+  worktree?: { cwd: string; branch: string }
+  createdAt: string
 }
 
 /** 팀 = 같은 폴더의 세션 묶음. 그룹 안의 책상 섬. 소속은 서버가 cwd 로 판정해 Session.teamId 로 준다 */
@@ -39,6 +50,9 @@ export interface Team {
   leadSessionId?: string
   /** 앵커 기준 책상 오프셋. 끌어 놓았을 때만 저장 */
   desks: Record<string, { dx: number; dy: number }>
+  /** 없으면 빈 배열. 소속은 서버가 판정해 Session.partId 로 준다 */
+  parts: Part[]
+  partOf: Record<string, string>
   createdAt: string
 }
 

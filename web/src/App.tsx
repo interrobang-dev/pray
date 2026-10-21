@@ -515,7 +515,7 @@ export function App() {
           onClose={() => setPartForm(null)}
         >
           <form className="create" onSubmit={createPart}>
-            <input name="name" placeholder="파트 이름 (예: api). worktree 면 영문·숫자가 폴더·브랜치 이름" required autoFocus />
+            <input name="name" placeholder="파트 이름 (예: api)" required autoFocus />
             <Segmented
               value={partLocation}
               onChange={setPartLocation}
@@ -524,9 +524,9 @@ export function App() {
                 { value: 'worktree', label: '새 worktree', hint: '같은 파일을 동시에 고칠 때. 저장소 옆 폴더에서 따로 일한다' },
               ]}
             />
-            <div className="hint">
+            <div className="form-hint">
               {partLocation === 'worktree'
-                ? '저장소 옆 <저장소>.worktrees/<이름> 폴더, 브랜치 part/<이름> (현재 HEAD 기준). 병합은 직접'
+                ? '저장소 옆 <저장소>.worktrees/<이름> 폴더, 브랜치 part/<이름> (현재 HEAD 기준. 이름의 영문·숫자만 씀). 병합은 직접'
                 : '팀 폴더 그대로. 다른 파트·팀 직속과 같은 파일을 고치지 않게 나눈다'}
             </div>
             <label className="check">
