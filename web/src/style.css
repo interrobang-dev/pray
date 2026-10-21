@@ -661,6 +661,35 @@ header button.icon:hover:not(:disabled) {
   word-break: break-all;
   text-align: left;
 }
+/* 답변 전 작업 묶음 (Chat.tsx). 알림 한 줄처럼 가운데 작은 회색, 길면 말줄임. 누르면 아래에 설명 글·도구 줄 말풍선이 펼쳐지고 왼쪽 옅은 선으로 묶음을 표시한다 */
+.work {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.work-summary {
+  align-self: center;
+  max-width: 95%;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.work-summary:hover {
+  color: var(--text);
+}
+.work-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+}
 /* 팀장↔팀원이 주고받은 글 (Chat.tsx). 사람 말풍선(초록)·claude 응답(흰색)과 다른 색. 위에 "→ 팀원"·"팀원 →"·"팀장 지시" 라벨 */
 .msg.relay {
   background: #eef1fb;
@@ -1704,5 +1733,10 @@ header button.icon:hover:not(:disabled) {
   .queued-cancel {
     padding: 4px 10px;
     font-size: 12px;
+  }
+  /* 작업 묶음 줄: 손가락으로 누르기 쉽게 누르는 자리만 위아래로 넓힌다 (음수 여백이라 줄 간격은 그대로) */
+  .work-summary {
+    margin: -8px 0;
+    padding: 8px;
   }
 }

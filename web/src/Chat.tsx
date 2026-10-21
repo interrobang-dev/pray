@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { flushSync } from 'react-dom'
+import { buildChatRows, type Work } from './chatRows'
 import { FilesButton } from './Files'
 import { MarkdownText } from './Markdown'
 import { NEWLINE_KEYS } from './Terminal'
@@ -199,6 +200,49 @@ function AskedCard({ toolUse, asked }: { toolUse: ToolUse; asked: Asked }) {
         </div>
       ))}
       <ToolBlock toolUse={toolUse} />
+    </div>
+  )
+}
+
+/** 작업 묶음에 넣지 않고 그 자리에 두는 도구 호출: 팀장↔팀원 말풍선, 질문 → 답 카드 */
+type Special = { kind: 'relay'; relay: Relay } | { kind: 'asked'; asked: Asked }
+
+/** 묶음 줄에 이름별 개수를 보여 주는 도구 수 (많은 순). 나머지는 전체 개수에만 든다 */
+const WORK_TOOL_NAMES_SHOWN = 3
+
+/** 묶음 줄의 도구 이름. MCP 도구 `mcp__<서버>__<도구>` 는 백그라운드 알림 요약과 같은 `<서버>/<도구>` 로 줄인다 */
+function shortToolName(name: string): string {
+  const match = name.match(/^mcp__(.+?)__(.+)$/)
+  return match ? `${match[1]}/${match[2]}` : name
+}
+
+/** "작업 14개 · Bash 6 · Read 5 · Edit 3 · 2분 10초 · 진행 중". 시간은 1초 미만이면 뺀다 */
+function workTitle(work: Work): string {
+  const counts = work.toolCounts.slice(0, WORK_TOOL_NAMES_SHOWN).map(({ name, count }) => `${shortToolName(name)} ${count}`)
+  const duration = work.durationMs >= 1000 ? [formatDuration(work.durationMs)] : []
+  return [`작업 ${work.toolCount}개`, ...counts, ...duration, ...(work.isInProgress ? ['진행 중'] : [])].join(' · ')
+}
+
+/** 답변 전 작업 묶음 한 줄. 누르면 아래에 설명 글(마크다운)·도구 줄이 시간 순서대로 펼쳐진다. 접혀 있으면 안쪽을 그리지 않는다 (마크다운 파싱을 피하려고) */
+function WorkLine({ work, isOpen, onToggle }: { work: Work; isOpen: boolean; onToggle: () => void }) {
+  const title = workTitle(work)
+  return (
+    <div className="work">
+      <button type="button" className="work-summary" aria-expanded={isOpen} onClick={onToggle} title={title}>
+        <span aria-hidden="true">{isOpen ? '▼' : '▶'}</span> {title}
+      </button>
+      {isOpen && (
+        <div className="work-items">
+          {work.parts.map((part) => (
+            <div key={part.message.id} className="msg assistant">
+              {part.text && <MarkdownText text={part.text} />}
+              {part.toolUses.map((toolUse) => (
+                <ToolBlock key={toolUse.id} toolUse={toolUse} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -549,6 +593,24 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     return (id: string) => spawnedNames.get(id) ?? sessionNames[id] ?? id.slice(0, 8)
   }, [messages, sessionNames])
 
+  /** 화면 줄: 구간마다 claude 의 중간 설명 글·일반 도구 호출을 작업 묶음으로 접고, relay·질문 카드는 그 자리에 둔다 */
+  const rows = useMemo(
+    () =>
+      buildChatRows<Special>(
+        messages,
+        (toolUse) => {
+          const relay = relayOf(toolUse, memberNameOf)
+          if (relay) return { kind: 'relay', relay }
+          const asked = askedOf(toolUse)
+          return asked ? { kind: 'asked', asked } : null
+        },
+        isWorking,
+      ),
+    [messages, memberNameOf, isWorking],
+  )
+  /** 펼친 작업 묶음 키 (Work.key). 몇 초마다 대화를 다시 받아도 접히지 않게 여기 둔다. 세션을 바꾸면 비운다 */
+  const [openWorkKeys, setOpenWorkKeys] = useState<ReadonlySet<string>>(() => new Set())
+
   useEffect(() => {
     let isCancelled = false
     fetch(`/api/sessions/${sessionId}/messages`)
@@ -589,6 +651,7 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     setCancellingId(null)
     setCancelNotice(null)
     setPendings([])
+    setOpenWorkKeys(new Set())
     isFirstLoadRef.current = true
     isAtBottomRef.current = true
     setIsAtBottom(true)
@@ -612,6 +675,18 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     isAtBottomRef.current = isNearBottom
     setIsAtBottom(isNearBottom)
     if (isNearBottom) setHasUnread(false)
+  }
+
+  function toggleWork(key: string) {
+    flushSync(() =>
+      setOpenWorkKeys((current) => {
+        const next = new Set(current)
+        if (!next.delete(key)) next.add(key)
+        return next
+      }),
+    )
+    // 펼치면 내용만 길어지고 스크롤 이벤트가 없어 "맨 아래를 보고 있다" 가 남는다. 다음 갱신 때 펼친 것을 읽다 끌려 내려가지 않게 다시 잰다
+    onMessagesScroll()
   }
 
   function onToBottomClick() {
@@ -718,7 +793,33 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     <div className="chat">
       <div className="messages-pane">
         <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
-          {messages.map((message) => {
+          {rows.map((row) => {
+            if (row.kind === 'work') {
+              const { work } = row
+              return <WorkLine key={`work:${work.key}`} work={work} isOpen={openWorkKeys.has(work.key)} onToggle={() => toggleWork(work.key)} />
+            }
+            // claude 답변 (구간의 마지막 글. 도구 없는 구간이면 글마다)
+            if (row.kind === 'text') {
+              return (
+                <div key={row.message.id} className="msg assistant">
+                  <MarkdownText text={row.message.text} />
+                </div>
+              )
+            }
+            // 팀장 대화의 지시·보고 도구 호출은 말풍선으로, AskUserQuestion 은 질문 → 답 카드로. 원래 도구 블록은 그 안에 접어 둔다
+            if (row.kind === 'special') {
+              const { toolUse, special } = row
+              return special.kind === 'relay' ? (
+                <div key={toolUse.id} className="msg relay">
+                  <div className="relay-label">{special.relay.label}</div>
+                  <MarkdownText text={special.relay.text} />
+                  <ToolBlock toolUse={toolUse} />
+                </div>
+              ) : (
+                <AskedCard key={toolUse.id} toolUse={toolUse} asked={special.asked} />
+              )
+            }
+            const { message } = row
             // 팀원 대화: 서버가 보낸 팀장·파트장 지시
             if (message.from) {
               return (
@@ -762,53 +863,27 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
                 </Fragment>
               )
             }
-            // 팀장 대화의 지시·보고 도구 호출은 말풍선으로, AskUserQuestion 은 질문 → 답 카드로 빼고 원래 도구 블록은 그 안에 접어 둔다
-            const relays = message.toolUses.map((toolUse) => ({ toolUse, relay: relayOf(toolUse, memberNameOf), asked: askedOf(toolUse) }))
-            const plainToolUses = relays.filter(({ relay, asked }) => !relay && !asked).map(({ toolUse }) => toolUse)
-            const isEmptyWithoutRelays = !message.text && plainToolUses.length === 0 && relays.length > 0
+            // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다)
             return (
-              <Fragment key={message.id}>
-                {!isEmptyWithoutRelays && (
-                  <div className={`msg ${message.role}${message.isQueued ? ' queued' : ''}`}>
-                    {message.text &&
-                      (message.role === 'assistant' ? (
-                        <MarkdownText text={message.text} />
-                      ) : (
-                        <div className="text">{message.text}</div>
-                      ))}
-                    {plainToolUses.map((toolUse) => (
-                      <ToolBlock key={toolUse.id} toolUse={toolUse} />
-                    ))}
-                    {message.isQueued && (
-                      <div className="queued-label">
-                        대기 중
-                        {message.id === lastQueuedId && canCancelQueued && (
-                          <button
-                            type="button"
-                            className="queued-cancel"
-                            disabled={cancellingId !== null}
-                            onClick={() => void cancelQueued(message)}
-                            title="claude 가 받기 전에 이 메시지를 대기열에서 뺀다"
-                          >
-                            {cancellingId === message.id ? '취소 중…' : '취소'}
-                          </button>
-                        )}
-                      </div>
+              <div key={message.id} className={`msg ${message.role}${message.isQueued ? ' queued' : ''}`}>
+                {message.text && <div className="text">{message.text}</div>}
+                {message.isQueued && (
+                  <div className="queued-label">
+                    대기 중
+                    {message.id === lastQueuedId && canCancelQueued && (
+                      <button
+                        type="button"
+                        className="queued-cancel"
+                        disabled={cancellingId !== null}
+                        onClick={() => void cancelQueued(message)}
+                        title="claude 가 받기 전에 이 메시지를 대기열에서 뺀다"
+                      >
+                        {cancellingId === message.id ? '취소 중…' : '취소'}
+                      </button>
                     )}
                   </div>
                 )}
-                {relays.map(({ toolUse, relay, asked }) =>
-                  relay ? (
-                    <div key={toolUse.id} className="msg relay">
-                      <div className="relay-label">{relay.label}</div>
-                      <MarkdownText text={relay.text} />
-                      <ToolBlock toolUse={toolUse} />
-                    </div>
-                  ) : (
-                    asked && <AskedCard key={toolUse.id} toolUse={toolUse} asked={asked} />
-                  ),
-                )}
-              </Fragment>
+              </div>
             )
           })}
           {pendings.map((pending) => (
