@@ -17,6 +17,10 @@ const EMPTY_OFFICE: OfficeData = { groups: [], teams: [] }
 /** 이 폭 이하는 폰 화면: 한 열(목록 ↔ 패널)이고 사무실을 마운트하지 않는다. style.css 의 @media 와 같은 값 */
 const NARROW_QUERY = '(max-width: 768px)'
 
+/** 세션 API 가 그 폴더를 ~/.claude.json 에 신뢰로 기록하지 못했을 때 (isTrustFailed) */
+const SESSION_TRUST_FAILED_MESSAGE =
+  '신뢰 표시를 남기지 못했습니다. 이 폴더에서 처음 뜨는 세션이면 터미널 탭에서 신뢰를 직접 허용해야 합니다 (기본 선택 "No, exit" 를 그대로 두면 세션이 꺼집니다).'
+
 /** 미디어 쿼리 일치 여부. 창 폭이 바뀌면 따라간다 */
 function useMediaQuery(query: string): boolean {
   const [isMatched, setIsMatched] = useState(() => window.matchMedia(query).matches)
@@ -124,6 +128,15 @@ export function App() {
 
   const selected = snapshot.sessions.find((s) => s.id === selectedId) ?? null
 
+  /**
+   * 세션을 고른다. 다른 세션이면 대화 탭으로 연다 (같은 세션을 다시 누르면 보던 탭 그대로).
+   * 탭과 선택을 한 번에 바꾼다 — 따로 바꾸면 새 세션의 터미널이 잠깐 붙어 그 pty 크기를 바꾼다
+   */
+  function selectSession(sessionId: string) {
+    if (sessionId !== selectedId) setTab('chat')
+    setSelectedId(sessionId)
+  }
+
   async function createSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!sessionForm) return
@@ -132,7 +145,6 @@ export function App() {
       cwd: sessionForm.teamId ? undefined : form.get('cwd'),
       teamId: sessionForm.teamId ?? undefined,
       partId: sessionForm.partId ?? undefined,
-      prompt: form.get('prompt'),
       name: form.get('name'),
       isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
     })
@@ -140,10 +152,10 @@ export function App() {
       alert((await response.json()).message ?? '생성 실패')
       return
     }
-    const { sessionId } = await response.json()
-    setSelectedId(sessionId)
-    setTab('terminal')
+    const { sessionId, isTrustFailed } = (await response.json()) as { sessionId: string; isTrustFailed?: boolean }
+    selectSession(sessionId)
     setSessionForm(null)
+    if (isTrustFailed) alert(SESSION_TRUST_FAILED_MESSAGE)
   }
 
   async function createTeam(event: FormEvent<HTMLFormElement>) {
@@ -177,14 +189,15 @@ export function App() {
       teamId: partForm.teamId,
       partId: part.id,
       isLead: true,
-      prompt: form.get('prompt'),
     })
     if (!leadResponse.ok) {
       alert((await leadResponse.json()).message ?? '파트장 생성 실패')
       return
     }
-    setSelectedId((await leadResponse.json()).sessionId)
-    setTab('terminal')
+    const { sessionId, isTrustFailed } = (await leadResponse.json()) as { sessionId: string; isTrustFailed?: boolean }
+    selectSession(sessionId)
+    // worktree 신뢰 실패는 위에서 이미 알렸다 (같은 폴더라 같은 이유)
+    if (isTrustFailed && !(isWorktree && !isTrusted)) alert(SESSION_TRUST_FAILED_MESSAGE)
   }
 
   async function createGroup(event: FormEvent<HTMLFormElement>) {
@@ -340,7 +353,6 @@ export function App() {
           )}
           {!team && <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />}
           <input name="name" placeholder="세션 이름 (선택. 비우면 대화 내용으로 자동 제목)" autoFocus={Boolean(team)} />
-          <input name="prompt" placeholder="첫 지시 (선택)" />
           <div className="actions">
             <button type="submit" className="primary">
               시작
@@ -416,7 +428,7 @@ export function App() {
       <div
         key={session.id}
         className={['session', session.id === selectedId ? 'selected' : '', session.isAlive ? '' : 'dead'].join(' ')}
-        onClick={() => setSelectedId(session.id)}
+        onClick={() => selectSession(session.id)}
       >
         <span className={`status-dot ${session.status}`} title={statusLabel[session.status]} />
         <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
@@ -569,7 +581,6 @@ export function App() {
               <input type="checkbox" checked={isPartLeadSpawned} onChange={(e) => setIsPartLeadSpawned(e.target.checked)} />
               파트장 바로 띄우기
             </label>
-            {isPartLeadSpawned && <input name="prompt" placeholder="파트장 첫 지시 (선택)" />}
             <div className="actions">
               <button type="submit" className="primary" disabled={!snapshot.isHostReachable && isPartLeadSpawned}>
                 만들기
@@ -607,7 +618,7 @@ export function App() {
           office={office}
           sessions={snapshot.sessions}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={selectSession}
           onMoveDesk={moveDesk}
           onMoveTeam={moveTeam}
           onEditTeam={editTeam}

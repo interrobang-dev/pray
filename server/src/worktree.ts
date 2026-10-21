@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { posix } from 'node:path'
 import { promisify } from 'node:util'
@@ -51,7 +51,7 @@ export async function createWorktree(teamCwd: string, slug: string): Promise<{ c
   return { cwd, branch }
 }
 
-/** ~/.claude.json 텍스트에 그 폴더의 신뢰 표시를 넣은 새 텍스트. 파싱할 수 없으면 null */
+/** ~/.claude.json 텍스트에 그 폴더의 신뢰 표시를 넣은 새 텍스트. 이미 신뢰면 받은 텍스트 그대로, 파싱할 수 없으면 null */
 export function withTrust(claudeJson: string, folder: string): string | null {
   let parsed: { projects?: Record<string, Record<string, unknown>> }
   try {
@@ -61,25 +61,49 @@ export function withTrust(claudeJson: string, folder: string): string | null {
   }
   if (typeof parsed !== 'object' || parsed === null) return null
   const projects = parsed.projects ?? {}
+  if (projects[folder]?.hasTrustDialogAccepted === true) return claudeJson
   projects[folder] = { ...projects[folder], hasTrustDialogAccepted: true }
   return JSON.stringify({ ...parsed, projects }, null, 2)
 }
 
 /**
- * 새 worktree 에서 claude 의 신뢰 확인 창(기본 선택 "No, exit")이 뜨지 않게 ~/.claude.json 에 신뢰 표시를 남긴다.
- * Claude Code 가 이 파일을 수시로 다시 쓰므로 읽은 직후 그 키 하나만 바꿔 바로 쓴다. 실패하면 경고만 (사용자가 터미널에서 허용)
+ * claude 의 신뢰 확인 창(기본 선택 "No, exit")이 뜨지 않게 ~/.claude.json 에 그 폴더 키의 신뢰 표시를 남긴다.
+ * Claude Code 가 이 파일을 수시로 다시 쓰므로 이미 신뢰면 쓰지 않고, 쓸 때는 읽은 직후 그 키 하나만 바꿔 바로 쓴다.
+ * 실패하면 경고만 (사용자가 터미널에서 허용)
  */
 export function markTrusted(folder: string, claudeJsonPath = posix.join(homedir().replace(/\\/g, '/'), '.claude.json')): boolean {
   try {
-    const next = withTrust(readFileSync(claudeJsonPath, 'utf8'), folder)
+    const current = readFileSync(claudeJsonPath, 'utf8')
+    const next = withTrust(current, folder)
     if (next === null) {
       console.warn(`~/.claude.json 을 해석할 수 없어 신뢰 표시를 못 남김: ${folder}`)
       return false
     }
-    writeFileSync(claudeJsonPath, next)
+    if (next !== current) writeFileSync(claudeJsonPath, next)
     return true
   } catch (error) {
     console.warn(`신뢰 표시 기록 실패: ${folder}`, error)
     return false
   }
+}
+
+/**
+ * Claude Code 가 ~/.claude.json projects 에 쓰는 폴더 키: 실제 경로(드라이브 대문자·디스크의 대소문자)에 구분자 `/`
+ * (예: `D:/workspace/@private/jk-corp`). `d:\workspace\...` 처럼 와도 같은 키가 된다. 폴더가 없으면 null
+ */
+export function trustKey(folder: string): string | null {
+  try {
+    return realpathSync.native(folder).replace(/\\/g, '/')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 웹에서 새로 띄우는 세션의 폴더를 신뢰로 기록한다 (확인 창을 아무도 안 누르면 기본 선택 "No, exit" 로 세션이 꺼진다).
+ * true = 기록함 또는 이미 신뢰, false = 기록 실패 (화면이 경고), null = 폴더가 없어 기록 안 함 (spawn 이 실패하는 기존 흐름)
+ */
+export function markFolderTrusted(folder: string, claudeJsonPath?: string): boolean | null {
+  const key = trustKey(folder)
+  return key === null ? null : markTrusted(key, claudeJsonPath)
 }

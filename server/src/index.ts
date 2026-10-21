@@ -48,7 +48,7 @@ import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
-import { createWorktree, markTrusted, worktreeSlug, WorktreeError } from './worktree.js'
+import { createWorktree, markFolderTrusted, markTrusted, worktreeSlug, WorktreeError } from './worktree.js'
 import {
   allowDecision,
   buildAnswers,
@@ -288,8 +288,10 @@ app.post('/api/sessions', async (req, res) => {
   // worktree 없는 파트는 폴더로 구분이 안 되므로 소속을 기록한다
   if (team && part && !part.worktree) setPartOf(team.id, sessionId, part.id)
   if (name?.trim()) setSessionName(sessionId, name)
+  // 신뢰 확인 창(기본 "No, exit")에 막혀 세션이 꺼지지 않게 띄우기 전에 폴더를 신뢰로 기록한다. 실패해도 띄우고 화면이 경고한다
+  const isTrustFailed = markFolderTrusted(cwd) === false
   host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
-  res.json({ sessionId })
+  res.json({ sessionId, isTrustFailed })
   if (isLead || part) broadcastOffice()
 })
 
@@ -642,6 +644,8 @@ app.post('/api/team/:teamId/members', (req, res) => {
   const sessionId = randomUUID()
   const extraArgs = ['--name', name.trim(), '--permission-mode', permissionMode ?? 'bypassPermissions']
   if (part && !part.worktree) setPartOf(team.id, sessionId, part.id)
+  // 신뢰 기록은 POST /api/sessions 와 같다. 실패는 결과로 지시자에게 알린다
+  const isTrustFailed = markFolderTrusted(cwd) === false
   if (!host.send({ type: 'spawn', sessionId, cwd, extraArgs })) {
     if (part && !part.worktree) setPartOf(team.id, sessionId, null)
     res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
@@ -651,7 +655,7 @@ app.post('/api/team/:teamId/members', (req, res) => {
   setSessionName(sessionId, name)
   const member = { sessionId, name: name.trim(), cwd }
   if (!instruction) {
-    res.json({ member, task: null })
+    res.json({ member, task: null, isTrustFailed })
     return
   }
   // 아래 타이머 안에서 던지면 서버가 죽으므로 기록은 요청 처리 중인 여기서 남긴다
@@ -660,7 +664,7 @@ app.post('/api/team/:teamId/members', (req, res) => {
   setTimeout(() => {
     const task = tasks.assign(team.id, sessionId, instruction, part?.id ?? null)
     submitInstruction(sessionId, instruction)
-    res.json({ member, task })
+    res.json({ member, task, isTrustFailed })
   }, MEMBER_FIRST_INPUT_DELAY_MS)
 })
 
