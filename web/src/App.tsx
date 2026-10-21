@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Terminal } from './Terminal'
 import { Chat } from './Chat'
 import { Office } from './Office'
@@ -78,6 +78,41 @@ async function postJson(url: string, method: string, body: unknown): Promise<Res
   return fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 }
 
+/** 목록 끌어 놓기의 범위: 그룹끼리, 또는 한 그룹 안의 팀끼리 (다른 그룹으로 옮기기는 사무실에서 섬을 끌어서) */
+type ReorderScope = { kind: 'group' } | { kind: 'team'; groupId: string }
+
+/** 끌기로 보는 최소 이동 (px). 이보다 덜 움직이고 놓으면 그냥 클릭이다 */
+const DRAG_THRESHOLD_PX = 5
+/** 끄는 동안 목록 위·아래 끝에서 이 거리 안이면 목록을 스크롤한다 */
+const AUTO_SCROLL_EDGE_PX = 40
+/** 끝에 바짝 붙었을 때 한 프레임에 스크롤하는 양 (px) */
+const AUTO_SCROLL_MAX_PX = 14
+
+function isSameScope(a: ReorderScope, b: ReorderScope): boolean {
+  return a.kind === 'group' ? b.kind === 'group' : b.kind === 'team' && a.groupId === b.groupId
+}
+
+/** items 중 isTarget 인 것들이 차지한 자리에 ids 순서대로 다시 넣는다 (서버 hq.ts reorderSlots 와 같은 규칙). 집합이 다르면 그대로 둔다 */
+function reorderSlots<T extends { id: string }>(items: T[], ids: string[], isTarget: (item: T) => boolean): T[] {
+  const byId = new Map(items.filter(isTarget).map((item) => [item.id, item]))
+  if (ids.length !== byId.size || new Set(ids).size !== ids.length || ids.some((id) => !byId.has(id))) return items
+  let next = 0
+  return items.map((item) => (isTarget(item) ? byId.get(ids[next++])! : item))
+}
+
+function applyOrder(office: OfficeData, scope: ReorderScope, ids: string[]): OfficeData {
+  return scope.kind === 'group'
+    ? { ...office, groups: reorderSlots(office.groups, ids, () => true) }
+    : { ...office, teams: reorderSlots(office.teams, ids, (t) => t.groupId === scope.groupId) }
+}
+
+/** ids 에서 id 를 빼 dropIndex(원래 목록에서 이 순번 앞) 자리에 넣은 새 순서 */
+function moveTo(ids: string[], id: string, dropIndex: number): string[] {
+  const rest = ids.filter((other) => other !== id)
+  rest.splice(dropIndex > ids.indexOf(id) ? dropIndex - 1 : dropIndex, 0, id)
+  return rest
+}
+
 export function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>({ isHostReachable: false, sessions: [] })
   const [office, setOffice] = useState<OfficeData>(EMPTY_OFFICE)
@@ -101,6 +136,12 @@ export function App() {
   const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
   /** 목록의 경과 시간을 1분마다 다시 계산하기 위한 현재 시각 */
   const [now, setNow] = useState(() => Date.now())
+  /**
+   * 목록에서 끌고 있는 그룹·팀과 놓일 자리 (끌기로 판정된 뒤에만).
+   * dropIndex 는 형제 목록에서 이 순번 앞(길이면 맨 끝)이고, 놓아도 순서가 그대로인 자리면 null (선을 안 그린다)
+   */
+  const [reorderDrag, setReorderDrag] = useState<{ scope: ReorderScope; id: string; dropIndex: number | null } | null>(null)
+  const listRef = useRef<HTMLUListElement>(null)
   const isNarrow = useMediaQuery(NARROW_QUERY)
 
   useEffect(() => {
@@ -319,6 +360,112 @@ export function App() {
     if (name?.trim()) void postJson(`/api/team/${team.id}`, 'PATCH', { name: name.trim() })
   }
 
+  /**
+   * 목록 손잡이(⠿)를 누르면 시작한다. pointer 이벤트라 마우스·터치가 같고, 손잡이가 pointer 를 잡아(setPointerCapture) 밖으로 나가도 이벤트가 온다.
+   * DRAG_THRESHOLD_PX 를 넘게 움직여야 끌기다. 놓일 자리는 형제 요소들의 세로 가운데와 비교해 정하고(DOM 순서 = 화면 순서), 목록 위·아래 끝 근처에서는 목록을 스크롤한다
+   */
+  function startReorder(event: ReactPointerEvent<HTMLElement>, scope: ReorderScope, id: string) {
+    const list = listRef.current
+    if (!list || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return
+    const pointerId = event.pointerId
+    event.currentTarget.setPointerCapture(pointerId)
+    const start = { x: event.clientX, y: event.clientY }
+    const selector =
+      scope.kind === 'group' ? ':scope > li[data-group-id]' : `:scope > li[data-group-id="${CSS.escape(scope.groupId)}"] > [data-team-id]`
+    let pointerY = start.y
+    let isDragging = false
+    let ids: string[] = []
+    let dropIndex: number | null = null
+    let frame = 0
+
+    function updateDrop() {
+      const elements = [...list!.querySelectorAll<HTMLElement>(selector)]
+      ids = elements.map((element) => (scope.kind === 'group' ? element.dataset.groupId : element.dataset.teamId) ?? '')
+      const from = ids.indexOf(id)
+      const before = elements.findIndex((element) => {
+        const rect = element.getBoundingClientRect()
+        return pointerY < rect.top + rect.height / 2
+      })
+      const index = before === -1 ? elements.length : before
+      const next = from === -1 || index === from || index === from + 1 ? null : index
+      dropIndex = next
+      setReorderDrag((prev) => (prev && prev.id === id && prev.dropIndex === next ? prev : { scope, id, dropIndex: next }))
+    }
+
+    /** 누른 자리에서 그 끝 쪽으로 움직였을 때만 스크롤한다 — 끝 근처 항목을 반대쪽으로 끌 때 목록이 거꾸로 밀리지 않게 */
+    function autoScroll() {
+      const rect = list!.getBoundingClientRect()
+      const topDepth = pointerY < start.y ? rect.top + AUTO_SCROLL_EDGE_PX - pointerY : 0
+      const bottomDepth = pointerY > start.y ? pointerY - (rect.bottom - AUTO_SCROLL_EDGE_PX) : 0
+      const depth = topDepth > 0 ? -topDepth : bottomDepth > 0 ? bottomDepth : 0
+      if (depth !== 0) {
+        const scrollTop = list!.scrollTop
+        list!.scrollTop += Math.sign(depth) * Math.ceil((Math.min(Math.abs(depth), AUTO_SCROLL_EDGE_PX) / AUTO_SCROLL_EDGE_PX) * AUTO_SCROLL_MAX_PX)
+        if (list!.scrollTop !== scrollTop) updateDrop()
+      }
+      frame = requestAnimationFrame(autoScroll)
+    }
+
+    function onMove(moveEvent: PointerEvent) {
+      if (moveEvent.pointerId !== pointerId) return
+      pointerY = moveEvent.clientY
+      if (!isDragging) {
+        if (Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < DRAG_THRESHOLD_PX) return
+        isDragging = true
+        frame = requestAnimationFrame(autoScroll)
+      }
+      updateDrop()
+    }
+
+    function onEnd(endEvent: PointerEvent) {
+      if (endEvent.pointerId !== pointerId) return
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onEnd)
+      window.removeEventListener('pointercancel', onEnd)
+      cancelAnimationFrame(frame)
+      setReorderDrag(null)
+      if (endEvent.type === 'pointerup' && isDragging && dropIndex !== null) void saveOrder(scope, ids, moveTo(ids, id, dropIndex))
+    }
+
+    // 손잡이가 pointer 를 잡고 있어 이벤트가 손잡이에서 window 로 올라온다. 끄는 사이 손잡이가 다시 그려져도 놓치지 않게 window 에서 받는다
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onEnd)
+    window.addEventListener('pointercancel', onEnd)
+  }
+
+  /** 화면 순서를 먼저 바꾸고 저장한다. 실패하면 원래 순서로 되돌리고 알린다 (성공하면 서버가 office 이벤트로 같은 순서를 다시 보낸다) */
+  async function saveOrder(scope: ReorderScope, previousIds: string[], ids: string[]) {
+    setOffice((prev) => applyOrder(prev, scope, ids))
+    const url = scope.kind === 'group' ? '/api/groups/order' : `/api/groups/${scope.groupId}/teams/order`
+    let failure: string | null = null
+    try {
+      const response = await postJson(url, 'PUT', { ids })
+      if (!response.ok) failure = ((await response.json().catch(() => ({}))) as { message?: string }).message ?? `HTTP ${response.status}`
+    } catch (error) {
+      failure = String(error)
+    }
+    if (failure === null) return
+    setOffice((prev) => applyOrder(prev, scope, previousIds))
+    alert(`순서를 바꾸지 못했습니다: ${failure}`)
+  }
+
+  /** 끌어 놓기 중 목록 항목에 붙일 클래스: 끄는 중(흐리게)·놓일 자리 선(앞 또는 맨 끝 뒤) */
+  function reorderClass(scope: ReorderScope, id: string, index: number, count: number): string {
+    if (!reorderDrag || !isSameScope(reorderDrag.scope, scope)) return ''
+    if (reorderDrag.id === id) return 'dragging'
+    if (reorderDrag.dropIndex === index) return 'drop-before'
+    return reorderDrag.dropIndex === count && index === count - 1 ? 'drop-after' : ''
+  }
+
+  /** 끌기 손잡이. "+"·"⋯" 와 같은 head-actions 안에 두어 보이는 규칙(hover·터치 기기)이 같다 */
+  function renderDragHandle(scope: ReorderScope, id: string) {
+    return (
+      <button className="drag-handle" onPointerDown={(event) => startReorder(event, scope, id)} title="끌어서 순서 바꾸기">
+        ⠿
+      </button>
+    )
+  }
+
   function renderSessionModal(teamId: string | null, partId: string | null) {
     const team = teamId ? office.teams.find((t) => t.id === teamId) : undefined
     const part = team?.parts.find((p) => p.id === partId)
@@ -366,8 +513,9 @@ export function App() {
     )
   }
 
-  /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 팀 직속 세션 + 파트별(소제목 + 세션). 폴더는 툴팁 */
-  function renderTeam(team: Team) {
+  /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 팀 직속 세션 + 파트별(소제목 + 세션). 폴더는 툴팁. position 은 그룹 안 순번 (그룹이 없는 팀은 없어 끌기 손잡이도 없다) */
+  function renderTeam(team: Team, position?: { index: number; count: number }) {
+    const scope: ReorderScope = { kind: 'team', groupId: team.groupId }
     const members = snapshot.sessions
       .filter((s) => s.teamId === team.id && s.isAlive)
       .sort((a, b) => statusOrder[a.status] - statusOrder[b.status])
@@ -377,7 +525,12 @@ export function App() {
       { label: '팀 삭제', onClick: () => removeTeam(team) },
     ]
     return (
-      <div key={team.id} className="team" title={team.cwd}>
+      <div
+        key={team.id}
+        className={['team', position ? reorderClass(scope, team.id, position.index, position.count) : ''].join(' ')}
+        title={team.cwd}
+        data-team-id={position ? team.id : undefined}
+      >
         <div className="team-head">
           <span className="name">{team.name}</span>
           {members.length > 0 && <span className="count">{members.length}</span>}
@@ -386,6 +539,7 @@ export function App() {
               +
             </button>
             <MoreMenu items={menuItems} />
+            {position && renderDragHandle(scope, team.id)}
           </span>
         </div>
         {members.filter((s) => !s.partId).map((session) => renderSession(session, false))}
@@ -477,11 +631,15 @@ export function App() {
             + 세션 (로비)
           </button>
         </div>
-        <ul className="sessions">
-          {office.groups.map((group) => {
+        <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
+          {office.groups.map((group, groupIndex) => {
             const teams = office.teams.filter((t) => t.groupId === group.id)
             return (
-              <li key={group.id} className="group">
+              <li
+                key={group.id}
+                className={['group', reorderClass({ kind: 'group' }, group.id, groupIndex, office.groups.length)].join(' ')}
+                data-group-id={group.id}
+              >
                 <div className="group-label">
                   <span className="name">{group.name}</span>
                   <span className="head-actions">
@@ -489,9 +647,10 @@ export function App() {
                       +
                     </button>
                     {teams.length === 0 && <MoreMenu items={[{ label: '그룹 삭제', onClick: () => removeGroup(group) }]} />}
+                    {renderDragHandle({ kind: 'group' }, group.id)}
                   </span>
                 </div>
-                {teams.map((team) => renderTeam(team))}
+                {teams.map((team, teamIndex) => renderTeam(team, { index: teamIndex, count: teams.length }))}
               </li>
             )
           })}

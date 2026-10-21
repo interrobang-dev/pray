@@ -2,7 +2,17 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { addGroup, listTeams, listWebSessions, removeWebSession } from './hq.js'
+import {
+  addGroup,
+  addTeam,
+  listTeams,
+  listWebSessions,
+  OrderMismatchError,
+  readOffice,
+  removeWebSession,
+  reorderGroups,
+  reorderTeams,
+} from './hq.js'
 
 // hq.ts 는 import 때 homedir() 로 경로를 정한다. 실제 ~/.claude/jk-corp/hq.json 대신 임시 폴더를 쓴다
 vi.mock('node:os', async (importOriginal) => {
@@ -79,5 +89,50 @@ describe('hq.json storage', () => {
     expect(() => addGroup('기획')).toThrow('EBUSY')
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
     expect(readdirSync(hqDir)).toEqual(['hq.json'])
+  })
+})
+
+describe('list order', () => {
+  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
+  afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
+
+  it('reorders groups and keeps the file free of temp files', () => {
+    const [a, b, c] = ['가', '나', '다'].map((name) => addGroup(name))
+    expect(reorderGroups([c.id, a.id, b.id]).map((g) => g.name)).toEqual(['다', '가', '나'])
+    expect(JSON.parse(readFileSync(hqPath, 'utf8')).groups.map((g: { name: string }) => g.name)).toEqual(['다', '가', '나'])
+    expect(readdirSync(hqDir)).toEqual(['hq.json'])
+  })
+
+  it('refuses a group list that is not exactly the current set', () => {
+    const [a, b] = ['가', '나'].map((name) => addGroup(name))
+    const before = readFileSync(hqPath, 'utf8')
+    for (const ids of [[a.id], [a.id, b.id, 'zzz'], [a.id, 'zzz'], [a.id, a.id]]) {
+      expect(() => reorderGroups(ids)).toThrow(OrderMismatchError)
+    }
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+  })
+
+  it('reorders teams of one group without moving other groups\' teams in the array', () => {
+    const [g1, g2] = ['가', '나'].map((name) => addGroup(name))
+    const t1 = addTeam({ name: 't1', cwd: 'C:/a', groupId: g1.id })
+    const u1 = addTeam({ name: 'u1', cwd: 'C:/b', groupId: g2.id })
+    const t2 = addTeam({ name: 't2', cwd: 'C:/c', groupId: g1.id })
+    const u2 = addTeam({ name: 'u2', cwd: 'C:/d', groupId: g2.id })
+    const t3 = addTeam({ name: 't3', cwd: 'C:/e', groupId: g1.id })
+    expect(reorderTeams(g1.id, [t3.id, t1.id, t2.id])?.map((t) => t.name)).toEqual(['t3', 't1', 't2'])
+    expect(readOffice().teams.map((t) => t.name)).toEqual(['t3', 'u1', 't1', 'u2', 't2'])
+    reorderTeams(g2.id, [u2.id, u1.id])
+    expect(readOffice().teams.map((t) => t.name)).toEqual(['t3', 'u2', 't1', 'u1', 't2'])
+  })
+
+  it('refuses teams of another group and returns null for a missing group', () => {
+    const [g1, g2] = ['가', '나'].map((name) => addGroup(name))
+    const t1 = addTeam({ name: 't1', cwd: 'C:/a', groupId: g1.id })
+    const u1 = addTeam({ name: 'u1', cwd: 'C:/b', groupId: g2.id })
+    const before = readFileSync(hqPath, 'utf8')
+    expect(() => reorderTeams(g1.id, [t1.id, u1.id])).toThrow(OrderMismatchError)
+    expect(() => reorderTeams(g1.id, [u1.id])).toThrow(OrderMismatchError)
+    expect(reorderTeams('nope', [t1.id])).toBeNull()
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
   })
 })

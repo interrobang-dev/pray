@@ -298,6 +298,58 @@ header button.icon:hover:not(:disabled) {
 .menu-list button:hover {
   background: var(--bg);
 }
+/* 목록 끌어 놓기 (App.tsx). 손잡이는 head-actions 안이라 "+"·"⋯" 와 같이 hover 때만 보이고 터치 기기는 늘 보인다.
+   손잡이에서만 끌리게(touch-action: none) 해 목록 스크롤과 부딪히지 않는다 */
+.head-actions .drag-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.sessions.reordering {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sessions.reordering .drag-handle {
+  cursor: grabbing;
+}
+/* 끌고 있는 것은 흐리게. 마우스가 헤더를 벗어나도 손잡이는 보이게 */
+.sessions .dragging {
+  opacity: 0.45;
+}
+.dragging > .group-label .head-actions,
+.dragging > .team-head .head-actions {
+  opacity: 1;
+}
+/* 놓일 자리 선: 형제 사이 간격(그룹 12px, 팀 6px)의 가운데. 자리를 차지하지 않아 끄는 동안 목록이 흔들리지 않는다 */
+.drop-before,
+.drop-after {
+  position: relative;
+}
+.drop-before::before,
+.drop-after::after {
+  content: '';
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--green);
+  pointer-events: none;
+}
+li.group.drop-before::before {
+  top: -7px;
+}
+li.group.drop-after::after {
+  bottom: -7px;
+}
+.team.drop-before::before {
+  top: -5px;
+}
+.team.drop-after::after {
+  bottom: -5px;
+}
 .team {
   border: 1px solid var(--line);
   border-radius: 8px;

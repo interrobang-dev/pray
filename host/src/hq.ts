@@ -135,6 +135,25 @@ export function readOffice(): Office {
   return { groups, teams }
 }
 
+export class OrderMismatchError extends Error {
+  constructor() {
+    super('순서 목록이 지금 있는 것과 다름 (빠졌거나 모르는 ID·중복). 목록을 다시 받아 시도해라')
+  }
+}
+
+/** items 중 isTarget 인 것들이 차지한 자리에 ids 순서대로 다시 넣는다. 나머지는 자리 그대로. ids 가 대상과 정확히 같은 집합이 아니면 던진다 */
+function reorderSlots<T extends { id: string }>(items: T[], ids: string[], isTarget: (item: T) => boolean): T[] {
+  const byId = new Map(items.filter(isTarget).map((item) => [item.id, item]))
+  if (ids.length !== byId.size || new Set(ids).size !== ids.length) throw new OrderMismatchError()
+  const ordered = ids.map((id) => {
+    const item = byId.get(id)
+    if (!item) throw new OrderMismatchError()
+    return item
+  })
+  let next = 0
+  return items.map((item) => (isTarget(item) ? ordered[next++] : item))
+}
+
 // ---------- 그룹 ----------
 
 /** 기존 그룹들의 오른쪽 끝 옆에 새 그룹을 둔다 */
@@ -183,6 +202,14 @@ export function removeGroup(id: string): boolean {
   hq.groups = hq.groups.filter((g) => g.id !== id)
   writeHq(hq)
   return true
+}
+
+/** 그룹 순서(= 목록 순서)를 통째로 바꾼다. ids 는 지금 있는 그룹 전부여야 한다 */
+export function reorderGroups(ids: string[]): Group[] {
+  const hq = readHq()
+  hq.groups = reorderSlots(hq.groups, ids, () => true)
+  writeHq(hq)
+  return hq.groups
 }
 
 // ---------- 팀 ----------
@@ -252,6 +279,15 @@ export function removeTeam(teamId: string): boolean {
   if (hq.teams.length === before) return false
   writeHq(hq)
   return true
+}
+
+/** 한 그룹 안 팀 순서(= 목록 순서)를 통째로 바꾼다. ids 는 그 그룹 팀 전부여야 한다. 다른 그룹 팀들은 배열 안 자리 그대로. 그룹이 없으면 null */
+export function reorderTeams(groupId: string, ids: string[]): Team[] | null {
+  const hq = readHq()
+  if (!hq.groups.some((g) => g.id === groupId)) return null
+  hq.teams = reorderSlots(hq.teams, ids, (t) => t.groupId === groupId)
+  writeHq(hq)
+  return hq.teams.filter((t) => t.groupId === groupId)
 }
 
 export function setDesk(teamId: string, sessionId: string, desk: { dx: number; dy: number }): Team | null {

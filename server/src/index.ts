@@ -21,7 +21,10 @@ import {
   removeGroup,
   removePart,
   setPartOf,
+  OrderMismatchError,
   PartNotFoundError,
+  reorderGroups,
+  reorderTeams,
   TeamConflictError,
   WorktreePartError,
   updateGroup,
@@ -925,6 +928,53 @@ app.post('/api/groups', (req, res) => {
   res.json(addGroup(name.trim()))
   broadcastOffice()
 })
+
+/** 목록의 그룹 순서. ids 는 지금 있는 그룹 전부 (다르면 400) */
+app.put('/api/groups/order', (req, res) => {
+  const { ids } = req.body as { ids?: unknown }
+  if (!isIdList(ids)) {
+    res.status(400).json({ message: 'ids(문자열 배열) 필요' })
+    return
+  }
+  try {
+    res.json(reorderGroups(ids))
+  } catch (error) {
+    if (error instanceof OrderMismatchError) {
+      res.status(400).json({ message: error.message })
+      return
+    }
+    throw error
+  }
+  broadcastOffice()
+})
+
+/** 목록의 한 그룹 안 팀 순서. ids 는 그 그룹 팀 전부 (다르면 400, 그룹이 없으면 404) */
+app.put('/api/groups/:groupId/teams/order', (req, res) => {
+  const { ids } = req.body as { ids?: unknown }
+  if (!isIdList(ids)) {
+    res.status(400).json({ message: 'ids(문자열 배열) 필요' })
+    return
+  }
+  try {
+    const teams = reorderTeams(req.params.groupId, ids)
+    if (!teams) {
+      res.status(404).json({ message: '그룹 없음' })
+      return
+    }
+    res.json(teams)
+  } catch (error) {
+    if (error instanceof OrderMismatchError) {
+      res.status(400).json({ message: error.message })
+      return
+    }
+    throw error
+  }
+  broadcastOffice()
+})
+
+function isIdList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((id) => typeof id === 'string')
+}
 
 app.patch('/api/groups/:id', (req, res) => {
   const group = updateGroup(req.params.id, req.body as Partial<Omit<Group, 'id'>>)
