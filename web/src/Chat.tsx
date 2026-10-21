@@ -714,6 +714,8 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
           {isWorking && <WorkingIndicator since={workingSince} />}
           <div ref={bottomRef} />
         </div>
+        {/* 폴더 버튼을 "↓" 앞에 둔다: style.css 의 `.files-button ~ .to-bottom` 이 폴더 버튼이 있을 때만 "↓" 를 그 위로 올린다 */}
+        <FilesButton key={sessionId} sessionId={sessionId} version={version} />
         {!isAtBottom && (
           <button
             type="button"
@@ -725,7 +727,6 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
             ↓{hasUnread && <span className="to-bottom-dot" />}
           </button>
         )}
-        <FilesButton key={sessionId} sessionId={sessionId} version={version} />
       </div>
       {question?.questions.length ? (
         <QuestionCard key={`${sessionId}:${question.questions.map((item) => item.question).join('\n')}`} sessionId={sessionId} questions={question.questions} />

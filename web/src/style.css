@@ -708,7 +708,8 @@ header button.icon:hover:not(:disabled) {
   line-height: 1;
   cursor: pointer;
 }
-/* 맨 아래가 아닐 때 대화 오른쪽 아래의 "↓" (Chat.tsx). 40px 원이라 폰에서도 누르기 쉽다. 점 = 위를 보는 사이 새 메시지 */
+/* 대화 오른쪽 아래의 40px 원 버튼 둘 (폰에서도 누르기 쉽다). 맨 아래 자리는 작업 파일 폴더 버튼(Files.tsx),
+   맨 아래가 아닐 때 뜨는 "↓"(Chat.tsx)는 그 바로 위. 폴더 버튼이 없으면 "↓" 가 맨 아래 자리로 내려온다. 점 = 위를 보는 사이 새 메시지 */
 .to-bottom,
 .files-button {
   position: absolute;
@@ -733,9 +734,12 @@ header button.icon:hover:not(:disabled) {
   border: 2px solid var(--panel);
   background: var(--green);
 }
-/* 작업 파일 폴더 버튼 (Files.tsx). "↓" 자리 바로 위에 고정 — "↓" 가 숨을 때 따라 내려가면 누르려던 버튼이 움직인다 */
-.files-button {
+/* 폴더 버튼이 있을 때만 "↓" 를 한 칸 위로. 폴더 버튼은 늘 맨 아래라 "↓" 가 뜨고 숨어도 움직이지 않는다 (Chat.tsx 가 FilesButton 을 "↓" 앞에 렌더) */
+.files-button ~ .to-bottom {
   bottom: 60px;
+}
+/* 작업 파일 폴더 버튼 (Files.tsx) */
+.files-button {
   display: flex;
   align-items: center;
   justify-content: center;
