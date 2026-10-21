@@ -6,6 +6,7 @@ import type { Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
 import {
   addGroup,
+  addPart,
   addTeam,
   listSessionNames,
   listTeams,
@@ -16,13 +17,21 @@ import {
   GroupNotEmptyError,
   GroupNotFoundError,
   removeGroup,
+  removePart,
+  setPartOf,
+  PartNotFoundError,
   TeamConflictError,
+  WorktreePartError,
   updateGroup,
+  updatePart,
   updateTeam,
   type Group,
+  type Part,
+  type PartPatch,
   type Team,
   type TeamPatch,
 } from '@jk-corp/host/hq'
+import { normalizeCwd } from '@jk-corp/host/team'
 import { setupFileLog } from '@jk-corp/host/runtime'
 import { configDir, readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
@@ -35,6 +44,7 @@ import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
+import { createWorktree, markTrusted, worktreeSlug, WorktreeError } from './worktree.js'
 
 setupFileLog()
 const PORT = 4710
@@ -141,12 +151,15 @@ app.get('/api/sessions', async (_req, res) => {
   res.json(await snapshotPayload())
 })
 
-/** teamName 이 있으면 팀장 세션: 팀을 만들고 팀장 지침·권한 인자를 붙여 띄운다 */
-/** teamId 가 있으면 그 팀 폴더로 띄운다. isLead 면 그 팀의 팀장으로 (살아 있는 팀장이 이미 있으면 거부) */
+/**
+ * teamId 가 있으면 그 팀 폴더로 띄운다. partId 가 있으면 그 파트로 (worktree 파트면 그 폴더).
+ * isLead 면 그 지휘 단위의 지시자로 (팀장 또는 파트장. 살아 있는 지시자가 이미 있으면 거부)
+ */
 app.post('/api/sessions', async (req, res) => {
-  const { cwd: rawCwd, teamId, prompt, isLead, name } = req.body as {
+  const { cwd: rawCwd, teamId, partId, prompt, isLead, name } = req.body as {
     cwd?: string
     teamId?: string
+    partId?: string
     prompt?: string
     isLead?: boolean
     name?: string
@@ -156,7 +169,12 @@ app.post('/api/sessions', async (req, res) => {
     res.status(404).json({ message: '팀 없음' })
     return
   }
-  const cwd = team?.cwd ?? rawCwd
+  const part = team ? unitPart(team, partId) : null
+  if (part === undefined || (partId && !team)) {
+    res.status(404).json({ message: '파트 없음' })
+    return
+  }
+  const cwd = part?.worktree?.cwd ?? team?.cwd ?? rawCwd
   if (!cwd) {
     res.status(400).json({ message: 'cwd 또는 teamId 필요' })
     return
@@ -171,23 +189,31 @@ app.post('/api/sessions', async (req, res) => {
       res.status(400).json({ message: '팀장은 팀을 골라야 함' })
       return
     }
-    if (team.leadSessionId) {
+    const currentLeadId = part ? part.leadSessionId : team.leadSessionId
+    if (currentLeadId) {
       const { sessions } = await snapshotPayload()
-      if (sessions.some((s) => s.id === team.leadSessionId && s.isAlive)) {
-        res.status(409).json({ message: '이 팀에는 이미 팀장이 있음' })
+      if (sessions.some((s) => s.id === currentLeadId && s.isAlive)) {
+        res.status(409).json({ message: part ? '이 파트에는 이미 파트장이 있음' : '이 팀에는 이미 팀장이 있음' })
         return
       }
     }
   }
   const sessionId = randomUUID()
   if (isLead && team) {
-    updateTeam(team.id, { leadSessionId: sessionId })
-    extraArgs = leadExtraArgs({ ...team, leadSessionId: sessionId }, `http://127.0.0.1:${PORT}`)
+    if (part) updatePart(team.id, part.id, { leadSessionId: sessionId })
+    else updateTeam(team.id, { leadSessionId: sessionId })
+    extraArgs = leadExtraArgs(
+      part ? team : { ...team, leadSessionId: sessionId },
+      part ? { ...part, leadSessionId: sessionId } : null,
+      `http://127.0.0.1:${PORT}`,
+    )
   }
+  // worktree 없는 파트는 폴더로 구분이 안 되므로 소속을 기록한다
+  if (team && part && !part.worktree) setPartOf(team.id, sessionId, part.id)
   if (name?.trim()) setSessionName(sessionId, name)
   host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
   res.json({ sessionId })
-  if (isLead) broadcastOffice()
+  if (isLead || part) broadcastOffice()
 })
 
 app.get('/api/sessions/:id/messages', async (req, res) => {
@@ -293,17 +319,46 @@ function findTeam(teamId: string): Team | undefined {
   return listTeams().find((t) => t.id === teamId)
 }
 
-/** task 를 만들고 팀원 터미널에 지시문을 입력한다. 팀원 = 그 팀 폴더의 웹 세션 */
-async function assignTask(team: Team, sessionId: string, instruction: string, res: Response): Promise<void> {
+/** 요청의 지휘 단위. partId 가 없으면 null (팀 직속), 있으면 그 파트, 모르는 파트면 undefined */
+function unitPart(team: Team, partId: unknown): Part | null | undefined {
+  if (typeof partId !== 'string' || !partId) return null
+  return team.parts.find((p) => p.id === partId)
+}
+
+/** 팀 API 공통: 팀과 ?partId= 지휘 단위를 찾는다. 없으면 404 를 보내고 null */
+function findUnit(teamId: string, partId: unknown, res: Response): { team: Team; part: Part | null } | null {
+  const team = findTeam(teamId)
+  if (!team) {
+    res.status(404).json({ message: '팀 없음' })
+    return null
+  }
+  const part = unitPart(team, partId)
+  if (part === undefined) {
+    res.status(404).json({ message: '파트 없음' })
+    return null
+  }
+  return { team, part }
+}
+
+/** task 를 만들고 팀원 터미널에 지시문을 입력한다. 팀원 = 같은 지휘 단위의 웹 세션 */
+async function assignTask(team: Team, part: Part | null, sessionId: string, instruction: string, res: Response): Promise<void> {
   const { sessions } = await snapshotPayload()
   const member = sessions.find((s) => s.id === sessionId)
-  if (!member || member.teamId !== team.id || member.role !== 'member') {
-    res.status(404).json({ message: '이 팀의 팀원(웹 세션)이 아님' })
+  if (!member || member.teamId !== team.id) {
+    res.status(404).json({ message: '이 팀의 세션이 아님' })
+    return
+  }
+  if (member.partId !== (part?.id ?? null)) {
+    res.status(403).json({ message: '다른 지휘 단위(팀 직속·다른 파트)의 세션에는 지시할 수 없음' })
+    return
+  }
+  if (member.role !== 'member') {
+    res.status(404).json({ message: '팀원(웹 세션)이 아님' })
     return
   }
   let task
   try {
-    task = tasks.assign(team.id, sessionId, instruction)
+    task = tasks.assign(team.id, sessionId, instruction, part?.id ?? null)
   } catch (error) {
     if (error instanceof TaskConflictError) {
       res.status(409).json({ message: error.message })
@@ -341,15 +396,14 @@ app.post('/api/team', (req, res) => {
   broadcastOffice()
 })
 
+/** 지휘 단위(?partId= 없으면 팀 직속)의 세션과 task. 팀장·파트장 MCP 의 jk_status 가 부른다 */
 app.get('/api/team/:teamId', async (req, res) => {
-  const team = findTeam(req.params.teamId)
-  if (!team) {
-    res.status(404).json({ message: '팀 없음' })
-    return
-  }
+  const unit = findUnit(req.params.teamId, req.query.partId, res)
+  if (!unit) return
+  const { team, part } = unit
   const { sessions } = await snapshotPayload()
   const members = sessions
-    .filter((s) => s.teamId === team.id)
+    .filter((s) => s.teamId === team.id && s.partId === (part?.id ?? null))
     .map((s) => ({
       sessionId: s.id,
       name: s.name ?? s.title ?? s.id.slice(0, 8),
@@ -360,7 +414,7 @@ app.get('/api/team/:teamId', async (req, res) => {
       lastAssistantText: s.lastAssistantText,
       pendingTool: s.pendingTool,
     }))
-  res.json({ ...team, members, tasks: tasks.listByTeam(team.id) })
+  res.json({ ...team, part, members, tasks: tasks.listByUnit(team.id, part?.id ?? null) })
 })
 
 app.patch('/api/team/:teamId', (req, res) => {
@@ -397,13 +451,12 @@ app.put('/api/team/:teamId/desks/:sessionId', (req, res) => {
   broadcastOffice()
 })
 
-/** 팀 폴더로 세션을 띄운다. cwd 판정으로 자동 합류 */
+/** 지휘 단위로 팀원 세션을 띄운다. 팀 직속·worktree 파트는 cwd 판정으로 자동 합류, worktree 없는 파트는 소속을 기록 */
 app.post('/api/team/:teamId/members', (req, res) => {
-  const team = findTeam(req.params.teamId)
-  if (!team) {
-    res.status(404).json({ message: '팀 없음' })
-    return
-  }
+  const unit = findUnit(req.params.teamId, req.query.partId, res)
+  if (!unit) return
+  const { team, part } = unit
+  const cwd = part?.worktree?.cwd ?? team.cwd
   const { name, instruction, permissionMode } = req.body as { name?: string; instruction?: string; permissionMode?: string }
   if (!name?.trim()) {
     res.status(400).json({ message: 'name 필요' })
@@ -411,20 +464,22 @@ app.post('/api/team/:teamId/members', (req, res) => {
   }
   const sessionId = randomUUID()
   const extraArgs = ['--name', name.trim(), '--permission-mode', permissionMode ?? 'bypassPermissions']
-  if (!host.send({ type: 'spawn', sessionId, cwd: team.cwd, extraArgs })) {
+  if (part && !part.worktree) setPartOf(team.id, sessionId, part.id)
+  if (!host.send({ type: 'spawn', sessionId, cwd, extraArgs })) {
+    if (part && !part.worktree) setPartOf(team.id, sessionId, null)
     res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
     return
   }
-  // 팀장이 붙인 팀원 이름을 화면에도 보이게
+  // 지시자가 붙인 팀원 이름을 화면에도 보이게
   setSessionName(sessionId, name)
-  const member = { sessionId, name: name.trim(), cwd: team.cwd }
+  const member = { sessionId, name: name.trim(), cwd }
   if (!instruction) {
     res.json({ member, task: null })
     return
   }
   // claude 가 뜨기 전에 입력하면 사라진다. 첫 프롬프트는 호스트가 띄운 뒤 보내도록 지연
   setTimeout(() => {
-    const task = tasks.assign(team.id, sessionId, instruction)
+    const task = tasks.assign(team.id, sessionId, instruction, part?.id ?? null)
     submitInstruction(sessionId, instruction)
     res.json({ member, task })
   }, MEMBER_FIRST_INPUT_DELAY_MS)
@@ -438,32 +493,125 @@ app.delete('/api/team/:teamId/members/:sessionId', (req, res) => {
 })
 
 app.post('/api/team/:teamId/tasks', async (req, res) => {
-  const team = findTeam(req.params.teamId)
-  if (!team) {
-    res.status(404).json({ message: '팀 없음' })
-    return
-  }
+  const unit = findUnit(req.params.teamId, req.query.partId, res)
+  if (!unit) return
   const { sessionId, instruction } = req.body as { sessionId?: string; instruction?: string }
   if (!sessionId || !instruction?.trim()) {
     res.status(400).json({ message: 'sessionId, instruction 필요' })
     return
   }
-  await assignTask(team, sessionId, instruction.trim(), res)
+  await assignTask(unit.team, unit.part, sessionId, instruction.trim(), res)
 })
 
-/** task 완료까지 롱폴링. taskId 가 'any' 면 팀의 아무 task 하나. 타임아웃·모르는 task 는 { task: null } */
+/** task 완료까지 롱폴링. taskId 가 'any' 면 지휘 단위의 아무 task 하나. 타임아웃·모르는 task 는 { task: null } */
 app.get('/api/team/:teamId/tasks/:taskId/wait', async (req, res) => {
+  const unit = findUnit(req.params.teamId, req.query.partId, res)
+  if (!unit) return
+  const requested = Number(req.query.timeoutSec ?? MAX_WAIT_SECONDS)
+  const timeoutSec = Math.min(MAX_WAIT_SECONDS, Math.max(1, Number.isFinite(requested) ? requested : MAX_WAIT_SECONDS))
+  req.socket.setTimeout(0)
+  const taskId = req.params.taskId === 'any' ? null : req.params.taskId
+  const task = await tasks.wait(unit.team.id, taskId, timeoutSec * 1000, unit.part?.id ?? null)
+  res.json({ task })
+})
+
+// ---------- 파트 (팀 안의 선택적 지휘 단위) ----------
+
+/** 파트를 만든다. isWorktree 면 저장소 옆 형제 폴더에 worktree·브랜치를 만들고 ~/.claude.json 에 신뢰 표시를 남긴다 */
+app.post('/api/team/:teamId/parts', async (req, res) => {
   const team = findTeam(req.params.teamId)
   if (!team) {
     res.status(404).json({ message: '팀 없음' })
     return
   }
-  const requested = Number(req.query.timeoutSec ?? MAX_WAIT_SECONDS)
-  const timeoutSec = Math.min(MAX_WAIT_SECONDS, Math.max(1, Number.isFinite(requested) ? requested : MAX_WAIT_SECONDS))
-  req.socket.setTimeout(0)
-  const taskId = req.params.taskId === 'any' ? null : req.params.taskId
-  const task = await tasks.wait(team.id, taskId, timeoutSec * 1000)
-  res.json({ task })
+  const { name, isWorktree } = req.body as { name?: string; isWorktree?: boolean }
+  if (!name?.trim()) {
+    res.status(400).json({ message: 'name 필요' })
+    return
+  }
+  let worktree: Part['worktree']
+  let isTrusted = false
+  if (isWorktree) {
+    try {
+      worktree = await createWorktree(team.cwd, worktreeSlug(name, randomUUID().slice(0, 8)))
+    } catch (error) {
+      if (error instanceof WorktreeError) {
+        res.status(error.status).json({ message: error.message })
+        return
+      }
+      throw error
+    }
+    isTrusted = markTrusted(worktree.cwd)
+  }
+  const part = addPart(team.id, { name, worktree })
+  res.json({ part, isTrusted })
+  broadcastOffice()
+})
+
+app.patch('/api/team/:teamId/parts/:partId', (req, res) => {
+  const part = updatePart(req.params.teamId, req.params.partId, req.body as PartPatch)
+  if (!part) {
+    res.status(404).json({ message: '파트 없음' })
+    return
+  }
+  res.json(part)
+  broadcastOffice()
+})
+
+/** 파트 기록과 소속 기록만 지운다. worktree 폴더·브랜치는 남긴다 (병합 안 된 작업 보호) */
+app.delete('/api/team/:teamId/parts/:partId', (req, res) => {
+  if (!removePart(req.params.teamId, req.params.partId)) {
+    res.status(404).json({ message: '파트 없음' })
+    return
+  }
+  res.json({})
+  broadcastOffice()
+  void broadcast()
+})
+
+/** 팀 폴더 세션의 파트 이동 (partId null = 팀 직속). worktree 세션은 폴더로 정해지고, 지시자는 옮기면 지휘를 잃어 거부 */
+app.put('/api/team/:teamId/partOf/:sessionId', async (req, res) => {
+  const team = findTeam(req.params.teamId)
+  if (!team) {
+    res.status(404).json({ message: '팀 없음' })
+    return
+  }
+  const { partId } = req.body as { partId?: unknown }
+  if (partId !== null && typeof partId !== 'string') {
+    res.status(400).json({ message: 'partId 필요 (null 이면 팀 직속)' })
+    return
+  }
+  const sessionId = req.params.sessionId
+  const { sessions } = await snapshotPayload()
+  const session = sessions.find((s) => s.id === sessionId)
+  if (!session || session.teamId !== team.id) {
+    res.status(404).json({ message: '이 팀의 세션이 아님' })
+    return
+  }
+  if (normalizeCwd(session.cwd) !== normalizeCwd(team.cwd)) {
+    res.status(409).json({ message: 'worktree 폴더의 세션은 폴더로 소속이 정해져 옮길 수 없음' })
+    return
+  }
+  if (team.leadSessionId === sessionId || team.parts.some((p) => p.leadSessionId === sessionId)) {
+    res.status(409).json({ message: '팀장·파트장은 옮길 수 없음 (먼저 해제)' })
+    return
+  }
+  try {
+    setPartOf(team.id, sessionId, partId)
+  } catch (error) {
+    if (error instanceof PartNotFoundError) {
+      res.status(404).json({ message: error.message })
+      return
+    }
+    if (error instanceof WorktreePartError) {
+      res.status(409).json({ message: error.message })
+      return
+    }
+    throw error
+  }
+  res.json({})
+  broadcastOffice()
+  void broadcast()
 })
 
 /** 호스트에게 스스로 종료하라고 보낸다. 트레이 앱이 새 코드로 다시 띄운다 (작업 스케줄러 방식에서는 다시 뜨지 않음) */

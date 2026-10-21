@@ -18,7 +18,9 @@ export interface Session {
   lastAt: string | null
   lastAssistantText: string | null
   pendingTool: string | null
-  /** 팀에 속하면 팀장/팀원. 아니면 null */
+  /** 팀에 속하면 자기 지휘 단위의 지시자(팀장·파트장)/팀원. 아니면 null */
   role: 'lead' | 'member' | null
   teamId: string | null
+  /** 팀 안의 파트. null 이면 팀 직속 */
+  partId: string | null
 }

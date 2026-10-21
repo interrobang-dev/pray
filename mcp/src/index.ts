@@ -4,16 +4,18 @@ import { z } from 'zod'
 import { TeamApi } from './teamApi.js'
 
 /**
- * 팀장 claude 세션에 붙는 stdio MCP 서버. 서버의 /api/team/* 를 호출하는 얇은 어댑터.
- * 팀장은 --mcp-config 로 이 프로세스를 띄우고, env 로 팀 ID 와 서버 주소를 받는다.
+ * 팀장·파트장 claude 세션에 붙는 stdio MCP 서버. 서버의 /api/team/* 를 호출하는 얇은 어댑터.
+ * 지시자는 --mcp-config 로 이 프로세스를 띄우고, env 로 팀 ID·서버 주소(파트장은 파트 ID 도)를 받는다.
+ * 도구가 보는 "팀" 은 자기 지휘 단위(팀장 = 팀 직속, 파트장 = 그 파트)다.
  */
 const teamId = process.env.JK_CORP_TEAM_ID
+const partId = process.env.JK_CORP_PART_ID || null
 const baseUrl = process.env.JK_CORP_SERVER ?? 'http://127.0.0.1:4710'
 if (!teamId) {
   console.error('JK_CORP_TEAM_ID 환경변수 필요')
   process.exit(1)
 }
-const api = new TeamApi(baseUrl, teamId)
+const api = new TeamApi(baseUrl, teamId, partId)
 
 const server = new McpServer({ name: 'jk-corp', version: '0.1.0' })
 
@@ -29,7 +31,7 @@ server.registerTool(
   'jk_spawn_member',
   {
     description:
-      '팀 폴더에서 팀원 세션을 새로 만든다. 사무실에 책상이 생기고 사람이 볼 수 있다. instruction 을 주면 첫 지시로 보내고 task 를 돌려준다. 팀원 결과는 마지막 응답 텍스트 하나로만 돌아오니 지시에 "끝나면 결과 요약을 마지막 메시지로 써라" 를 넣어라.',
+      '팀원 세션을 새로 만든다 (팀 폴더, 파트가 worktree 면 그 폴더). 사무실에 책상이 생기고 사람이 볼 수 있다. instruction 을 주면 첫 지시로 보내고 task 를 돌려준다. 팀원 결과는 마지막 응답 텍스트 하나로만 돌아오니 지시에 "끝나면 결과 요약을 마지막 메시지로 써라" 를 넣어라.',
     inputSchema: {
       name: z.string().describe('팀원 이름 (예: 조사원 A)'),
       instruction: z.string().optional().describe('첫 지시 (선택)'),

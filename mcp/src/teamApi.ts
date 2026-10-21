@@ -1,10 +1,15 @@
-/** 서버 /api/team/* 호출. fetch 를 주입할 수 있어 테스트에서 서버 없이 쓴다 */
+/** 서버 /api/team/* 호출. 파트장이면 모든 호출에 partId 쿼리를 붙여 지휘 단위를 정한다. fetch 를 주입할 수 있어 테스트에서 서버 없이 쓴다 */
 export class TeamApi {
   constructor(
     private readonly baseUrl: string,
     private readonly teamId: string,
+    private readonly partId: string | null = null,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
+
+  private unitQuery(separator: '?' | '&'): string {
+    return this.partId ? `${separator}partId=${encodeURIComponent(this.partId)}` : ''
+  }
 
   private async call(path: string, init?: RequestInit): Promise<unknown> {
     let response: Response
@@ -22,22 +27,22 @@ export class TeamApi {
   }
 
   spawnMember(name: string, instruction?: string): Promise<unknown> {
-    return this.call(`/api/team/${this.teamId}/members`, { method: 'POST', body: JSON.stringify({ name, instruction }) })
+    return this.call(`/api/team/${this.teamId}/members${this.unitQuery('?')}`, { method: 'POST', body: JSON.stringify({ name, instruction }) })
   }
 
   assign(sessionId: string, instruction: string): Promise<unknown> {
-    return this.call(`/api/team/${this.teamId}/tasks`, { method: 'POST', body: JSON.stringify({ sessionId, instruction }) })
+    return this.call(`/api/team/${this.teamId}/tasks${this.unitQuery('?')}`, { method: 'POST', body: JSON.stringify({ sessionId, instruction }) })
   }
 
   wait(taskId: string | null, timeoutSec: number): Promise<unknown> {
-    return this.call(`/api/team/${this.teamId}/tasks/${taskId ?? 'any'}/wait?timeoutSec=${timeoutSec}`)
+    return this.call(`/api/team/${this.teamId}/tasks/${taskId ?? 'any'}/wait?timeoutSec=${timeoutSec}${this.unitQuery('&')}`)
   }
 
   status(): Promise<unknown> {
-    return this.call(`/api/team/${this.teamId}`)
+    return this.call(`/api/team/${this.teamId}${this.unitQuery('?')}`)
   }
 
   dismiss(sessionId: string): Promise<unknown> {
-    return this.call(`/api/team/${this.teamId}/members/${sessionId}`, { method: 'DELETE' })
+    return this.call(`/api/team/${this.teamId}/members/${sessionId}${this.unitQuery('?')}`, { method: 'DELETE' })
   }
 }

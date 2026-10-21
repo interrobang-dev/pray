@@ -13,21 +13,30 @@ describe('lead', () => {
   })
 
   it('extra args carry name, permission mode and the prompt', () => {
-    const args = leadExtraArgs(team, 'http://127.0.0.1:4710')
+    const args = leadExtraArgs(team, null, 'http://127.0.0.1:4710')
     expect(args.slice(0, 4)).toEqual(['--name', '개발 팀장', '--permission-mode', 'bypassPermissions'])
     expect(args[4]).toBe('--append-system-prompt')
     expect(args[5]).toBe(leadSystemPrompt(team))
     expect(args[6]).toBe('--mcp-config')
-    expect(leadExtraArgs(team, 'http://x', 'acceptEdits')[3]).toBe('acceptEdits')
+    expect(leadExtraArgs(team, null, 'http://x', 'acceptEdits')[3]).toBe('acceptEdits')
   })
 
   it('mcp config runs mcp/src/index.ts with tsx loader and team env', () => {
-    const config = JSON.parse(leadMcpConfig(team, 'http://127.0.0.1:4710', 'C:/node.exe'))
+    const config = JSON.parse(leadMcpConfig(team, null, 'http://127.0.0.1:4710', 'C:/node.exe'))
     const server = config.mcpServers['jk-corp']
     expect(server.command).toBe('C:/node.exe')
     expect(server.args[0]).toBe('--import')
     expect(server.args[1]).toMatch(/^file:\/\/\/.*tsx\/dist\/loader\.mjs$/)
     expect(server.args[2].replace(/\\/g, '/')).toMatch(/\/mcp\/src\/index\.ts$/)
     expect(server.env).toEqual({ JK_CORP_TEAM_ID: 'abc12345', JK_CORP_SERVER: 'http://127.0.0.1:4710' })
+  })
+
+  it('part lead gets its own name, prompt and part env', () => {
+    const part = { id: 'p1', name: 'api', worktree: { cwd: 'D:/x.worktrees/api', branch: 'part/api' }, createdAt: '' }
+    const args = leadExtraArgs(team, part, 'http://x')
+    expect(args[1]).toBe('api 파트장')
+    expect(args[5]).toContain('"api" 파트 파트장')
+    expect(args[5]).toContain('part/api')
+    expect(JSON.parse(args[7]).mcpServers['jk-corp'].env).toEqual({ JK_CORP_TEAM_ID: 'abc12345', JK_CORP_PART_ID: 'p1', JK_CORP_SERVER: 'http://x' })
   })
 })

@@ -5,7 +5,7 @@ import type { Session } from './types.js'
 import type { HookState } from './hookState.js'
 import { summarizeTranscript } from './transcript.js'
 import { readLiveSessions } from './liveSessions.js'
-import { roleOf, teamOf, type Team } from '@jk-corp/host/team'
+import { partOfSession, roleOf, teamOf, type Team } from '@jk-corp/host/team'
 
 const claudeDir = join(homedir(), '.claude')
 export const projectsDir = join(claudeDir, 'projects')
@@ -47,6 +47,7 @@ export async function listSessions(
       const cwd = liveEntry?.cwd ?? hook?.cwd ?? webSessions.get(id) ?? ''
       const isWeb = webSessions.has(id)
       const team = teamOf(cwd, teams)
+      const part = partOfSession(id, cwd, team)
       return {
         id,
         cwd,
@@ -59,7 +60,8 @@ export async function listSessions(
         lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
         pendingTool: hook?.pendingTool ?? null,
         teamId: team?.id ?? null,
-        role: roleOf(id, isWeb, team),
+        partId: part?.id ?? null,
+        role: roleOf(id, isWeb, team, part),
       }
     }),
   )

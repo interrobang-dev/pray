@@ -84,4 +84,18 @@ describe('TaskStore', () => {
     expect(await store.wait('t1', 'nope', 10)).toBeNull()
     expect(await store.wait('t2', task.id, 10)).toBeNull()
   })
+
+  it('keeps each unit (team direct, part) from taking the other unit results', async () => {
+    const { store } = makeStore()
+    const direct = store.assign('t1', 'm1', 'a')
+    const part = store.assign('t1', 'm2', 'b', 'p1')
+    expect(await store.wait('t1', part.id, 10)).toBeNull()
+    const directWait = store.wait('t1', null, 1000)
+    store.applyHook(hook('m2', 'Stop', '파트 끝'))
+    expect((await store.wait('t1', null, 10, 'p1'))?.id).toBe(part.id)
+    store.applyHook(hook('m1', 'Stop', '직속 끝'))
+    expect((await directWait)?.id).toBe(direct.id)
+    expect(store.listByUnit('t1').map((t) => t.id)).toEqual([direct.id])
+    expect(store.listByUnit('t1', 'p1').map((t) => t.id)).toEqual([part.id])
+  })
 })

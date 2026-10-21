@@ -1,13 +1,22 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { Team } from '@jk-corp/host/hq'
+import type { Part, Team } from '@jk-corp/host/hq'
 
 const repoRoot = join(import.meta.dirname, '..', '..')
 
-/** 팀장 세션에 붙이는 지침 */
-export function leadSystemPrompt(team: Team): string {
+/** 팀장(part 가 null)·파트장 세션에 붙이는 지침 */
+export function leadSystemPrompt(team: Team, part: Part | null = null): string {
+  const intro = part
+    ? [
+        `너는 jk-corp 사무실의 "${team.name}" 팀 "${part.name}" 파트 파트장이다 (팀 ID: ${team.id}, 파트 ID: ${part.id}).`,
+        '너는 네 파트 팀원만 지휘한다. 팀장·다른 파트의 세션은 jk_status 에 보이지 않고 지시할 수도 없다.',
+        ...(part.worktree
+          ? [`너희 파트는 git worktree ${part.worktree.cwd} (브랜치 ${part.worktree.branch}) 에서 일한다. 다른 브랜치로의 병합은 사람이 승인한 뒤에만 한다.`]
+          : []),
+      ]
+    : [`너는 jk-corp 사무실의 "${team.name}" 팀 팀장이다 (팀 ID: ${team.id}).`]
   return [
-    `너는 jk-corp 사무실의 "${team.name}" 팀 팀장이다 (팀 ID: ${team.id}).`,
+    ...intro,
     '큰 일은 팀원에게 나눠 주고 결과를 모아 합친다. 사람(사용자)은 너에게만 지시한다.',
     '팀원은 jk_spawn_member 로 만들고, jk_assign 으로 지시하고, jk_wait 로 결과를 받고, jk_status 로 상태를 보고, 끝나면 jk_dismiss 로 정리한다.',
     '팀원은 각자 독립된 Claude Code 세션이고, 결과는 팀원의 마지막 응답 텍스트 하나로만 돌아온다.',
@@ -26,30 +35,30 @@ export function leadSystemPrompt(team: Team): string {
   ].join('\n')
 }
 
-/** 팀장 claude 가 띄울 MCP 서버 설정 (--mcp-config 에 JSON 문자열로 넘김) */
-export function leadMcpConfig(team: Team, serverUrl: string, nodePath = process.execPath): string {
+/** 팀장·파트장 claude 가 띄울 MCP 서버 설정 (--mcp-config 에 JSON 문자열로 넘김). 파트장은 JK_CORP_PART_ID 를 더 받는다 */
+export function leadMcpConfig(team: Team, part: Part | null, serverUrl: string, nodePath = process.execPath): string {
   const loader = pathToFileURL(join(repoRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs')).href
   return JSON.stringify({
     mcpServers: {
       'jk-corp': {
         command: nodePath,
         args: ['--import', loader, join(repoRoot, 'mcp', 'src', 'index.ts')],
-        env: { JK_CORP_TEAM_ID: team.id, JK_CORP_SERVER: serverUrl },
+        env: { JK_CORP_TEAM_ID: team.id, ...(part ? { JK_CORP_PART_ID: part.id } : {}), JK_CORP_SERVER: serverUrl },
       },
     },
   })
 }
 
-/** 팀장 claude 에 넘길 추가 인자. 호스트가 webSessions 에 저장해 resume 때도 같이 넘긴다 */
-export function leadExtraArgs(team: Team, serverUrl: string, permissionMode = 'bypassPermissions'): string[] {
+/** 팀장·파트장 claude 에 넘길 추가 인자. 호스트가 webSessions 에 저장해 resume 때도 같이 넘긴다 */
+export function leadExtraArgs(team: Team, part: Part | null, serverUrl: string, permissionMode = 'bypassPermissions'): string[] {
   return [
     '--name',
-    `${team.name} 팀장`,
+    part ? `${part.name} 파트장` : `${team.name} 팀장`,
     '--permission-mode',
     permissionMode,
     '--append-system-prompt',
-    leadSystemPrompt(team),
+    leadSystemPrompt(team, part),
     '--mcp-config',
-    leadMcpConfig(team, serverUrl),
+    leadMcpConfig(team, part, serverUrl),
   ]
 }

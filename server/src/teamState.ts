@@ -6,6 +6,8 @@ export type TaskStatus = 'running' | 'done' | 'failed'
 export interface Task {
   id: string
   teamId: string
+  /** 지휘 단위. null 이면 팀 직속 (팀장이 지시) */
+  partId: string | null
   memberSessionId: string
   instruction: string
   status: TaskStatus
@@ -26,7 +28,7 @@ export interface Task {
  */
 export const ACK_TIMEOUT_MS = 13_000
 
-type Waiter = { taskId: string | null; teamId: string; resolve: (task: Task | null) => void }
+type Waiter = { taskId: string | null; teamId: string; partId: string | null; resolve: (task: Task | null) => void }
 
 /**
  * 팀장이 팀원에게 준 task 의 상태 기계. 서버 메모리에만 있다 (훅 상태와 같은 수명).
@@ -42,17 +44,19 @@ export class TaskStore {
     return this.tasks.get(taskId)
   }
 
-  listByTeam(teamId: string): Task[] {
-    return [...this.tasks.values()].filter((t) => t.teamId === teamId)
+  /** 지휘 단위(팀 직속 또는 파트)의 task. 팀으로만 거르면 한 지시자가 다른 단위의 결과를 가로챈다 */
+  listByUnit(teamId: string, partId: string | null = null): Task[] {
+    return [...this.tasks.values()].filter((t) => t.teamId === teamId && t.partId === partId)
   }
 
-  /** 같은 팀원에게 running task 가 있으면 거부한다. 팀장이 순서를 지키게 강제 */
-  assign(teamId: string, memberSessionId: string, instruction: string): Task {
+  /** 같은 팀원에게 running task 가 있으면 거부한다. 지시자가 순서를 지키게 강제 */
+  assign(teamId: string, memberSessionId: string, instruction: string, partId: string | null = null): Task {
     const isBusy = [...this.tasks.values()].some((t) => t.memberSessionId === memberSessionId && t.status === 'running')
     if (isBusy) throw new TaskConflictError(memberSessionId)
     const task: Task = {
       id: randomUUID().slice(0, 8),
       teamId,
+      partId,
       memberSessionId,
       instruction,
       status: 'running',
@@ -90,24 +94,25 @@ export class TaskStore {
   }
 
   /**
-   * task 가 끝날 때까지 기다린다. taskId 가 없으면 팀의 아무 task 든 끝나는 것 하나.
-   * 이미 끝난 task 는 즉시, 모르는 task 는 null 즉시, 타임아웃이면 null
+   * task 가 끝날 때까지 기다린다. taskId 가 없으면 지휘 단위의 아무 task 든 끝나는 것 하나.
+   * 이미 끝난 task 는 즉시, 모르는 task·다른 단위의 task 는 null 즉시, 타임아웃이면 null
    */
-  wait(teamId: string, taskId: string | null, timeoutMs: number): Promise<Task | null> {
+  wait(teamId: string, taskId: string | null, timeoutMs: number, partId: string | null = null): Promise<Task | null> {
     if (taskId) {
       const task = this.tasks.get(taskId)
-      if (!task || task.teamId !== teamId) return Promise.resolve(null)
+      if (!task || task.teamId !== teamId || task.partId !== partId) return Promise.resolve(null)
       if (task.status !== 'running') return Promise.resolve(task)
     } else {
-      const finished = this.listByTeam(teamId).find((t) => t.status !== 'running' && !t.isDelivered)
+      const unitTasks = this.listByUnit(teamId, partId)
+      const finished = unitTasks.find((t) => t.status !== 'running' && !t.isDelivered)
       if (finished) {
         finished.isDelivered = true
         return Promise.resolve(finished)
       }
-      if (!this.listByTeam(teamId).some((t) => t.status === 'running')) return Promise.resolve(null)
+      if (!unitTasks.some((t) => t.status === 'running')) return Promise.resolve(null)
     }
     return new Promise((resolve) => {
-      const waiter: Waiter = { taskId, teamId, resolve }
+      const waiter: Waiter = { taskId, teamId, partId, resolve }
       this.waiters.add(waiter)
       setTimeout(() => {
         if (this.waiters.delete(waiter)) resolve(null)
@@ -125,7 +130,7 @@ export class TaskStore {
     task.error = error
     task.finishedAt = this.now().toISOString()
     for (const waiter of this.waiters) {
-      if (waiter.teamId !== task.teamId) continue
+      if (waiter.teamId !== task.teamId || waiter.partId !== task.partId) continue
       if (waiter.taskId !== null && waiter.taskId !== task.id) continue
       this.waiters.delete(waiter)
       if (waiter.taskId === null) task.isDelivered = true
