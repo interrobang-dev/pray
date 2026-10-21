@@ -13,6 +13,8 @@ export interface ChatMessage {
   toolUses: ToolUse[]
   /** 서버가 보낸 팀장·파트장 지시인 user 메시지에만 있다 (instructions.jsonl 과 내용이 같은 것) */
   from?: { sessionId: string | null; name: string }
+  /** 작업 중에 보내 아직 Claude Code 대기열에 있는 메시지에만 있다. 대화 맨 끝에 온다 */
+  isQueued?: boolean
 }
 
 /** instructions.jsonl 한 줄. 서버가 팀원 터미널에 지시를 보낼 때 남긴다 */
@@ -49,13 +51,32 @@ function resultToText(content: unknown): string {
   return ''
 }
 
-/** jsonl 전체를 채팅 메시지 배열로 바꾼다. 사이드체인·메타·thinking 은 뺀다. */
+/** 사람 쪽 글 → 메시지. 문자열이 `<` 로 시작하면 system (명령 출력·알림 등), 블록 배열이면 text 블록만 (없으면 null) */
+function userTextMessage(id: string, timestamp: string, content: unknown): ChatMessage | null {
+  if (typeof content === 'string') {
+    return { id, role: content.startsWith('<') ? 'system' : 'user', timestamp, text: content, toolUses: [] }
+  }
+  if (!Array.isArray(content)) return null
+  const text = (content as Block[])
+    .filter((block) => block.type === 'text' && block.text)
+    .map((block) => block.text!)
+    .join('\n')
+  return text ? { id, role: 'user', timestamp, text, toolUses: [] } : null
+}
+
+/**
+ * jsonl 전체를 채팅 메시지 배열로 바꾼다. 사이드체인·메타·thinking 은 뺀다.
+ * 작업 중에 보낸 메시지는 user 로 남지 않는다: 보낼 때 queue-operation enqueue, 차례 중간에 받아들이면 remove +
+ * queued_command 첨부(그 위치에 user 로 넣는다), 차례가 끝난 뒤 받으면 dequeue + 일반 user. 아직 대기 중인 것은 맨 끝에 isQueued 로 붙인다
+ */
 export function parseMessages(jsonl: string): ChatMessage[] {
   const messages: ChatMessage[] = []
   const toolUseById = new Map<string, ToolUse>()
   const assistantByMessageId = new Map<string, ChatMessage>()
+  /** 대기열 (enqueue 순). 글이 없는 enqueue 도 dequeue 순서를 맞추려고 넣고 화면에는 안 낸다 */
+  const queue: { id: string; timestamp: string; content: string | undefined }[] = []
 
-  for (const line of jsonl.split('\n')) {
+  for (const [index, line] of jsonl.split('\n').entries()) {
     if (!line.trim()) continue
     let record: Record<string, unknown>
     try {
@@ -65,37 +86,46 @@ export function parseMessages(jsonl: string): ChatMessage[] {
     }
     if (record.isSidechain || record.isMeta) continue
     const type = record.type
-    if (type !== 'user' && type !== 'assistant') continue
-    const message = record.message as { id?: string; content?: string | Block[] } | undefined
     const timestamp = typeof record.timestamp === 'string' ? record.timestamp : ''
     const uuid = typeof record.uuid === 'string' ? record.uuid : `${messages.length}`
+
+    if (type === 'queue-operation') {
+      const content = typeof record.content === 'string' ? record.content : undefined
+      // enqueue 에는 uuid 가 없어 줄 번호로 만든다 (jsonl 은 덧붙기만 해서 다시 받아도 같다)
+      if (record.operation === 'enqueue') queue.push({ id: `queued-${index}`, timestamp, content })
+      // remove 는 이유(받아들임·취소 등)와 관계없이 글이 같은 것 중 먼저 들어온 것을 뺀다
+      if (record.operation === 'remove') {
+        const position = queue.findIndex((item) => item.content === content)
+        if (position >= 0) queue.splice(position, 1)
+      }
+      // dequeue 는 글이 없다. Claude Code 는 우선순위(jsonl 에 없음)가 같으면 먼저 들어온 것부터 빼므로 맨 앞을 뺀다
+      if (record.operation === 'dequeue') queue.shift()
+      continue
+    }
+    if (type === 'attachment') {
+      const attachment = record.attachment as { type?: string; prompt?: unknown } | undefined
+      if (attachment?.type !== 'queued_command') continue
+      const queued = userTextMessage(uuid, timestamp, attachment.prompt)
+      if (queued) messages.push(queued)
+      continue
+    }
+    if (type !== 'user' && type !== 'assistant') continue
+    const message = record.message as { id?: string; content?: string | Block[] } | undefined
     const content = message?.content
 
     if (type === 'user') {
-      if (typeof content === 'string') {
-        messages.push({
-          id: uuid,
-          role: content.startsWith('<') ? 'system' : 'user',
-          timestamp,
-          text: content,
-          toolUses: [],
-        })
-        continue
-      }
-      if (!Array.isArray(content)) continue
-      for (const block of content) {
-        if (block.type === 'tool_result' && block.tool_use_id) {
-          const toolUse = toolUseById.get(block.tool_use_id)
-          if (!toolUse) continue
-          const result = resultToText(block.content)
-          toolUse.result = toolUse.name.startsWith(UNLIMITED_RESULT_PREFIX) ? result : result.slice(0, RESULT_LIMIT)
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'tool_result' && block.tool_use_id) {
+            const toolUse = toolUseById.get(block.tool_use_id)
+            if (!toolUse) continue
+            const result = resultToText(block.content)
+            toolUse.result = toolUse.name.startsWith(UNLIMITED_RESULT_PREFIX) ? result : result.slice(0, RESULT_LIMIT)
+          }
         }
       }
-      const text = content
-        .filter((block) => block.type === 'text' && block.text)
-        .map((block) => block.text!)
-        .join('\n')
-      if (text) messages.push({ id: uuid, role: 'user', timestamp, text, toolUses: [] })
+      const user = userTextMessage(uuid, timestamp, content)
+      if (user) messages.push(user)
       continue
     }
 
@@ -117,6 +147,10 @@ export function parseMessages(jsonl: string): ChatMessage[] {
         target.toolUses.push(toolUse)
       }
     }
+  }
+  for (const item of queue) {
+    const queued = userTextMessage(item.id, item.timestamp, item.content)
+    if (queued) messages.push({ ...queued, isQueued: true })
   }
   return messages
 }

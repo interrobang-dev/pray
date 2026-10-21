@@ -70,6 +70,102 @@ describe('parseMessages', () => {
   })
 })
 
+describe('parseMessages: messages sent while claude is working', () => {
+  // 실제 jsonl 의 꼴: 보낼 때 enqueue (uuid 없음), 받아들일 때 remove + queued_command 첨부 (첨부의 timestamp 는 보낸 시각)
+  const enqueue = (content: string | undefined, timestamp = 't-enq') =>
+    line({ type: 'queue-operation', operation: 'enqueue', timestamp, sessionId: 's', ...(content !== undefined && { content }) })
+  const remove = (content: string, reason = 'absorbed_mid_turn') =>
+    line({ type: 'queue-operation', operation: 'remove', timestamp: 't-rm', sessionId: 's', content, reason, commandUuid: 'c', deliveryId: 'd' })
+  const dequeue = () => line({ type: 'queue-operation', operation: 'dequeue', timestamp: 't-deq', sessionId: 's' })
+  const queuedCommand = (uuid: string, prompt: unknown, commandMode = 'prompt') =>
+    line({
+      parentUuid: 'p',
+      isSidechain: false,
+      type: 'attachment',
+      uuid,
+      timestamp: 't-sent',
+      attachment: { type: 'queued_command', prompt, source_uuid: 'c', commandMode, origin: { kind: 'human' }, timestamp: 't-sent', humanTurn: true },
+    })
+  const assistant = (uuid: string, text: string) =>
+    line({ type: 'assistant', uuid, timestamp: 't', message: { id: `m-${uuid}`, content: [{ type: 'text', text }] } })
+  const user = (uuid: string, content: string) => line({ type: 'user', uuid, timestamp: 't', message: { role: 'user', content } })
+  const view = (messages: ChatMessage[]) => messages.map((m) => [m.role, m.text, m.isQueued ?? false])
+
+  it('puts an absorbed message where its queued_command attachment is, as user (task notifications as system)', () => {
+    const jsonl = [
+      user('u1', '일 해 줘'),
+      enqueue('스크롤 고쳐 줘'),
+      assistant('a1', '작업 중'),
+      remove('스크롤 고쳐 줘'),
+      queuedCommand('q1', '스크롤 고쳐 줘'),
+      enqueue('<task-notification>\n<task-id>b1</task-id>'),
+      remove('<task-notification>\n<task-id>b1</task-id>'),
+      queuedCommand('q2', '<task-notification>\n<task-id>b1</task-id>', 'task-notification'),
+      queuedCommand('q3', [{ type: 'image' }, { type: 'text', text: '그림 보고 고쳐' }]),
+      assistant('a2', '반영함'),
+    ].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(view(messages)).toEqual([
+      ['user', '일 해 줘', false],
+      ['assistant', '작업 중', false],
+      ['user', '스크롤 고쳐 줘', false],
+      ['system', '<task-notification>\n<task-id>b1</task-id>', false],
+      ['user', '그림 보고 고쳐', false],
+      ['assistant', '반영함', false],
+    ])
+    expect(messages[2]).toMatchObject({ id: 'q1', timestamp: 't-sent' })
+  })
+
+  it('appends messages still in the queue at the end with isQueued and a line-based id', () => {
+    const jsonl = [user('u1', '일 해 줘'), enqueue('이것도 해 줘', 't-queued'), enqueue(undefined), assistant('a1', '작업 중')].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(view(messages)).toEqual([
+      ['user', '일 해 줘', false],
+      ['assistant', '작업 중', false],
+      ['user', '이것도 해 줘', true],
+    ])
+    expect(messages[2]).toMatchObject({ id: 'queued-1', timestamp: 't-queued' })
+  })
+
+  it('shows nothing for a message removed without an attachment (cancelled)', () => {
+    const jsonl = [user('u1', '일 해 줘'), enqueue('취소할 말'), remove('취소할 말', 'cleared_on_cancel'), assistant('a1', '중단함')].join('\n')
+
+    expect(view(parseMessages(jsonl))).toEqual([
+      ['user', '일 해 줘', false],
+      ['assistant', '중단함', false],
+    ])
+  })
+
+  it('pairs the same text sent twice in order: one absorbed, one still queued', () => {
+    const jsonl = [enqueue('진행'), enqueue('진행'), remove('진행'), queuedCommand('q1', '진행'), assistant('a1', '진행 중')].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(view(messages)).toEqual([
+      ['user', '진행', false],
+      ['assistant', '진행 중', false],
+      ['user', '진행', true],
+    ])
+    expect(messages[2].id).toBe('queued-1')
+    expect(view(parseMessages([enqueue('진행'), enqueue('진행')].join('\n')))).toEqual([
+      ['user', '진행', true],
+      ['user', '진행', true],
+    ])
+    expect(parseMessages([enqueue('진행'), enqueue('진행')].join('\n')).map((m) => m.id)).toEqual(['queued-0', 'queued-1'])
+  })
+
+  it('takes a dequeue (delivered after the turn, no content) from the front of the queue', () => {
+    // 차례가 끝난 뒤 전달되면 remove 가 아니라 글 없는 dequeue 와 일반 user 줄이 남는다
+    const jsonl = [enqueue(undefined), enqueue('<task-notification>\n<task-id>b2</task-id>'), enqueue('다음 일'), dequeue(), dequeue(), user('u1', '<task-notification>\n<task-id>b2</task-id>')].join('\n')
+
+    expect(view(parseMessages(jsonl))).toEqual([
+      ['system', '<task-notification>\n<task-id>b2</task-id>', false],
+      ['user', '다음 일', true],
+    ])
+  })
+})
+
 describe('parseInstructionLog', () => {
   it('keeps only well-formed records of the session and skips broken lines', () => {
     const log = [
