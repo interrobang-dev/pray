@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js'
-import type { Office as OfficeData, Group, Session, Team } from './types'
+import type { Office as OfficeData, Group, Part, Session, Team } from './types'
 import { avatarOf, type Avatar } from './avatar'
 
 /**
@@ -51,6 +51,8 @@ const COLOR = {
   alertLine: 0xe05a5a,
   select: 0x3f9c4b,
   gold: 0xd9a63a,
+  silver: 0xa9b0bd,
+  partLine: 0xc3c7d2,
 }
 
 interface Props {
@@ -91,6 +93,15 @@ interface Placement {
   y: number
 }
 
+/** 섬 안의 파트 구역: 그 파트 책상들의 경계 (타일, 절대 좌표). 이름표는 바로 위 1타일에 그린다 */
+interface PartZone {
+  part: Part
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 /** 팀 섬 경계 (타일) */
 interface Island {
   team: Team
@@ -98,6 +109,7 @@ interface Island {
   y: number
   w: number
   h: number
+  zones: PartZone[]
 }
 
 /** 로비: 팀 없는 세션(웹·외부)이 모이는 고정 구역. 그룹이 아니라 지울 수 없고, 그룹들의 오른쪽 끝에 붙는다 */
@@ -112,7 +124,7 @@ function lobbyZone(office: OfficeData, count: number): Group {
 }
 
 /**
- * 팀 세션: 앵커 + 저장된 오프셋, 없으면 섬 안 2열 자동 정렬.
+ * 팀 세션: 앵커 + 저장된 오프셋, 없으면 섬 안 2열 자동 정렬 (팀 직속 → 파트 순으로 아래로 쌓고, 파트 앞에는 이름표 자리 1타일).
  * 팀 없는 세션: 로비 구역에 순서대로.
  */
 function placeAll(office: OfficeData, sessions: Session[], zone: Group): { seats: Map<string, Placement>; islands: Island[] } {
@@ -123,33 +135,59 @@ function placeAll(office: OfficeData, sessions: Session[], zone: Group): { seats
 
   for (const team of office.teams) {
     const members = sessions.filter((s) => s.teamId === team.id)
-    const placed: Placement[] = []
+    const partIds = new Set(team.parts.map((p) => p.id))
+    // 목록 갱신 사이에 파트를 못 찾으면 팀 직속으로 둔다
+    const unitOf = (session: Session) => (session.partId && partIds.has(session.partId) ? session.partId : null)
+    const placedByUnit = new Map<string | null, Placement[]>()
+    const place = (session: Session, p: Placement) => {
+      seats.set(session.id, p)
+      occupy(p)
+      const unit = unitOf(session)
+      placedByUnit.set(unit, [...(placedByUnit.get(unit) ?? []), p])
+    }
     for (const session of members) {
       const desk = team.desks[session.id]
-      if (!desk) continue
-      const p = { x: team.x + desk.dx, y: team.y + desk.dy }
-      seats.set(session.id, p)
-      occupy(p)
-      placed.push(p)
+      if (desk) place(session, { x: team.x + desk.dx, y: team.y + desk.dy })
     }
-    let slot = 0
-    for (const session of members) {
-      if (seats.has(session.id)) continue
-      let p: Placement
-      do {
-        p = { x: team.x + (slot % 2) * SEAT_STEP, y: team.y + Math.floor(slot / 2) * SEAT_STEP }
-        slot += 1
-      } while (taken.has(`${p.x},${p.y}`))
-      seats.set(session.id, p)
-      occupy(p)
-      placed.push(p)
+    const zones: PartZone[] = []
+    let top = team.y
+    for (const part of [null, ...team.parts]) {
+      const unitMembers = members.filter((s) => unitOf(s) === (part?.id ?? null))
+      if (part && unitMembers.length === 0) continue
+      if (part) top += 1
+      let slot = 0
+      let bottom = top
+      for (const session of unitMembers) {
+        if (seats.has(session.id)) continue
+        let p: Placement
+        do {
+          p = { x: team.x + (slot % 2) * SEAT_STEP, y: top + Math.floor(slot / 2) * SEAT_STEP }
+          slot += 1
+        } while (taken.has(`${p.x},${p.y}`))
+        place(session, p)
+        bottom = Math.max(bottom, p.y + DESK_TILES_H)
+      }
+      top = bottom
+      if (!part) continue
+      const placed = placedByUnit.get(part.id) ?? []
+      const minX = Math.min(...placed.map((p) => p.x))
+      const minY = Math.min(...placed.map((p) => p.y))
+      zones.push({
+        part,
+        x: minX,
+        y: minY,
+        w: Math.max(...placed.map((p) => p.x)) + DESK_TILES_W - minX,
+        h: Math.max(...placed.map((p) => p.y)) + DESK_TILES_H - minY,
+      })
     }
+    const placed = [...placedByUnit.values()].flat()
     if (placed.length === 0) placed.push({ x: team.x, y: team.y })
     const minX = Math.min(...placed.map((p) => p.x))
-    const minY = Math.min(...placed.map((p) => p.y))
+    // 파트 이름표 자리(구역 위 1타일)도 섬 안에 넣는다
+    const minY = Math.min(...placed.map((p) => p.y), ...zones.map((z) => z.y - 1))
     const maxX = Math.max(...placed.map((p) => p.x)) + DESK_TILES_W
     const maxY = Math.max(...placed.map((p) => p.y)) + DESK_TILES_H
-    islands.push({ team, x: minX - 1, y: minY - 1, w: maxX - minX + 2, h: maxY - minY + 2 })
+    islands.push({ team, x: minX - 1, y: minY - 1, w: maxX - minX + 2, h: maxY - minY + 2, zones })
   }
 
   let index = 0
@@ -317,7 +355,7 @@ interface IslandParts {
   sign: Graphics
 }
 
-/** 팀 섬: 연한 바닥 + 점선 테두리 + 팀 이름표 */
+/** 팀 섬: 연한 바닥 + 점선 테두리 + 팀 이름표 + 파트 구역(옅은 실선 테두리 + 파트 이름표). 파트 구역은 섬 컨테이너에 있어 섬을 끌면 같이 움직인다 */
 function drawIsland(island: Island, onEdit: () => void): IslandParts {
   const container = new Container()
   container.position.set(PAD_X + island.x * TILE, PAD_Y + island.y * TILE)
@@ -328,6 +366,24 @@ function drawIsland(island: Island, onEdit: () => void): IslandParts {
   for (let x = 0; x < w; x += 4) g.rect(x, 0, 2, 1).fill(COLOR.greenDark).rect(x, h - 1, 2, 1).fill(COLOR.greenDark)
   for (let y = 0; y < h; y += 4) g.rect(0, y, 1, 2).fill(COLOR.greenDark).rect(w - 1, y, 1, 2).fill(COLOR.greenDark)
   container.addChild(g)
+  for (const zone of island.zones) {
+    // 책상 경계에서 좌우 4px, 위로 이름표 자리 12px, 아래 1px
+    const zx = (zone.x - island.x) * TILE - 4
+    const zy = (zone.y - island.y) * TILE - 12
+    const zoneGraphics = new Graphics()
+      .rect(zx, zy, zone.w * TILE + 8, zone.h * TILE + 13)
+      .fill({ color: 0xffffff, alpha: 0.35 })
+      .stroke({ width: 1, color: COLOR.partLine })
+    const partName = label(zone.part.name, 6, 0x5d6675)
+    const partSign = new Graphics()
+      .rect(0, 0, partName.width + 6, 9)
+      .fill(0xffffff)
+      .rect(0, 8, partName.width + 6, 1)
+      .fill(COLOR.silver)
+    partSign.position.set(zx + 2, zy + 1)
+    partName.position.set(zx + 5, zy + 2)
+    container.addChild(zoneGraphics, partSign, partName)
+  }
   const name = label(island.team.name, 6, COLOR.text)
   const sign = new Graphics().rect(0, 0, name.width + 6, 9).fill(0xffffff).rect(0, 8, name.width + 6, 1).fill(COLOR.greenDark)
   sign.position.set(3, 3)
@@ -478,15 +534,16 @@ function drawDesk(session: Session, seat: Placement, isSelected: boolean): DeskP
 
   // 이름표
   const isLead = session.role === 'lead'
+  const isPartLead = isLead && session.partId !== null
   const name = label(session.name ?? session.title ?? session.id.slice(0, 8), 6, isExternal ? 0x7a7f8e : COLOR.text)
   // 자리 간격(3타일)보다 조금 좁게. 책상보다 넓어도 옆 책상과 안 겹친다
   const tagW = Math.min(name.width + 4, SEAT_STEP * TILE - 4)
-  // 이름표 밑줄: 외부 회색, 팀장 금색, 그 외 초록
-  const underline = isExternal ? COLOR.chairLine : isLead ? COLOR.gold : COLOR.green
+  // 이름표 밑줄: 외부 회색, 팀장 금색, 파트장 은색, 그 외 초록
+  const underline = isExternal ? COLOR.chairLine : isPartLead ? COLOR.silver : isLead ? COLOR.gold : COLOR.green
   const tag = new Graphics().rect(0, 0, tagW, 9).fill(0xffffff).rect(0, 8, tagW, 1).fill(underline)
   tag.position.set(Math.floor((DESK_W - tagW) / 2), 39)
   name.position.set(tag.x + 2, 40)
-  // 팀장: 책상 앞판 위에 금색 명패
+  // 팀장·파트장: 책상 앞판 위에 금색 명패 (둘은 이름표 밑줄로 구분)
   if (isLead) container.addChild(new Graphics().rect(10, 30, 12, 3).fill(COLOR.gold).rect(11, 31, 10, 1).fill(0xf4d77a))
   const mask = new Graphics().rect(tag.x, 39, tagW, 9).fill(0xffffff)
   name.mask = mask
