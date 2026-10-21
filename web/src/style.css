@@ -599,6 +599,17 @@ header button.icon:hover:not(:disabled) {
   border: 0;
   box-shadow: none;
 }
+/* 팀장↔팀원이 주고받은 글 (Chat.tsx). 사람 말풍선(초록)·claude 응답(흰색)과 다른 색. 위에 "→ 팀원"·"팀원 →"·"팀장 지시" 라벨 */
+.msg.relay {
+  background: #eef1fb;
+  border-color: #d3daf2;
+}
+.relay-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #5a68a6;
+}
 .msg .text {
   white-space: pre-wrap;
   word-break: break-word;

@@ -636,6 +636,7 @@ export function App() {
               isApprovalNeeded={selected.status === 'needs-approval'}
               pendingTool={selected.pendingTool}
               version={transcriptVersions[selected.id] ?? 0}
+              sessionNames={Object.fromEntries(snapshot.sessions.map((s) => [s.id, displayName(s)]))}
             />
           )}
         </section>

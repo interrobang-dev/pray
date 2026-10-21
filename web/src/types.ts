@@ -61,6 +61,24 @@ export interface Office {
   teams: Team[]
 }
 
+export interface ToolUse {
+  id: string
+  name: string
+  input: unknown
+  result: string | null
+}
+
+/** 대화 탭 메시지 (`GET /api/sessions/:id/messages`) */
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  timestamp: string
+  text: string
+  toolUses: ToolUse[]
+  /** 서버가 보낸 팀장·파트장 지시인 user 메시지에만 있다. 옛 서버 응답에는 없다 */
+  from?: { sessionId: string | null; name: string }
+}
+
 export const statusLabel: Record<SessionStatus, string> = {
   working: '작업중',
   'my-turn': '내 차례',

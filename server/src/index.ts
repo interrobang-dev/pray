@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { appendFileSync, existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import express from 'express'
 import type { Response } from 'express'
@@ -38,8 +39,9 @@ import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js
 import { makeSendCode } from './mail.js'
 import { applyHook, type HookPayload, type HookState } from './hookState.js'
 import { findTranscript, listSessions, projectsDir } from './sessions.js'
+import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
-import { parseMessages } from './messages.js'
+import { attachInstructions, parseInstructionLog, parseMessages } from './messages.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
@@ -59,6 +61,10 @@ const config = readConfig()
 const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
 const sendCode = makeSendCode(config.smtp)
 const COOKIE = 'jk_session'
+/** 팀원에게 보낸 지시 기록 (한 줄 = InstructionRecord). 대화 탭이 사람 입력과 구분하는 데 쓴다 */
+const instructionLogPath = join(configDir, 'instructions.jsonl')
+/** 지휘 단위에 팀장·파트장이 없을 때 지시 말풍선에 쓰는 이름 */
+const NO_LEAD_NAME = '팀 API'
 
 const app = express()
 app.use(express.json({ limit: '1mb' }))
@@ -135,9 +141,14 @@ function sendSse(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
 }
 
+/** 사용자 지정 세션 이름 (exit 한 웹 세션 것 포함) */
+function sessionNames(): Record<string, string> {
+  return { ...Object.fromEntries(exitedSessionNames), ...listSessionNames() }
+}
+
 async function snapshotPayload() {
   const webSessions = new Map(host.sessions.map((s) => [s.sessionId, s.cwd]))
-  const names = { ...Object.fromEntries(exitedSessionNames), ...listSessionNames() }
+  const names = sessionNames()
   return {
     isHostReachable: host.isReachable,
     sessions: await listSessions(hookStates, webSessions, listTeams(), names),
@@ -230,9 +241,31 @@ app.post('/api/sessions', async (req, res) => {
   if (isLead || part) broadcastOffice()
 })
 
+/** 세션 화면 이름: 사용자 지정 → 자동 제목(ai-title) → ID 앞 8자리 */
+async function displayNameOf(sessionId: string, names: Record<string, string>): Promise<string> {
+  if (names[sessionId]) return names[sessionId]
+  const jsonl = await findTranscript(sessionId)
+  return (jsonl ? summarizeTranscript(jsonl).title : null) ?? sessionId.slice(0, 8)
+}
+
+/** 대화 메시지. 서버가 보낸 팀장·파트장 지시(instructions.jsonl)와 내용이 같은 user 메시지에는 from 이 붙는다 */
 app.get('/api/sessions/:id/messages', async (req, res) => {
   const jsonl = await findTranscript(req.params.id)
-  res.json(jsonl ? parseMessages(jsonl) : [])
+  if (!jsonl) {
+    res.json([])
+    return
+  }
+  const messages = parseMessages(jsonl)
+  const log = await readFile(instructionLogPath, 'utf8').catch(() => '')
+  const records = parseInstructionLog(log, req.params.id)
+  if (records.length === 0) {
+    res.json(messages)
+    return
+  }
+  const names = sessionNames()
+  const fromIds = [...new Set(records.map((r) => r.fromSessionId).filter((id): id is string => id !== null))]
+  const fromNames = new Map(await Promise.all(fromIds.map(async (id) => [id, await displayNameOf(id, names)] as const)))
+  res.json(attachInstructions(messages, records, (id) => (id ? (fromNames.get(id) ?? id.slice(0, 8)) : NO_LEAD_NAME)))
 })
 
 /** 세션 이름 지정. 빈 문자열이면 지워서 자동 제목(ai-title)으로 돌아간다. 외부 세션에도 붙일 수 있다 */
@@ -329,6 +362,15 @@ function submitInstruction(sessionId: string, instruction: string): boolean {
   return true
 }
 
+/** 팀원에게 보낸 지시를 instructions.jsonl 에 남긴다. 요청 처리 안에서 부르고, 실패해도 로그만 남겨 지시는 그대로 진행한다 */
+function recordInstruction(sessionId: string, fromSessionId: string | null, text: string): void {
+  try {
+    appendFileSync(instructionLogPath, `${JSON.stringify({ sessionId, fromSessionId, text, at: new Date().toISOString() })}\n`)
+  } catch (error) {
+    console.error(`지시 기록 실패 (${sessionId.slice(0, 8)}): ${error}`)
+  }
+}
+
 function findTeam(teamId: string): Team | undefined {
   return listTeams().find((t) => t.id === teamId)
 }
@@ -385,6 +427,7 @@ async function assignTask(team: Team, part: Part | null, sessionId: string, inst
     res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
     return
   }
+  recordInstruction(sessionId, (part ? part.leadSessionId : team.leadSessionId) ?? null, instruction)
   res.json(task)
 }
 
@@ -491,6 +534,8 @@ app.post('/api/team/:teamId/members', (req, res) => {
     res.json({ member, task: null })
     return
   }
+  // 아래 타이머 안에서 던지면 서버가 죽으므로 기록은 요청 처리 중인 여기서 남긴다
+  recordInstruction(sessionId, (part ? part.leadSessionId : team.leadSessionId) ?? null, instruction)
   // claude 가 뜨기 전에 입력하면 사라진다. 첫 프롬프트는 호스트가 띄운 뒤 보내도록 지연
   setTimeout(() => {
     const task = tasks.assign(team.id, sessionId, instruction, part?.id ?? null)
