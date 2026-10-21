@@ -11,6 +11,9 @@ export interface Session {
   isAlive: boolean
   lastAt: string | null
   lastAssistantText: string | null
+  /** 마지막 claude 응답의 모델 ID·effort. 응답이 아직 없으면 null. 옛 서버 응답에는 빠져 있다 */
+  model?: string | null
+  effort?: string | null
   pendingTool: string | null
   /** 이번 차례를 시작한 시각 (훅 상태). 모르면 null. workingSince 가 없는 옛 서버 응답에는 빠져 있다 */
   workingSince: string | null

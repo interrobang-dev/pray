@@ -17,6 +17,10 @@ export interface Session {
   isAlive: boolean
   lastAt: string | null
   lastAssistantText: string | null
+  /** 마지막 claude 응답(jsonl)의 모델 ID. 응답이 아직 없으면 null */
+  model: string | null
+  /** 같은 응답의 effort (perTurnEffort → effort 순). 없으면 null */
+  effort: string | null
   pendingTool: string | null
   /** 이번 차례를 시작한 시각 (훅 상태). 모르면 null */
   workingSince: string | null

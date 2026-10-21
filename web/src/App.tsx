@@ -35,6 +35,20 @@ function displayName(session: Session): string {
   return session.name ?? session.title ?? session.id.slice(0, 8)
 }
 
+/** 모델 ID → 짧은 이름. claude-<이름>-<주>-<부> 는 "Opus 5.5" 꼴로, 모르는 꼴은 ID 그대로 (날짜가 붙은 옛 ID 가 "Opus 4.20250514" 가 되지 않게 버전은 두 자리까지) */
+function modelName(model: string): string {
+  const match = model.match(/^claude-([a-z]+)-(\d{1,2})-(\d{1,2})$/)
+  if (!match) return model
+  const [, name, major, minor] = match
+  return `${name[0].toUpperCase()}${name.slice(1)} ${major}.${minor}`
+}
+
+/** 목록·패널의 "Opus 5.5 · xhigh". 모델을 모르면 null, effort 가 없으면 모델만 */
+function modelLabel(session: Session): string | null {
+  if (!session.model) return null
+  return session.effort ? `${modelName(session.model)} · ${session.effort}` : modelName(session.model)
+}
+
 /** 마지막 활동부터 지금까지를 "now"·"3m"·"2h"·"1d" 처럼 단위 하나로. 15분 미만은 recent, 2시간 초과는 stale */
 function formatElapsed(iso: string | null, now: number): { text: string; className: string; title: string } {
   if (!iso) return { text: '-', className: '', title: '' }
@@ -397,6 +411,7 @@ export function App() {
   function renderSession(session: Session, hasCwd: boolean, teamName?: string) {
     const avatar = avatarOf(session.id)
     const elapsed = formatElapsed(session.lastAt, now)
+    const model = modelLabel(session)
     return (
       <div
         key={session.id}
@@ -406,6 +421,11 @@ export function App() {
         <span className={`status-dot ${session.status}`} title={statusLabel[session.status]} />
         <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
         <div className="title">{teamName ? `${teamName} · ${displayName(session)}` : displayName(session)}</div>
+        {model && (
+          <span className="model" title={session.model ?? undefined}>
+            {model}
+          </span>
+        )}
         <div className="meta">
           {session.role === 'lead' &&
             (session.partId ? <span className="badge role-part-lead">파트장</span> : <span className="badge role-lead">팀장</span>)}
@@ -602,6 +622,11 @@ export function App() {
             <button className="rename" title="이름 변경" onClick={() => setRenameTarget(selected)}>
               ✎
             </button>
+            {modelLabel(selected) && (
+              <span className="model-chip" title={selected.model ?? undefined}>
+                {modelLabel(selected)}
+              </span>
+            )}
             <span className="cwd">{selected.cwd}</span>
             <nav className="tabs">
               <button className={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>

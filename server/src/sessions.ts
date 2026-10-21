@@ -61,6 +61,8 @@ export async function listSessions(
         isAlive: liveEntry !== undefined || webSessions.has(id),
         lastAt: transcript?.lastAt ?? hook?.updatedAt ?? null,
         lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
+        model: transcript?.model ?? null,
+        effort: transcript?.effort ?? null,
         pendingTool: hook?.pendingTool ?? null,
         workingSince: hook?.workingSince ?? null,
         teamId: team?.id ?? null,
