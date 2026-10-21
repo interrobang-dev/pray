@@ -1430,7 +1430,7 @@ header button.icon:hover:not(:disabled) {
 }
 /* Claude Code 의 다음 입력 제안 (Chat.tsx). 입력칸 바로 위 한 줄 칩, 길면 말줄임 (전체는 툴팁). 누르거나 빈 입력칸 Tab = 채우기 (보내지 않는다) */
 .suggestion {
-  align-self: flex-start;
+  align-self: flex-end;
   display: flex;
   align-items: center;
   gap: 6px;
