@@ -436,6 +436,9 @@ function WorkingIndicator({ since }: { since: string | null }) {
 /** 맨 아래에서 이만큼 안쪽이면 "맨 아래를 보고 있다" 로 본다 */
 const BOTTOM_SLACK_PX = 40
 
+/** 터치 기기(마우스 없음). style.css 의 터치 기기 스타일과 같은 기준. 이 기기에서는 세션을 열 때 입력칸에 포커스하지 않는다 (가상 키보드가 바로 떠 대화를 가린다) */
+const TOUCH_QUERY = '(hover: none)'
+
 /** 보냈지만 아직 jsonl 에서 안 보인 내 말. 진짜 user 메시지가 오면 없앤다 */
 interface PendingMessage {
   id: number
@@ -762,7 +765,7 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
             placeholder={isAsking ? '위 질문에 먼저 답해 주세요' : '지시를 입력하고 Enter (줄바꿈은 Shift+Enter)'}
             rows={Math.min(Math.max(draft.split('\n').length, 1), 8)}
             disabled={isAsking}
-            autoFocus
+            autoFocus={!window.matchMedia(TOUCH_QUERY).matches}
           />
           <button type="submit" className="send" disabled={!draft.trim() || isAsking} aria-label="보내기" title="보내기 (Enter)">
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
