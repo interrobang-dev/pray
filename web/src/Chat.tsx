@@ -1,4 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { memo, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import Markdown, { type Components, type Options } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/github.css'
 import { NEWLINE_KEYS } from './Terminal'
 
 interface ToolUse {
@@ -32,6 +36,29 @@ function summarizeInput(name: string, input: unknown): string {
   const value = key ? String(record[key]) : ''
   return value.split('\n')[0].slice(0, 120) || name
 }
+
+const REMARK_PLUGINS: Options['remarkPlugins'] = [remarkGfm]
+// 언어가 표시된 코드 블록만 칠한다. 자동 추측(detect)은 엉뚱한 언어로 칠하기 쉬워 끈다
+const REHYPE_PLUGINS: Options['rehypePlugins'] = [[rehypeHighlight, { detect: false }]]
+const MARKDOWN_COMPONENTS: Components = {
+  a: ({ href, title, children }) => (
+    <a href={href} title={title} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  ),
+}
+
+/** claude 응답 말풍선. raw HTML 은 react-markdown 기본값대로 글자로 보인다 (rehype-raw 안 씀).
+ *  memo: 입력칸에 칠 때마다 대화 전체를 다시 파싱하지 않게 */
+const AssistantText = memo(function AssistantText({ text }: { text: string }) {
+  return (
+    <div className="markdown">
+      <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={MARKDOWN_COMPONENTS}>
+        {text}
+      </Markdown>
+    </div>
+  )
+})
 
 export function Chat({ sessionId, isWritable, isApprovalNeeded, pendingTool, version }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -87,7 +114,12 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, pendingTool, ver
       <div className="messages">
         {messages.map((message) => (
           <div key={message.id} className={`msg ${message.role}`}>
-            {message.text && <div className="text">{message.text}</div>}
+            {message.text &&
+              (message.role === 'assistant' ? (
+                <AssistantText text={message.text} />
+              ) : (
+                <div className="text">{message.text}</div>
+              ))}
             {message.toolUses.map((toolUse) => (
               <details key={toolUse.id} className="tool">
                 <summary>

@@ -603,6 +603,127 @@ header button.icon:hover:not(:disabled) {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* claude 응답 마크다운 (Chat.tsx). 말풍선 안이라 제목·간격을 작게 잡는다 */
+.markdown {
+  line-height: 1.55;
+}
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre,
+.markdown table {
+  margin: 0 0 8px;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 12px 0 6px;
+  line-height: 1.35;
+  font-size: 14px;
+}
+/* 전역 h1(앱 제목 도트 폰트·초록)을 되돌린다 */
+.markdown h1 {
+  font-family: inherit;
+  font-size: 16px;
+  letter-spacing: normal;
+  color: inherit;
+}
+.markdown h2 {
+  font-size: 15px;
+}
+.markdown ul,
+.markdown ol {
+  padding-left: 20px;
+}
+.markdown li + li,
+.markdown li > ul,
+.markdown li > ol {
+  margin-top: 2px;
+}
+.markdown li > ul,
+.markdown li > ol {
+  margin-bottom: 0;
+}
+.markdown .contains-task-list {
+  list-style: none;
+  padding-left: 4px;
+}
+.markdown .task-list-item input {
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
+}
+.markdown blockquote {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+.markdown hr {
+  margin: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.markdown a {
+  color: #2f6fd0;
+}
+.markdown code {
+  font-size: 12px;
+}
+.markdown :not(pre) > code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #f1f2f6;
+}
+/* 긴 줄은 말풍선 안에서만 가로 스크롤 */
+.markdown pre {
+  overflow-x: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f6f8fa;
+  line-height: 1.45;
+}
+/* highlight.js 테마의 pre code 모양(배경·여백·code 자체 스크롤) 대신 위 pre 모양을 쓴다 (언어 없는 블록과 같게).
+   code 가 스크롤하면 폰의 겹치는 스크롤바가 마지막 줄을 가린다 */
+.markdown pre code.hljs {
+  display: inline;
+  overflow-x: visible;
+  padding: 0;
+  background: transparent;
+}
+/* 넓은 표도 말풍선 안에서만 가로 스크롤. 칸 안 단어는 쪼개지 않아(말풍선의 anywhere 를 되돌림) 좁게 찌그러지지 않는다 */
+.markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.markdown th,
+.markdown td {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+.markdown th {
+  background: #f6f8fa;
+  font-weight: 600;
+}
 .msg,
 .tool summary {
   overflow-wrap: anywhere;
