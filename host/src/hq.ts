@@ -2,9 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
-import { normalizeCwd, type Team } from './team.js'
+import { normalizeCwd, type Part, type Team } from './team.js'
 
-export type { Team } from './team.js'
+export type { Part, Team } from './team.js'
 
 export interface WebSessionRecord {
   sessionId: string
@@ -57,10 +57,10 @@ function readHq(): HqFile {
   return { ...rest, groups, webSessions: rest.webSessions ?? [], teams, sessionNames: rest.sessionNames ?? {} }
 }
 
-/** 구버전 기록(desks 없음, roomId 등)을 읽어도 터지지 않게 */
+/** 구버전 기록(desks·parts·partOf 없음, roomId 등)을 읽어도 터지지 않게 */
 function withDefaults(team: Partial<Team> & Pick<Team, 'id' | 'name' | 'cwd'> & { roomId?: string }): Team {
   const { roomId, ...rest } = team
-  return { groupId: roomId ?? 'lobby', x: 1, y: 1, desks: {}, createdAt: '', ...rest }
+  return { groupId: roomId ?? 'lobby', x: 1, y: 1, desks: {}, parts: [], partOf: {}, createdAt: '', ...rest }
 }
 
 function writeHq(hq: HqFile): void {
@@ -187,6 +187,8 @@ export function addTeam(input: { name: string; cwd: string; groupId: string }): 
     x: group.x + 2,
     y,
     desks: {},
+    parts: [],
+    partOf: {},
     createdAt: new Date().toISOString(),
   }
   hq.teams.push(team)
@@ -224,6 +226,72 @@ export function setDesk(teamId: string, sessionId: string, desk: { dx: number; d
   const team = hq.teams.find((t) => t.id === teamId)
   if (!team) return null
   team.desks[sessionId] = { dx: Math.round(desk.dx), dy: Math.round(desk.dy) }
+  writeHq(hq)
+  return team
+}
+
+// ---------- 파트 ----------
+
+export class PartNotFoundError extends Error {
+  constructor() {
+    super('파트를 찾을 수 없음')
+  }
+}
+
+export class WorktreePartError extends Error {
+  constructor() {
+    super('worktree 파트의 소속은 폴더로 정해져 바꿀 수 없음')
+  }
+}
+
+/** 팀이 없으면 null. worktree 는 호출한 쪽이 git 으로 만든 뒤 넘긴다 */
+export function addPart(teamId: string, input: { name: string; worktree?: Part['worktree'] }): Part | null {
+  const hq = readHq()
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team) return null
+  const part: Part = { id: randomUUID().slice(0, 8), name: input.name.trim(), createdAt: new Date().toISOString() }
+  if (input.worktree) part.worktree = input.worktree
+  team.parts.push(part)
+  writeHq(hq)
+  return part
+}
+
+export type PartPatch = { name?: string; leadSessionId?: string | null }
+
+export function updatePart(teamId: string, partId: string, patch: PartPatch): Part | null {
+  const hq = readHq()
+  const part = hq.teams.find((t) => t.id === teamId)?.parts.find((p) => p.id === partId)
+  if (!part) return null
+  if (patch.name !== undefined && patch.name.trim()) part.name = patch.name.trim()
+  if (patch.leadSessionId === null) delete part.leadSessionId
+  else if (typeof patch.leadSessionId === 'string') part.leadSessionId = patch.leadSessionId
+  writeHq(hq)
+  return part
+}
+
+/** 파트 기록과 그 파트를 가리키는 partOf 만 지운다. worktree 폴더·브랜치는 남긴다. 소속 세션은 팀 직속이 된다 */
+export function removePart(teamId: string, partId: string): boolean {
+  const hq = readHq()
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team || !team.parts.some((p) => p.id === partId)) return false
+  team.parts = team.parts.filter((p) => p.id !== partId)
+  for (const [sessionId, value] of Object.entries(team.partOf)) if (value === partId) delete team.partOf[sessionId]
+  writeHq(hq)
+  return true
+}
+
+/** 팀 폴더 세션의 파트 소속. null 이면 팀 직속. worktree 파트로는 옮길 수 없다 (폴더로 정해짐) */
+export function setPartOf(teamId: string, sessionId: string, partId: string | null): Team | null {
+  const hq = readHq()
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team) return null
+  if (partId === null) delete team.partOf[sessionId]
+  else {
+    const part = team.parts.find((p) => p.id === partId)
+    if (!part) throw new PartNotFoundError()
+    if (part.worktree) throw new WorktreePartError()
+    team.partOf[sessionId] = partId
+  }
   writeHq(hq)
   return team
 }
