@@ -73,6 +73,30 @@ function unwrapPastes(text: string): string {
   return text.replace(PASTE_BLOCK, '$2')
 }
 
+interface QueueItem {
+  id: string
+  timestamp: string
+  content: string | undefined
+}
+
+/** 대기열에서 빼는 queue-operation. popAll 은 빈 입력칸 ↑ 로 대기 메시지를 입력칸에 꺼낸 것(꺼낸 것마다 한 줄), popOne 은 하나만 꺼낸 것 */
+const TAKE_OPERATIONS = new Set(['remove', 'popAll', 'popOne'])
+
+/**
+ * queue-operation 한 줄을 대기열에 반영한다. enqueue 에는 uuid 가 없어 줄 번호로 id 를 만든다 (jsonl 은 덧붙기만 해서 다시 받아도 같다).
+ * remove·popAll·popOne 은 이유(받아들임·취소·꺼냄)와 관계없이 글이 같은 것 중 먼저 들어온 것을 뺀다.
+ * dequeue 는 글이 없다. Claude Code 는 우선순위(jsonl 에 없음)가 같으면 먼저 들어온 것부터 빼므로 맨 앞을 뺀다
+ */
+function applyQueueOperation(queue: QueueItem[], record: Record<string, unknown>, index: number, timestamp: string): void {
+  const content = typeof record.content === 'string' ? record.content : undefined
+  if (record.operation === 'enqueue') queue.push({ id: `queued-${index}`, timestamp, content })
+  if (TAKE_OPERATIONS.has(record.operation as string)) {
+    const position = queue.findIndex((item) => item.content === content)
+    if (position >= 0) queue.splice(position, 1)
+  }
+  if (record.operation === 'dequeue') queue.shift()
+}
+
 /** 사람 쪽 글 → 메시지. 문자열이 `<` 로 시작하면 system (명령 출력·알림 등. 붙여넣기를 풀기 전 글로 본다), 블록 배열이면 text 블록만 (없으면 null) */
 function userTextMessage(id: string, timestamp: string, content: unknown): ChatMessage | null {
   if (typeof content === 'string') {
@@ -89,14 +113,15 @@ function userTextMessage(id: string, timestamp: string, content: unknown): ChatM
 /**
  * jsonl 전체를 채팅 메시지 배열로 바꾼다. 사이드체인·메타·thinking 은 뺀다. 압축 요약(isCompactSummary)은 system 이다.
  * 작업 중에 보낸 메시지는 user 로 남지 않는다: 보낼 때 queue-operation enqueue, 차례 중간에 받아들이면 remove +
- * queued_command 첨부(그 위치에 user 로 넣는다), 차례가 끝난 뒤 받으면 dequeue + 일반 user. 아직 대기 중인 것은 맨 끝에 isQueued 로 붙인다
+ * queued_command 첨부(그 위치에 user 로 넣는다), 차례가 끝난 뒤 받으면 dequeue + 일반 user, ↑ 로 입력칸에 꺼내면 popAll.
+ * 아직 대기 중인 것은 맨 끝에 isQueued 로 붙인다
  */
 export function parseMessages(jsonl: string): ChatMessage[] {
   const messages: ChatMessage[] = []
   const toolUseById = new Map<string, ToolUse>()
   const assistantByMessageId = new Map<string, ChatMessage>()
   /** 대기열 (enqueue 순). 글이 없는 enqueue 도 dequeue 순서를 맞추려고 넣고 화면에는 안 낸다 */
-  const queue: { id: string; timestamp: string; content: string | undefined }[] = []
+  const queue: QueueItem[] = []
 
   for (const [index, line] of jsonl.split('\n').entries()) {
     if (!line.trim()) continue
@@ -112,16 +137,7 @@ export function parseMessages(jsonl: string): ChatMessage[] {
     const uuid = typeof record.uuid === 'string' ? record.uuid : `${messages.length}`
 
     if (type === 'queue-operation') {
-      const content = typeof record.content === 'string' ? record.content : undefined
-      // enqueue 에는 uuid 가 없어 줄 번호로 만든다 (jsonl 은 덧붙기만 해서 다시 받아도 같다)
-      if (record.operation === 'enqueue') queue.push({ id: `queued-${index}`, timestamp, content })
-      // remove 는 이유(받아들임·취소 등)와 관계없이 글이 같은 것 중 먼저 들어온 것을 뺀다
-      if (record.operation === 'remove') {
-        const position = queue.findIndex((item) => item.content === content)
-        if (position >= 0) queue.splice(position, 1)
-      }
-      // dequeue 는 글이 없다. Claude Code 는 우선순위(jsonl 에 없음)가 같으면 먼저 들어온 것부터 빼므로 맨 앞을 뺀다
-      if (record.operation === 'dequeue') queue.shift()
+      applyQueueOperation(queue, record, index, timestamp)
       continue
     }
     if (type === 'attachment') {
@@ -185,6 +201,32 @@ export function parseMessages(jsonl: string): ChatMessage[] {
     if (queued) messages.push({ ...queued, isQueued: true })
   }
   return messages
+}
+
+/** 아직 대기 중인 사람 쪽 글. raw 는 jsonl content 그대로(↑ 로 꺼내면 입력칸에 들어가는 글), text 는 화면 글(붙여넣기를 푼 것) */
+export interface QueuedPrompt {
+  raw: string
+  text: string
+}
+
+/**
+ * 대기열에 남은 사람 쪽 글 (들어온 순). 대화 탭의 "대기 중" user 말풍선과 같은 것이다: 글 없는 enqueue(플러그인이 넣은 것. ↑ 로 안 꺼내진다)와
+ * `<` 로 시작하는 글(백그라운드 작업 알림 등. 화면에서는 system)은 뺀다
+ */
+export function queuedPrompts(jsonl: string): QueuedPrompt[] {
+  const queue: QueueItem[] = []
+  for (const [index, line] of jsonl.split('\n').entries()) {
+    if (!line.trim()) continue
+    let record: Record<string, unknown>
+    try {
+      record = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (record.isSidechain || record.isMeta || record.type !== 'queue-operation') continue
+    applyQueueOperation(queue, record, index, '')
+  }
+  return queue.flatMap(({ content }) => (content === undefined || content.startsWith('<') ? [] : [{ raw: content, text: unwrapPastes(content) }]))
 }
 
 /** instructions.jsonl 에서 그 세션이 받은 지시만 고른다. 깨진 줄·모양이 다른 줄은 건너뛴다 */

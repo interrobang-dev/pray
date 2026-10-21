@@ -708,6 +708,20 @@ header button.icon:hover:not(:disabled) {
   line-height: 1;
   cursor: pointer;
 }
+/* 마지막 "대기 중" 말풍선의 [취소] (Chat.tsx). 라벨 옆 작은 버튼, 누르면 "취소 중…" */
+.queued-cancel {
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted);
+}
+/* 대기 메시지 취소 결과 한 줄 (Chat.tsx). system 글처럼 가운데 작은 회색, 몇 초 뒤 사라진다 */
+.queue-notice {
+  align-self: center;
+  font-size: 11px;
+  color: var(--muted);
+}
 /* 대화 오른쪽 아래의 40px 원 버튼 둘 (폰에서도 누르기 쉽다). 맨 아래 자리는 작업 파일 폴더 버튼(Files.tsx),
    맨 아래가 아닐 때 뜨는 "↓"(Chat.tsx)는 그 바로 위. 폴더 버튼이 없으면 "↓" 가 맨 아래 자리로 내려온다. 점 = 위를 보는 사이 새 메시지 */
 .to-bottom,
@@ -1685,5 +1699,10 @@ header button.icon:hover:not(:disabled) {
   }
   .suggestion-key {
     display: none;
+  }
+  /* 대기 메시지 [취소]: 손가락으로 누르기 쉽게 키운다 */
+  .queued-cancel {
+    padding: 4px 10px;
+    font-size: 12px;
   }
 }

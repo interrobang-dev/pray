@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { attachInstructions, parseInstructionLog, parseMessages, type ChatMessage, type InstructionRecord } from './messages.js'
+import {
+  attachInstructions,
+  parseInstructionLog,
+  parseMessages,
+  queuedPrompts,
+  type ChatMessage,
+  type InstructionRecord,
+} from './messages.js'
 
 const line = (record: unknown) => JSON.stringify(record)
 
@@ -215,6 +222,45 @@ describe('parseMessages: messages sent while claude is working', () => {
     expect(parseMessages([enqueue('진행'), enqueue('진행')].join('\n')).map((m) => m.id)).toEqual(['queued-0', 'queued-1'])
   })
 
+  it('takes popAll (↑ pulled them into the prompt box) out of the queue, and shows the ones entered again at the end', () => {
+    // 실제 jsonl 의 꼴 (Claude Code 2.1.306): 꺼낸 것마다 popAll 한 줄 (reason 없음), 다시 넣으면 새 enqueue
+    const popAll = (content: string) => line({ type: 'queue-operation', operation: 'popAll', timestamp: 't-pop', sessionId: 's', content })
+    const jsonl = [
+      user('u1', '일 해 줘'),
+      enqueue('대기1', 't1'),
+      enqueue('대기2', 't2'),
+      enqueue('대기3', 't3'),
+      popAll('대기1'),
+      popAll('대기2'),
+      popAll('대기3'),
+      enqueue('대기1', 't4'),
+      enqueue('대기2', 't5'),
+    ].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(view(messages)).toEqual([
+      ['user', '일 해 줘', false],
+      ['user', '대기1', true],
+      ['user', '대기2', true],
+    ])
+    expect(messages.slice(1).map((m) => [m.id, m.timestamp])).toEqual([
+      ['queued-7', 't4'],
+      ['queued-8', 't5'],
+    ])
+  })
+
+  it('takes popOne like remove: the first queued message with the same text', () => {
+    const popOne = (content: string) => line({ type: 'queue-operation', operation: 'popOne', timestamp: 't-pop', sessionId: 's', content })
+    const jsonl = [enqueue('같은 말', 't1'), enqueue('다른 말', 't2'), enqueue('같은 말', 't3'), popOne('같은 말')].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(view(messages)).toEqual([
+      ['user', '다른 말', true],
+      ['user', '같은 말', true],
+    ])
+    expect(messages.map((m) => m.id)).toEqual(['queued-1', 'queued-2'])
+  })
+
   it('takes a dequeue (delivered after the turn, no content) from the front of the queue', () => {
     // 차례가 끝난 뒤 전달되면 remove 가 아니라 글 없는 dequeue 와 일반 user 줄이 남는다
     const jsonl = [enqueue(undefined), enqueue('<task-notification>\n<task-id>b2</task-id>'), enqueue('다음 일'), dequeue(), dequeue(), user('u1', '<task-notification>\n<task-id>b2</task-id>')].join('\n')
@@ -223,6 +269,26 @@ describe('parseMessages: messages sent while claude is working', () => {
       ['system', '<task-notification>\n<task-id>b2</task-id>', false],
       ['user', '다음 일', true],
     ])
+  })
+
+  it('queuedPrompts: the queued user messages in order, raw content and unwrapped text, without content-less or system ones', () => {
+    const pasted = '\n\n<pasted_content id="ab12">\n긴 지시\n</pasted_content id="ab12">\n'
+    const jsonl = [
+      enqueue('먼저 온 말'),
+      enqueue(undefined),
+      enqueue('<task-notification>\n<task-id>b3</task-id>'),
+      enqueue(pasted),
+      enqueue('받아들여진 말'),
+      remove('받아들여진 말'),
+      line({ type: 'queue-operation', operation: 'popAll', sessionId: 's', content: '먼저 온 말' }),
+      enqueue('먼저 온 말'),
+    ].join('\n')
+
+    expect(queuedPrompts(jsonl)).toEqual([
+      { raw: pasted, text: '긴 지시' },
+      { raw: '먼저 온 말', text: '먼저 온 말' },
+    ])
+    expect(queuedPrompts('')).toEqual([])
   })
 })
 

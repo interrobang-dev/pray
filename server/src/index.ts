@@ -43,7 +43,7 @@ import { findTranscript, listSessions, projectsDir } from './sessions.js'
 import { contentTypeOf, findScratchpad, isSessionId, listScratchpad, resolveScratchpadFile } from './scratchpad.js'
 import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
-import { attachInstructions, parseInstructionLog, parseMessages } from './messages.js'
+import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts } from './messages.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
@@ -61,6 +61,7 @@ import {
 import type { AskQuestion } from './types.js'
 import { serialRunner } from './serialRunner.js'
 import { applySuggestion } from './suggestion.js'
+import { answerBox, decideOutcome, judgeQueue, type QueueJudgement, type UnqueueProgress } from './unqueue.js'
 
 setupFileLog()
 const PORT = 4710
@@ -80,6 +81,8 @@ const heldQuestions = new Map<
 >()
 /** 웹 세션 입력칸의 Claude Code 다음 입력 제안 (mod 가 POST /api/hook/suggestion 으로 보낸다). 메모리에만 */
 const suggestions = new Map<string, string>()
+/** 진행 중인 대기 메시지 취소 (세션당 하나). mod 의 입력칸 알림(POST /api/hook/prompt-box)이 단계를 넘긴다. 메모리에만 */
+const unqueues = new Map<string, UnqueueProgress>()
 
 const config = readConfig()
 const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
@@ -383,8 +386,90 @@ app.post('/api/sessions/:id/input', (req, res) => {
     res.status(400).end()
     return
   }
+  // 대기 메시지 취소가 입력칸을 다루는 동안 다른 키가 끼면 꺼낸 글·다시 넣는 글과 섞인다
+  if (unqueues.has(req.params.id)) {
+    res.status(409).json({ message: '대기 메시지를 취소하는 중' })
+    return
+  }
   host.send({ type: 'input', sessionId: req.params.id, data })
   res.json({})
+})
+
+/** 빈 입력칸의 ↑: 사람이 친 대기 메시지를 전부 입력칸에 꺼낸다 (Esc·Ctrl+C 는 작업 중인 차례를 멈추므로 쓰지 않는다) */
+const UP_KEY = '\x1b[A'
+/** ↑ 뒤 꺼냄 알림을 기다리는 시간. 안 오면(이미 받아서 꺼낼 게 없었거나 mod 가 안 붙음) jsonl 로만 판정한다 */
+const UNQUEUE_POP_TIMEOUT_MS = 3_000
+/** 다시 넣기까지 전체 시간. 넘으면 실패로 끝내고 진행 상태를 비운다 */
+const UNQUEUE_TIMEOUT_MS = 10_000
+/** 진행이 끝난 뒤 jsonl 에 꺼냄·받아들임이 적히기를 기다리는 시간 */
+const UNQUEUE_RECORD_TIMEOUT_MS = 3_000
+const UNQUEUE_POLL_MS = 100
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * 대기 중인 마지막 메시지 취소. body { text } = 화면의 마지막 "대기 중" 말풍선 글 (jsonl 의 마지막 대기 글과 같아야 한다).
+ * pty 에 ↑ 를 보내 대기 글을 전부 입력칸에 꺼내고, mod 의 입력칸 알림에 답해 마지막 것만 빼고 하나씩 다시 넣는다 (unqueue.ts).
+ * 끝나면 { outcome: cancelled·accepted·stuck·failed }. 진행 중에는 그 세션의 /input 을 409 로 막는다
+ */
+app.post('/api/sessions/:id/queue/cancel-last', async (req, res) => {
+  const sessionId = req.params.id
+  const { text } = (req.body ?? {}) as { text?: unknown }
+  if (typeof text !== 'string' || !text) {
+    res.status(400).json({ message: 'text 필요' })
+    return
+  }
+  if (!host.sessions.some((s) => s.sessionId === sessionId)) {
+    res.status(404).json({ message: '웹 세션이 아님' })
+    return
+  }
+  if (hookStates.get(sessionId)?.status !== 'working' || heldQuestions.has(sessionId)) {
+    res.status(409).json({ message: 'claude 가 작업 중일 때만 취소할 수 있음' })
+    return
+  }
+  const jsonl = (await findTranscript(sessionId)) ?? ''
+  // 위 await 사이에 다른 취소가 시작됐을 수 있어 여기서 본다
+  if (unqueues.has(sessionId)) {
+    res.status(409).json({ message: '이미 취소하는 중' })
+    return
+  }
+  const queued = queuedPrompts(jsonl)
+  if (queued.at(-1)?.text !== text) {
+    res.status(409).json({ message: '대기열의 마지막 메시지가 아님 (이미 받았을 수 있음)' })
+    return
+  }
+  const progress: UnqueueProgress = { queued: queued.map((item) => item.raw), step: { kind: 'popping' } }
+  const target = progress.queued.at(-1)!
+  // 마지막 조각이 쓰다 만 줄이면 그 줄부터 본다 (↑ 직전의 받아들임일 수 있다)
+  const fromLine = jsonl.split('\n').length - 1
+  unqueues.set(sessionId, progress)
+  try {
+    if (!host.send({ type: 'input', sessionId, data: UP_KEY })) {
+      res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+      return
+    }
+    const startedAt = Date.now()
+    while (unqueues.get(sessionId) === progress) {
+      const { kind } = progress.step
+      const elapsed = Date.now() - startedAt
+      if (kind === 'done' || kind === 'stuck' || elapsed >= UNQUEUE_TIMEOUT_MS) break
+      if (kind === 'popping' && elapsed >= UNQUEUE_POP_TIMEOUT_MS) break
+      await sleep(UNQUEUE_POLL_MS)
+    }
+    // 여기서 비워야 늦게 온 알림이 Enter 를 보내지 않는다
+    if (unqueues.get(sessionId) === progress) unqueues.delete(sessionId)
+    const step = progress.step
+    let judgement: QueueJudgement = 'unknown'
+    const deadline = Date.now() + UNQUEUE_RECORD_TIMEOUT_MS
+    while (step.kind !== 'stuck') {
+      judgement = judgeQueue((await findTranscript(sessionId)) ?? '', fromLine, target)
+      if (judgement !== 'unknown' || Date.now() >= deadline) break
+      await sleep(UNQUEUE_POLL_MS)
+    }
+    res.json({ outcome: decideOutcome(step, judgement) })
+  } finally {
+    if (unqueues.get(sessionId) === progress) unqueues.delete(sessionId)
+  }
 })
 
 /**
@@ -884,6 +969,28 @@ app.post('/api/hook/suggestion', (req, res) => {
 })
 
 /**
+ * mod 가 알리는 입력칸 변경 (↑ 로 꺼냄·자기 fill·빈 입력칸) `{ sessionId, text, origin }`. 대기 메시지 취소가 진행 중일 때만 답한다:
+ * { fill } = 입력칸을 그 글로 바꿔라. fill 한 글이 그대로 들어온 것을 확인하면 서버가 pty 에 Enter 를 보낸다.
+ * 진행 중인 취소가 없으면 {} (평소에는 아무 일도 없다). suggestion 과 같은 이유로 인증 예외가 아니다 (mod 는 loopback 으로 통과)
+ */
+app.post('/api/hook/prompt-box', (req, res) => {
+  const { sessionId, text, origin } = (req.body ?? {}) as { sessionId?: unknown; text?: unknown; origin?: unknown }
+  if (typeof sessionId !== 'string' || typeof text !== 'string' || typeof origin !== 'string') {
+    res.status(400).end()
+    return
+  }
+  const progress = unqueues.get(sessionId)
+  if (!progress) {
+    res.json({})
+    return
+  }
+  const answer = answerBox(progress, text, origin)
+  progress.step = answer.step
+  if (answer.isEnterNeeded) host.send({ type: 'input', sessionId, data: '\r' })
+  res.json(answer.reply)
+})
+
+/**
  * PermissionRequest(matcher AskUserQuestion) 훅. 웹 세션이면 응답하지 않고 붙잡아 두고 답하기 API 를 기다린다
  * (훅 timeout 1시간). 외부 세션은 관찰만이라 바로 {} (결정 없음 → 터미널 화면이 받는다)
  */
@@ -923,7 +1030,10 @@ app.get('/api/events', (req, res) => {
 
 host.on('reachable', (isReachable: boolean) => {
   // 연결이 끊기면 웹 세션 목록도 빈다. 호스트가 재시작했으면 세션이 --resume 으로 새로 떠 옛 제안은 쓸모없다
-  if (!isReachable) suggestions.clear()
+  if (!isReachable) {
+    suggestions.clear()
+    unqueues.clear()
+  }
   void broadcast()
 })
 host.on('message', (message: HostMessage) => {
@@ -931,6 +1041,7 @@ host.on('message', (message: HostMessage) => {
   if (message.type === 'exit') {
     lastOutputAt.delete(message.sessionId)
     suggestions.delete(message.sessionId)
+    unqueues.delete(message.sessionId)
     tasks.markExited(message.sessionId)
     releaseQuestion(message.sessionId)
     // 이벤트 처리기라 던지면 서버가 죽는다. 실패하면 이름이 hq.json 에 남는다

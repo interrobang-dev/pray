@@ -453,6 +453,16 @@ interface PendingMessage {
 /** 확인되지 않은 임시 말풍선을 조용히 없애기까지. `/help` 같은 슬래시 명령은 user 메시지로 안 남을 수 있다 */
 const PENDING_TIMEOUT_MS = 15_000
 
+/** 대기 메시지 취소 결과 (서버 outcome) → 대화 맨 아래 한 줄 */
+const CANCEL_OUTCOME_LABELS: Record<string, string> = {
+  cancelled: '취소됨',
+  accepted: '이미 claude 가 받음',
+  stuck: '취소 못 함: 터미널 탭에서 확인',
+  failed: '실패: 터미널 탭에서 확인',
+}
+/** 취소 결과 한 줄을 보여 주는 시간 */
+const CANCEL_NOTICE_MS = 6_000
+
 const PASTE_TAG = /<\/?pasted_content id="[^"]*">/g
 
 /**
@@ -500,6 +510,18 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     !isAsking &&
     draft === '' &&
     pendings.every((pending) => pending.isFailed)
+  /** [취소] 를 누른 대기 메시지 ID. 서버가 결과를 줄 때까지 버튼이 "취소 중…" */
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+  /** 대기 메시지 취소 결과 한 줄. CANCEL_NOTICE_MS 뒤 사라진다 */
+  const [cancelNotice, setCancelNotice] = useState<string | null>(null)
+  /** 응답이 왔을 때 아직 같은 세션을 보고 있는지 보려고 */
+  const sessionIdRef = useRef(sessionId)
+  /**
+   * [취소] 는 맨 마지막 "대기 중" 말풍선에만 (Claude Code 는 대기열을 전부 꺼내는 방법만 있어 서버가 나머지를 다시 넣는다).
+   * claude 가 작업 중이고 승인 대기·질문 중이 아닐 때만 (서버도 다시 확인한다)
+   */
+  const lastQueuedId = useMemo(() => [...messages].reverse().find((m) => m.isQueued && m.role === 'user' && !m.from)?.id ?? null, [messages])
+  const canCancelQueued = isWritable && isWorking && !isApprovalNeeded && !isAsking
   const nextPendingIdRef = useRef(1)
   const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -563,6 +585,9 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
   }, [messages])
 
   useEffect(() => {
+    sessionIdRef.current = sessionId
+    setCancellingId(null)
+    setCancelNotice(null)
     setPendings([])
     isFirstLoadRef.current = true
     isAtBottomRef.current = true
@@ -632,6 +657,36 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
 
   function dismissPending(pendingId: number) {
     setPendings((current) => current.filter((pending) => pending.id !== pendingId))
+  }
+
+  useEffect(() => {
+    if (!cancelNotice) return
+    const timer = setTimeout(() => setCancelNotice(null), CANCEL_NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [cancelNotice])
+
+  /** 마지막 대기 메시지를 Claude Code 대기열에서 뺀다. 서버가 ↑ 로 전부 꺼내고 나머지를 다시 넣은 뒤 결과를 준다 (몇 초 걸린다) */
+  async function cancelQueued(message: ChatMessage) {
+    const requestSessionId = sessionId
+    setCancellingId(message.id)
+    setCancelNotice(null)
+    let notice: string
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/queue/cancel-last`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: message.text }),
+      })
+      const body = (await response.json().catch(() => ({}))) as { outcome?: string; message?: string }
+      notice = response.ok
+        ? (CANCEL_OUTCOME_LABELS[body.outcome ?? ''] ?? CANCEL_OUTCOME_LABELS.failed)
+        : `취소 못 함: ${body.message ?? `HTTP ${response.status}`}`
+    } catch {
+      notice = '실패: 네트워크 오류'
+    }
+    if (sessionIdRef.current !== requestSessionId) return
+    setCancellingId(null)
+    setCancelNotice(notice)
   }
 
   /** 제안을 입력칸에 채우고 커서를 끝에 둔다. 보내지 않는다 (사람이 확인하고 Enter) */
@@ -724,7 +779,22 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
                     {plainToolUses.map((toolUse) => (
                       <ToolBlock key={toolUse.id} toolUse={toolUse} />
                     ))}
-                    {message.isQueued && <div className="queued-label">대기 중</div>}
+                    {message.isQueued && (
+                      <div className="queued-label">
+                        대기 중
+                        {message.id === lastQueuedId && canCancelQueued && (
+                          <button
+                            type="button"
+                            className="queued-cancel"
+                            disabled={cancellingId !== null}
+                            onClick={() => void cancelQueued(message)}
+                            title="claude 가 받기 전에 이 메시지를 대기열에서 뺀다"
+                          >
+                            {cancellingId === message.id ? '취소 중…' : '취소'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 {relays.map(({ toolUse, relay, asked }) =>
@@ -754,6 +824,11 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
               </div>
             </div>
           ))}
+          {cancelNotice && (
+            <div className="queue-notice" role="status">
+              대기 메시지 · {cancelNotice}
+            </div>
+          )}
           {messages.length === 0 && pendings.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
           {isWorking && <WorkingIndicator since={workingSince} />}
           <div ref={bottomRef} />
