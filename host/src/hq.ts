@@ -14,6 +14,20 @@ export interface WebSessionRecord {
   extraArgs?: string[]
 }
 
+/** dismissed = kill 요청으로 끝남(정리됨), exit = 종료 코드 0, error = 그 밖의 종료 코드 */
+export type OffDutyReason = 'exit' | 'dismissed' | 'error'
+
+/** 끝난 웹 세션 (퇴근). 다시 출근(resume)하면 webSessions 로 되돌아간다. 호스트만 쓴다 */
+export interface OffDutyRecord extends WebSessionRecord {
+  endedAt: string
+  reason: OffDutyReason
+  /** kill 할 프로세스가 없었으면 null */
+  exitCode: number | null
+}
+
+/** 퇴근 기록 보관 기간. 지나면 기록과 세션 이름을 지운다 */
+export const OFF_DUTY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
 /** 그룹 = 그래픽 공간. 좌표·크기는 타일 단위 */
 export interface Group {
   id: string
@@ -32,6 +46,7 @@ export interface Office {
 
 interface HqFile extends Office {
   webSessions: WebSessionRecord[]
+  offDuty: OffDutyRecord[]
   /** 사용자가 직접 붙인 세션 이름. 없으면 화면은 jsonl 의 ai-title 을 쓴다. 외부 세션에도 붙일 수 있어 webSessions 와 별도 */
   sessionNames: Record<string, string>
 }
@@ -56,7 +71,14 @@ function readHq(): HqFile {
     (g) => g.id !== 'lobby' || teams.some((t) => t.groupId === 'lobby'),
   )
   // 모르는 키도 보존한다. 호스트·서버가 같은 파일을 쓰므로 한쪽이 구버전이어도 다른 쪽 데이터를 지우지 않게
-  return { ...rest, groups, webSessions: rest.webSessions ?? [], teams, sessionNames: rest.sessionNames ?? {} }
+  return {
+    ...rest,
+    groups,
+    webSessions: rest.webSessions ?? [],
+    offDuty: rest.offDuty ?? [],
+    teams,
+    sessionNames: rest.sessionNames ?? {},
+  }
 }
 
 /** 구버전 기록(desks·parts·partOf 없음, roomId 등)을 읽어도 터지지 않게 */
@@ -115,6 +137,66 @@ export function removeWebSession(sessionId: string): void {
   const hq = readHq()
   hq.webSessions = hq.webSessions.filter((s) => s.sessionId !== sessionId)
   writeHq(hq)
+}
+
+/** 다시 출근할 수 없는 웹 세션(대화가 없음)의 기록과 이름을 지운다. webSessions 에 없으면 아무것도 쓰지 않고 false */
+export function discardWebSession(sessionId: string): boolean {
+  const hq = readHq()
+  if (!hq.webSessions.some((s) => s.sessionId === sessionId)) return false
+  hq.webSessions = hq.webSessions.filter((s) => s.sessionId !== sessionId)
+  delete hq.sessionNames[sessionId]
+  writeHq(hq)
+  return true
+}
+
+// ---------- 퇴근 기록 ----------
+
+export function listOffDuty(): OffDutyRecord[] {
+  return readHq().offDuty
+}
+
+/** webSessions 기록을 퇴근 기록으로 옮긴다. webSessions 에 없으면 아무것도 쓰지 않고 false */
+export function moveToOffDuty(sessionId: string, end: Pick<OffDutyRecord, 'endedAt' | 'reason' | 'exitCode'>): boolean {
+  const hq = readHq()
+  const record = hq.webSessions.find((s) => s.sessionId === sessionId)
+  if (!record) return false
+  hq.webSessions = hq.webSessions.filter((s) => s.sessionId !== sessionId)
+  hq.offDuty = [...hq.offDuty.filter((s) => s.sessionId !== sessionId), { ...record, ...end }]
+  writeHq(hq)
+  return true
+}
+
+/** 퇴근 기록을 webSessions 로 되돌린다 (다시 출근). 없으면 null */
+export function returnFromOffDuty(sessionId: string): WebSessionRecord | null {
+  const hq = readHq()
+  const record = hq.offDuty.find((s) => s.sessionId === sessionId)
+  if (!record) return null
+  const { endedAt: _endedAt, reason: _reason, exitCode: _exitCode, ...webSession } = record
+  hq.offDuty = hq.offDuty.filter((s) => s.sessionId !== sessionId)
+  hq.webSessions = [...hq.webSessions.filter((s) => s.sessionId !== sessionId), webSession]
+  writeHq(hq)
+  return webSession
+}
+
+/** 퇴근 기록과 그 세션 이름을 지운다. 없으면 false */
+export function removeOffDuty(sessionId: string): boolean {
+  const hq = readHq()
+  if (!hq.offDuty.some((s) => s.sessionId === sessionId)) return false
+  hq.offDuty = hq.offDuty.filter((s) => s.sessionId !== sessionId)
+  delete hq.sessionNames[sessionId]
+  writeHq(hq)
+  return true
+}
+
+/** 보관 기간이 지난 퇴근 기록과 그 이름을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
+export function pruneOffDuty(now = Date.now()): string[] {
+  const hq = readHq()
+  const expired = hq.offDuty.filter((s) => now - Date.parse(s.endedAt) > OFF_DUTY_RETENTION_MS).map((s) => s.sessionId)
+  if (expired.length === 0) return []
+  hq.offDuty = hq.offDuty.filter((s) => !expired.includes(s.sessionId))
+  for (const sessionId of expired) delete hq.sessionNames[sessionId]
+  writeHq(hq)
+  return expired
 }
 
 export function listSessionNames(): Record<string, string> {

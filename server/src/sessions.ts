@@ -7,6 +7,7 @@ import type { HookState } from './hookState.js'
 import { summarizeTranscript, type TranscriptSummary } from './transcript.js'
 import { readLiveSessions } from './liveSessions.js'
 import { partOfSession, roleOf, teamOf, type Team } from '@jk-corp/host/team'
+import type { OffDutyRecord, WebSessionRecord } from '@jk-corp/host/hq'
 
 const claudeDir = join(homedir(), '.claude')
 export const projectsDir = join(claudeDir, 'projects')
@@ -123,9 +124,21 @@ export async function listSessions(
   questions: ReadonlyMap<string, AskQuestion[]> = new Map(),
   /** mod 가 POST /api/hook/suggestion 으로 보낸 입력칸 제안 (세션 ID → 글) */
   suggestions: ReadonlyMap<string, string> = new Map(),
+  /** hq.json webSessions. 프로세스가 없으면 휴식 */
+  recorded: WebSessionRecord[] = [],
+  /** hq.json offDuty (퇴근) */
+  offDuty: OffDutyRecord[] = [],
 ): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
-  const ids = new Set<string>([...live.map((s) => s.sessionId), ...hookStates.keys(), ...webSessions.keys()])
+  const recordedById = new Map(recorded.map((r) => [r.sessionId, r]))
+  const offDutyById = new Map(offDuty.map((r) => [r.sessionId, r]))
+  // 훅 상태만 있는 세션(끝난 외부 세션 등)은 넣지 않는다. 훅 상태는 상태 표시용
+  const ids = new Set<string>([
+    ...live.map((s) => s.sessionId),
+    ...webSessions.keys(),
+    ...recordedById.keys(),
+    ...offDutyById.keys(),
+  ])
   transcripts.retain(ids)
 
   const sessions = await Promise.all(
@@ -133,8 +146,13 @@ export async function listSessions(
       const liveEntry = live.find((s) => s.sessionId === id)
       const hook = hookStates.get(id)
       const transcript = await transcripts.summarize(id)
-      const cwd = liveEntry?.cwd ?? hook?.cwd ?? webSessions.get(id) ?? ''
-      const isWeb = webSessions.has(id)
+      // 근무가 이긴다 (터미널에서 직접 resume 한 퇴근 세션은 근무 중인 외부 세션)
+      const attendance = liveEntry || webSessions.has(id) ? 'present' : recordedById.has(id) ? 'break' : 'off'
+      const record = recordedById.get(id) ?? offDutyById.get(id)
+      const cwd =
+        attendance === 'present' ? (liveEntry?.cwd ?? hook?.cwd ?? webSessions.get(id) ?? '') : (record?.cwd ?? '')
+      const isWeb = webSessions.has(id) || attendance !== 'present'
+      const off = attendance === 'off' ? offDutyById.get(id) : undefined
       const team = teamOf(cwd, teams)
       const part = partOfSession(id, cwd, team)
       const heldQuestions = questions.get(id)
@@ -145,7 +163,9 @@ export async function listSessions(
         title: transcript?.title ?? null,
         status: hook?.status ?? 'unknown',
         kind: isWeb ? 'web' : 'external',
-        isAlive: liveEntry !== undefined || webSessions.has(id),
+        attendance,
+        isAlive: attendance === 'present',
+        offDuty: off ? { endedAt: off.endedAt, reason: off.reason, exitCode: off.exitCode } : null,
         lastAt: transcript?.lastAt ?? hook?.updatedAt ?? null,
         lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
         model: transcript?.model ?? null,

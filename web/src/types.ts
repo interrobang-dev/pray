@@ -1,5 +1,15 @@
 export type SessionStatus = 'working' | 'my-turn' | 'needs-approval' | 'idle' | 'ended' | 'unknown'
 
+/** 근무 = 살아 있는 세션. 휴식 = 호스트·트레이 재시작 중이라 잠깐 꺼진 웹 세션(호스트가 다시 띄운다). 퇴근 = 끝난 웹 세션(다시 출근할 수 있다) */
+export type Attendance = 'present' | 'break' | 'off'
+
+export interface OffDuty {
+  endedAt: string
+  /** exit = 스스로 퇴근, dismissed = 정리됨(종료 버튼·팀장 정리), error = 오류로 퇴근 */
+  reason: 'exit' | 'dismissed' | 'error'
+  exitCode: number | null
+}
+
 export interface Session {
   id: string
   cwd: string
@@ -8,7 +18,12 @@ export interface Session {
   title: string | null
   status: SessionStatus
   kind: 'web' | 'external'
+  /** attendance === 'present' 와 같다 */
   isAlive: boolean
+  /** 휴식·퇴근 세션의 kind 는 web. 옛 서버 응답에는 빠져 있다 — attendanceOf 로 읽는다 */
+  attendance?: Attendance
+  /** 퇴근 세션만 값이 있다. 옛 서버 응답에는 빠져 있다 */
+  offDuty?: OffDuty | null
   lastAt: string | null
   lastAssistantText: string | null
   /** 마지막 claude 응답의 모델 ID·effort. 응답이 아직 없으면 null. 옛 서버 응답에는 빠져 있다 */
@@ -114,6 +129,11 @@ export interface ScratchpadListing {
   files: ScratchpadFile[]
   /** 서버 상한(1000개)에서 잘렸는지. 얕은 폴더부터 모은다 */
   isTruncated: boolean
+}
+
+/** 출근 상태. attendance 가 없는 옛 서버 응답은 isAlive 로 본다 (끝난 세션은 퇴근. 다시 출근·기록 지우기는 못 한다) */
+export function attendanceOf(session: Session): Attendance {
+  return session.attendance ?? (session.isAlive ? 'present' : 'off')
 }
 
 export const statusLabel: Record<SessionStatus, string> = {

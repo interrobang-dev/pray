@@ -14,7 +14,15 @@ export interface Session {
   title: string | null
   status: SessionStatus
   kind: 'web' | 'external'
+  /**
+   * 근무(present) = pid 기록 또는 호스트 목록에 있음. 휴식(break) = hq.json webSessions 에 있는데 프로세스 없음 (호스트가 다시 뜨면 저절로 돌아옴).
+   * 퇴근(off) = 끝난 웹 세션 (hq.json offDuty). POST /api/sessions/:id/resume 로 다시 출근, DELETE /api/sessions/:id/off-duty 로 목록에서 지움
+   */
+  attendance: 'present' | 'break' | 'off'
+  /** attendance === 'present' 와 같은 뜻 */
   isAlive: boolean
+  /** 퇴근일 때만. dismissed = kill 요청(정리됨), exit = 종료 코드 0, error = 그 밖 */
+  offDuty: { endedAt: string; reason: 'exit' | 'dismissed' | 'error'; exitCode: number | null } | null
   lastAt: string | null
   lastAssistantText: string | null
   /** 마지막 claude 응답(jsonl)의 모델 ID. 응답이 아직 없으면 null */

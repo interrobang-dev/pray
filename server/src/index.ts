@@ -10,8 +10,10 @@ import {
   addGroup,
   addPart,
   addTeam,
+  listOffDuty,
   listSessionNames,
   listTeams,
+  listWebSessions,
   readOffice,
   setSessionName,
   removeTeam,
@@ -72,8 +74,6 @@ const hookStates = new Map<string, HookState>()
 const subscribers = new Set<Response>()
 const host = new HostClient()
 const tasks = new TaskStore()
-/** exit 한 웹 세션의 이름 (hq.json 에서는 지운다). 메모리라 서버 재시작 때 사라지지만 휴무 목록도 메모리의 훅 상태 기반이라 같이 비워지므로 수명이 같다 */
-const exitedSessionNames = new Map<string, string>()
 /**
  * 웹 세션의 AskUserQuestion PermissionRequest 훅 요청을 응답하지 않고 붙잡아 둔 것 (세션당 하나).
  * 답하기 API 가 이 응답으로 결정을 돌려준다. 터미널 화면과 경쟁해 먼저 결정한 쪽이 이긴다
@@ -178,18 +178,22 @@ function sendSse(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
 }
 
-/** 사용자 지정 세션 이름 (exit 한 웹 세션 것 포함) */
-function sessionNames(): Record<string, string> {
-  return { ...Object.fromEntries(exitedSessionNames), ...listSessionNames() }
-}
-
 async function snapshotPayload() {
   const webSessions = new Map(host.sessions.map((s) => [s.sessionId, s.cwd]))
-  const names = sessionNames()
+  const names = listSessionNames()
   const questions = new Map([...heldQuestions].map(([id, held]) => [id, held.questions]))
   return {
     isHostReachable: host.isReachable,
-    sessions: await listSessions(hookStates, webSessions, listTeams(), names, questions, suggestions),
+    sessions: await listSessions(
+      hookStates,
+      webSessions,
+      listTeams(),
+      names,
+      questions,
+      suggestions,
+      listWebSessions(),
+      listOffDuty(),
+    ),
   }
 }
 
@@ -325,7 +329,7 @@ app.get('/api/sessions/:id/messages', async (req, res) => {
     res.json(messages)
     return
   }
-  const names = sessionNames()
+  const names = listSessionNames()
   const fromIds = [...new Set(records.map((r) => r.fromSessionId).filter((id): id is string => id !== null))]
   const fromNames = new Map(await Promise.all(fromIds.map(async (id) => [id, await displayNameOf(id, names)] as const)))
   res.json(attachInstructions(messages, records, (id) => (id ? (fromNames.get(id) ?? id.slice(0, 8)) : NO_LEAD_NAME)))
@@ -378,8 +382,62 @@ app.patch('/api/sessions/:id', (req, res) => {
   void broadcast()
 })
 
+/** 웹 세션 종료. 호스트가 기록을 정리됨(dismissed) 퇴근으로 옮긴다 */
 app.delete('/api/sessions/:id', (req, res) => {
   host.send({ type: 'kill', sessionId: req.params.id })
+  res.json({})
+})
+
+/**
+ * 퇴근한 웹 세션 다시 출근: 호스트가 퇴근 기록의 cwd·extraArgs 그대로 --resume 한다.
+ * 팀장·파트장(--mcp-config 가 있는 것)은 지금도 그 팀·파트의 지시자일 때만 — 옛 팀장이 팀장 도구를 들고 돌아오지 않게
+ */
+app.post('/api/sessions/:id/resume', async (req, res) => {
+  const sessionId = req.params.id
+  const record = listOffDuty().find((r) => r.sessionId === sessionId)
+  if (!record) {
+    res.status(404).json({ message: '퇴근 기록 없음' })
+    return
+  }
+  const { sessions } = await snapshotPayload()
+  if (sessions.some((s) => s.id === sessionId && s.isAlive)) {
+    res.status(409).json({ message: '이미 근무 중' })
+    return
+  }
+  if (!existsSync(record.cwd)) {
+    res.status(409).json({ message: `폴더 없음: ${record.cwd}` })
+    return
+  }
+  if (!host.isReachable) {
+    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    return
+  }
+  const isCommander = record.extraArgs?.includes('--mcp-config') ?? false
+  const teams = listTeams()
+  const isStillCommander = teams.some(
+    (t) => t.leadSessionId === sessionId || t.parts.some((p) => p.leadSessionId === sessionId),
+  )
+  if (isCommander && !isStillCommander) {
+    res.status(409).json({ message: '지시자가 바뀌어 다시 출근할 수 없음' })
+    return
+  }
+  if (!host.send({ type: 'resume', sessionId })) {
+    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    return
+  }
+  res.json({})
+})
+
+/** 퇴근 기록을 지운다 (목록에서 빠짐). 호스트가 그 세션 이름도 같이 지운다 */
+app.delete('/api/sessions/:id/off-duty', (req, res) => {
+  if (!listOffDuty().some((r) => r.sessionId === req.params.id)) {
+    res.status(404).json({ message: '퇴근 기록 없음' })
+    return
+  }
+  if (!host.send({ type: 'forget', sessionId: req.params.id })) {
+    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    return
+  }
   res.json({})
 })
 
@@ -623,6 +681,11 @@ async function assignTask(team: Team, part: Part | null, sessionId: string, inst
   }
   if (member.role !== 'member') {
     res.status(404).json({ message: '팀원(웹 세션)이 아님' })
+    return
+  }
+  // 휴식·퇴근 세션도 kind 가 web 이라 role 이 member 다. 받아 주면 입력이 갈 곳이 없어 13초 뒤 failed 가 된다
+  if (!member.isAlive) {
+    res.status(409).json({ message: '퇴근·휴식 중인 팀원이라 지시할 수 없음' })
     return
   }
   let task
@@ -1094,14 +1157,6 @@ host.on('message', (message: HostMessage) => {
     unqueues.delete(message.sessionId)
     tasks.markExited(message.sessionId)
     releaseQuestion(message.sessionId)
-    // 이벤트 처리기라 던지면 서버가 죽는다. 실패하면 이름이 hq.json 에 남는다
-    try {
-      const name = listSessionNames()[message.sessionId]
-      if (name) exitedSessionNames.set(message.sessionId, name)
-      setSessionName(message.sessionId, null)
-    } catch (error) {
-      console.error(`hq.json 을 읽거나 쓰지 못해 종료한 세션의 이름 정리 건너뜀 (${message.sessionId}): ${error}`)
-    }
   }
   if (message.type === 'sessions' || message.type === 'exit') void broadcast()
 })

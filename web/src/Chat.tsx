@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { buildChatRows, type Work } from './chatRows'
 import { FilesButton } from './Files'
@@ -8,7 +8,10 @@ import type { AskQuestion, ChatMessage, ToolUse } from './types'
 
 interface Props {
   sessionId: string
+  /** 근무 중인 웹 세션만 true. 입력·승인·질문·제안 칩·대기 취소는 이때만 (휴식·퇴근 세션 pty 에 키를 보내지 않게) */
   isWritable: boolean
+  /** 입력할 수 없을 때 입력칸 자리에 둘 것 (휴식 안내·퇴근 버튼). 없으면 외부 세션 안내 */
+  footer?: ReactNode
   isApprovalNeeded: boolean
   /** 훅 상태가 working 이면 대화 맨 아래에 작업 중 표시기 */
   isWorking: boolean
@@ -536,7 +539,7 @@ function settlePendings(pendings: PendingMessage[], messages: ChatMessage[]): Pe
   return remaining.map((pending) => ({ ...pending, knownIds: new Set([...pending.knownIds, ...matchedIds]) }))
 }
 
-export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, workingSince, pendingTool, question, suggestion, version, sessionNames }: Props) {
+export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorking, workingSince, pendingTool, question, suggestion, version, sessionNames }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [pendings, setPendings] = useState<PendingMessage[]>([])
@@ -922,7 +925,7 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
           </button>
         )}
       </div>
-      {question?.questions.length ? (
+      {isWritable && question?.questions.length ? (
         <QuestionCard key={`${sessionId}:${question.questions.map((item) => item.question).join('\n')}`} sessionId={sessionId} questions={question.questions} />
       ) : (
         isWritable &&
@@ -976,7 +979,7 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
           </button>
         </form>
       ) : (
-        <p className="hint">터미널·IDE에서 띄운 세션이라 관찰만 가능합니다</p>
+        (footer ?? <p className="hint">터미널·IDE에서 띄운 세션이라 관찰만 가능합니다</p>)
       )}
     </div>
   )

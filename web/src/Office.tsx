@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js'
-import type { Office as OfficeData, Group, Part, Session, Team } from './types'
+import { attendanceOf, type Office as OfficeData, type Group, type Part, type Session, type Team } from './types'
 import { avatarOf, type Avatar } from './avatar'
 
 /**
@@ -482,17 +482,20 @@ function drawFigure(avatar: Avatar, status: Session['status']): Figure {
 
 interface DeskParts {
   container: Container
-  figure: Figure
+  /** 휴식 세션은 null (빈 의자) */
+  figure: Figure | null
 }
 
 const DESK_W = DESK_TILES_W * TILE
 const DESK_H = DESK_TILES_H * TILE
 
+/** 휴식 세션(호스트 재시작 중)은 책상을 그대로 두고 캐릭터 없이 빈 의자 + 흐린 이름표. 훅 상태가 남아 있어도 모니터·말풍선은 끈다 */
 function drawDesk(session: Session, seat: Placement, isSelected: boolean): DeskParts {
   const container = new Container()
   container.position.set(PAD_X + seat.x * TILE, PAD_Y + seat.y * TILE)
   const avatar = avatarOf(session.id)
-  const isWorking = session.status === 'working'
+  const isOnBreak = attendanceOf(session) === 'break'
+  const isWorking = session.status === 'working' && !isOnBreak
   const isExternal = session.kind === 'external'
 
   // 의자 등받이
@@ -500,9 +503,11 @@ function drawDesk(session: Session, seat: Placement, isSelected: boolean): DeskP
   chair.rect(4, 6, 1, 10).fill(COLOR.chairLine).rect(19, 6, 1, 10).fill(COLOR.chairLine)
   container.addChild(chair)
 
-  const figure = drawFigure(avatar, session.status)
-  figure.container.position.set(4, 2)
-  container.addChild(figure.container)
+  const figure = isOnBreak ? null : drawFigure(avatar, session.status)
+  if (figure) {
+    figure.container.position.set(4, 2)
+    container.addChild(figure.container)
+  }
 
   // 책상
   const desk = new Graphics()
@@ -547,11 +552,16 @@ function drawDesk(session: Session, seat: Placement, isSelected: boolean): DeskP
   if (isLead) container.addChild(new Graphics().rect(10, 30, 12, 3).fill(COLOR.gold).rect(11, 31, 10, 1).fill(0xf4d77a))
   const mask = new Graphics().rect(tag.x, 39, tagW, 9).fill(0xffffff)
   name.mask = mask
+  if (isOnBreak) {
+    tag.alpha = 0.5
+    name.alpha = 0.5
+  }
   container.addChild(tag, mask, name)
 
   // 말풍선
-  const bubbleText =
-    session.status === 'needs-approval'
+  const bubbleText = isOnBreak
+    ? null
+    : session.status === 'needs-approval'
       ? `승인 필요: ${session.pendingTool ?? '?'}`
       : session.status === 'my-turn'
         ? (session.lastAssistantText?.split('\n')[0] ?? '끝났어요').slice(0, 50)
@@ -667,8 +677,9 @@ export function Office(props: Props) {
           desks.clear()
           groupViews.clear()
           working.clear()
-          const alive = sessions.filter((s) => s.isAlive)
-          const zone = lobbyZone(office, alive.filter((s) => !s.teamId).length)
+          // 근무·휴식 세션만 자리가 있다 (퇴근은 그리지 않는다)
+          const seated = sessions.filter((s) => attendanceOf(s) !== 'off')
+          const zone = lobbyZone(office, seated.filter((s) => !s.teamId).length)
           content.w = PAD_X * 2 + (zone.x + zone.w) * TILE
           content.h = PAD_Y + 16 + Math.max(zone.y + zone.h, ...office.groups.map((r) => r.y + r.h)) * TILE
           const bgW = Math.max(content.w, Math.ceil(app.screen.width / SCALE))
@@ -695,14 +706,14 @@ export function Office(props: Props) {
           }
           world.addChild(drawZone(zone))
           clampPan()
-          const { seats, islands } = placeAll(office, alive, zone)
+          const { seats, islands } = placeAll(office, seated, zone)
           for (const island of islands) {
             const parts = drawIsland(island, () => {
               if (!teamDrag?.isMoved) latest.current.onEditTeam(island.team)
             })
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               event.stopPropagation()
-              const memberIds = alive.filter((s) => s.teamId === island.team.id).map((s) => s.id)
+              const memberIds = seated.filter((s) => s.teamId === island.team.id).map((s) => s.id)
               teamDrag = {
                 team: island.team,
                 start: toWorld(event),
@@ -719,7 +730,7 @@ export function Office(props: Props) {
             world.addChild(parts.container)
           }
           // 아래쪽 책상이 위쪽을 가리도록 y 순 정렬
-          const ordered = [...alive].sort((a, b) => seats.get(a.id)!.y - seats.get(b.id)!.y)
+          const ordered = [...seated].sort((a, b) => seats.get(a.id)!.y - seats.get(b.id)!.y)
           for (const session of ordered) {
             const seat = seats.get(session.id)!
             const parts = drawDesk(session, seat, session.id === selectedId)
@@ -745,7 +756,7 @@ export function Office(props: Props) {
             })
             world.addChild(parts.container)
             desks.set(session.id, parts)
-            if (session.status === 'working') working.add(session.id)
+            if (parts.figure && session.status === 'working') working.add(session.id)
           }
         }
         redrawRef.current = redraw
@@ -845,6 +856,7 @@ export function Office(props: Props) {
           frame = (frame + 1) % 2
           for (const [id, parts] of desks) {
             const { figure } = parts
+            if (!figure) continue
             if (working.has(id)) {
               figure.handLeft.y = frame ? -1 : 0
               figure.handRight.y = frame ? 0 : -1

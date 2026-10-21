@@ -5,13 +5,23 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import {
   addGroup,
   addTeam,
+  addWebSession,
+  discardWebSession,
+  listOffDuty,
+  listSessionNames,
   listTeams,
   listWebSessions,
+  moveToOffDuty,
+  OFF_DUTY_RETENTION_MS,
   OrderMismatchError,
+  pruneOffDuty,
   readOffice,
+  removeOffDuty,
   removeWebSession,
   reorderGroups,
   reorderTeams,
+  returnFromOffDuty,
+  setSessionName,
 } from './hq.js'
 
 // hq.ts 는 import 때 homedir() 로 경로를 정한다. 실제 ~/.claude/jk-corp/hq.json 대신 임시 폴더를 쓴다
@@ -134,5 +144,79 @@ describe('list order', () => {
     expect(() => reorderTeams(g1.id, [u1.id])).toThrow(OrderMismatchError)
     expect(reorderTeams('nope', [t1.id])).toBeNull()
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
+  })
+})
+
+describe('off duty records', () => {
+  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
+  afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
+
+  const record = { sessionId: 'a', cwd: 'D:/repo', createdAt: '2026-10-01T00:00:00.000Z', extraArgs: ['--name', '팀장'] }
+  const end = { endedAt: '2026-10-20T00:00:00.000Z', reason: 'error' as const, exitCode: 1 }
+
+  it('moves a web session to off duty and back with its spawn args', () => {
+    addWebSession(record)
+    expect(moveToOffDuty('a', end)).toBe(true)
+    expect(listWebSessions()).toEqual([])
+    expect(listOffDuty()).toEqual([{ ...record, ...end }])
+    expect(returnFromOffDuty('a')).toEqual(record)
+    expect(listWebSessions()).toEqual([record])
+    expect(listOffDuty()).toEqual([])
+    expect(readdirSync(hqDir)).toEqual(['hq.json'])
+  })
+
+  it('does nothing for sessions without a record', () => {
+    addGroup('개발')
+    const before = readFileSync(hqPath, 'utf8')
+    expect(moveToOffDuty('nope', end)).toBe(false)
+    expect(returnFromOffDuty('nope')).toBeNull()
+    expect(removeOffDuty('nope')).toBe(false)
+    expect(discardWebSession('nope')).toBe(false)
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+  })
+
+  it('removes the session name together with the off duty record', () => {
+    addWebSession(record)
+    setSessionName('a', '서버 개발자')
+    setSessionName('other', '남의 이름')
+    moveToOffDuty('a', end)
+    expect(removeOffDuty('a')).toBe(true)
+    expect(listOffDuty()).toEqual([])
+    expect(listSessionNames()).toEqual({ other: '남의 이름' })
+  })
+
+  it('discards a web session that cannot be resumed together with its name', () => {
+    addWebSession(record)
+    setSessionName('a', '서버 개발자')
+    expect(discardWebSession('a')).toBe(true)
+    expect(listWebSessions()).toEqual([])
+    expect(listOffDuty()).toEqual([])
+    expect(listSessionNames()).toEqual({})
+  })
+
+  it('prunes records older than the retention period with their names', () => {
+    const now = Date.parse('2026-10-22T00:00:00.000Z')
+    for (const [sessionId, endedAt] of [
+      ['old', new Date(now - OFF_DUTY_RETENTION_MS - 1).toISOString()],
+      ['edge', new Date(now - OFF_DUTY_RETENTION_MS).toISOString()],
+      ['new', new Date(now - 1000).toISOString()],
+    ]) {
+      addWebSession({ ...record, sessionId })
+      setSessionName(sessionId, sessionId)
+      moveToOffDuty(sessionId, { ...end, endedAt })
+    }
+    expect(pruneOffDuty(now)).toEqual(['old'])
+    expect(listOffDuty().map((r) => r.sessionId)).toEqual(['edge', 'new'])
+    expect(listSessionNames()).toEqual({ edge: 'edge', new: 'new' })
+    const before = readFileSync(hqPath, 'utf8')
+    expect(pruneOffDuty(now)).toEqual([])
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+  })
+
+  it('keeps off duty records when other code writes the file', () => {
+    addWebSession(record)
+    moveToOffDuty('a', end)
+    addGroup('개발')
+    expect(listOffDuty()).toHaveLength(1)
   })
 })

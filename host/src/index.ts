@@ -2,7 +2,7 @@ import { createServer, type Socket } from 'node:net'
 import { existsSync } from 'node:fs'
 import { PIPE_PATH, LineDecoder, encode, type ClientMessage, type HostMessage } from './protocol.js'
 import { PtyPool } from './ptyPool.js'
-import { listWebSessions, removeWebSession } from './hq.js'
+import { listOffDuty, listWebSessions, pruneOffDuty, removeOffDuty, removeWebSession, returnFromOffDuty } from './hq.js'
 import { setupFileLog } from './runtime.js'
 
 setupFileLog()
@@ -58,6 +58,19 @@ function handle(socket: Socket, message: ClientMessage): void {
     case 'kill':
       pool.kill(message.sessionId)
       return
+    case 'resume':
+      resumeOffDuty(socket, message.sessionId)
+      return
+    case 'forget':
+      try {
+        if (removeOffDuty(message.sessionId)) console.log(`퇴근 기록 지움 ${message.sessionId}`)
+      } catch (error) {
+        console.error(`hq.json 기록 실패 (퇴근 기록 지우기 ${message.sessionId})`, error)
+        send(socket, { type: 'error', sessionId: message.sessionId, message: String(error) })
+      }
+      // 서버는 sessions 를 받으면 hq.json 을 다시 읽어 목록을 보낸다
+      broadcast({ type: 'sessions', sessions: pool.list() })
+      return
     case 'restart':
       // 웹 세션은 호스트와 함께 끊기고, 다시 뜰 때 webSessions 를 --resume 한다
       console.log(`restart 요청 → 종료 코드 ${RESTART_EXIT_CODE} 로 나감 (트레이 앱이 다시 띄움)`)
@@ -77,6 +90,26 @@ const server = createServer((socket) => {
   socket.on('error', () => clients.delete(socket))
   send(socket, { type: 'sessions', sessions: pool.list() })
 })
+
+/** 퇴근 기록의 cwd·extraArgs 그대로 --resume 하고 기록을 webSessions 로 되돌린다. 폴더·팀장 확인은 서버가 한다 */
+function resumeOffDuty(socket: Socket, sessionId: string): void {
+  try {
+    const record = listOffDuty().find((r) => r.sessionId === sessionId)
+    if (!record) throw new Error('퇴근 기록 없음')
+    pool.spawn({ sessionId, cwd: record.cwd, resume: true, extraArgs: record.extraArgs })
+    console.log(`resume (퇴근 기록) ${sessionId} cwd=${record.cwd}`)
+  } catch (error) {
+    console.error(`resume 실패 ${sessionId}`, error)
+    send(socket, { type: 'error', sessionId, message: String(error) })
+    return
+  }
+  // 띄운 뒤에 옮긴다. 실패하면 세션은 돌지만 기록이 퇴근에 남는다 (끝날 때 webSessions 에 없어 그대로)
+  try {
+    returnFromOffDuty(sessionId)
+  } catch (error) {
+    console.error(`hq.json 기록 실패 (퇴근 → webSessions ${sessionId})`, error)
+  }
+}
 
 /** 지난번 호스트가 살려 두던 웹 세션을 --resume 으로 되살린다 */
 function resumeWebSessions(): void {
@@ -107,7 +140,18 @@ function resumeWebSessions(): void {
   }
 }
 
+/** 보관 기간이 지난 퇴근 기록을 지운다 (세션이 끝날 때도 ptyPool 이 한다) */
+function pruneOffDutyOnStart(): void {
+  try {
+    const expired = pruneOffDuty()
+    if (expired.length) console.log(`퇴근 기록 보관 기간 지남, 지움: ${expired.join(', ')}`)
+  } catch (error) {
+    console.error('hq.json 기록 실패 (퇴근 기록 정리)', error)
+  }
+}
+
 server.listen(PIPE_PATH, () => {
   console.log(`jk-corp host listening on ${PIPE_PATH}`)
+  pruneOffDutyOnStart()
   resumeWebSessions()
 })

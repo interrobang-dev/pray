@@ -1,9 +1,11 @@
 import { EventEmitter } from 'node:events'
+import { existsSync, readdirSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import * as pty from 'node-pty'
 import { RingBuffer } from './ringBuffer.js'
 import type { HostSession } from './protocol.js'
-import { addWebSession, removeWebSession } from './hq.js'
+import { addWebSession, discardWebSession, moveToOffDuty, pruneOffDuty, type OffDutyReason } from './hq.js'
 import { getArg } from './runtime.js'
 
 const RING_LIMIT = 200_000
@@ -29,6 +31,27 @@ function childEnv(sessionId: string): Record<string, string> {
   return env
 }
 
+const projectsDir = join(homedir(), '.claude', 'projects')
+
+/** `~/.claude/projects/<프로젝트>/<id>.jsonl` 이 있는지. 대화가 한 번도 없던 세션은 없고 resume 할 수 없다 */
+function transcriptExists(sessionId: string): boolean {
+  try {
+    return readdirSync(projectsDir).some((name) => existsSync(join(projectsDir, name, `${sessionId}.jsonl`)))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 끝난 웹 세션의 퇴근 이유. null 이면 다시 출근(resume)할 수 없어 기록 없이 지운다.
+ * kill 은 종료 코드 1 로 끝나서(실측) 코드가 아니라 kill 요청 여부로 정리됨을 가린다. /exit 는 0
+ */
+export function offDutyReason(end: { isDismissed: boolean; exitCode: number | null; hasTranscript: boolean }): OffDutyReason | null {
+  if (!end.hasTranscript) return null
+  if (end.isDismissed) return 'dismissed'
+  return end.exitCode === 0 ? 'exit' : 'error'
+}
+
 /** hq.json 이 깨져 있으면 hq 함수가 던진다. 호스트가 죽으면 웹 세션이 전부 끊기므로 로그만 남기고 넘어간다 (기록은 그대로) */
 function updateHq(what: string, update: () => void): void {
   try {
@@ -42,6 +65,8 @@ interface Entry {
   pty: pty.IPty
   ring: RingBuffer
   cwd: string
+  /** kill 요청으로 끝나는 중 (퇴근 이유 dismissed) */
+  isDismissed: boolean
 }
 
 export interface SpawnOptions {
@@ -56,6 +81,12 @@ export interface SpawnOptions {
 /** 이벤트: output(sessionId, data), exit(sessionId, exitCode), change() */
 export class PtyPool extends EventEmitter {
   private entries = new Map<string, Entry>()
+  private readonly hasTranscript: (sessionId: string) => boolean
+
+  constructor(hasTranscript = transcriptExists) {
+    super()
+    this.hasTranscript = hasTranscript
+  }
 
   list(): HostSession[] {
     return [...this.entries].map(([sessionId, entry]) => ({ sessionId, cwd: entry.cwd, pid: entry.pty.pid }))
@@ -80,7 +111,8 @@ export class PtyPool extends EventEmitter {
       env: childEnv(sessionId),
     })
     const ring = new RingBuffer(RING_LIMIT)
-    this.entries.set(sessionId, { pty: child, ring, cwd })
+    const entry: Entry = { pty: child, ring, cwd, isDismissed: false }
+    this.entries.set(sessionId, entry)
     if (!resume) {
       const record = { sessionId, cwd, createdAt: new Date().toISOString(), extraArgs: extraArgs.length ? extraArgs : undefined }
       updateHq(`추가 ${sessionId}`, () => addWebSession(record))
@@ -92,7 +124,9 @@ export class PtyPool extends EventEmitter {
     })
     child.onExit(({ exitCode }) => {
       this.entries.delete(sessionId)
-      updateHq(`삭제 ${sessionId}`, () => removeWebSession(sessionId))
+      // 호스트 자체가 죽을 때는 여기가 돌지 않아 기록이 webSessions 에 남는다 (휴식 → 다음 호스트가 resume)
+      const hasTranscript = this.hasTranscript(sessionId)
+      this.recordEnd(sessionId, offDutyReason({ isDismissed: entry.isDismissed, exitCode, hasTranscript }), exitCode)
       this.emit('exit', sessionId, exitCode)
       this.emit('change')
     })
@@ -116,8 +150,27 @@ export class PtyPool extends EventEmitter {
     }
   }
 
+  /** 기록은 onExit 가 dismissed 퇴근으로 옮긴다. 프로세스 없이 기록만 남은 세션(휴식)은 바로 옮긴다 */
   kill(sessionId: string): void {
-    this.entries.get(sessionId)?.pty.kill()
-    updateHq(`삭제 ${sessionId}`, () => removeWebSession(sessionId))
+    const entry = this.entries.get(sessionId)
+    if (!entry) {
+      const hasTranscript = this.hasTranscript(sessionId)
+      this.recordEnd(sessionId, offDutyReason({ isDismissed: true, exitCode: null, hasTranscript }), null)
+      return
+    }
+    entry.isDismissed = true
+    entry.pty.kill()
+  }
+
+  /** 끝난 웹 세션을 퇴근 기록으로 옮기거나(reason) 기록 없이 지우고(null), 보관 기간이 지난 퇴근 기록을 정리한다 */
+  private recordEnd(sessionId: string, reason: OffDutyReason | null, exitCode: number | null): void {
+    updateHq(`퇴근 ${sessionId}`, () => {
+      if (reason === null) discardWebSession(sessionId)
+      else moveToOffDuty(sessionId, { endedAt: new Date().toISOString(), reason, exitCode })
+    })
+    updateHq('퇴근 기록 정리', () => {
+      const expired = pruneOffDuty()
+      if (expired.length) console.log(`퇴근 기록 보관 기간 지남, 지움: ${expired.join(', ')}`)
+    })
   }
 }

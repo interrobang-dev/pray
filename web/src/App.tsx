@@ -1,10 +1,28 @@
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react'
 import { Terminal } from './Terminal'
 import { Chat } from './Chat'
 import { Office } from './Office'
 import { UsagePanel } from './UsagePanel'
 import { Modal, Segmented } from './Modal'
-import { statusLabel, type Office as OfficeData, type Group, type Part, type Session, type SessionStatus, type Team } from './types'
+import {
+  attendanceOf,
+  statusLabel,
+  type Office as OfficeData,
+  type Group,
+  type OffDuty,
+  type Part,
+  type Session,
+  type SessionStatus,
+  type Team,
+} from './types'
 import { avatarOf, cssColor } from './avatar'
 
 interface Snapshot {
@@ -62,6 +80,36 @@ function formatElapsed(iso: string | null, now: number): { text: string; classNa
     minutes < 1 ? 'now' : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`
   const className = minutes < 15 ? 'recent' : minutes > 120 ? 'stale' : ''
   return { text, className, title: date.toLocaleString('ko-KR') }
+}
+
+/** 퇴근 시각부터 지금까지를 "방금"·"5분 전"·"3시간 전"·"2일 전" 으로 */
+function formatAgo(iso: string, now: number): string {
+  const minutes = Math.floor(Math.max(0, now - new Date(iso).getTime()) / 60_000)
+  if (minutes < 1) return '방금'
+  if (minutes < 60) return `${minutes}분 전`
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}시간 전`
+  return `${Math.floor(minutes / 1440)}일 전`
+}
+
+interface OffDutyLabel {
+  text: string
+  /** 오류로 퇴근. 빨강 */
+  isError: boolean
+  /** 툴팁: 퇴근 시각 */
+  title: string
+}
+
+/** 퇴근 이유 · 시각 "퇴근 · 방금"·"정리됨 · 3시간 전"·"오류로 퇴근 (코드 1) · 2일 전" */
+function offDutyLabel(offDuty: OffDuty, now: number): OffDutyLabel {
+  const isError = offDuty.reason === 'error'
+  const reason = isError
+    ? offDuty.exitCode === null
+      ? '오류로 퇴근'
+      : `오류로 퇴근 (코드 ${offDuty.exitCode})`
+    : offDuty.reason === 'dismissed'
+      ? '정리됨'
+      : '퇴근'
+  return { text: `${reason} · ${formatAgo(offDuty.endedAt, now)}`, isError, title: new Date(offDuty.endedAt).toLocaleString('ko-KR') }
 }
 
 /** 팀 카드 안 세션 줄의 정렬 순위. 작을수록 위. 승인 대기 → 내 차례 → 작업 중 → 나머지 (팀장도 상태로만 정렬) */
@@ -132,8 +180,10 @@ export function App() {
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
-  /** 목록 맨 아래 "휴무"(죽은 세션) 구역을 펼쳤는지. 기본 접힘 */
+  /** 목록 맨 아래 "퇴근" 구역을 펼쳤는지. 기본 접힘 */
   const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
+  /** [다시 출근] 이 받아들여져 근무로 바뀌기를 기다리는 세션 ID → 그때의 퇴근 시각 (다시 퇴근하면 시각이 바뀐다). 기다리는 동안 패널이 "출근 중…" */
+  const [returningSessions, setReturningSessions] = useState<Record<string, string>>({})
   /** 목록의 경과 시간을 1분마다 다시 계산하기 위한 현재 시각 */
   const [now, setNow] = useState(() => Date.now())
   /**
@@ -167,7 +217,23 @@ export function App() {
     return () => source.close()
   }, [])
 
+  // 다시 출근을 기다리던 세션이 근무로 바뀌었거나, 다시 퇴근했거나(퇴근 시각이 바뀜), 목록에서 빠지면 기다림을 끝낸다
+  useEffect(() => {
+    setReturningSessions((prev) => {
+      const ids = Object.keys(prev).filter((id) => {
+        const session = snapshot.sessions.find((s) => s.id === id)
+        return session && attendanceOf(session) !== 'present' && (session.offDuty?.endedAt ?? prev[id]) === prev[id]
+      })
+      return ids.length === Object.keys(prev).length ? prev : Object.fromEntries(ids.map((id) => [id, prev[id]]))
+    })
+  }, [snapshot])
+
   const selected = snapshot.sessions.find((s) => s.id === selectedId) ?? null
+  const isSelectedPresent = selected !== null && attendanceOf(selected) === 'present'
+  /** 근무 중인 웹 세션. 터미널·입력·승인·종료는 이때만 (휴식·퇴근 세션 pty 에 키·resize 를 보내지 않게) */
+  const isSelectedLiveWeb = isSelectedPresent && selected.kind === 'web'
+  /** 터미널을 못 여는 세션이면 보던 탭이 터미널이어도 대화 */
+  const shownTab = isSelectedLiveWeb ? tab : 'chat'
 
   /**
    * 세션을 고른다. 다른 세션이면 대화 탭으로 연다 (같은 세션을 다시 누르면 보던 탭 그대로).
@@ -516,9 +582,11 @@ export function App() {
   /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 팀 직속 세션 + 파트별(소제목 + 세션). 폴더는 툴팁. position 은 그룹 안 순번 (그룹이 없는 팀은 없어 끌기 손잡이도 없다) */
   function renderTeam(team: Team, position?: { index: number; count: number }) {
     const scope: ReorderScope = { kind: 'team', groupId: team.groupId }
+    // 근무·휴식 세션. 휴식은 훅 상태가 남아 있어도 "나머지" 순위
+    const rankOf = (session: Session) => (attendanceOf(session) === 'break' ? statusOrder.idle : statusOrder[session.status])
     const members = snapshot.sessions
-      .filter((s) => s.teamId === team.id && s.isAlive)
-      .sort((a, b) => statusOrder[a.status] - statusOrder[b.status])
+      .filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off')
+      .sort((a, b) => rankOf(a) - rankOf(b))
     const menuItems = [
       { label: '파트 추가', onClick: () => openPartForm(team.id) },
       ...(team.leadSessionId ? [{ label: '팀장 해제', onClick: () => releaseLead(team) }] : []),
@@ -573,18 +641,27 @@ export function App() {
     )
   }
 
-  /** 세션 한 줄: 상태 점 · 아바타 · 제목 · (팀장 태그 · 승인 대기 배지 · 시각). 팀 안에서는 폴더를 숨긴다 (팀 = 폴더). teamName 이 있으면 제목 앞에 붙인다 (휴무) */
+  /**
+   * 세션 한 줄: 상태 점 · 아바타 · 제목 · (팀장 태그 · 승인 대기·휴식 배지 · 시각). 팀 안에서는 폴더를 숨긴다 (팀 = 폴더). teamName 이 있으면 제목 앞에 붙인다 (퇴근).
+   * 휴식은 회색 점 + "휴식", 퇴근은 시각 대신 퇴근 이유 · 시각 (옛 서버 응답이라 이유가 없으면 시각)
+   */
   function renderSession(session: Session, hasCwd: boolean, teamName?: string) {
     const avatar = avatarOf(session.id)
     const elapsed = formatElapsed(session.lastAt, now)
     const model = modelLabel(session)
+    const attendance = attendanceOf(session)
+    const isPresent = attendance === 'present'
+    const offDuty = attendance === 'off' && session.offDuty ? offDutyLabel(session.offDuty, now) : null
     return (
       <div
         key={session.id}
-        className={['session', session.id === selectedId ? 'selected' : '', session.isAlive ? '' : 'dead'].join(' ')}
+        className={['session', session.id === selectedId ? 'selected' : '', attendance === 'off' ? 'dead' : ''].join(' ')}
         onClick={() => selectSession(session.id)}
       >
-        <span className={`status-dot ${session.status}`} title={statusLabel[session.status]} />
+        <span
+          className={`status-dot ${isPresent ? session.status : attendance}`}
+          title={isPresent ? statusLabel[session.status] : attendance === 'break' ? '휴식' : '퇴근'}
+        />
         <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
         <div className="title">{teamName ? `${teamName} · ${displayName(session)}` : displayName(session)}</div>
         {model && (
@@ -595,21 +672,50 @@ export function App() {
         <div className="meta">
           {session.role === 'lead' &&
             (session.partId ? <span className="badge role-part-lead">파트장</span> : <span className="badge role-lead">팀장</span>)}
-          {session.status === 'needs-approval' && <span className="badge needs-approval">{statusLabel[session.status]}</span>}
-          <span className={`time ${elapsed.className}`} title={elapsed.title}>
-            {elapsed.text}
-          </span>
+          {isPresent && session.status === 'needs-approval' && <span className="badge needs-approval">{statusLabel[session.status]}</span>}
+          {attendance === 'break' && <span className="badge">휴식</span>}
+          {offDuty ? (
+            <span className={offDuty.isError ? 'off-duty-reason error' : 'off-duty-reason'} title={offDuty.title}>
+              {offDuty.text}
+            </span>
+          ) : (
+            <span className={`time ${elapsed.className}`} title={elapsed.title}>
+              {elapsed.text}
+            </span>
+          )}
         </div>
         {hasCwd && <div className="cwd">{session.cwd}</div>}
       </div>
     )
   }
 
+  /** 입력할 수 없는 세션의 입력칸 자리: 퇴근 버튼(출근 중 포함)·휴식 안내. undefined 면 Chat 의 외부 세션 안내 */
+  function renderPanelFooter(session: Session): ReactNode {
+    const attendance = attendanceOf(session)
+    const isReturning = session.id in returningSessions
+    if (isReturning || session.attendance === 'off') {
+      return (
+        <OffDutyBar
+          key={session.id}
+          sessionId={session.id}
+          label={attendance === 'off' && session.offDuty ? offDutyLabel(session.offDuty, now) : null}
+          isReturning={isReturning}
+          onReturnAccepted={() => setReturningSessions((prev) => ({ ...prev, [session.id]: session.offDuty?.endedAt ?? '' }))}
+        />
+      )
+    }
+    if (attendance === 'break') return <p className="hint">휴식 중 · 호스트가 다시 띄우면 이어집니다</p>
+    // attendance 가 없는 옛 서버 응답의 끝난 웹 세션: 다시 출근·기록 지우기를 못 한다
+    if (attendance === 'off' && session.kind === 'web') return <p className="hint">퇴근한 세션이라 기록만 볼 수 있습니다</p>
+    return undefined
+  }
+
   /** 그룹이 지워져 소속 그룹이 없는 팀. 라벨 없이 그대로 보여 준다 */
   const orphanTeams = office.teams.filter((t) => !office.groups.some((g) => g.id === t.groupId))
-  const lobbySessions = snapshot.sessions.filter((s) => !s.teamId && s.isAlive)
-  /** 죽은 세션은 팀·로비에서 빼고 맨 아래 "휴무" 에 모은다. 서버가 준 순서(최근 활동 순) 그대로 */
-  const offDutySessions = snapshot.sessions.filter((s) => !s.isAlive)
+  /** 팀·로비에는 근무·휴식 세션. 휴식은 호스트가 다시 띄우면 저절로 돌아오므로 자리를 지킨다 */
+  const lobbySessions = snapshot.sessions.filter((s) => !s.teamId && attendanceOf(s) !== 'off')
+  /** 퇴근 세션은 맨 아래 "퇴근" 에 모은다. 서버가 준 순서 그대로 */
+  const offDutySessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'off')
 
   return (
     <main className={selected ? 'layout with-panel' : 'layout'}>
@@ -666,7 +772,7 @@ export function App() {
             <li className="group">
               <div className="group-label toggle" onClick={() => setIsOffDutyOpen(!isOffDutyOpen)}>
                 <span className="name">
-                  {isOffDutyOpen ? '▾' : '▸'} 휴무
+                  {isOffDutyOpen ? '▾' : '▸'} 퇴근
                 </span>
                 <span className="count">{offDutySessions.length}</span>
               </div>
@@ -799,16 +905,16 @@ export function App() {
             )}
             <span className="cwd">{selected.cwd}</span>
             <nav className="tabs">
-              <button className={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>
+              <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>
                 대화
               </button>
-              {selected.kind === 'web' && (
-                <button className={tab === 'terminal' ? 'on' : ''} onClick={() => setTab('terminal')}>
+              {isSelectedLiveWeb && (
+                <button className={shownTab === 'terminal' ? 'on' : ''} onClick={() => setTab('terminal')}>
                   터미널
                 </button>
               )}
             </nav>
-            {selected.kind === 'web' && (
+            {isSelectedLiveWeb && (
               <button
                 onClick={() => {
                   if (confirm('세션을 종료할까요?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
@@ -822,14 +928,16 @@ export function App() {
               {isNarrow ? '←' : '×'}
             </button>
           </div>
-          {tab === 'terminal' && selected.kind === 'web' ? (
+          {shownTab === 'terminal' ? (
             <Terminal sessionId={selected.id} />
           ) : (
             <Chat
               sessionId={selected.id}
-              isWritable={selected.kind === 'web'}
-              isApprovalNeeded={selected.status === 'needs-approval'}
-              isWorking={selected.status === 'working'}
+              isWritable={isSelectedLiveWeb}
+              footer={renderPanelFooter(selected)}
+              // 휴식·퇴근 세션은 훅 상태가 남아 있어도 작업 중·승인 대기로 보지 않는다
+              isApprovalNeeded={isSelectedPresent && selected.status === 'needs-approval'}
+              isWorking={isSelectedPresent && selected.status === 'working'}
               workingSince={selected.workingSince ?? null}
               pendingTool={selected.pendingTool}
               question={selected.question ?? null}
@@ -841,6 +949,75 @@ export function App() {
         </section>
       )}
     </main>
+  )
+}
+
+/**
+ * 퇴근 세션의 입력칸 자리: 퇴근 이유 · [다시 출근] · [기록 지우기]. 실패하면 서버 문구를 그 아래에 보인다.
+ * 다시 출근이 받아들여지면 App 이 세션이 근무로 바뀔 때까지 isReturning 으로 막는다. 기록 지우기에 성공하면 세션이 목록에서 빠질 때까지 막아 둔다 (그러면 패널이 닫힌다)
+ */
+function OffDutyBar({
+  sessionId,
+  label,
+  isReturning,
+  onReturnAccepted,
+}: {
+  sessionId: string
+  label: OffDutyLabel | null
+  isReturning: boolean
+  onReturnAccepted: () => void
+}) {
+  const [busy, setBusy] = useState<'return' | 'clear' | 'cleared' | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const isLocked = isReturning || busy !== null
+
+  async function request(action: 'return' | 'clear') {
+    const actionLabel = action === 'return' ? '다시 출근' : '기록 지우기'
+    setBusy(action)
+    setErrorMessage(null)
+    try {
+      const response =
+        action === 'return'
+          ? await postJson(`/api/sessions/${sessionId}/resume`, 'POST', {})
+          : await fetch(`/api/sessions/${sessionId}/off-duty`, { method: 'DELETE' })
+      if (response.ok) {
+        if (action === 'return') onReturnAccepted()
+        setBusy(action === 'clear' ? 'cleared' : null)
+        return
+      }
+      const { message } = (await response.json().catch(() => ({}))) as { message?: string }
+      setErrorMessage(`${actionLabel} 실패: ${message ?? `HTTP ${response.status}`}`)
+    } catch {
+      setErrorMessage(`${actionLabel} 실패: 네트워크 오류`)
+    }
+    setBusy(null)
+  }
+
+  function clearRecord() {
+    if (confirm('퇴근 기록을 지울까요? 목록에서 빠지고 다시 출근할 수 없습니다.')) void request('clear')
+  }
+
+  return (
+    <div className="off-duty">
+      {label && (
+        <span className={label.isError ? 'off-duty-reason error' : 'off-duty-reason'} title={label.title}>
+          {label.text}
+        </span>
+      )}
+      <div className="off-duty-actions">
+        <button className="primary" disabled={isLocked} onClick={() => void request('return')}>
+          {isReturning || busy === 'return' ? '출근 중…' : '다시 출근'}
+        </button>
+        <button disabled={isLocked} onClick={clearRecord}>
+          {busy === 'clear' || busy === 'cleared' ? '지우는 중…' : '기록 지우기'}
+        </button>
+      </div>
+      {errorMessage && (
+        <div className="off-duty-error" role="alert">
+          {errorMessage}
+        </div>
+      )}
+    </div>
   )
 }
 
