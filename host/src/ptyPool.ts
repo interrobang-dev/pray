@@ -63,8 +63,9 @@ export class PtyPool extends EventEmitter {
   spawn({ sessionId, cwd, prompt, resume, extraArgs = [] }: SpawnOptions): void {
     if (this.entries.has(sessionId)) throw new Error(`이미 실행 중: ${sessionId}`)
     const args = resume ? ['--resume', sessionId] : ['--session-id', sessionId]
-    args.push(...extraArgs)
+    // --mcp-config 는 값을 여러 개 받아서 첫 지시를 뒤에 두면 설정 파일 이름으로 읽고 claude 가 종료된다
     if (prompt) args.push(prompt)
+    args.push(...extraArgs)
 
     const child = pty.spawn(CLAUDE_COMMAND, args, {
       name: 'xterm-256color',

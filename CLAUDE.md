@@ -34,7 +34,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 ## 구조
 
 - `host/src/index.ts` — named pipe `\\.\pipe\jk-corp-host` 서버. 연결된 모든 클라이언트에 모든 세션 출력을 보낸다 (구독 관리 없음). `restart` 메시지를 받으면 종료 코드 2 로 나가고 트레이 앱이 다시 띄운다 (0 은 "의도한 중지" 라 안 살린다)
-- `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid>` 실행, 세션별 200KB 링버퍼. `spawn.extraArgs` 로 `--name`·`--permission-mode` 등 추가 인자를 넘기고 `webSessions` 에 같이 저장해 resume 때도 넘긴다. claude 경로는 `--claude=` 인자 (스케줄러 환경엔 사용자 PATH 가 없어 설치 스크립트가 넘김)
+- `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid> [첫 지시] ...extraArgs` 실행, 세션별 200KB 링버퍼. `spawn.extraArgs` 로 `--name`·`--permission-mode`·`--mcp-config` 등 추가 인자를 넘기고 `webSessions` 에 같이 저장해 resume 때도 넘긴다. **첫 지시는 extraArgs 앞에 둔다** — `--mcp-config` 는 값을 여러 개 받아서, 뒤에 두면 첫 지시를 설정 파일 이름으로 읽고 claude 가 바로 종료된다(종료 코드 1). claude 경로는 `--claude=` 인자 (스케줄러 환경엔 사용자 PATH 가 없어 설치 스크립트가 넘김)
 - `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=<path>` 면 console 을 파일로 (스케줄러는 환경변수를 못 넘기므로 전부 인자)
 - `scripts/install-startup.ps1` · `stop.ps1` · `uninstall-startup.ps1` — 작업 스케줄러 등록·중지·제거. UTF-8 BOM 필수 (Windows PowerShell 5.1 이 BOM 없는 .ps1 을 ANSI 로 읽어 한글이 깨짐)
 - `desktop/src/main.ts` — Electron 트레이 앱. 호스트·서버를 `node --import tsx src/index.ts` 로 자식 실행(tsx CLI 는 자식 node 를 하나 더 만들어 kill 때 고아가 남으므로 쓰지 않음), 5초마다 `/api/sessions` 로 상태 폴링해 아이콘·툴팁 갱신. `node`·`claude` 경로는 `where` 로 찾고 자식 env 에서 `CLAUDE*`·`ELECTRON_*` 를 지운다
