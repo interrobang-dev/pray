@@ -96,13 +96,14 @@ function notificationTitle(notification: TaskNotification): string {
   return shortSummary ? `${heading} · ${shortSummary}` : heading
 }
 
-/** 보고 말풍선이 되지 않는 알림 한 줄. 원문은 접어 둔다 (글자 그대로. HTML 로 꽂지 않는다) */
-function NotificationLine({ notification }: { notification: TaskNotification }) {
-  const title = notificationTitle(notification)
+const COMPACT_SUMMARY_TITLE = '대화 압축됨 · 이전 대화를 요약해 이어감'
+
+/** 가운데 작은 한 줄 (보고 말풍선이 되지 않는 알림·대화 압축 요약). 원문은 접어 둔다 (글자 그대로. HTML 로 꽂지 않는다) */
+function NoticeLine({ title, raw, isFailed = false }: { title: string; raw: string; isFailed?: boolean }) {
   return (
-    <details className={`msg notice${notification.status === 'failed' ? ' failed' : ''}`}>
+    <details className={`msg notice${isFailed ? ' failed' : ''}`}>
       <summary title={title}>{title}</summary>
-      <pre>{notification.raw}</pre>
+      <pre>{raw}</pre>
     </details>
   )
 }
@@ -631,6 +632,8 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
                 </div>
               )
             }
+            // 대화 압축 요약: 사람 말이 아니라 한 줄. 요약 원문은 접어 둔다
+            if (message.isCompactSummary) return <NoticeLine key={message.id} title={COMPACT_SUMMARY_TITLE} raw={message.text} />
             // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 말풍선, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
             const parts = message.role === 'system' ? splitNotifications(message.text) : null
             if (parts) {
@@ -646,7 +649,7 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
                       )
                     }
                     const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
-                    if (!report) return <NotificationLine key={key} notification={part} />
+                    if (!report) return <NoticeLine key={key} title={notificationTitle(part)} raw={part.raw} isFailed={part.status === 'failed'} />
                     return (
                       <div key={key} className="msg relay">
                         <div className="relay-label">{memberNameOf(report.memberSessionId)} →</div>

@@ -17,6 +17,8 @@ export interface ChatMessage {
   from?: { sessionId: string | null; name: string }
   /** 작업 중에 보내 아직 Claude Code 대기열에 있는 메시지에만 있다. 대화 맨 끝에 온다 */
   isQueued?: boolean
+  /** Claude Code 가 대화를 압축하며 남긴 요약 (role system, text 는 요약 원문)에만 있다 */
+  isCompactSummary?: true
 }
 
 /** instructions.jsonl 한 줄. 서버가 팀원 터미널에 지시를 보낼 때 남긴다 */
@@ -85,7 +87,7 @@ function userTextMessage(id: string, timestamp: string, content: unknown): ChatM
 }
 
 /**
- * jsonl 전체를 채팅 메시지 배열로 바꾼다. 사이드체인·메타·thinking 은 뺀다.
+ * jsonl 전체를 채팅 메시지 배열로 바꾼다. 사이드체인·메타·thinking 은 뺀다. 압축 요약(isCompactSummary)은 system 이다.
  * 작업 중에 보낸 메시지는 user 로 남지 않는다: 보낼 때 queue-operation enqueue, 차례 중간에 받아들이면 remove +
  * queued_command 첨부(그 위치에 user 로 넣는다), 차례가 끝난 뒤 받으면 dequeue + 일반 user. 아직 대기 중인 것은 맨 끝에 isQueued 로 붙인다
  */
@@ -134,6 +136,12 @@ export function parseMessages(jsonl: string): ChatMessage[] {
     const content = message?.content
 
     if (type === 'user') {
+      // 압축 요약은 type user 줄이지만 사람 말이 아니다. 붙여넣기 풀기 없이 원문 그대로 system 으로 낸다
+      if (record.isCompactSummary === true) {
+        const text = resultToText(content)
+        if (text) messages.push({ id: uuid, role: 'system', timestamp, text, toolUses: [], isCompactSummary: true })
+        continue
+      }
       if (Array.isArray(content)) {
         for (const block of content) {
           if (block.type === 'tool_result' && block.tool_use_id) {

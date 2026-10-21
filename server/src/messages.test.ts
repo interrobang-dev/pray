@@ -107,6 +107,27 @@ describe('parseMessages', () => {
     const [message] = parseMessages(jsonl)
     expect(message.toolUses.map((t) => t.answers)).toEqual([{ '어디서?': 'main' }, undefined, undefined])
   })
+
+  it('turns the compact summary (a user line) into a system message with the text as is, outside instructions and the queue', () => {
+    // 실제 jsonl 의 꼴: compact_boundary system 줄 다음에 isCompactSummary user 줄. 요약 안의 붙여넣기 태그도 풀지 않는다
+    const summary = 'This session is being continued from a previous conversation that ran out of context.\n\n<pasted_content id="ab12">\n인용\n</pasted_content id="ab12">\n'
+    const jsonl = [
+      line({ type: 'user', uuid: 'u1', timestamp: 't1', message: { role: 'user', content: '일 해 줘' } }),
+      line({ type: 'queue-operation', operation: 'enqueue', timestamp: 't2', content: '이것도 해 줘' }),
+      line({ type: 'system', subtype: 'compact_boundary', uuid: 'b1', timestamp: 't3', compactMetadata: { trigger: 'auto' } }),
+      line({ type: 'user', uuid: 'c1', timestamp: 't4', isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: 'user', content: summary } }),
+    ].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(messages.map((m) => [m.role, m.text, m.isCompactSummary ?? false, m.isQueued ?? false])).toEqual([
+      ['user', '일 해 줘', false, false],
+      ['system', summary, true, false],
+      ['user', '이것도 해 줘', false, true],
+    ])
+    expect(messages[1]).toMatchObject({ id: 'c1', timestamp: 't4' })
+    const record: InstructionRecord = { sessionId: 'member', fromSessionId: 'lead-1', text: summary, at: '' }
+    expect(attachInstructions(messages, [record], () => '팀장')[1].from).toBeUndefined()
+  })
 })
 
 describe('parseMessages: messages sent while claude is working', () => {

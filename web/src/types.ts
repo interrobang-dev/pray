@@ -96,6 +96,8 @@ export interface ChatMessage {
   from?: { sessionId: string | null; name: string }
   /** claude 가 작업 중일 때 보내 아직 받아들여지지 않은 user 메시지 (대화 맨 끝). 옛 서버 응답에는 없다 */
   isQueued?: boolean
+  /** Claude Code 가 대화를 압축하며 남긴 요약 (role system, text 는 요약 원문). 옛 서버 응답에는 없다 */
+  isCompactSummary?: true
 }
 
 /** 세션 작업 폴더(scratchpad)의 파일 하나 (`GET /api/sessions/:id/files`) */

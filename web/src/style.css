@@ -630,7 +630,7 @@ header button.icon:hover:not(:disabled) {
   border: 0;
   box-shadow: none;
 }
-/* 백그라운드 작업 알림 한 줄 (Chat.tsx). system 글처럼 가운데 작은 회색, 길면 말줄임. 누르면 원문 */
+/* 백그라운드 작업 알림·대화 압축 요약 한 줄 (Chat.tsx). system 글처럼 가운데 작은 회색, 길면 말줄임. 누르면 원문 */
 .msg.notice {
   align-self: center;
   max-width: 95%;
