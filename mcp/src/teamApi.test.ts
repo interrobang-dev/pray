@@ -31,7 +31,7 @@ describe('TeamApi', () => {
   it('part lead sends partId on every call', async () => {
     const { calls, fetchImpl } = fakeFetch(200, { ok: true })
     const api = new TeamApi('http://x', 'T1', 'P1', fetchImpl)
-    await api.spawnMember('A')
+    await api.spawnMember({ role: 'FE' })
     await api.assign('S1', '해라')
     await api.wait(null, 30)
     await api.status()
@@ -42,6 +42,17 @@ describe('TeamApi', () => {
       'http://x/api/team/T1/tasks/any/wait?timeoutSec=30&partId=P1',
       'http://x/api/team/T1?partId=P1',
       'http://x/api/team/T1/members/S1?partId=P1',
+    ])
+  })
+
+  it('sends role (or the old name) for a new member and leaves out what is not given', async () => {
+    const { calls, fetchImpl } = fakeFetch(200, { ok: true })
+    const api = new TeamApi('http://x', 'T1', null, fetchImpl)
+    await api.spawnMember({ role: 'FE' }, '해라')
+    await api.spawnMember({ name: '조사원 A' })
+    expect(calls.map((c) => [c.url, c.init?.method, JSON.parse(c.init?.body as string)])).toEqual([
+      ['http://x/api/team/T1/members', 'POST', { role: 'FE', instruction: '해라' }],
+      ['http://x/api/team/T1/members', 'POST', { name: '조사원 A' }],
     ])
   })
 

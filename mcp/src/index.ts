@@ -33,13 +33,19 @@ server.registerTool(
     description:
       '팀원 세션을 새로 만든다 (팀 폴더, 파트가 worktree 면 그 폴더). 사무실에 책상이 생기고 사람이 볼 수 있다. instruction 을 주면 첫 지시로 보내고 task 를 돌려준다. 팀원 결과는 마지막 응답 텍스트 하나로만 돌아오니 지시에 "끝나면 결과 요약을 마지막 메시지로 써라" 를 넣어라.',
     inputSchema: {
-      name: z.string().describe('팀원 이름 (예: 조사원 A)'),
+      role: z
+        .string()
+        .optional()
+        .describe(
+          '팀원 역할 약어 (1~12자). 이름 "[역할] 성" 은 서버가 붙여 결과 member.name 으로 돌려준다. 권장: FE(화면), BE(서버·호스트), FS(풀스택), UI/UX, QA(검증·테스트), Ops(배포·인프라), Docs(문서), Research(조사)',
+        ),
+      name: z.string().optional().describe('예전 방식의 팀원 이름. role 이 있으면 쓰지 않는다. role 과 name 중 하나는 필요'),
       instruction: z.string().optional().describe('첫 지시 (선택)'),
     },
   },
-  async ({ name, instruction }) => {
+  async ({ role, name, instruction }) => {
     try {
-      return text(await api.spawnMember(name, instruction))
+      return text(await api.spawnMember({ role, name }, instruction))
     } catch (error) {
       return failure(error)
     }

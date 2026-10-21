@@ -53,6 +53,7 @@ import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
+import { parseMemberRole, pickMemberName } from './memberName.js'
 import { createWorktree, markFolderTrusted, markTrusted, worktreeSlug, WorktreeError } from './worktree.js'
 import {
   allowDecision,
@@ -784,19 +785,50 @@ app.put('/api/team/:teamId/desks/:sessionId', (req, res) => {
   broadcastOffice()
 })
 
-/** 지휘 단위로 팀원 세션을 띄운다. 팀 직속·worktree 파트는 cwd 판정으로 자동 합류, worktree 없는 파트는 소속을 기록 */
-app.post('/api/team/:teamId/members', (req, res) => {
+/**
+ * 방금 이름을 붙인 팀원 (세션 ID → 팀·이름). 호스트가 띄워 세션 목록에 나타나기 전에 같은 팀 팀원을 또 만들면
+ * (팀장이 도구를 동시에 부르면) 목록만 봐서는 성이 겹치므로 잠깐 들고 있는다
+ */
+const recentMemberNames = new Map<string, { teamId: string; name: string }>()
+const RECENT_MEMBER_NAME_MS = 60_000
+
+/**
+ * 지휘 단위로 팀원 세션을 띄운다. 팀 직속·worktree 파트는 cwd 판정으로 자동 합류, worktree 없는 파트는 소속을 기록.
+ * role 이 있으면 이름은 서버가 "[role] 성" 으로 붙인다 (같은 팀 근무·휴식·퇴근 세션에 쓰인 성은 피한다).
+ * name 만 오면 그대로 쓴다 (role 인자가 생기기 전의 팀장 MCP)
+ */
+app.post('/api/team/:teamId/members', async (req, res) => {
   const unit = findUnit(req.params.teamId, req.query.partId, res)
   if (!unit) return
   const { team, part } = unit
   const cwd = part?.worktree?.cwd ?? team.cwd
-  const { name, instruction, permissionMode } = req.body as { name?: string; instruction?: string; permissionMode?: string }
-  if (!name?.trim()) {
-    res.status(400).json({ message: 'name 필요' })
-    return
+  const { name, role, instruction, permissionMode } = req.body as {
+    name?: string
+    role?: unknown
+    instruction?: string
+    permissionMode?: string
   }
   const sessionId = randomUUID()
-  const extraArgs = ['--name', name.trim(), '--permission-mode', permissionMode ?? 'bypassPermissions']
+  let memberName: string
+  if (role != null) {
+    const parsedRole = parseMemberRole(role)
+    if (!parsedRole) {
+      res.status(400).json({ message: 'role 은 1~12자이고 [ ] 와 줄바꿈이 없어야 함 (예: FE, BE, QA)' })
+      return
+    }
+    const { sessions } = await snapshotPayload()
+    const usedNames = [
+      ...sessions.filter((s) => s.teamId === team.id && s.name).map((s) => s.name!),
+      ...[...recentMemberNames.values()].filter((recent) => recent.teamId === team.id).map((recent) => recent.name),
+    ]
+    memberName = pickMemberName(parsedRole, usedNames)
+  } else if (name?.trim()) {
+    memberName = name.trim()
+  } else {
+    res.status(400).json({ message: 'role 또는 name 필요' })
+    return
+  }
+  const extraArgs = ['--name', memberName, '--permission-mode', permissionMode ?? 'bypassPermissions']
   if (part && !part.worktree) setPartOf(team.id, sessionId, part.id)
   // 신뢰 기록은 POST /api/sessions 와 같다. 실패는 결과로 지시자에게 알린다
   const isTrustFailed = markFolderTrusted(cwd) === false
@@ -805,9 +837,11 @@ app.post('/api/team/:teamId/members', (req, res) => {
     res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
     return
   }
-  // 지시자가 붙인 팀원 이름을 화면에도 보이게
-  setSessionName(sessionId, name)
-  const member = { sessionId, name: name.trim(), cwd }
+  recentMemberNames.set(sessionId, { teamId: team.id, name: memberName })
+  setTimeout(() => recentMemberNames.delete(sessionId), RECENT_MEMBER_NAME_MS)
+  // 팀원 이름을 화면에도 보이게
+  setSessionName(sessionId, memberName)
+  const member = { sessionId, name: memberName, cwd }
   if (!instruction) {
     res.json({ member, task: null, isTrustFailed })
     return
