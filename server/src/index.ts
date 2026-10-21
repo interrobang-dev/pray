@@ -144,9 +144,20 @@ async function snapshotPayload() {
   }
 }
 
+/** hq.json 을 못 읽어 갱신을 건너뛰는 중. 5초마다 같은 로그가 쌓이지 않게 상태가 바뀔 때만 로그를 남긴다 */
+let isBroadcastFailing = false
+
+/** 요청 처리 밖(5초 주기·SSE 접속·훅·호스트 이벤트)에서 `void` 로 불리므로 던지면 서버가 죽는다. 실패하면 그 회차만 건너뛴다 */
 async function broadcast() {
   if (subscribers.size === 0) return
-  const payload = await snapshotPayload()
+  const payload = await snapshotPayload().catch((error: unknown) => {
+    if (!isBroadcastFailing) console.error(`hq.json 을 읽지 못해 갱신 건너뜀: ${error}`)
+    isBroadcastFailing = true
+    return null
+  })
+  if (!payload) return
+  if (isBroadcastFailing) console.log('갱신 복구')
+  isBroadcastFailing = false
   for (const res of subscribers) sendSse(res, 'sessions', payload)
 }
 
@@ -694,9 +705,14 @@ host.on('message', (message: HostMessage) => {
   if (message.type === 'exit') {
     lastOutputAt.delete(message.sessionId)
     tasks.markExited(message.sessionId)
-    const name = listSessionNames()[message.sessionId]
-    if (name) exitedSessionNames.set(message.sessionId, name)
-    setSessionName(message.sessionId, null)
+    // 이벤트 처리기라 던지면 서버가 죽는다. 실패하면 이름이 hq.json 에 남는다
+    try {
+      const name = listSessionNames()[message.sessionId]
+      if (name) exitedSessionNames.set(message.sessionId, name)
+      setSessionName(message.sessionId, null)
+    } catch (error) {
+      console.error(`hq.json 을 읽거나 쓰지 못해 종료한 세션의 이름 정리 건너뜀 (${message.sessionId}): ${error}`)
+    }
   }
   if (message.type === 'sessions' || message.type === 'exit') void broadcast()
 })
