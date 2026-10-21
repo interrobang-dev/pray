@@ -98,6 +98,20 @@ export interface ChatMessage {
   isQueued?: boolean
 }
 
+/** 세션 작업 폴더(scratchpad)의 파일 하나 (`GET /api/sessions/:id/files`) */
+export interface ScratchpadFile {
+  /** scratchpad 기준 상대 경로. 구분자는 `/` */
+  path: string
+  size: number
+  modifiedAt: string
+}
+
+export interface ScratchpadListing {
+  files: ScratchpadFile[]
+  /** 서버 상한(1000개)에서 잘렸는지. 얕은 폴더부터 모은다 */
+  isTruncated: boolean
+}
+
 export const statusLabel: Record<SessionStatus, string> = {
   working: '작업중',
   'my-turn': '내 차례',

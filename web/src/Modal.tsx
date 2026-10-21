@@ -5,11 +5,13 @@ interface Props {
   /** 제목 아래 작은 보조 설명 (폴더 경로 등) */
   subtitle?: string
   onClose: () => void
+  /** 대화상자 크기·배치를 바꿀 때 덧붙이는 클래스 */
+  className?: string
   children: ReactNode
 }
 
 /** 오버레이 + 대화상자. Esc 또는 바깥 클릭으로 닫힌다 */
-export function Modal({ title, subtitle, onClose, children }: Props) {
+export function Modal({ title, subtitle, onClose, className, children }: Props) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -20,7 +22,7 @@ export function Modal({ title, subtitle, onClose, children }: Props) {
 
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+      <div className={className ? `modal ${className}` : 'modal'} role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
         <div className="modal-title">
           <b>{title}</b>
           {subtitle && <span className="cwd">{subtitle}</span>}

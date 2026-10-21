@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import compression from 'compression'
 import express from 'express'
 import type { Response } from 'express'
@@ -40,6 +40,7 @@ import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js
 import { makeSendCode } from './mail.js'
 import { applyHook, type HookPayload, type HookState } from './hookState.js'
 import { findTranscript, listSessions, projectsDir } from './sessions.js'
+import { contentTypeOf, findScratchpad, isSessionId, listScratchpad, resolveScratchpadFile } from './scratchpad.js'
 import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
 import { attachInstructions, parseInstructionLog, parseMessages } from './messages.js'
@@ -309,6 +310,41 @@ app.get('/api/sessions/:id/messages', async (req, res) => {
   const fromIds = [...new Set(records.map((r) => r.fromSessionId).filter((id): id is string => id !== null))]
   const fromNames = new Map(await Promise.all(fromIds.map(async (id) => [id, await displayNameOf(id, names)] as const)))
   res.json(attachInstructions(messages, records, (id) => (id ? (fromNames.get(id) ?? id.slice(0, 8)) : NO_LEAD_NAME)))
+})
+
+/** 세션 작업 폴더(scratchpad)의 파일 목록. 하위 폴더 포함, 상한 MAX_FILES. 폴더가 없으면 빈 목록 */
+app.get('/api/sessions/:id/files', async (req, res) => {
+  if (!isSessionId(req.params.id)) {
+    res.status(400).json({ message: '세션 ID 형식 오류' })
+    return
+  }
+  const scratchpad = await findScratchpad(req.params.id)
+  res.json(scratchpad ? await listScratchpad(scratchpad) : { files: [], isTruncated: false })
+})
+
+/**
+ * scratchpad 파일 하나 (?path=상대 경로, ?download=1 이면 내려받기). Range·ETag 는 sendFile 이 처리한다.
+ * 로컬 접속은 무인증이라 파일 안 스크립트가 이 서버 API 를 부르면 안 된다: HTML·SVG·XML 은 CSP sandbox(allow-scripts 없음)로 내보낸다.
+ * no-transform 은 압축을 끄려고 — 압축 미들웨어가 206(Range) 응답까지 압축하면 Content-Range 와 바이트가 어긋난다
+ */
+app.get('/api/sessions/:id/files/raw', async (req, res) => {
+  const { path } = req.query
+  if (!isSessionId(req.params.id) || typeof path !== 'string') {
+    res.status(400).json({ message: '세션 ID 또는 path 형식 오류' })
+    return
+  }
+  const scratchpad = await findScratchpad(req.params.id)
+  const file = scratchpad ? await resolveScratchpadFile(scratchpad, path) : null
+  if (!file) {
+    res.status(404).json({ message: '파일 없음' })
+    return
+  }
+  const { type, isActive } = contentTypeOf(file)
+  // attachment() 가 Content-Type 도 바꾸므로 먼저 부르고 아래에서 덮어쓴다
+  if (req.query.download === '1') res.attachment(basename(file))
+  res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
+  if (isActive) res.set('Content-Security-Policy', 'sandbox')
+  res.sendFile(file, { dotfiles: 'allow' })
 })
 
 /** 세션 이름 지정. 빈 문자열이면 지워서 자동 제목(ai-title)으로 돌아간다. 외부 세션에도 붙일 수 있다 */
