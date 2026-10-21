@@ -743,6 +743,28 @@ li.group.drop-after::after {
 .work-summary:hover {
   color: var(--text);
 }
+/* 가운데 한 줄(작업 묶음·알림)의 접기 화살표. 둘이 같은 크기로 보이게 브라우저 기본 표시 대신 이 규칙 하나로 그린다.
+   폭을 고정해 펼쳐도(▼) 뒤 글자가 움직이지 않는다. 왼쪽 정렬은 button 의 가운데 정렬을 이어받지 않게, 1px 올림은 기준선에 앉으면
+   글자 가운데보다 1.5px 낮아서 (middle 은 더 내려간다). 색은 줄을 따른다 (실패 빨강·hover) */
+.msg.notice summary {
+  list-style: none;
+}
+.msg.notice summary::-webkit-details-marker {
+  display: none;
+}
+.msg.notice summary::before,
+.work-summary::before {
+  content: '▶';
+  display: inline-block;
+  width: 12px;
+  font-size: 9px;
+  text-align: left;
+  vertical-align: 1px;
+}
+.msg.notice[open] summary::before,
+.work-summary[aria-expanded='true']::before {
+  content: '▼';
+}
 .work-items {
   display: flex;
   flex-direction: column;

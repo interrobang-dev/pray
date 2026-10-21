@@ -232,7 +232,7 @@ function WorkLine({ work, isOpen, onToggle }: { work: Work; isOpen: boolean; onT
   return (
     <div className="work">
       <button type="button" className="work-summary" aria-expanded={isOpen} onClick={onToggle} title={title}>
-        <span aria-hidden="true">{isOpen ? '▼' : '▶'}</span> {title}
+        {title}
       </button>
       {isOpen && (
         <div className="work-items">
