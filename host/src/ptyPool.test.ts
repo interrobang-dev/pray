@@ -49,3 +49,21 @@ describe('PtyPool.spawn args', () => {
     expect(spawnedArgs({ resume: true, extraArgs: EXTRA_ARGS })).toEqual(['--resume', SESSION_ID, ...EXTRA_ARGS])
   })
 })
+
+describe('PtyPool.resize', () => {
+  it('does not throw when the pty has already exited', () => {
+    const exitedPty = {
+      pid: 1,
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(() => {
+        throw new Error('Cannot resize a pty that has already exited')
+      }),
+    }
+    vi.mocked(pty.spawn).mockReturnValueOnce(exitedPty as unknown as pty.IPty)
+    const pool = new PtyPool()
+    pool.spawn({ sessionId: SESSION_ID, cwd: 'D:/repo' })
+    expect(() => pool.resize(SESSION_ID, 80, 24)).not.toThrow()
+    expect(exitedPty.resize).toHaveBeenCalledWith(80, 24)
+  })
+})

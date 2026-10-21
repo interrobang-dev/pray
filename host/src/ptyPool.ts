@@ -104,7 +104,11 @@ export class PtyPool extends EventEmitter {
 
   resize(sessionId: string, cols: number, rows: number): void {
     if (cols < 2 || rows < 2) return
-    this.entries.get(sessionId)?.pty.resize(cols, rows)
+    try {
+      this.entries.get(sessionId)?.pty.resize(cols, rows)
+    } catch {
+      // claude 가 끝난 뒤 onExit 전에 오면 node-pty 가 던진다. 꺼진 세션 하나로 호스트가 죽으면 웹 세션이 전부 끊긴다
+    }
   }
 
   kill(sessionId: string): void {
