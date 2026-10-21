@@ -1,4 +1,5 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { flushSync } from 'react-dom'
 import Markdown, { type Components, type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -152,9 +153,52 @@ function WorkingIndicator({ since }: { since: string | null }) {
 /** 맨 아래에서 이만큼 안쪽이면 "맨 아래를 보고 있다" 로 본다 */
 const BOTTOM_SLACK_PX = 40
 
+/** 보냈지만 아직 jsonl 에서 안 보인 내 말. 진짜 user 메시지가 오면 없앤다 */
+interface PendingMessage {
+  id: number
+  text: string
+  /** 보낸 시점에 이미 있던 메시지 ID. 같은 글을 전에 보낸 적이 있어도 그것과 맞추지 않게 뺀다 */
+  knownIds: Set<string>
+  isFailed: boolean
+}
+
+/** 확인되지 않은 임시 말풍선을 조용히 없애기까지. `/help` 같은 슬래시 명령은 user 메시지로 안 남을 수 있다 */
+const PENDING_TIMEOUT_MS = 15_000
+
+const PASTE_TAG = /<\/?pasted_content id="[^"]*">/g
+
+/**
+ * 내 말과 jsonl 의 user 메시지 비교 키. 서버 instructionKey(server/src/messages.ts)와 같은 규칙:
+ * Claude Code 는 pty 로 들어온 긴 입력을 4096바이트 조각으로 받아 `<pasted_content id="…">` 태그로 감싸고
+ * 조각 경계에 줄바꿈을 넣어 남기므로, 태그를 빼고 공백을 전부 지운 뒤 비교한다
+ */
+function messageKey(text: string): string {
+  return text.replace(PASTE_TAG, '').replace(/\s+/g, '')
+}
+
+/** 새로 생긴 user 메시지와 글이 같은 임시 말풍선을 없앤다. 메시지 하나는 말풍선 하나에만, 앞에서부터 맞춘다. 전송 실패는 사용자가 닫을 때까지 둔다 */
+function settlePendings(pendings: PendingMessage[], messages: ChatMessage[]): PendingMessage[] {
+  const matchedIds = new Set<string>()
+  const remaining = pendings.filter((pending) => {
+    if (pending.isFailed) return true
+    const key = messageKey(pending.text)
+    const match = messages.find(
+      (message) => message.role === 'user' && !pending.knownIds.has(message.id) && !matchedIds.has(message.id) && messageKey(message.text) === key,
+    )
+    if (!match) return true
+    matchedIds.add(match.id)
+    return false
+  })
+  if (remaining.length === pendings.length) return pendings
+  // 이미 다른 말풍선과 맞춘 메시지는 남은 말풍선이 다음 번에 다시 맞추지 않게 한다 (같은 글을 연달아 보냈을 때)
+  return remaining.map((pending) => ({ ...pending, knownIds: new Set([...pending.knownIds, ...matchedIds]) }))
+}
+
 export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, workingSince, pendingTool, version, sessionNames }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
+  const [pendings, setPendings] = useState<PendingMessage[]>([])
+  const nextPendingIdRef = useRef(1)
   const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   /** 사용자가 맨 아래를 보고 있는지. 스크롤 때마다 갱신한다 (표시기가 생겨 내용만 길어질 때는 스크롤 이벤트가 없어 직전 값이 남는다) */
@@ -189,6 +233,14 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [messages])
 
+  useEffect(() => {
+    setPendings((current) => settlePendings(current, messages))
+  }, [messages])
+
+  useEffect(() => {
+    setPendings([])
+  }, [sessionId])
+
   // 메시지가 바뀌면 위에서 늘 맨 아래로 내린다. 표시기는 맨 아래를 보고 있었을 때만 따라 내려간다
   useEffect(() => {
     if (isWorking && isAtBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -211,13 +263,32 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     const text = draft.trim()
     if (!text) return
     setDraft('')
-    // 줄마다 따로 보내고 줄 사이에 Claude Code 줄바꿈 키를 넣는다 (\n 을 그대로 보내면 줄바꿈으로 안 들어간다)
-    const lines = text.split(/\r?\n/)
-    for (const [index, line] of lines.entries()) {
-      if (index > 0) await sendKeys(NEWLINE_KEYS)
-      if (line) await sendKeys(line)
+    // jsonl 에 남기까지(transcript 갱신 → 대화 전체 다시 받기) 기다리지 않고 내 말풍선을 바로 띄운다
+    const pendingId = nextPendingIdRef.current++
+    const knownIds = new Set(messages.map((message) => message.id))
+    flushSync(() => setPendings((current) => [...current, { id: pendingId, text, knownIds, isFailed: false }]))
+    bottomRef.current?.scrollIntoView({ block: 'end' })
+    setTimeout(() => setPendings((current) => current.filter((pending) => pending.id !== pendingId || pending.isFailed)), PENDING_TIMEOUT_MS)
+    const markFailed = () =>
+      setPendings((current) => current.map((pending) => (pending.id === pendingId ? { ...pending, isFailed: true } : pending)))
+    const send = async (data: string) => {
+      if (!(await sendKeys(data)).ok) markFailed()
     }
-    await sendKeys('\r')
+    try {
+      // 줄마다 따로 보내고 줄 사이에 Claude Code 줄바꿈 키를 넣는다 (\n 을 그대로 보내면 줄바꿈으로 안 들어간다)
+      const lines = text.split(/\r?\n/)
+      for (const [index, line] of lines.entries()) {
+        if (index > 0) await send(NEWLINE_KEYS)
+        if (line) await send(line)
+      }
+      await send('\r')
+    } catch {
+      markFailed()
+    }
+  }
+
+  function dismissPending(pendingId: number) {
+    setPendings((current) => current.filter((pending) => pending.id !== pendingId))
   }
 
   /** Enter = 보내기, Shift+Enter = 줄바꿈. 한글 조합 중 Enter 는 조합 확정이라 보내지 않는다 */
@@ -288,7 +359,20 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
             </Fragment>
           )
         })}
-        {messages.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
+        {pendings.map((pending) => (
+          <div key={`pending-${pending.id}`} className={`msg user pending${pending.isFailed ? ' failed' : ''}`}>
+            <div className="text">{pending.text}</div>
+            <div className="pending-label">
+              {pending.isFailed ? '전송 실패' : '보내는 중'}
+              {pending.isFailed && (
+                <button type="button" className="pending-dismiss" aria-label="닫기" onClick={() => dismissPending(pending.id)}>
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {messages.length === 0 && pendings.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
         {isWorking && <WorkingIndicator since={workingSince} />}
         <div ref={bottomRef} />
       </div>
