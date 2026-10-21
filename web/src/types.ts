@@ -79,6 +79,8 @@ export interface ChatMessage {
   toolUses: ToolUse[]
   /** 서버가 보낸 팀장·파트장 지시인 user 메시지에만 있다. 옛 서버 응답에는 없다 */
   from?: { sessionId: string | null; name: string }
+  /** claude 가 작업 중일 때 보내 아직 받아들여지지 않은 user 메시지 (대화 맨 끝). 옛 서버 응답에는 없다 */
+  isQueued?: boolean
 }
 
 export const statusLabel: Record<SessionStatus, string> = {

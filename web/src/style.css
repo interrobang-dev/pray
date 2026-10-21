@@ -569,6 +569,14 @@ header button.icon:hover:not(:disabled) {
   flex-direction: column;
   background: var(--bg);
 }
+/* 대화 목록 + "맨 아래로" 버튼. 버튼이 승인 막대·입력칸 바깥(위)에 뜨도록 목록만 감싼다 */
+.messages-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .messages {
   flex: 1;
   overflow-y: auto;
@@ -618,7 +626,14 @@ header button.icon:hover:not(:disabled) {
   opacity: 1;
   border-color: #e8b4ae;
 }
-.pending-label {
+/* claude 가 작업 중이라 아직 받아들여지지 않은 내 말 (서버 isQueued). "보내는 중" 보다 덜 흐리고 점선 테두리 */
+.msg.queued {
+  opacity: 0.75;
+  border-style: dashed;
+  border-color: #9fcca6;
+}
+.pending-label,
+.queued-label {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -638,6 +653,30 @@ header button.icon:hover:not(:disabled) {
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
+}
+/* 맨 아래가 아닐 때 대화 오른쪽 아래의 "↓" (Chat.tsx). 40px 원이라 폰에서도 누르기 쉽다. 점 = 위를 보는 사이 새 메시지 */
+.to-bottom {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(20, 24, 40, 0.15);
+}
+.to-bottom-dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--panel);
+  background: var(--green);
 }
 /* 작업 중 표시기 (Chat.tsx). claude 쪽(왼쪽)의 작은 말풍선에 점 세 개가 차례로 출렁인다 */
 .typing {

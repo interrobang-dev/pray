@@ -201,8 +201,15 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
   const nextPendingIdRef = useRef(1)
   const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  /** 사용자가 맨 아래를 보고 있는지. 스크롤 때마다 갱신한다 (표시기가 생겨 내용만 길어질 때는 스크롤 이벤트가 없어 직전 값이 남는다) */
+  /** 사용자가 맨 아래를 보고 있는지. 스크롤 때마다 갱신한다 (내용만 길어질 때는 스크롤 이벤트가 없어 직전 값이 남는다 = "갱신 직전에 맨 아래였는지") */
   const isAtBottomRef = useRef(true)
+  /** 같은 값을 "맨 아래로" 버튼을 그리는 데 쓴다 */
+  const [isAtBottom, setIsAtBottom] = useState(true)
+  /** 위를 보는 사이 새 메시지가 왔는지. 버튼의 점 */
+  const [hasUnread, setHasUnread] = useState(false)
+  /** 세션을 열거나 바꾼 뒤 첫 로딩이면 위치와 관계없이 맨 아래에서 시작한다 */
+  const isFirstLoadRef = useRef(true)
+  const lastMessageIdRef = useRef<string | null>(null)
 
   /** 팀원 이름: jk_spawn_member 때 붙인 이름 → 세션 목록 이름 → ID 앞 8자리 */
   const memberNameOf = useMemo(() => {
@@ -229,8 +236,23 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     }
   }, [sessionId, version])
 
-  useEffect(() => {
+  function scrollToBottom() {
     bottomRef.current?.scrollIntoView({ block: 'end' })
+    isAtBottomRef.current = true
+  }
+
+  // 메시지가 갱신되면 맨 아래를 보고 있었을 때만 따라 내려간다 (위를 읽는 중이면 그대로 두고 새 메시지면 버튼에 점). 첫 로딩은 늘 맨 아래
+  useEffect(() => {
+    const lastMessageId = messages.at(-1)?.id ?? null
+    const isNewMessage = lastMessageId !== lastMessageIdRef.current
+    lastMessageIdRef.current = lastMessageId
+    if (isFirstLoadRef.current || isAtBottomRef.current) {
+      scrollToBottom()
+      // 마운트 직후의 빈 목록은 첫 로딩이 아니다
+      if (messages.length > 0) isFirstLoadRef.current = false
+    } else if (isNewMessage) {
+      setHasUnread(true)
+    }
   }, [messages])
 
   useEffect(() => {
@@ -239,16 +261,29 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
 
   useEffect(() => {
     setPendings([])
+    isFirstLoadRef.current = true
+    isAtBottomRef.current = true
+    setIsAtBottom(true)
+    setHasUnread(false)
   }, [sessionId])
 
-  // 메시지가 바뀌면 위에서 늘 맨 아래로 내린다. 표시기는 맨 아래를 보고 있었을 때만 따라 내려간다
+  // 작업 중 표시기도 같은 규칙: 맨 아래를 보고 있었을 때만 따라 내려간다
   useEffect(() => {
-    if (isWorking && isAtBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' })
+    if (isWorking && isAtBottomRef.current) scrollToBottom()
   }, [isWorking])
 
   function onMessagesScroll() {
     const element = messagesRef.current
-    if (element) isAtBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_SLACK_PX
+    if (!element) return
+    const isNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_SLACK_PX
+    isAtBottomRef.current = isNearBottom
+    setIsAtBottom(isNearBottom)
+    if (isNearBottom) setHasUnread(false)
+  }
+
+  function onToBottomClick() {
+    const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior: isReducedMotion ? 'auto' : 'smooth' })
   }
 
   const sendKeys = (data: string) =>
@@ -267,7 +302,7 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     const pendingId = nextPendingIdRef.current++
     const knownIds = new Set(messages.map((message) => message.id))
     flushSync(() => setPendings((current) => [...current, { id: pendingId, text, knownIds, isFailed: false }]))
-    bottomRef.current?.scrollIntoView({ block: 'end' })
+    scrollToBottom()
     setTimeout(() => setPendings((current) => current.filter((pending) => pending.id !== pendingId || pending.isFailed)), PENDING_TIMEOUT_MS)
     const markFailed = () =>
       setPendings((current) => current.map((pending) => (pending.id === pendingId ? { ...pending, isFailed: true } : pending)))
@@ -300,81 +335,95 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
 
   return (
     <div className="chat">
-      <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
-        {messages.map((message) => {
-          // 팀원 대화: 서버가 보낸 팀장·파트장 지시
-          if (message.from) {
-            return (
-              <div key={message.id} className="msg user relay">
-                <div className="relay-label">{message.from.name} 지시</div>
-                <AssistantText text={message.text} />
-              </div>
-            )
-          }
-          // 팀장 대화: 백그라운드로 넘어간 jk_wait 의 결과 알림
-          const notified = message.role === 'system' ? waitReport(waitNotificationResult(message.text)) : null
-          if (notified) {
-            return (
-              <div key={message.id} className="msg relay">
-                <div className="relay-label">{memberNameOf(notified.memberSessionId)} →</div>
-                <AssistantText text={notified.result} />
-                <details className="tool">
-                  <summary>
-                    <code>task-notification</code> jk_wait 결과
-                  </summary>
-                  <pre className="result">{message.text}</pre>
-                </details>
-              </div>
-            )
-          }
-          // 팀장 대화: 지시·보고 도구 호출은 말풍선으로 빼고 원래 도구 블록은 그 안에 접어 둔다
-          const relays = message.toolUses.map((toolUse) => ({ toolUse, relay: relayOf(toolUse, memberNameOf) }))
-          const plainToolUses = relays.filter(({ relay }) => !relay).map(({ toolUse }) => toolUse)
-          const isEmptyWithoutRelays = !message.text && plainToolUses.length === 0 && relays.length > 0
-          return (
-            <Fragment key={message.id}>
-              {!isEmptyWithoutRelays && (
-                <div className={`msg ${message.role}`}>
-                  {message.text &&
-                    (message.role === 'assistant' ? (
-                      <AssistantText text={message.text} />
-                    ) : (
-                      <div className="text">{message.text}</div>
-                    ))}
-                  {plainToolUses.map((toolUse) => (
-                    <ToolBlock key={toolUse.id} toolUse={toolUse} />
-                  ))}
+      <div className="messages-pane">
+        <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
+          {messages.map((message) => {
+            // 팀원 대화: 서버가 보낸 팀장·파트장 지시
+            if (message.from) {
+              return (
+                <div key={message.id} className="msg user relay">
+                  <div className="relay-label">{message.from.name} 지시</div>
+                  <AssistantText text={message.text} />
                 </div>
-              )}
-              {relays.map(
-                ({ toolUse, relay }) =>
-                  relay && (
-                    <div key={toolUse.id} className="msg relay">
-                      <div className="relay-label">{relay.label}</div>
-                      <AssistantText text={relay.text} />
-                      <ToolBlock toolUse={toolUse} />
-                    </div>
-                  ),
-              )}
-            </Fragment>
-          )
-        })}
-        {pendings.map((pending) => (
-          <div key={`pending-${pending.id}`} className={`msg user pending${pending.isFailed ? ' failed' : ''}`}>
-            <div className="text">{pending.text}</div>
-            <div className="pending-label">
-              {pending.isFailed ? '전송 실패' : '보내는 중'}
-              {pending.isFailed && (
-                <button type="button" className="pending-dismiss" aria-label="닫기" onClick={() => dismissPending(pending.id)}>
-                  ×
-                </button>
-              )}
+              )
+            }
+            // 팀장 대화: 백그라운드로 넘어간 jk_wait 의 결과 알림
+            const notified = message.role === 'system' ? waitReport(waitNotificationResult(message.text)) : null
+            if (notified) {
+              return (
+                <div key={message.id} className="msg relay">
+                  <div className="relay-label">{memberNameOf(notified.memberSessionId)} →</div>
+                  <AssistantText text={notified.result} />
+                  <details className="tool">
+                    <summary>
+                      <code>task-notification</code> jk_wait 결과
+                    </summary>
+                    <pre className="result">{message.text}</pre>
+                  </details>
+                </div>
+              )
+            }
+            // 팀장 대화: 지시·보고 도구 호출은 말풍선으로 빼고 원래 도구 블록은 그 안에 접어 둔다
+            const relays = message.toolUses.map((toolUse) => ({ toolUse, relay: relayOf(toolUse, memberNameOf) }))
+            const plainToolUses = relays.filter(({ relay }) => !relay).map(({ toolUse }) => toolUse)
+            const isEmptyWithoutRelays = !message.text && plainToolUses.length === 0 && relays.length > 0
+            return (
+              <Fragment key={message.id}>
+                {!isEmptyWithoutRelays && (
+                  <div className={`msg ${message.role}${message.isQueued ? ' queued' : ''}`}>
+                    {message.text &&
+                      (message.role === 'assistant' ? (
+                        <AssistantText text={message.text} />
+                      ) : (
+                        <div className="text">{message.text}</div>
+                      ))}
+                    {plainToolUses.map((toolUse) => (
+                      <ToolBlock key={toolUse.id} toolUse={toolUse} />
+                    ))}
+                    {message.isQueued && <div className="queued-label">대기 중</div>}
+                  </div>
+                )}
+                {relays.map(
+                  ({ toolUse, relay }) =>
+                    relay && (
+                      <div key={toolUse.id} className="msg relay">
+                        <div className="relay-label">{relay.label}</div>
+                        <AssistantText text={relay.text} />
+                        <ToolBlock toolUse={toolUse} />
+                      </div>
+                    ),
+                )}
+              </Fragment>
+            )
+          })}
+          {pendings.map((pending) => (
+            <div key={`pending-${pending.id}`} className={`msg user pending${pending.isFailed ? ' failed' : ''}`}>
+              <div className="text">{pending.text}</div>
+              <div className="pending-label">
+                {pending.isFailed ? '전송 실패' : '보내는 중'}
+                {pending.isFailed && (
+                  <button type="button" className="pending-dismiss" aria-label="닫기" onClick={() => dismissPending(pending.id)}>
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-        {messages.length === 0 && pendings.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
-        {isWorking && <WorkingIndicator since={workingSince} />}
-        <div ref={bottomRef} />
+          ))}
+          {messages.length === 0 && pendings.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
+          {isWorking && <WorkingIndicator since={workingSince} />}
+          <div ref={bottomRef} />
+        </div>
+        {!isAtBottom && (
+          <button
+            type="button"
+            className="to-bottom"
+            onClick={onToBottomClick}
+            title="맨 아래로"
+            aria-label={hasUnread ? '맨 아래로 (새 메시지)' : '맨 아래로'}
+          >
+            ↓{hasUnread && <span className="to-bottom-dot" />}
+          </button>
+        )}
       </div>
       {isWritable && isApprovalNeeded && (
         <div className="approval">
