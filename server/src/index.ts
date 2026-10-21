@@ -38,7 +38,7 @@ import { setupFileLog } from '@jk-corp/host/runtime'
 import { configDir, readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
 import { makeSendCode } from './mail.js'
-import { applyHook, type HookPayload, type HookState } from './hookState.js'
+import { applyHook, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { findTranscript, listSessions, projectsDir } from './sessions.js'
 import { contentTypeOf, findScratchpad, isSessionId, listScratchpad, resolveScratchpadFile } from './scratchpad.js'
 import { summarizeTranscript } from './transcript.js'
@@ -406,6 +406,11 @@ app.post('/api/sessions/:id/answer', (req, res) => {
     decision = allowDecision(held.toolInput, built.answers)
   }
   releaseQuestion(sessionId, decision)
+  // deny 에는 PostToolUse 가 오지 않아 Stop 까지 needs-approval(질문 없음)로 남으므로 바로 working 으로 돌린다
+  if (decision.hookSpecificOutput.decision.behavior === 'deny') {
+    const next = applyQuestionDenied(hookStates.get(sessionId))
+    if (next) hookStates.set(sessionId, next)
+  }
   res.json({})
   void broadcast()
 })

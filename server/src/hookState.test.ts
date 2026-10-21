@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyHook } from './hookState.js'
+import { applyHook, applyQuestionDenied } from './hookState.js'
 
 const base = { session_id: 's1', cwd: 'D:/x' }
 const now = new Date('2026-10-20T00:00:00Z')
@@ -59,5 +59,39 @@ describe('applyHook workingSince', () => {
     const first = applyHook(undefined, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:00Z'))
     const second = applyHook(first, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:05:00Z'))
     expect(second?.workingSince).toBe('2026-10-21T00:05:00.000Z')
+  })
+})
+
+describe('applyQuestionDenied', () => {
+  const at = (iso: string) => new Date(iso)
+  /** 앞 차례가 끝나고 새 차례에서 질문을 띄운 상태 */
+  const asking = () => {
+    const stopped = applyHook(undefined, { ...base, hook_event_name: 'Stop', last_assistant_message: '앞 차례' }, now)
+    const started = applyHook(stopped, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:00Z'))
+    return applyHook(started, { ...base, hook_event_name: 'PermissionRequest', tool_name: 'AskUserQuestion' }, at('2026-10-21T00:00:10Z'))
+  }
+
+  it('turns a waiting question into working in the same turn, clearing the pending tool', () => {
+    const denied = applyQuestionDenied(asking(), at('2026-10-21T00:00:20Z'))
+    expect(denied).toEqual({
+      status: 'working',
+      cwd: 'D:/x',
+      lastAssistantText: '앞 차례',
+      pendingTool: null,
+      updatedAt: '2026-10-21T00:00:20.000Z',
+      workingSince: '2026-10-21T00:00:00.000Z',
+    })
+  })
+
+  it('lets the next hook change it as usual', () => {
+    const denied = applyQuestionDenied(asking(), at('2026-10-21T00:00:20Z'))
+    const stopped = applyHook(denied, { ...base, hook_event_name: 'Stop', last_assistant_message: '취소됨' }, at('2026-10-21T00:00:25Z'))
+    expect(stopped).toMatchObject({ status: 'my-turn', pendingTool: null, workingSince: null, lastAssistantText: '취소됨' })
+  })
+
+  it('leaves other states and unknown sessions alone', () => {
+    const stopped = applyHook(undefined, { ...base, hook_event_name: 'Stop' }, now)
+    expect(applyQuestionDenied(stopped, now)).toBe(stopped)
+    expect(applyQuestionDenied(undefined, now)).toBeUndefined()
   })
 })

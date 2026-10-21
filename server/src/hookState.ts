@@ -27,6 +27,16 @@ const statusByEvent: Record<string, SessionStatus> = {
   SessionEnd: 'ended',
 }
 
+/**
+ * 웹에서 질문을 거절(취소·대화로 답하기 = deny)한 직후의 상태. deny 에는 PostToolUse 가 오지 않아 Stop 까지 몇 초 동안
+ * needs-approval 로 남으므로 서버가 바로 working 으로 돌린다. 같은 차례라 workingSince 는 잇고, 다음 훅이 오면 평소대로 바뀐다.
+ * 승인 대기가 아니면(이미 다른 훅이 왔거나 훅을 못 받았으면) 그대로 둔다
+ */
+export function applyQuestionDenied(previous: HookState | undefined, now: Date = new Date()): HookState | undefined {
+  if (previous?.status !== 'needs-approval') return previous
+  return { ...previous, status: 'working', pendingTool: null, updatedAt: now.toISOString() }
+}
+
 export function applyHook(
   previous: HookState | undefined,
   payload: HookPayload,
