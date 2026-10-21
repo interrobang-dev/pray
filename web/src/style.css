@@ -901,6 +901,202 @@ header button.icon:hover:not(:disabled) {
   color: #fff;
   border: 0;
 }
+/* claude 의 AskUserQuestion 에 답하는 카드 (Chat.tsx). 승인 막대 자리에 뜬다. 길면 가운데(질문·선택지)만 스크롤하고 탭·버튼은 남는다 */
+.question-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+  border-top: 2px solid var(--green);
+  background: var(--panel);
+}
+.question-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 16px 0;
+}
+.question-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--bg);
+  border-color: transparent;
+}
+.question-tabs button.on {
+  color: var(--text);
+  font-weight: 600;
+  background: var(--panel);
+  border-color: var(--green);
+}
+.question-tabs .tab-mark {
+  font-size: 11px;
+}
+.question-tabs button.answered .tab-mark {
+  color: var(--green);
+}
+.question-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.question-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.question-chip {
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: #2f7a39;
+  font-weight: 600;
+}
+.question-text {
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.question-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: left;
+}
+.question-option.selected {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+/* 번호(숫자 키) 겸 고름 표시. 단일 선택은 원, 여러 개 고르기는 네모 */
+.option-key {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 1px solid #c9ccd6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+.question-option.multi .option-key {
+  border-radius: 5px;
+}
+.question-option.selected .option-key {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.option-label {
+  font-weight: 600;
+}
+.option-description {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.question-preview-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+/* 글자 그림이라 줄을 바꾸지 않고 이 안에서만 가로 스크롤 */
+.question-preview pre {
+  margin: 0;
+  max-height: 200px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f6f8fa;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre;
+}
+.question-custom {
+  resize: none;
+  line-height: 1.4;
+}
+.question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+}
+.question-actions .primary {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+.question-error,
+.question-status {
+  flex: 1 1 200px;
+  font-size: 12px;
+}
+.question-error {
+  color: #c84a3f;
+}
+.question-status {
+  color: var(--muted);
+}
+/* 대화 기록의 AskUserQuestion (Chat.tsx): 질문 → 답, 결과가 아직 없으면 "질문 중" 한 줄 */
+.asked-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2f7a39;
+}
+.msg.asked.waiting {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--muted);
+}
+.msg.asked.waiting .asked-label {
+  margin: 0;
+}
+.asked-item + .asked-item {
+  margin-top: 8px;
+}
+.asked-question {
+  font-size: 13px;
+}
+.asked-answer {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--green-soft);
+  font-weight: 600;
+}
 .composer {
   display: flex;
   gap: 8px;
@@ -915,6 +1111,12 @@ header button.icon:hover:not(:disabled) {
   flex: 1;
   resize: none;
   line-height: 1.4;
+}
+/* 질문 중 (Chat.tsx isAsking). 쓰던 글은 남아 흐리게 보인다 */
+.composer textarea:disabled {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 /* 보내기: 종이비행기 아이콘의 둥근 정사각형. 한 변 = 한 줄 입력칸 높이(줄 높이 1.4em + 위아래 padding 7px·border 1px).
    em 이라 입력칸과 글자 크기가 같아야 맞는다 */
@@ -1054,9 +1256,24 @@ header button.icon:hover:not(:disabled) {
     flex-wrap: wrap;
   }
   /* 16px 이 되면 안내 문구가 두 줄로 넘쳐 한 줄 입력칸에 스크롤바가 생긴다 */
-  .composer textarea::placeholder {
+  .composer textarea::placeholder,
+  .question-custom::placeholder {
     white-space: nowrap;
     overflow: hidden;
+  }
+  /* 질문 카드: 손가락으로 누르기 쉽게 버튼을 40px 안팎으로. 주소창이 보여도 카드가 화면을 다 덮지 않게 dvh */
+  .question-card {
+    max-height: 60dvh;
+  }
+  .question-tabs button,
+  .question-actions button {
+    min-height: 40px;
+  }
+  .question-option {
+    min-height: 44px;
+  }
+  .question-actions button {
+    flex: 1 1 auto;
   }
   /* 보내기 버튼 크기가 em 이라 입력칸과 같은 16px 이어야 높이가 맞는다 */
   .composer .send {

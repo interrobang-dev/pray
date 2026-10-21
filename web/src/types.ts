@@ -19,6 +19,16 @@ export interface Session {
   teamId: string | null
   /** 팀 안의 파트. null 이면 팀 직속 */
   partId: string | null
+  /** 서버가 이 웹 세션의 AskUserQuestion 훅을 붙잡고 있을 때만 값이 있다. 옛 서버 응답에는 빠져 있다 */
+  question?: { questions: AskQuestion[] } | null
+}
+
+/** claude 가 AskUserQuestion 으로 묻는 질문 하나. 질문은 1~4개, 선택지는 2~4개 */
+export interface AskQuestion {
+  question: string
+  header: string
+  options: { label: string; description: string; preview?: string }[]
+  multiSelect: boolean
 }
 
 export interface Group {
@@ -68,6 +78,8 @@ export interface ToolUse {
   name: string
   input: unknown
   result: string | null
+  /** 답한 AskUserQuestion 에만 있다: 질문문 → 답 (여러 개 고르기는 ", " 로 이음). 옛 서버 응답·취소에는 없다 */
+  answers?: Record<string, string>
 }
 
 /** 대화 탭 메시지 (`GET /api/sessions/:id/messages`) */
