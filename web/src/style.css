@@ -652,7 +652,7 @@ li.group.drop-after::after {
   flex-direction: column;
   background: var(--bg);
 }
-/* 대화 목록 + "맨 아래로" 버튼. 버튼이 승인 막대·입력칸 바깥(위)에 뜨도록 목록만 감싼다 */
+/* 대화 목록 + 오른쪽 아래 버튼 묶음. 버튼이 승인 막대·입력칸 바깥(위)에 뜨도록 목록만 감싼다 */
 .messages-pane {
   position: relative;
   flex: 1;
@@ -811,14 +811,32 @@ li.group.drop-after::after {
   font-size: 11px;
   color: var(--muted);
 }
-/* 대화 오른쪽 아래의 40px 원 버튼 둘 (폰에서도 누르기 쉽다). 맨 아래 자리는 작업 파일 폴더 버튼(Files.tsx),
-   맨 아래가 아닐 때 뜨는 "↓"(Chat.tsx)는 그 바로 위. 폴더 버튼이 없으면 "↓" 가 맨 아래 자리로 내려온다. 점 = 위를 보는 사이 새 메시지 */
-.to-bottom,
-.files-button {
+/* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 작업 파일 폴더(Files.tsx) → 제안 → 맨 아래가 아닐 때 뜨는 "↓".
+   아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않고, 위 버튼이 뜨고 숨어도 아래 버튼은 움직이지 않는다.
+   묶음이 대화 폭을 다 덮는 것은 제안 말풍선 최대 폭을 대화 폭 기준으로 정하려고다. 빈 자리는 클릭이 대화로 지나간다.
+   z-index 를 주지 않는다: 폴더 버튼의 모달이 이 안에 렌더돼 묶음의 쌓임 맥락에 갇힌다 */
+.pane-buttons {
   position: absolute;
+  left: 16px;
   right: 16px;
   bottom: 12px;
-  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+/* 버튼들과 폴더 버튼의 모달 */
+.pane-buttons > * {
+  pointer-events: auto;
+}
+/* 원 버튼 모양 (제안은 말풍선을 뺀 원 부분) */
+.to-bottom,
+.files-button,
+.suggestion-icon {
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
   width: 40px;
   height: 40px;
   padding: 0;
@@ -827,6 +845,7 @@ li.group.drop-after::after {
   line-height: 1;
   box-shadow: 0 2px 6px rgba(20, 24, 40, 0.15);
 }
+/* 점 = 위를 보는 사이 새 메시지 */
 .to-bottom-dot {
   position: absolute;
   top: 1px;
@@ -836,10 +855,6 @@ li.group.drop-after::after {
   border-radius: 50%;
   border: 2px solid var(--panel);
   background: var(--green);
-}
-/* 폴더 버튼이 있을 때만 "↓" 를 한 칸 위로. 폴더 버튼은 늘 맨 아래라 "↓" 가 뜨고 숨어도 움직이지 않는다 (Chat.tsx 가 FilesButton 을 "↓" 앞에 렌더) */
-.files-button ~ .to-bottom {
-  bottom: 60px;
 }
 /* 작업 파일 폴더 버튼 (Files.tsx) */
 .files-button {
@@ -1549,22 +1564,66 @@ li.group.drop-after::after {
   font-size: 12px;
   color: #c84a3f;
 }
-/* Claude Code 의 다음 입력 제안 (Chat.tsx). 입력칸 바로 위 한 줄 칩, 길면 말줄임 (전체는 툴팁). 누르거나 빈 입력칸 Tab = 채우기 (보내지 않는다) */
+/* Claude Code 의 다음 입력 제안 (Chat.tsx). 오른쪽 아래 버튼 묶음의 원 버튼 ✦ + 바로 왼쪽 말풍선 한 줄 (길면 말줄임, 전체는 툴팁).
+   둘이 한 버튼이라 어디를 누르든, 빈 입력칸에서 Tab 이든 = 입력칸에 채우기 (보내지 않는다). 말풍선 최대 폭은 대화 폭의 약 70% (+ 원 버튼·간격 48px) */
 .suggestion {
-  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(70% + 48px);
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+}
+.suggestion-bubble {
+  position: relative;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  max-width: calc(100% - 32px);
-  margin: 0 16px 8px;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  color: var(--muted);
-  box-shadow: 0 1px 2px rgba(20, 24, 40, 0.04);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 13px;
+  box-shadow: 0 2px 6px rgba(20, 24, 40, 0.15);
 }
-.suggestion-label {
+/* 말풍선 꼬리: 원 버튼을 가리킨다 */
+.suggestion-bubble::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -5px;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  transform: translateY(-50%) rotate(45deg);
+}
+.suggestion-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--green);
+}
+/* 겉 버튼은 테두리가 없어 기본 hover 대신 말풍선·원에 */
+.suggestion:hover .suggestion-bubble,
+.suggestion:hover .suggestion-bubble::after,
+.suggestion:hover .suggestion-icon {
+  border-color: var(--green);
+}
+/* 제안이 보일 때 대화 끝에 비워 두는 자리 (Chat.tsx). 맨 아래로 내렸을 때 마지막 글 끝이 말풍선 위에 온다.
+   폴더 버튼이 있으면 말풍선이 그 위 칸이라 그만큼 더. 빈 div 라 flex-shrink 를 막지 않으면 대화가 길 때 0 으로 줄어든다 */
+.suggestion-space {
   flex-shrink: 0;
+  height: 40px;
+}
+.messages-pane:has(.files-button) .suggestion-space {
+  height: 88px;
 }
 .suggestion-text {
   min-width: 0;
@@ -1813,10 +1872,9 @@ li.group.drop-after::after {
   .files-preview-body {
     padding: 8px 0;
   }
-  /* 제안 칩: 폰 키보드에는 Tab 이 없어 힌트를 숨기고, 손가락으로 누르기 쉽게 키운다 */
+  /* 제안 말풍선: 화면이 좁아 원 버튼 왼쪽 폭을 다 쓴다. 폰 키보드에는 Tab 이 없어 힌트를 숨긴다 */
   .suggestion {
-    min-height: 32px;
-    font-size: 13px;
+    max-width: 100%;
   }
   .suggestion-key {
     display: none;
