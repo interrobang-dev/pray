@@ -36,6 +36,8 @@ export async function listSessions(
   names: Record<string, string> = {},
   /** 서버가 붙잡고 있는 AskUserQuestion (세션 ID → 질문) */
   questions: ReadonlyMap<string, AskQuestion[]> = new Map(),
+  /** mod 가 POST /api/hook/suggestion 으로 보낸 입력칸 제안 (세션 ID → 글) */
+  suggestions: ReadonlyMap<string, string> = new Map(),
 ): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
   const ids = new Set<string>([...live.map((s) => s.sessionId), ...hookStates.keys(), ...webSessions.keys()])
@@ -69,6 +71,7 @@ export async function listSessions(
         partId: part?.id ?? null,
         role: roleOf(id, isWeb, team, part),
         question: heldQuestions ? { questions: heldQuestions } : null,
+        suggestion: isWeb ? (suggestions.get(id) ?? null) : null,
       }
     }),
   )

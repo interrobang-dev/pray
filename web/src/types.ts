@@ -24,6 +24,8 @@ export interface Session {
   partId: string | null
   /** 서버가 이 웹 세션의 AskUserQuestion 훅을 붙잡고 있을 때만 값이 있다. 옛 서버 응답에는 빠져 있다 */
   question?: { questions: AskQuestion[] } | null
+  /** 입력칸에 놓인 Claude Code 다음 입력 제안 (웹 세션만, 세션의 mod 가 서버로 보낸다). 옛 서버 응답에는 빠져 있다 */
+  suggestion?: string | null
 }
 
 /** claude 가 AskUserQuestion 으로 묻는 질문 하나. 질문은 1~4개, 선택지는 2~4개 */

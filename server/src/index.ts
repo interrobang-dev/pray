@@ -60,6 +60,7 @@ import {
 } from './askQuestion.js'
 import type { AskQuestion } from './types.js'
 import { serialRunner } from './serialRunner.js'
+import { applySuggestion } from './suggestion.js'
 
 setupFileLog()
 const PORT = 4710
@@ -77,6 +78,8 @@ const heldQuestions = new Map<
   string,
   { questions: AskQuestion[]; toolInput: Record<string, unknown>; res: Response; at: string }
 >()
+/** 웹 세션 입력칸의 Claude Code 다음 입력 제안 (mod 가 POST /api/hook/suggestion 으로 보낸다). 메모리에만 */
+const suggestions = new Map<string, string>()
 
 const config = readConfig()
 const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
@@ -180,7 +183,7 @@ async function snapshotPayload() {
   const questions = new Map([...heldQuestions].map(([id, held]) => [id, held.questions]))
   return {
     isHostReachable: host.isReachable,
-    sessions: await listSessions(hookStates, webSessions, listTeams(), names, questions),
+    sessions: await listSessions(hookStates, webSessions, listTeams(), names, questions, suggestions),
   }
 }
 
@@ -867,6 +870,20 @@ app.post('/api/hook', (req, res) => {
 })
 
 /**
+ * 입력칸의 Claude Code 다음 입력 제안. 웹 세션에 불러온 mod(mod/hooks/register.ts)가 제안이 놓일 때 글을, 보낼 때 null 을 보낸다.
+ * 위 인증 미들웨어의 예외가 아니다 — mod 는 같은 PC 에서 와 loopback 으로 통과하고, 예외로 두면 다른 PC 가 아무 세션 제안이나 써넣는다
+ */
+app.post('/api/hook/suggestion', (req, res) => {
+  const update = applySuggestion(suggestions, new Set(host.sessions.map((s) => s.sessionId)), req.body)
+  if (update === 'invalid') {
+    res.status(400).end()
+    return
+  }
+  res.status(204).end()
+  if (update === 'changed') void broadcast()
+})
+
+/**
  * PermissionRequest(matcher AskUserQuestion) 훅. 웹 세션이면 응답하지 않고 붙잡아 두고 답하기 API 를 기다린다
  * (훅 timeout 1시간). 외부 세션은 관찰만이라 바로 {} (결정 없음 → 터미널 화면이 받는다)
  */
@@ -904,11 +921,16 @@ app.get('/api/events', (req, res) => {
   void broadcast()
 })
 
-host.on('reachable', () => void broadcast())
+host.on('reachable', (isReachable: boolean) => {
+  // 연결이 끊기면 웹 세션 목록도 빈다. 호스트가 재시작했으면 세션이 --resume 으로 새로 떠 옛 제안은 쓸모없다
+  if (!isReachable) suggestions.clear()
+  void broadcast()
+})
 host.on('message', (message: HostMessage) => {
   if (message.type === 'output') lastOutputAt.set(message.sessionId, Date.now())
   if (message.type === 'exit') {
     lastOutputAt.delete(message.sessionId)
+    suggestions.delete(message.sessionId)
     tasks.markExited(message.sessionId)
     releaseQuestion(message.sessionId)
     // 이벤트 처리기라 던지면 서버가 죽는다. 실패하면 이름이 hq.json 에 남는다

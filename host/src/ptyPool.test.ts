@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { isAbsolute, join, resolve } from 'node:path'
 import * as pty from 'node-pty'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { addWebSession } from './hq.js'
@@ -47,6 +49,25 @@ describe('PtyPool.spawn args', () => {
 
   it('passes extraArgs as is on resume', () => {
     expect(spawnedArgs({ resume: true, extraArgs: EXTRA_ARGS })).toEqual(['--resume', SESSION_ID, ...EXTRA_ARGS])
+  })
+})
+
+describe('PtyPool child env', () => {
+  it('loads the repo mod/ through CLAUDE_CODE_PLUGIN_DIRS, set after dropping inherited CLAUDE* variables', () => {
+    vi.stubEnv('CLAUDE_CODE_PLUGIN_DIRS', 'D:/elsewhere')
+    vi.stubEnv('CLAUDECODE', '1')
+    try {
+      new PtyPool().spawn({ sessionId: SESSION_ID, cwd: 'D:/repo' })
+      const env = vi.mocked(pty.spawn).mock.lastCall![2].env as Record<string, string>
+      const modDir = resolve(import.meta.dirname, '..', '..', 'mod')
+      expect(env.CLAUDE_CODE_PLUGIN_DIRS).toBe(modDir)
+      expect(isAbsolute(env.CLAUDE_CODE_PLUGIN_DIRS)).toBe(true)
+      expect(existsSync(join(modDir, '.claude-plugin', 'plugin.json'))).toBe(true)
+      expect(env.CLAUDECODE).toBeUndefined()
+      expect(env.JK_CORP_SESSION).toBe(SESSION_ID)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 

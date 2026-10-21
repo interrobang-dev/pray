@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { join } from 'node:path'
 import * as pty from 'node-pty'
 import { RingBuffer } from './ringBuffer.js'
 import type { HostSession } from './protocol.js'
@@ -8,10 +9,13 @@ import { getArg } from './runtime.js'
 const RING_LIMIT = 200_000
 /** 작업 스케줄러 환경에는 사용자 PATH 가 없을 수 있어 설치 스크립트가 `--claude=<exe>` 로 넘긴다 */
 const CLAUDE_COMMAND = getArg('claude') ?? process.env.JK_CORP_CLAUDE ?? 'claude.exe'
+/** 웹 세션에만 불러오는 저장소의 mod (입력칸 제안을 서버로 보낸다). 절대 경로 */
+const MOD_DIR = join(import.meta.dirname, '..', '..', 'mod')
 
 /**
  * 호스트가 Claude 세션 안에서 실행됐을 때 상속되는 변수.
  * CLAUDE* 를 남겨두면 자식 claude 가 중첩 실행으로 판단해 종료하고, NO_COLOR 를 남겨두면 색 없이 렌더링한다.
+ * mod 폴더(CLAUDE_CODE_PLUGIN_DIRS)는 CLAUDE* 를 지운 뒤에 넣는다
  */
 function childEnv(sessionId: string): Record<string, string> {
   const env: Record<string, string> = {}
@@ -21,6 +25,7 @@ function childEnv(sessionId: string): Record<string, string> {
     env[key] = value
   }
   env.JK_CORP_SESSION = sessionId
+  env.CLAUDE_CODE_PLUGIN_DIRS = MOD_DIR
   return env
 }
 

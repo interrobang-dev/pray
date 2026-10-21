@@ -674,6 +674,7 @@ export function App() {
               workingSince={selected.workingSince ?? null}
               pendingTool={selected.pendingTool}
               question={selected.question ?? null}
+              suggestion={selected.suggestion ?? null}
               version={transcriptVersions[selected.id] ?? 0}
               sessionNames={Object.fromEntries(snapshot.sessions.map((s) => [s.id, displayName(s)]))}
             />

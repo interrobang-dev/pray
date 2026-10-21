@@ -31,6 +31,8 @@ export interface Session {
   partId: string | null
   /** 서버가 이 세션의 AskUserQuestion 을 붙잡고 있을 때만 있다 (웹 세션만). 답하기는 POST /api/sessions/:id/answer */
   question: { questions: AskQuestion[] } | null
+  /** 입력칸에 놓인 Claude Code 다음 입력 제안 (웹 세션의 mod 가 POST /api/hook/suggestion 으로 보낸다). 웹 세션이 아니거나 없으면 null */
+  suggestion: string | null
 }
 
 /** AskUserQuestion 의 질문 하나 (tool_input.questions[]) */

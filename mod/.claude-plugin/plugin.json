@@ -1,0 +1,5 @@
+{
+  "name": "jk-corp",
+  "version": "0.1.0",
+  "description": "jk-corp 웹 세션의 입력칸 제안(Prompt suggestions)을 jk-corp 서버로 보낸다"
+}

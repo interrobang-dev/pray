@@ -15,6 +15,8 @@ interface Props {
   pendingTool: string | null
   /** 서버가 붙잡고 있는 AskUserQuestion. 있으면 승인 막대 대신 질문 카드 */
   question: { questions: AskQuestion[] } | null
+  /** 입력칸에 그려진 Claude Code 다음 입력 제안. 있으면 입력칸 위 칩 */
+  suggestion: string | null
   /** 전역 SSE 의 transcript 이벤트로 올라가는 카운터. 바뀌면 다시 읽는다 */
   version: number
   /** 세션 ID → 화면 이름 (App 의 세션 목록). 팀원 이름 찾기용 */
@@ -480,15 +482,28 @@ function settlePendings(pendings: PendingMessage[], messages: ChatMessage[]): Pe
   return remaining.map((pending) => ({ ...pending, knownIds: new Set([...pending.knownIds, ...matchedIds]) }))
 }
 
-export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, workingSince, pendingTool, question, version, sessionNames }: Props) {
+export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, workingSince, pendingTool, question, suggestion, version, sessionNames }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [pendings, setPendings] = useState<PendingMessage[]>([])
   /** 질문 중에는 입력칸을 막는다. 키 입력이 터미널의 질문 화면에 들어가면 Enter 가 1번 선택지로 답해 버린다. 쓰던 글은 남긴다 */
   const isAsking = Boolean(question) || pendingTool === ASK_TOOL
+  /**
+   * 입력칸 위 제안 칩: Claude Code 가 빈 입력칸에 제안을 그리는 때와 같게 (작업·승인 대기·질문 중이 아니고 입력칸이 비었을 때).
+   * 막 보낸 말이 아직 확인 전이면 mod 가 보낸 null 이 반영되기 전일 수 있어 숨긴다 (전송 실패는 입력이 안 갔으니 그대로)
+   */
+  const isSuggestionShown =
+    Boolean(suggestion) &&
+    isWritable &&
+    !isWorking &&
+    !isApprovalNeeded &&
+    !isAsking &&
+    draft === '' &&
+    pendings.every((pending) => pending.isFailed)
   const nextPendingIdRef = useRef(1)
   const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
   /** 사용자가 맨 아래를 보고 있는지. 스크롤 때마다 갱신한다 (내용만 길어질 때는 스크롤 이벤트가 없어 직전 값이 남는다 = "갱신 직전에 맨 아래였는지") */
   const isAtBottomRef = useRef(true)
   /** 같은 값을 "맨 아래로" 버튼을 그리는 데 쓴다 */
@@ -560,6 +575,11 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     if (isWorking && isAtBottomRef.current) scrollToBottom()
   }, [isWorking])
 
+  // 제안 칩이 뜨면 대화 영역이 줄어 맨 아래(방금 끝난 응답)가 가려지므로 같은 규칙으로 내린다
+  useEffect(() => {
+    if (isSuggestionShown && isAtBottomRef.current) scrollToBottom()
+  }, [isSuggestionShown])
+
   function onMessagesScroll() {
     const element = messagesRef.current
     if (!element) return
@@ -614,8 +634,26 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
     setPendings((current) => current.filter((pending) => pending.id !== pendingId))
   }
 
-  /** Enter = 보내기, Shift+Enter = 줄바꿈. 한글 조합 중 Enter 는 조합 확정이라 보내지 않는다 */
+  /** 제안을 입력칸에 채우고 커서를 끝에 둔다. 보내지 않는다 (사람이 확인하고 Enter) */
+  function fillSuggestion() {
+    if (!suggestion) return
+    flushSync(() => setDraft(suggestion))
+    const textarea = composerRef.current
+    textarea?.focus()
+    textarea?.setSelectionRange(suggestion.length, suggestion.length)
+  }
+
+  /**
+   * Enter = 보내기, Shift+Enter = 줄바꿈. 한글 조합 중 Enter 는 조합 확정이라 보내지 않는다.
+   * 제안 칩이 있으면 (= 빈 입력칸) Tab = 제안 채우기. 그 밖의 Tab 은 기본 동작(포커스 이동)
+   */
   function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    const isPlainTab = event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey
+    if (isPlainTab && isSuggestionShown && !event.nativeEvent.isComposing) {
+      event.preventDefault()
+      fillSuggestion()
+      return
+    }
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
     event.preventDefault()
     void submit()
@@ -756,9 +794,17 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, worki
           </div>
         ))
       )}
+      {isSuggestionShown && (
+        <button type="button" className="suggestion" onClick={fillSuggestion} title={suggestion ?? undefined} aria-label={`제안을 입력칸에 채우기: ${suggestion}`}>
+          <span className="suggestion-label">제안 ·</span>
+          <span className="suggestion-text">{suggestion}</span>
+          <kbd className="suggestion-key">Tab</kbd>
+        </button>
+      )}
       {isWritable ? (
         <form className="composer" onSubmit={submit}>
           <textarea
+            ref={composerRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
