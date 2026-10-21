@@ -166,6 +166,47 @@ describe('parseMessages: messages sent while claude is working', () => {
   })
 })
 
+describe('parseMessages: pasted input', () => {
+  const open = (id: string) => `<pasted_content id="${id}">`
+  const close = (id: string) => `</pasted_content id="${id}">`
+  const textOf = (content: string) => parseMessages(line({ type: 'user', uuid: 'u1', message: { role: 'user', content } }))[0]
+
+  it('restores the sent text exactly, dropping only the newlines added around the tags', () => {
+    // 한 조각을 통째로 감싼 꼴 (실제 jsonl: 앞 "\n\n", 태그 안쪽 "\n", 끝 "\n")
+    expect(textOf(`\n\n${open('8184')}\n첫 문단.\n\n둘째 문단.\n${close('8184')}\n`).text).toBe('첫 문단.\n\n둘째 문단.')
+    // 4096바이트 조각 경계가 낱말 중간("열거|나")이고 나머지는 태그 밖에 남은 꼴
+    expect(textOf(`\n\n${open('d70d')}\n금지: 설정 파일은 열거\n${close('d70d')}\n\n나 출력하지 마라.`).text).toBe('금지: 설정 파일은 열거나 출력하지 마라.')
+    // 태그 앞에 직접 친 글이 있는 꼴, 조각 둘이 각각 감싸진 꼴
+    expect(textOf(`아래를 보고 해 줘. \n\n${open('f63e')}\n붙인 글\n${close('f63e')}\n`).text).toBe('아래를 보고 해 줘. 붙인 글')
+    expect(textOf(`\n\n${open('8989')}\n앞 조각\n${close('8989')}\n\n\n${open('8989')}\n뒤 조각\n${close('8989')}\n`).text).toBe('앞 조각뒤 조각')
+  })
+
+  it('keeps newlines that belong to the text next to the tags', () => {
+    // 글이 빈 줄로 시작·끝나고 태그 뒤 글도 줄바꿈으로 시작 → 감싼 줄바꿈 바깥은 남는다
+    expect(textOf(`\n\n\n${open('ab12')}\n\n가운데\n\n${close('ab12')}\n\n\n끝`).text).toBe('\n\n가운데\n\n끝')
+  })
+
+  it('decides system by the stored text and leaves look-alike tags alone', () => {
+    expect(textOf(`\n\n${open('ab12')}\n<div>붙인 HTML</div>\n${close('ab12')}\n`)).toMatchObject({ role: 'user', text: '<div>붙인 HTML</div>' })
+    const lookAlike = `${open('not-hex')}\n글\n${close('not-hex')}`
+    expect(textOf(`설명: ${lookAlike}`).text).toBe(`설명: ${lookAlike}`)
+    expect(textOf(`설명: ${open('ab12')}\n닫는 태그 없음`).text).toBe(`설명: ${open('ab12')}\n닫는 태그 없음`)
+  })
+
+  it('unwraps absorbed and queued messages too, and attachInstructions still matches the unwrapped text', () => {
+    const stored = `\n\n${open('ab12')}\n지시 앞부분\n${close('ab12')}\n\n이어진 뒷부분`
+    const jsonl = [
+      line({ type: 'attachment', uuid: 'q1', attachment: { type: 'queued_command', prompt: stored, commandMode: 'prompt' } }),
+      line({ type: 'queue-operation', operation: 'enqueue', timestamp: 't', content: stored }),
+    ].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(messages.map((m) => m.text)).toEqual(['지시 앞부분이어진 뒷부분', '지시 앞부분이어진 뒷부분'])
+    const record: InstructionRecord = { sessionId: 'member', fromSessionId: 'lead-1', text: '지시 앞부분이어진 뒷부분', at: '' }
+    expect(attachInstructions(messages, [record], () => '팀장')[0].from).toEqual({ sessionId: 'lead-1', name: '팀장' })
+  })
+})
+
 describe('parseInstructionLog', () => {
   it('keeps only well-formed records of the session and skips broken lines', () => {
     const log = [

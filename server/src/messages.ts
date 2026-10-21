@@ -51,17 +51,27 @@ function resultToText(content: unknown): string {
   return ''
 }
 
-/** 사람 쪽 글 → 메시지. 문자열이 `<` 로 시작하면 system (명령 출력·알림 등), 블록 배열이면 text 블록만 (없으면 null) */
+/**
+ * Claude Code 가 붙여넣기로 받은 글(pty 입력 조각)을 감싼 꼴: `\n\n<pasted_content id="4자리 hex">\n` + 글 + `\n</pasted_content id="같은 id">\n\n`.
+ * 감쌀 때 넣은 줄바꿈(앞뒤 최대 2개씩, 태그 안쪽 1개씩)까지 지우면 보낸 글이 그대로 돌아온다 (Claude Code 자신의 풀기 함수와 같은 규칙)
+ */
+const PASTE_BLOCK = /\n{0,2}<pasted_content id="([0-9a-f]{4})">\n([\s\S]*?)\n<\/pasted_content id="\1">\n{0,2}/g
+
+function unwrapPastes(text: string): string {
+  return text.replace(PASTE_BLOCK, '$2')
+}
+
+/** 사람 쪽 글 → 메시지. 문자열이 `<` 로 시작하면 system (명령 출력·알림 등. 붙여넣기를 풀기 전 글로 본다), 블록 배열이면 text 블록만 (없으면 null) */
 function userTextMessage(id: string, timestamp: string, content: unknown): ChatMessage | null {
   if (typeof content === 'string') {
-    return { id, role: content.startsWith('<') ? 'system' : 'user', timestamp, text: content, toolUses: [] }
+    return { id, role: content.startsWith('<') ? 'system' : 'user', timestamp, text: unwrapPastes(content), toolUses: [] }
   }
   if (!Array.isArray(content)) return null
   const text = (content as Block[])
     .filter((block) => block.type === 'text' && block.text)
     .map((block) => block.text!)
     .join('\n')
-  return text ? { id, role: 'user', timestamp, text, toolUses: [] } : null
+  return text ? { id, role: 'user', timestamp, text: unwrapPastes(text), toolUses: [] } : null
 }
 
 /**
