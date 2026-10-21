@@ -102,7 +102,7 @@ Vite 페이지는 SSE 때문에 `--virtual-time-budget` 방식이 멈춘다. `--
 
 ## 확인하지 못한 것
 
-- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`, `--mcp-config`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력, 팀장 세션이 실제로 MCP 도구를 보고 쓰는지. **호스트를 새 코드로 재시작**한 뒤 "+ 팀"(이름·폴더·그룹) → "+ 새 세션" 에서 그 팀 선택 + "팀장으로" → 팀장에게 "팀원 둘에게 A·B 를 시키고 합쳐라" 로 확인해야 한다 (지시 → 결과 수신 흐름, 팀 API, MCP 서버 단독 동작은 검증함). 화면 `↻` 버튼 클릭 자체는 확인하지 못했다 (같은 API `POST /api/host/restart` 로 호스트가 종료 코드 2 로 나가고, 트레이가 다시 띄우고, 웹 세션이 `--resume` 되는 것은 확인함).
+- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`, `--mcp-config`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력, 팀장 세션이 실제로 MCP 도구를 보고 쓰는지. "+ 팀"(이름·폴더·그룹) → "+ 새 세션" 에서 그 팀 선택 + "팀장으로" → 팀장에게 "팀원 둘에게 A·B 를 시키고 합쳐라" 로 확인해야 한다 (지시 → 결과 수신 흐름, 팀 API, MCP 서버 단독 동작은 검증함). 화면 `↻` 버튼 클릭 자체는 확인하지 못했다 (같은 API `POST /api/host/restart` 로 호스트가 종료 코드 2 로 나가고, 트레이가 다시 띄우고, 웹 세션이 `--resume` 되는 것은 확인함).
 - 위 팀장 항목의 확인은 파트장에도 그대로 필요하다. 거기에 더해 파트장 지침·`JK_CORP_PART_ID` 로 자기 파트만 다루는지, worktree 폴더에서 bypassPermissions 경고 창이 따로 뜨는지도 확인해야 한다 (파트 API·단위 판정·403 거부·worktree 생성은 검증함)
 - `jk_dismiss`(`DELETE /api/team/:id/members/:sessionId`)는 팀·지휘 단위를 확인하지 않고 아무 세션이나 종료한다
 - 팀·파트 삭제 직후 늦게 도착한 세션 목록이 지워진 팀을 가리키면 `Office.tsx` 가 책상 자리를 못 찾아 `reading 'y'` 오류를 낸 적이 있다 (원인 추정, 고치지 않음)
