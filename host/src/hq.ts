@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -43,9 +43,11 @@ function readHq(): HqFile {
   let parsed: Partial<HqFile> = {}
   try {
     parsed = JSON.parse(readFileSync(hqPath, 'utf8'))
-  } catch {
-    // 파일 없음 → 기본값
+  } catch (error) {
+    // 파일 없음 → 기본값. 있는데 못 읽거나 깨졌으면 던져서 저장을 막는다. 기본값으로 넘어가면 다음 쓰기가 기록을 통째로 지운다
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw unreadable(error)
   }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw unreadable('최상위가 객체가 아님')
   // 구 파일 이전: "방(rooms)" 이 "그룹(groups)" 으로 바뀌었고 seats 는 없어졌다. 읽을 때 옮기고 다음 쓰기 때 새 키로만 저장한다
   const { rooms: legacyGroups, seats: _legacySeats, ...rest } = parsed as Partial<HqFile> & { rooms?: Group[]; seats?: unknown }
   const teams = (rest.teams ?? []).map(withDefaults)
@@ -63,9 +65,40 @@ function withDefaults(team: Partial<Team> & Pick<Team, 'id' | 'name' | 'cwd'> & 
   return { groupId: roomId ?? 'lobby', x: 1, y: 1, desks: {}, parts: [], partOf: {}, createdAt: '', ...rest }
 }
 
+function unreadable(cause: unknown): Error {
+  return new Error(`hq.json 을 읽을 수 없어 읽기·저장을 막음 (${hqPath}): ${cause}`, { cause })
+}
+
+/** Windows 는 대상 파일을 다른 프로세스(백신·인덱서 등)가 잡고 있으면 rename 이 실패한다. 잠깐 기다렸다 다시 한다 */
+const RENAME_RETRY_CODES = new Set(['EPERM', 'EBUSY', 'EACCES'])
+const RENAME_ATTEMPTS = 5
+const RENAME_RETRY_MS = 50
+
+/** 같은 폴더의 임시 파일에 다 쓴 뒤 바꿔 끼운다. 바로 덮어쓰면 쓰는 도중 강제 종료되거나 다른 프로세스가 그 사이에 읽을 때 빈 파일이 된다 */
 function writeHq(hq: HqFile): void {
   mkdirSync(hqDir, { recursive: true })
-  writeFileSync(hqPath, JSON.stringify(hq, null, 2) + '\n')
+  const tempPath = `${hqPath}.${process.pid}.tmp`
+  try {
+    writeFileSync(tempPath, JSON.stringify(hq, null, 2) + '\n')
+    renameWithRetry(tempPath, hqPath)
+  } catch (error) {
+    rmSync(tempPath, { force: true })
+    throw error
+  }
+}
+
+function renameWithRetry(from: string, to: string): void {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      renameSync(from, to)
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? ''
+      if (attempt >= RENAME_ATTEMPTS || !RENAME_RETRY_CODES.has(code)) throw error
+      // 호출부가 전부 동기라 동기로 기다린다
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, RENAME_RETRY_MS)
+    }
+  }
 }
 
 export function listWebSessions(): WebSessionRecord[] {

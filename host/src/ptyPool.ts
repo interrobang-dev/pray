@@ -24,6 +24,15 @@ function childEnv(sessionId: string): Record<string, string> {
   return env
 }
 
+/** hq.json 이 깨져 있으면 hq 함수가 던진다. 호스트가 죽으면 웹 세션이 전부 끊기므로 로그만 남기고 넘어간다 (기록은 그대로) */
+function updateHq(what: string, update: () => void): void {
+  try {
+    update()
+  } catch (error) {
+    console.error(`hq.json 기록 실패 (${what})`, error)
+  }
+}
+
 interface Entry {
   pty: pty.IPty
   ring: RingBuffer
@@ -66,7 +75,10 @@ export class PtyPool extends EventEmitter {
     })
     const ring = new RingBuffer(RING_LIMIT)
     this.entries.set(sessionId, { pty: child, ring, cwd })
-    if (!resume) addWebSession({ sessionId, cwd, createdAt: new Date().toISOString(), extraArgs: extraArgs.length ? extraArgs : undefined })
+    if (!resume) {
+      const record = { sessionId, cwd, createdAt: new Date().toISOString(), extraArgs: extraArgs.length ? extraArgs : undefined }
+      updateHq(`추가 ${sessionId}`, () => addWebSession(record))
+    }
 
     child.onData((data) => {
       ring.push(data)
@@ -74,7 +86,7 @@ export class PtyPool extends EventEmitter {
     })
     child.onExit(({ exitCode }) => {
       this.entries.delete(sessionId)
-      removeWebSession(sessionId)
+      updateHq(`삭제 ${sessionId}`, () => removeWebSession(sessionId))
       this.emit('exit', sessionId, exitCode)
       this.emit('change')
     })
@@ -96,6 +108,6 @@ export class PtyPool extends EventEmitter {
 
   kill(sessionId: string): void {
     this.entries.get(sessionId)?.pty.kill()
-    removeWebSession(sessionId)
+    updateHq(`삭제 ${sessionId}`, () => removeWebSession(sessionId))
   }
 }

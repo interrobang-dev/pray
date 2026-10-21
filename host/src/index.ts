@@ -80,10 +80,22 @@ const server = createServer((socket) => {
 
 /** 지난번 호스트가 살려 두던 웹 세션을 --resume 으로 되살린다 */
 function resumeWebSessions(): void {
-  for (const record of listWebSessions()) {
+  // hq.json 이 깨져 있으면 던진다. 호스트는 살려 두고 기록은 건드리지 않는다
+  let records
+  try {
+    records = listWebSessions()
+  } catch (error) {
+    console.error('resume 전부 건너뜀 (hq.json 을 읽을 수 없음)', error)
+    return
+  }
+  for (const record of records) {
     if (!existsSync(record.cwd)) {
       console.log(`resume 건너뜀 (폴더 없음) ${record.sessionId} ${record.cwd}`)
-      removeWebSession(record.sessionId)
+      try {
+        removeWebSession(record.sessionId)
+      } catch (error) {
+        console.error(`hq.json 기록 실패 (삭제 ${record.sessionId})`, error)
+      }
       continue
     }
     try {
