@@ -71,7 +71,8 @@ server.registerTool(
       'task 가 끝날 때까지 기다린다. taskId 를 생략하면 팀의 아무 task 든 먼저 끝나는 것 하나. 시간 안에 안 끝나면 task 가 null 로 돌아오니 다시 호출하면 된다. 결과는 result 필드 (팀원의 마지막 응답).',
     inputSchema: {
       taskId: z.string().optional().describe('기다릴 task ID. 생략하면 아무 task'),
-      timeoutSec: z.number().int().min(1).max(600).optional().describe('최대 대기 초. 기본 120'),
+      // fetch(undici)가 응답 헤더를 300초(headersTimeout)까지만 기다려서 그 아래로 막는다
+      timeoutSec: z.number().int().min(1).max(280).optional().describe('최대 대기 초. 기본 120, 최대 280'),
     },
   },
   async ({ taskId, timeoutSec }) => {
