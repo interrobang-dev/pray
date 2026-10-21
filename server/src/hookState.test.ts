@@ -29,3 +29,35 @@ describe('applyHook', () => {
     expect(applyHook(previous, { ...base, hook_event_name: 'PreCompact' }, now)).toBe(previous)
   })
 })
+
+describe('applyHook workingSince', () => {
+  const at = (iso: string) => new Date(iso)
+
+  it('starts on UserPromptSubmit and keeps it through tool use and approval in the same turn', () => {
+    const started = applyHook(undefined, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:00Z'))
+    const tooled = applyHook(started, { ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, at('2026-10-21T00:00:30Z'))
+    const asking = applyHook(tooled, { ...base, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }, at('2026-10-21T00:01:00Z'))
+    const resumed = applyHook(asking, { ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, at('2026-10-21T00:01:30Z'))
+    expect([started, tooled, asking, resumed].map((s) => s?.workingSince)).toEqual(Array(4).fill('2026-10-21T00:00:00.000Z'))
+    expect(resumed?.updatedAt).toBe('2026-10-21T00:01:30.000Z')
+  })
+
+  it('clears on Stop, SessionEnd and SessionStart', () => {
+    const started = applyHook(undefined, { ...base, hook_event_name: 'UserPromptSubmit' }, now)
+    for (const event of ['Stop', 'SessionEnd', 'SessionStart']) {
+      expect(applyHook(started, { ...base, hook_event_name: event }, now)?.workingSince).toBeNull()
+    }
+  })
+
+  it('does not invent a start when the turn began before the server saw it', () => {
+    expect(applyHook(undefined, { ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, now)?.workingSince).toBeNull()
+    const stopped = applyHook(undefined, { ...base, hook_event_name: 'Stop' }, now)
+    expect(applyHook(stopped, { ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, now)?.workingSince).toBeNull()
+  })
+
+  it('restarts on the next UserPromptSubmit', () => {
+    const first = applyHook(undefined, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:00Z'))
+    const second = applyHook(first, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:05:00Z'))
+    expect(second?.workingSince).toBe('2026-10-21T00:05:00.000Z')
+  })
+})

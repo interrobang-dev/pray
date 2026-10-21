@@ -10,6 +10,9 @@ interface Props {
   sessionId: string
   isWritable: boolean
   isApprovalNeeded: boolean
+  /** 훅 상태가 working 이면 대화 맨 아래에 작업 중 표시기 */
+  isWorking: boolean
+  workingSince: string | null
   pendingTool: string | null
   /** 전역 SSE 의 transcript 이벤트로 올라가는 카운터. 바뀌면 다시 읽는다 */
   version: number
@@ -110,10 +113,52 @@ const AssistantText = memo(function AssistantText({ text }: { text: string }) {
   )
 })
 
-export function Chat({ sessionId, isWritable, isApprovalNeeded, pendingTool, version, sessionNames }: Props) {
+/** 경과 시간 "12초"·"1분 12초"·"1시간 2분 3초" */
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}시간 ${minutes}분 ${seconds}초`
+  if (minutes > 0) return `${minutes}분 ${seconds}초`
+  return `${seconds}초`
+}
+
+/** 메신저의 "입력 중…" 같은 작업 중 표시기. 1초 타이머가 이 컴포넌트만 다시 그리게 따로 둔다 (대화 전체 마크다운 파싱을 피하려고) */
+function WorkingIndicator({ since }: { since: string | null }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!since) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [since])
+  return (
+    <div className="typing" role="status">
+      <span className="typing-dots" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+      <span>
+        작업 중
+        {/* 매초 바뀌는 글자를 화면 낭독기가 계속 읽지 않게 */}
+        {since && <span aria-hidden="true"> · {formatDuration(now - Date.parse(since))}</span>}
+      </span>
+    </div>
+  )
+}
+
+/** 맨 아래에서 이만큼 안쪽이면 "맨 아래를 보고 있다" 로 본다 */
+const BOTTOM_SLACK_PX = 40
+
+export function Chat({ sessionId, isWritable, isApprovalNeeded, isWorking, workingSince, pendingTool, version, sessionNames }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
+  const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  /** 사용자가 맨 아래를 보고 있는지. 스크롤 때마다 갱신한다 (표시기가 생겨 내용만 길어질 때는 스크롤 이벤트가 없어 직전 값이 남는다) */
+  const isAtBottomRef = useRef(true)
 
   /** 팀원 이름: jk_spawn_member 때 붙인 이름 → 세션 목록 이름 → ID 앞 8자리 */
   const memberNameOf = useMemo(() => {
@@ -143,6 +188,16 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, pendingTool, ver
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [messages])
+
+  // 메시지가 바뀌면 위에서 늘 맨 아래로 내린다. 표시기는 맨 아래를 보고 있었을 때만 따라 내려간다
+  useEffect(() => {
+    if (isWorking && isAtBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [isWorking])
+
+  function onMessagesScroll() {
+    const element = messagesRef.current
+    if (element) isAtBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_SLACK_PX
+  }
 
   const sendKeys = (data: string) =>
     fetch(`/api/sessions/${sessionId}/input`, {
@@ -174,7 +229,7 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, pendingTool, ver
 
   return (
     <div className="chat">
-      <div className="messages">
+      <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
         {messages.map((message) => {
           // 팀원 대화: 서버가 보낸 팀장·파트장 지시
           if (message.from) {
@@ -234,6 +289,7 @@ export function Chat({ sessionId, isWritable, isApprovalNeeded, pendingTool, ver
           )
         })}
         {messages.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
+        {isWorking && <WorkingIndicator since={workingSince} />}
         <div ref={bottomRef} />
       </div>
       {isWritable && isApprovalNeeded && (

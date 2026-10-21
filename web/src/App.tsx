@@ -634,6 +634,8 @@ export function App() {
               sessionId={selected.id}
               isWritable={selected.kind === 'web'}
               isApprovalNeeded={selected.status === 'needs-approval'}
+              isWorking={selected.status === 'working'}
+              workingSince={selected.workingSince ?? null}
               pendingTool={selected.pendingTool}
               version={transcriptVersions[selected.id] ?? 0}
               sessionNames={Object.fromEntries(snapshot.sessions.map((s) => [s.id, displayName(s)]))}

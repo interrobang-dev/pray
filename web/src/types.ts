@@ -12,6 +12,8 @@ export interface Session {
   lastAt: string | null
   lastAssistantText: string | null
   pendingTool: string | null
+  /** 이번 차례를 시작한 시각 (훅 상태). 모르면 null. workingSince 가 없는 옛 서버 응답에는 빠져 있다 */
+  workingSince: string | null
   /** 팀에 속하면 자기 지휘 단위의 지시자(팀장·파트장)/팀원. 아니면 null */
   role: 'lead' | 'member' | null
   teamId: string | null

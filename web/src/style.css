@@ -610,6 +610,53 @@ header button.icon:hover:not(:disabled) {
   font-weight: 600;
   color: #5a68a6;
 }
+/* 작업 중 표시기 (Chat.tsx). claude 쪽(왼쪽)의 작은 말풍선에 점 세 개가 차례로 출렁인다 */
+.typing {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+.typing-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.4;
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes typing-bounce {
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing-dots span {
+    animation: none;
+    opacity: 0.7;
+  }
+}
 .msg .text {
   white-space: pre-wrap;
   word-break: break-word;

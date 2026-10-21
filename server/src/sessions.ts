@@ -59,6 +59,7 @@ export async function listSessions(
         lastAt: transcript?.lastAt ?? hook?.updatedAt ?? null,
         lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
         pendingTool: hook?.pendingTool ?? null,
+        workingSince: hook?.workingSince ?? null,
         teamId: team?.id ?? null,
         partId: part?.id ?? null,
         role: roleOf(id, isWeb, team, part),
