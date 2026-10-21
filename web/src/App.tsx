@@ -14,6 +14,21 @@ interface Snapshot {
 
 const EMPTY_OFFICE: OfficeData = { groups: [], teams: [] }
 
+/** 이 폭 이하는 폰 화면: 한 열(목록 ↔ 패널)이고 사무실을 마운트하지 않는다. style.css 의 @media 와 같은 값 */
+const NARROW_QUERY = '(max-width: 768px)'
+
+/** 미디어 쿼리 일치 여부. 창 폭이 바뀌면 따라간다 */
+function useMediaQuery(query: string): boolean {
+  const [isMatched, setIsMatched] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const list = window.matchMedia(query)
+    const onChange = () => setIsMatched(list.matches)
+    onChange()
+    list.addEventListener('change', onChange)
+    return () => list.removeEventListener('change', onChange)
+  }, [query])
+  return isMatched
+}
 
 /** 화면에 쓰는 세션 이름: 사용자 지정 → 자동 제목 → ID 앞 8자리 */
 function displayName(session: Session): string {
@@ -68,6 +83,7 @@ export function App() {
   const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
   /** 목록의 경과 시간을 1분마다 다시 계산하기 위한 현재 시각 */
   const [now, setNow] = useState(() => Date.now())
+  const isNarrow = useMediaQuery(NARROW_QUERY)
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000)
@@ -565,17 +581,20 @@ export function App() {
           </form>
         </Modal>
       )}
-      <Office
-        office={office}
-        sessions={snapshot.sessions}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-        onMoveDesk={moveDesk}
-        onMoveTeam={moveTeam}
-        onEditTeam={editTeam}
-        onEditGroup={editGroup}
-        onUpdateGroupBounds={updateGroupBounds}
-      />
+      {/* 폰 폭에서는 PixiJS 를 돌리지 않도록 마운트하지 않는다 (CSS 로 숨기기만 하면 캔버스가 계속 돈다) */}
+      {!isNarrow && (
+        <Office
+          office={office}
+          sessions={snapshot.sessions}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onMoveDesk={moveDesk}
+          onMoveTeam={moveTeam}
+          onEditTeam={editTeam}
+          onEditGroup={editGroup}
+          onUpdateGroupBounds={updateGroupBounds}
+        />
+      )}
       {selected && (
         <section className="panel">
           <div className="panel-header">
@@ -603,8 +622,9 @@ export function App() {
                 종료
               </button>
             )}
-            <button onClick={() => setSelectedId(null)} title="닫기">
-              ×
+            {/* 폰에서는 패널이 화면 전체라 "뒤로" 가 목록으로 돌아가는 버튼이다 */}
+            <button className="close" onClick={() => setSelectedId(null)} title={isNarrow ? '목록으로' : '닫기'}>
+              {isNarrow ? '←' : '×'}
             </button>
           </div>
           {tab === 'terminal' && selected.kind === 'web' ? (

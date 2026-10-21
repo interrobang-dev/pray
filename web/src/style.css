@@ -734,3 +734,86 @@ header button.icon:hover:not(:disabled) {
   font-size: 11px;
   color: var(--muted);
 }
+
+/* 터치 기기: hover 가 없으니 관리 버튼("+"·"⋯")을 항상 보이고, 손가락으로 누를 수 있게 키운다 */
+@media (hover: none) {
+  .head-actions {
+    opacity: 1;
+  }
+  .head-actions button {
+    padding: 3px 10px;
+    font-size: 15px;
+  }
+}
+
+/* 폰 폭: 한 열. 기본은 목록 전체 폭이고 세션을 고르면 패널이 화면 전체를 쓴다 (사무실은 App 이 마운트하지 않는다).
+   App.tsx 의 NARROW_QUERY 와 같은 값. 이 블록 밖의 규칙은 데스크톱 화면이라 건드리지 않는다 */
+@media (max-width: 768px) {
+  /* 모바일 주소창이 보일 때도 아래 입력칸이 화면 안에 있도록 */
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+  .layout,
+  .layout.with-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .layout.with-panel aside {
+    display: none;
+  }
+  aside {
+    border-right: 0;
+  }
+  .panel {
+    border-left: 0;
+  }
+  /* 아이폰은 16px 미만 입력칸에 포커스하면 화면을 확대한다 */
+  input,
+  textarea,
+  select,
+  .create select {
+    font-size: 16px;
+  }
+  .toolbar,
+  .usage,
+  .approval {
+    flex-wrap: wrap;
+  }
+  /* 16px 이 되면 안내 문구가 두 줄로 넘쳐 한 줄 입력칸에 스크롤바가 생긴다 */
+  .composer textarea::placeholder {
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .modal {
+    box-sizing: border-box;
+    width: calc(100vw - 32px);
+    max-width: none;
+  }
+  /* 패널 헤더 두 줄: [← 이름 ✎ ··· 탭 종료] / [폴더]. 긴 이름만 줄어들어 말줄임된다.
+     flex 줄바꿈은 이름의 전체 폭으로 줄을 나눠 긴 이름이면 세 줄이 되므로 grid. 종료 버튼은 자동 배치로 남은 마지막 칸에 간다 */
+  .panel-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, max-content) 1fr auto auto;
+    gap: 4px 8px;
+  }
+  .panel-header .close {
+    grid-area: 1 / 1;
+  }
+  .panel-header b {
+    grid-area: 1 / 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .panel-header .rename {
+    grid-area: 1 / 3;
+    justify-self: start;
+  }
+  .panel-header .tabs {
+    grid-area: 1 / 4;
+  }
+  .panel-header .cwd {
+    grid-area: 2 / 1 / 3 / -1;
+  }
+}
