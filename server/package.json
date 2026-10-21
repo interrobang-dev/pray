@@ -9,10 +9,12 @@
   },
   "dependencies": {
     "@jk-corp/host": "*",
+    "compression": "^1.8.2",
     "express": "^5.1.0",
     "nodemailer": "^7.0.0"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",
     "@types/nodemailer": "^6.4.17",

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import compression from 'compression'
 import express from 'express'
 import type { Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
@@ -67,6 +68,13 @@ const instructionLogPath = join(configDir, 'instructions.jsonl')
 const NO_LEAD_NAME = '팀 API'
 
 const app = express()
+// SSE 는 압축하면 압축 버퍼에 쌓여 이벤트가 늦게 가거나 안 가므로 뺀다 (Express 가 `; charset=utf-8` 을 붙여 앞부분으로 비교)
+app.use(
+  compression({
+    filter: (req, res) =>
+      !String(res.getHeader('Content-Type') ?? '').startsWith('text/event-stream') && compression.filter(req, res),
+  }),
+)
 app.use(express.json({ limit: '1mb' }))
 
 // 로컬(127.0.0.1)은 무인증. 그 외는 로그인 쿠키 필요. 훅·인증 API 는 예외
