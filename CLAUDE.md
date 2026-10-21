@@ -102,7 +102,8 @@ Vite 페이지는 SSE 때문에 `--virtual-time-budget` 방식이 멈춘다. `--
 
 ## 확인하지 못한 것
 
-- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`, `--mcp-config`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력, 팀장 세션이 실제로 MCP 도구를 보고 쓰는지. **호스트를 새 코드로 재시작**한 뒤 "+ 팀"(이름·폴더·그룹) → "+ 새 세션" 에서 그 팀 선택 + "팀장으로" → 팀장에게 "팀원 둘에게 A·B 를 시키고 합쳐라" 로 확인해야 한다 (지시 → 결과 수신 흐름, 팀 API, MCP 서버 단독 동작은 검증함). 구 호스트는 `extraArgs` 를 무시하고 `hq.json` 의 `teams` 를 지우며 `restart` 메시지도 무시하므로 **첫 한 번은 트레이 메뉴로** 재시작해야 한다. 화면 `↻` 버튼의 실제 재시작도 그 뒤에 확인할 수 있다 (이 세션에서는 자기 자신이 끊겨 검증 못 함). 파트장도 같다 (파트장 지침·`JK_CORP_PART_ID` 로 자기 파트만 다루는지, worktree 폴더에서 bypassPermissions 경고 창이 따로 뜨는지. 파트 API·단위 판정·403 거부·worktree 생성은 검증함)
+- 팀장·팀원 spawn 의 `extraArgs`(`--name`, `--permission-mode bypassPermissions`, `--append-system-prompt`, `--mcp-config`), resume 때 extraArgs 재전달, 팀원 첫 지시 4초 지연 입력, 팀장 세션이 실제로 MCP 도구를 보고 쓰는지. **호스트를 새 코드로 재시작**한 뒤 "+ 팀"(이름·폴더·그룹) → "+ 새 세션" 에서 그 팀 선택 + "팀장으로" → 팀장에게 "팀원 둘에게 A·B 를 시키고 합쳐라" 로 확인해야 한다 (지시 → 결과 수신 흐름, 팀 API, MCP 서버 단독 동작은 검증함). 구 호스트는 `extraArgs` 를 무시하고 `hq.json` 의 `teams` 를 지우며 `restart` 메시지도 무시하므로 **첫 한 번은 트레이 메뉴로** 재시작해야 한다. 화면 `↻` 버튼의 실제 재시작도 그 뒤에 확인할 수 있다 (이 세션에서는 자기 자신이 끊겨 검증 못 함).
+- 위 팀장 항목의 확인은 파트장에도 그대로 필요하다. 거기에 더해 파트장 지침·`JK_CORP_PART_ID` 로 자기 파트만 다루는지, worktree 폴더에서 bypassPermissions 경고 창이 따로 뜨는지도 확인해야 한다 (파트 API·단위 판정·403 거부·worktree 생성은 검증함)
 - `jk_dismiss`(`DELETE /api/team/:id/members/:sessionId`)는 팀·지휘 단위를 확인하지 않고 아무 세션이나 종료한다
 - 팀·파트 삭제 직후 늦게 도착한 세션 목록이 지워진 팀을 가리키면 `Office.tsx` 가 책상 자리를 못 찾아 `reading 'y'` 오류를 낸 적이 있다 (원인 추정, 고치지 않음)
 - 섬·책상 마우스 드래그 (headless 로 검증 못 함. API 는 검증함). 파트 책상을 다른 구역으로 끌면 그 파트 구역이 늘어나 겹칠 수 있다 (겹침 방지 없음)
