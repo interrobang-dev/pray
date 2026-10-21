@@ -4,7 +4,7 @@ import { Chat } from './Chat'
 import { Office } from './Office'
 import { UsagePanel } from './UsagePanel'
 import { Modal, Segmented } from './Modal'
-import { statusLabel, type Office as OfficeData, type Group, type Session, type SessionStatus, type Team } from './types'
+import { statusLabel, type Office as OfficeData, type Group, type Part, type Session, type SessionStatus, type Team } from './types'
 import { avatarOf, cssColor } from './avatar'
 
 interface Snapshot {
@@ -53,9 +53,13 @@ export function App() {
   const [isGroupForm, setIsGroupForm] = useState(false)
   /** 팀 추가 모달. 그룹 헤더의 "+ 팀" 으로 열리며 그 그룹에 고정 */
   const [teamForm, setTeamForm] = useState<{ groupId: string } | null>(null)
-  /** 세션 추가 모달. 팀 헤더의 "+ 세션" 이면 그 팀에 고정, 툴바의 "+ 세션" 이면 로비(폴더 직접 입력) */
-  const [sessionForm, setSessionForm] = useState<{ teamId: string | null } | null>(null)
+  /** 세션 추가 모달. 팀 헤더의 "+" 면 그 팀 직속, 파트 소제목의 "+" 면 그 파트, 툴바의 "+ 세션" 이면 로비(폴더 직접 입력) */
+  const [sessionForm, setSessionForm] = useState<{ teamId: string | null; partId: string | null } | null>(null)
   const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
+  /** 파트 추가 모달. 팀 "⋯" 의 "파트 추가" 로 열린다 */
+  const [partForm, setPartForm] = useState<{ teamId: string } | null>(null)
+  const [partLocation, setPartLocation] = useState<'folder' | 'worktree'>('folder')
+  const [isPartLeadSpawned, setIsPartLeadSpawned] = useState(true)
   /** 이름 변경 모달의 대상 세션 */
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
@@ -97,6 +101,7 @@ export function App() {
     const response = await postJson('/api/sessions', 'POST', {
       cwd: sessionForm.teamId ? undefined : form.get('cwd'),
       teamId: sessionForm.teamId ?? undefined,
+      partId: sessionForm.partId ?? undefined,
       prompt: form.get('prompt'),
       name: form.get('name'),
       isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
@@ -121,6 +126,35 @@ export function App() {
       return
     }
     setTeamForm(null)
+  }
+
+  /** 파트를 만들고, 고르면 그 파트의 파트장을 바로 띄운다 (파트 API 와 세션 API 두 번 호출) */
+  async function createPart(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!partForm) return
+    const form = new FormData(event.currentTarget)
+    const isWorktree = partLocation === 'worktree'
+    const response = await postJson(`/api/team/${partForm.teamId}/parts`, 'POST', { name: form.get('name'), isWorktree })
+    if (!response.ok) {
+      alert((await response.json()).message ?? '파트 생성 실패')
+      return
+    }
+    const { part, isTrusted } = (await response.json()) as { part: Part; isTrusted: boolean }
+    if (isWorktree && !isTrusted) alert(`신뢰 표시를 남기지 못했습니다. 이 폴더에서 처음 뜨는 세션은 터미널에서 신뢰를 직접 허용해야 합니다.\n${part.worktree?.cwd}`)
+    setPartForm(null)
+    if (!isPartLeadSpawned) return
+    const leadResponse = await postJson('/api/sessions', 'POST', {
+      teamId: partForm.teamId,
+      partId: part.id,
+      isLead: true,
+      prompt: form.get('prompt'),
+    })
+    if (!leadResponse.ok) {
+      alert((await leadResponse.json()).message ?? '파트장 생성 실패')
+      return
+    }
+    setSelectedId((await leadResponse.json()).sessionId)
+    setTab('terminal')
   }
 
   async function createGroup(event: FormEvent<HTMLFormElement>) {
@@ -154,13 +188,43 @@ export function App() {
 
   function openTeamForm(groupId: string) {
     setSessionForm(null)
+    setPartForm(null)
     setTeamForm({ groupId })
   }
 
-  function openSessionForm(teamId: string | null) {
+  function openSessionForm(teamId: string | null, partId: string | null = null) {
     setTeamForm(null)
+    setPartForm(null)
     setSessionRole('member')
-    setSessionForm({ teamId })
+    setSessionForm({ teamId, partId })
+  }
+
+  function openPartForm(teamId: string) {
+    setTeamForm(null)
+    setSessionForm(null)
+    setPartLocation('folder')
+    setIsPartLeadSpawned(true)
+    setPartForm({ teamId })
+  }
+
+  function editPart(team: Team, part: Part) {
+    const name = prompt('파트 이름 (worktree 폴더·브랜치 이름은 그대로)', part.name)
+    if (name?.trim()) void postJson(`/api/team/${team.id}/parts/${part.id}`, 'PATCH', { name: name.trim() })
+  }
+
+  function releasePartLead(team: Team, part: Part) {
+    if (confirm(`"${part.name}" 파트장 지정을 해제할까요? (세션은 그대로 남고 파트 팀원이 됩니다)`)) {
+      void postJson(`/api/team/${team.id}/parts/${part.id}`, 'PATCH', { leadSessionId: null })
+    }
+  }
+
+  function removePart(team: Team, part: Part) {
+    const effect = part.worktree
+      ? `worktree 폴더와 브랜치 ${part.worktree.branch} 는 남습니다. 그 폴더의 세션은 팀 폴더 밖이라 로비로 갑니다.`
+      : '소속 세션은 종료되지 않고 팀 직속이 됩니다.'
+    if (confirm(`"${part.name}" 파트를 지울까요? ${effect}`)) {
+      void fetch(`/api/team/${team.id}/parts/${part.id}`, { method: 'DELETE' })
+    }
   }
 
   function releaseLead(team: Team) {
@@ -212,13 +276,18 @@ export function App() {
     if (name?.trim()) void postJson(`/api/team/${team.id}`, 'PATCH', { name: name.trim() })
   }
 
-  function renderSessionModal(teamId: string | null) {
+  function renderSessionModal(teamId: string | null, partId: string | null) {
     const team = teamId ? office.teams.find((t) => t.id === teamId) : undefined
-    const hasLiveLead = Boolean(team?.leadSessionId && snapshot.sessions.some((s) => s.id === team.leadSessionId && s.isAlive))
+    const part = team?.parts.find((p) => p.id === partId)
+    const leadSessionId = part ? part.leadSessionId : team?.leadSessionId
+    const hasLiveLead = Boolean(leadSessionId && snapshot.sessions.some((s) => s.id === leadSessionId && s.isAlive))
+    const leadLabel = part ? '파트장' : '팀장'
     return (
       <Modal
-        title={team ? `세션 추가 — 팀 「${team.name}」` : '세션 추가 — 로비 (팀 없음)'}
-        subtitle={team?.cwd}
+        title={
+          part ? `세션 추가 — 「${team?.name}」 · 파트 「${part.name}」` : team ? `세션 추가 — 팀 「${team.name}」` : '세션 추가 — 로비 (팀 없음)'
+        }
+        subtitle={part?.worktree?.cwd ?? team?.cwd}
         onClose={() => setSessionForm(null)}
       >
         <form className="create" onSubmit={createSession}>
@@ -227,12 +296,14 @@ export function App() {
               value={sessionRole}
               onChange={setSessionRole}
               options={[
-                { value: 'member', label: '팀원', hint: '팀장의 지시를 받아 일한다' },
+                { value: 'member', label: '팀원', hint: `${leadLabel}의 지시를 받아 일한다` },
                 {
                   value: 'lead',
-                  label: '팀장',
+                  label: leadLabel,
                   isDisabled: hasLiveLead,
-                  hint: hasLiveLead ? '이 팀에는 이미 팀장이 있음' : '팀원을 만들어 일을 나눠 준다 (MCP 도구 장착)',
+                  hint: hasLiveLead
+                    ? `이 ${part ? '파트' : '팀'}에는 이미 ${leadLabel}이 있음`
+                    : `${part ? '파트' : '팀 직속'} 팀원을 만들어 일을 나눠 준다 (MCP 도구 장착)`,
                 },
               ]}
             />
@@ -253,12 +324,13 @@ export function App() {
     )
   }
 
-  /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 소속 세션. 폴더는 툴팁 */
+  /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 팀 직속 세션 + 파트별(소제목 + 세션). 폴더는 툴팁 */
   function renderTeam(team: Team) {
     const members = snapshot.sessions
       .filter((s) => s.teamId === team.id && s.isAlive)
       .sort((a, b) => statusOrder[a.status] - statusOrder[b.status])
     const menuItems = [
+      { label: '파트 추가', onClick: () => openPartForm(team.id) },
       ...(team.leadSessionId ? [{ label: '팀장 해제', onClick: () => releaseLead(team) }] : []),
       { label: '팀 삭제', onClick: () => removeTeam(team) },
     ]
@@ -268,7 +340,33 @@ export function App() {
           <span className="name">{team.name}</span>
           {members.length > 0 && <span className="count">{members.length}</span>}
           <span className="head-actions">
-            <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="이 팀에 세션 추가">
+            <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="팀 직속 세션 추가">
+              +
+            </button>
+            <MoreMenu items={menuItems} />
+          </span>
+        </div>
+        {members.filter((s) => !s.partId).map((session) => renderSession(session, false))}
+        {team.parts.map((part) => renderPart(team, part, members.filter((s) => s.partId === part.id)))}
+      </div>
+    )
+  }
+
+  /** 파트 소제목(이름·worktree 브랜치·세션 수·hover 버튼) + 파트 세션 */
+  function renderPart(team: Team, part: Part, members: Session[]) {
+    const menuItems = [
+      { label: '이름 변경', onClick: () => editPart(team, part) },
+      ...(part.leadSessionId ? [{ label: '파트장 해제', onClick: () => releasePartLead(team, part) }] : []),
+      { label: '파트 삭제', onClick: () => removePart(team, part) },
+    ]
+    return (
+      <div key={part.id} className="part" title={part.worktree?.cwd ?? team.cwd}>
+        <div className="part-head">
+          <span className="name">{part.name}</span>
+          {part.worktree && <span className="branch">⎇ {part.worktree.branch}</span>}
+          {members.length > 0 && <span className="count">{members.length}</span>}
+          <span className="head-actions">
+            <button onClick={() => openSessionForm(team.id, part.id)} disabled={!snapshot.isHostReachable} title="이 파트에 세션 추가">
               +
             </button>
             <MoreMenu items={menuItems} />
@@ -279,8 +377,8 @@ export function App() {
     )
   }
 
-  /** 세션 한 줄: 상태 점 · 아바타 · 제목 · (팀장 태그 · 승인 대기 배지 · 시각). 팀 안에서는 폴더를 숨긴다 (팀 = 폴더) */
-  function renderSession(session: Session, hasCwd: boolean) {
+  /** 세션 한 줄: 상태 점 · 아바타 · 제목 · (팀장 태그 · 승인 대기 배지 · 시각). 팀 안에서는 폴더를 숨긴다 (팀 = 폴더). teamName 이 있으면 제목 앞에 붙인다 (휴무) */
+  function renderSession(session: Session, hasCwd: boolean, teamName?: string) {
     const avatar = avatarOf(session.id)
     const elapsed = formatElapsed(session.lastAt, now)
     return (
@@ -291,9 +389,10 @@ export function App() {
       >
         <span className={`status-dot ${session.status}`} title={statusLabel[session.status]} />
         <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
-        <div className="title">{displayName(session)}</div>
+        <div className="title">{teamName ? `${teamName} · ${displayName(session)}` : displayName(session)}</div>
         <div className="meta">
-          {session.role === 'lead' && <span className="badge role-lead">팀장</span>}
+          {session.role === 'lead' &&
+            (session.partId ? <span className="badge role-part-lead">파트장</span> : <span className="badge role-lead">팀장</span>)}
           {session.status === 'needs-approval' && <span className="badge needs-approval">{statusLabel[session.status]}</span>}
           <span className={`time ${elapsed.className}`} title={elapsed.title}>
             {elapsed.text}
@@ -364,7 +463,11 @@ export function App() {
                 </span>
                 <span className="count">{offDutySessions.length}</span>
               </div>
-              {isOffDutyOpen && offDutySessions.map((session) => renderSession(session, true))}
+              {isOffDutyOpen &&
+                offDutySessions.map((session) => {
+                  const team = office.teams.find((t) => t.id === session.teamId)
+                  return renderSession(session, !team, team?.name)
+                })}
             </li>
           )}
         </ul>
@@ -404,7 +507,44 @@ export function App() {
           </form>
         </Modal>
       )}
-      {sessionForm && renderSessionModal(sessionForm.teamId)}
+      {sessionForm && renderSessionModal(sessionForm.teamId, sessionForm.partId)}
+      {partForm && (
+        <Modal
+          title={`파트 추가 — 팀 「${office.teams.find((t) => t.id === partForm.teamId)?.name ?? ''}」`}
+          subtitle={office.teams.find((t) => t.id === partForm.teamId)?.cwd}
+          onClose={() => setPartForm(null)}
+        >
+          <form className="create" onSubmit={createPart}>
+            <input name="name" placeholder="파트 이름 (예: api). worktree 면 영문·숫자가 폴더·브랜치 이름" required autoFocus />
+            <Segmented
+              value={partLocation}
+              onChange={setPartLocation}
+              options={[
+                { value: 'folder', label: '팀 폴더', hint: '팀 폴더를 같이 쓴다. 파일이 겹치지 않는 일에' },
+                { value: 'worktree', label: '새 worktree', hint: '같은 파일을 동시에 고칠 때. 저장소 옆 폴더에서 따로 일한다' },
+              ]}
+            />
+            <div className="hint">
+              {partLocation === 'worktree'
+                ? '저장소 옆 <저장소>.worktrees/<이름> 폴더, 브랜치 part/<이름> (현재 HEAD 기준). 병합은 직접'
+                : '팀 폴더 그대로. 다른 파트·팀 직속과 같은 파일을 고치지 않게 나눈다'}
+            </div>
+            <label className="check">
+              <input type="checkbox" checked={isPartLeadSpawned} onChange={(e) => setIsPartLeadSpawned(e.target.checked)} />
+              파트장 바로 띄우기
+            </label>
+            {isPartLeadSpawned && <input name="prompt" placeholder="파트장 첫 지시 (선택)" />}
+            <div className="actions">
+              <button type="submit" className="primary" disabled={!snapshot.isHostReachable && isPartLeadSpawned}>
+                만들기
+              </button>
+              <button type="button" onClick={() => setPartForm(null)}>
+                취소
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
       {renameTarget && (
         <Modal title="세션 이름 변경" subtitle={renameTarget.title ?? renameTarget.id} onClose={() => setRenameTarget(null)}>
           <form className="create" onSubmit={renameSession}>

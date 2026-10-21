@@ -52,6 +52,8 @@ const hookStates = new Map<string, HookState>()
 const subscribers = new Set<Response>()
 const host = new HostClient()
 const tasks = new TaskStore()
+/** exit 한 웹 세션의 이름 (hq.json 에서는 지운다). 메모리라 서버 재시작 때 사라지지만 휴무 목록도 메모리의 훅 상태 기반이라 같이 비워지므로 수명이 같다 */
+const exitedSessionNames = new Map<string, string>()
 
 const config = readConfig()
 const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
@@ -135,9 +137,10 @@ function sendSse(res: Response, event: string, data: unknown): void {
 
 async function snapshotPayload() {
   const webSessions = new Map(host.sessions.map((s) => [s.sessionId, s.cwd]))
+  const names = { ...Object.fromEntries(exitedSessionNames), ...listSessionNames() }
   return {
     isHostReachable: host.isReachable,
-    sessions: await listSessions(hookStates, webSessions, listTeams(), listSessionNames()),
+    sessions: await listSessions(hookStates, webSessions, listTeams(), names),
   }
 }
 
@@ -691,6 +694,8 @@ host.on('message', (message: HostMessage) => {
   if (message.type === 'exit') {
     lastOutputAt.delete(message.sessionId)
     tasks.markExited(message.sessionId)
+    const name = listSessionNames()[message.sessionId]
+    if (name) exitedSessionNames.set(message.sessionId, name)
     setSessionName(message.sessionId, null)
   }
   if (message.type === 'sessions' || message.type === 'exit') void broadcast()
