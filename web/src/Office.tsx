@@ -684,8 +684,10 @@ export function Office(props: Props) {
           desks.clear()
           groupViews.clear()
           working.clear()
-          // 근무·휴식 세션만 자리가 있다 (퇴근은 그리지 않는다)
-          const seated = sessions.filter((s) => attendanceOf(s) !== 'off')
+          // 근무·휴식 세션만 자리가 있다 (퇴근은 그리지 않는다). office.teams 에 없는 팀을 가리키는 세션(office 를 받기 전·팀을 막 지운 뒤)도
+          // 자리가 없어 뺀다 — 왼쪽 목록도 팀 카드는 office.teams 기준, 로비는 팀 없는 세션만이라 같은 세션이 안 보인다
+          const teamIds = new Set(office.teams.map((t) => t.id))
+          const seated = sessions.filter((s) => attendanceOf(s) !== 'off' && (!s.teamId || teamIds.has(s.teamId)))
           const zone = lobbyZone(office, seated.filter((s) => !s.teamId).length)
           content.w = PAD_X * 2 + (zone.x + zone.w) * TILE
           content.h = PAD_Y + 16 + Math.max(zone.y + zone.h, ...office.groups.map((r) => r.y + r.h)) * TILE
