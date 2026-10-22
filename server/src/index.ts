@@ -61,6 +61,7 @@ import { HostClient } from './hostClient.js'
 import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts, withoutQueued } from './messages.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
+import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
 import { parseMemberRole, pickMemberName } from './memberName.js'
@@ -785,6 +786,66 @@ app.get('/api/usage', async (_req, res) => {
   res.json(await readUsage())
 })
 
+// ---------- 플로우(flow.team) 알림 중계. 키는 ~/.claude/flow-key.env ----------
+
+const flow = makeFlowClient()
+const FLOW_POLL_MS = 30_000
+const flowPoller = makeFlowPoller(flow, (status) => {
+  for (const res of subscribers) sendSse(res, 'flow', status)
+})
+
+function sendFlowError(res: Response, error: unknown): void {
+  if (!(error instanceof FlowError)) throw error
+  res.status(error.status).json({ message: error.message })
+}
+
+app.get('/api/flow', (_req, res) => {
+  res.json(flowPoller.status())
+})
+
+// 공식 알림 목록 한 쪽(50개) + 프로젝트 이름. readYn 이 없으면 전부
+app.get('/api/flow/alarms', async (req, res) => {
+  const { readYn, cursor } = req.query
+  if ((readYn !== undefined && readYn !== 'Y' && readYn !== 'N') || (cursor !== undefined && !/^\d{1,9}$/.test(String(cursor)))) {
+    res.status(400).json({ message: 'readYn 은 Y·N, cursor 는 숫자' })
+    return
+  }
+  const query: AlarmQuery = { readYn: readYn as AlarmQuery['readYn'], cursor: cursor as string | undefined }
+  try {
+    res.json(await flow.listAlarms(query))
+  } catch (error) {
+    sendFlowError(res, error)
+  }
+})
+
+// 읽음 처리 뒤 안 읽은 수를 바로 다시 세어 화면에 알리고, 그 상태를 응답으로도 준다
+app.post('/api/flow/alarms/read-all', async (_req, res) => {
+  try {
+    await flow.readAllAlarms()
+  } catch (error) {
+    sendFlowError(res, error)
+    return
+  }
+  await flowPoller.check()
+  res.json(flowPoller.status())
+})
+
+app.post('/api/flow/alarms/:alarmId/read', async (req, res) => {
+  const { alarmId } = req.params
+  if (!/^\d{1,20}$/.test(alarmId)) {
+    res.status(400).json({ message: 'alarmId 는 숫자' })
+    return
+  }
+  try {
+    await flow.readAlarm(alarmId)
+  } catch (error) {
+    sendFlowError(res, error)
+    return
+  }
+  await flowPoller.check()
+  res.json(flowPoller.status())
+})
+
 // ---------- 팀 (같은 폴더의 세션 묶음. 팀장 세션이 MCP 도구로도 호출) ----------
 
 const MAX_WAIT_SECONDS = 600
@@ -1451,6 +1512,7 @@ app.get('/api/events', (req, res) => {
   openSse(res)
   subscribers.add(res)
   req.on('close', () => subscribers.delete(res))
+  sendSse(res, 'flow', flowPoller.status())
   void broadcast()
 })
 
@@ -1482,6 +1544,8 @@ watcher.on('change', (sessionId: string) => {
 
 setInterval(() => void broadcast(), 5000)
 setInterval(() => tasks.expireUnacknowledged(), 1000)
+void flowPoller.check()
+setInterval(() => void flowPoller.check(), FLOW_POLL_MS)
 
 // 빌드된 웹이 있으면 서버 하나로 화면까지 제공한다 (개발 중에는 Vite 4711 을 쓴다)
 const webDist = join(import.meta.dirname, '..', '..', 'web', 'dist')

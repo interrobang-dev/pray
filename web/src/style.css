@@ -2525,6 +2525,170 @@ li.group.drop-after::after {
   color: var(--muted);
 }
 
+/* 툴바 아래 플로우 한 줄 (App.tsx FlowRow): 아이콘 · Flow · "알림 N · 채팅 N". 누르면 오른쪽 패널이 플로우 알림이 된다.
+   안 읽은 것이 없으면 회색, 하나라도 있으면 빨강 글자 */
+.flow-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+.flow-row:hover {
+  background: var(--bg);
+}
+.flow-row.selected {
+  background: var(--green-soft);
+}
+.flow-row svg {
+  flex-shrink: 0;
+}
+.flow-row-name {
+  font-weight: 600;
+}
+.flow-row-summary {
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.flow-row.unread {
+  color: var(--red);
+}
+.flow-row.unread .flow-row-summary {
+  font-weight: 600;
+}
+.flow-row-summary.error,
+.flow-row-warning {
+  color: var(--red);
+}
+/* 플로우 알림 패널 (FlowPanel.tsx). 세션 패널과 같은 .panel 자리. 닫기는 세션 패널처럼 오른쪽 끝 */
+.flow-panel .panel-header b {
+  margin-right: auto;
+}
+.flow-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.flow-toolbar .segmented {
+  width: 160px;
+}
+.flow-chat-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.flow-chat-count.unread {
+  color: var(--red);
+  font-weight: 600;
+}
+.flow-refresh {
+  padding: 2px 8px;
+  color: var(--muted);
+}
+.flow-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+}
+.flow-error {
+  color: var(--error);
+}
+/* 알림 한 줄: 점 칸 + 내용 칸 (머리 · 문구 · content 한 줄 · 보낸 사람) */
+.flow-alarm {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 2px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.flow-alarm > :not(.flow-alarm-dot) {
+  grid-column: 2;
+}
+.flow-alarm-dot {
+  grid-row: 1;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.flow-alarm.unread .flow-alarm-dot {
+  background: var(--blue-dot);
+}
+.flow-alarm-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.flow-alarm-project {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-alarm-time {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.flow-alarm-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.flow-alarm.unread .flow-alarm-text {
+  font-weight: 600;
+  color: var(--text);
+}
+.flow-alarm-detail {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-alarm-from {
+  font-size: 11px;
+  color: var(--muted);
+}
+.flow-more {
+  display: block;
+  margin: 12px auto;
+}
+/* 읽음 처리: 항목 아래쪽 줄의 [읽음](보낸 사람 오른쪽)·머리의 [전체 읽음]·실패 문구 */
+.flow-alarm-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.flow-read,
+.flow-read-all {
+  margin-left: auto;
+  padding: 1px 10px;
+  font-size: 12px;
+}
+.flow-read-error {
+  font-size: 12px;
+  color: var(--error);
+}
+.flow-read-all-error {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
 /* 데스크톱에서 사무실을 숨긴 화면 (App.tsx isOfficeHiddenLayout. 폰 폭에는 이 클래스가 붙지 않는다).
    세션을 골랐으면 패널이 목록 오른쪽 폭을 다 쓰고, 안 골랐으면 그 자리에 안내 한 줄 */
 .layout.office-hidden.with-panel {
@@ -2553,6 +2717,12 @@ li.group.drop-after::after {
 .layout.office-hidden .pane-buttons {
   left: var(--chat-gutter);
   right: var(--chat-gutter);
+}
+/* 넓어진 플로우 알림 패널도 대화와 같은 가운데 960px 열 */
+.layout.office-hidden .flow-list,
+.layout.office-hidden .flow-toolbar {
+  padding-left: max(16px, calc((100% - 960px) / 2));
+  padding-right: max(16px, calc((100% - 960px) / 2));
 }
 
 /* 터치 기기: hover 가 없으니 관리 버튼("+"·"⋯")을 항상 보이고, 손가락으로 누를 수 있게 키운다 */
@@ -2845,5 +3015,28 @@ li.group.drop-after::after {
   .shells-popover-row {
     min-height: 44px;
     align-items: center;
+  }
+  /* 플로우 줄·패널: 손가락으로 누르기 쉽게 40px */
+  .flow-row {
+    min-height: 44px;
+  }
+  .flow-toolbar .segmented button,
+  .flow-refresh,
+  .flow-more {
+    min-height: 40px;
+  }
+  .flow-refresh {
+    min-width: 40px;
+  }
+  .flow-read,
+  .flow-read-all {
+    min-height: 36px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+  /* 패널 헤더 grid 에서 이름 뒤 남은 칸을 다 차지하되 늘어나지 않게 오른쪽 끝에 붙인다 */
+  .flow-read-all {
+    grid-column: 3 / -1;
+    justify-self: end;
   }
 }
