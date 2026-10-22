@@ -16,6 +16,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).parent))
 from spritelib import (  # noqa: E402
     check_sprite,
+    crop_bbox,
     downscale,
     fill_dark_lines,
     fit_width,
@@ -74,7 +75,8 @@ def build_props(recipe: dict, source: Path) -> tuple[dict, dict, dict]:
         h, w = sheet.shape[:2]
         part = sheet[row * h // rows:(row + 1) * h // rows, column * w // columns:(column + 1) * w // columns]
         name = f"prop/{prop['id']}"
-        sprites[name] = fit_width(main_piece(part), prop['width'])
+        # whole: 칸 안 조각을 다 남긴다 (나란히 건 액자 둘처럼 떨어진 조각이 한 소품). 기본은 가장 긴 덩어리만
+        sprites[name] = fit_width(crop_bbox(part) if prop.get('whole') else main_piece(part), prop['width'])
         anchors[name] = {'x': prop.get('anchor', [0.5, 1])[0], 'y': prop.get('anchor', [0.5, 1])[1]}
         if 'meta' in prop:
             extras[name] = prop['meta']

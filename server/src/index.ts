@@ -17,6 +17,9 @@ import {
   listTeams,
   listWebSessions,
   readOffice,
+  setDecor,
+  DECOR_THEMES,
+  type DecorTheme,
   setCharacter,
   setGender,
   setSessionName,
@@ -1365,6 +1368,19 @@ app.post('/api/server/restart', (_req, res) => {
 
 app.get('/api/office', (_req, res) => {
   res.json(readOffice())
+})
+
+/** 도트 사무실 꾸밈 바꾸기: { seed?, theme? } 중 준 것만 (seed = 0 이상 2^31 미만 정수, theme = DECOR_THEMES). 둘 다 없거나 꼴이 틀리면 400 */
+app.put('/api/office/decor', (req, res) => {
+  const { seed, theme } = (req.body ?? {}) as { seed?: unknown; theme?: unknown }
+  const isSeed = Number.isInteger(seed) && (seed as number) >= 0 && (seed as number) < 2 ** 31
+  const isTheme = typeof theme === 'string' && (DECOR_THEMES as readonly string[]).includes(theme)
+  if ((seed === undefined && theme === undefined) || (seed !== undefined && !isSeed) || (theme !== undefined && !isTheme)) {
+    res.status(400).json({ message: `seed(0 이상 2^31 미만 정수)·theme(${DECOR_THEMES.join('·')}) 중 하나 이상 필요` })
+    return
+  }
+  res.json(setDecor({ ...(isSeed ? { seed: seed as number } : {}), ...(isTheme ? { theme: theme as DecorTheme } : {}) }))
+  broadcastOffice()
 })
 
 /** 팀이 없는 그룹만 지운다 (팀이 있으면 409) */

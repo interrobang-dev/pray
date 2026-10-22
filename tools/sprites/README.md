@@ -31,7 +31,7 @@ SPRITE_GEN=<sprite-gen 실행 파일> bash tools/sprites/gen.sh gen --provider c
 
 ## 레시피
 
-`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이), `characters[]`(`id`·`pool`·`gender` 는 아틀라스 메타로), `characters[].rows[]`(`strip`+`count` 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`, 그 행만 다른 몸 높이 `bodyHeight` — 웅크리게 그려진 행이 커질 때. 파일 이름은 `--source-dir` 기준이라 `../v1/…` 로 앞 판 원본을 쓸 수 있다), `props[]`(시트·격자 칸·폭), `tiles[]`(반복 타일):
+`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이), `characters[]`(`id`·`pool`·`gender` 는 아틀라스 메타로), `characters[].rows[]`(`strip`+`count` 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`, 그 행만 다른 몸 높이 `bodyHeight` — 웅크리게 그려진 행이 커질 때. 파일 이름은 `--source-dir` 기준이라 `../v1/…` 로 앞 판 원본을 쓸 수 있다), `props[]`(시트·격자 칸·폭. `whole: true` 면 칸 안 조각을 다 남긴다 — 기본은 가장 긴 덩어리만이라 나란히 건 액자 둘이 하나로 줄어든다), `tiles[]`(반복 타일):
 
 | 키 | 뜻 |
 |---|---|

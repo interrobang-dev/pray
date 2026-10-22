@@ -39,9 +39,24 @@ export interface Group {
   waitingNote?: string
 }
 
+/** 도트 사무실 꾸미기 테마. 화면(web/src/officeDecor.ts 의 DECOR_THEMES)과 손으로 맞춘다 */
+export const DECOR_THEMES = ['office', 'cafe', 'forest', 'winter'] as const
+export type DecorTheme = (typeof DECOR_THEMES)[number]
+
+/** 도트 사무실 꾸밈: 소품 배치 시드와 테마. 모든 화면이 같은 꾸밈을 보게 저장한다 */
+export interface OfficeDecor {
+  seed: number
+  theme: DecorTheme
+}
+
+/** 저장된 꾸밈이 없을 때 */
+export const DEFAULT_DECOR: OfficeDecor = { seed: 1, theme: 'office' }
+
 export interface Office {
   groups: Group[]
   teams: Team[]
+  /** 읽을 때는 늘 있다 (저장된 것이 없으면 DEFAULT_DECOR) */
+  decor?: OfficeDecor
 }
 
 /** 사용자가 고른 도트 사무실 인물 (프리셋 id). 머리·윗옷 색은 '#rrggbb', null 이면 그 인물 기본색 */
@@ -261,8 +276,17 @@ export function setGender(sessionId: string, gender: SessionGender | null): void
 }
 
 export function readOffice(): Office {
-  const { groups, teams } = readHq()
-  return { groups, teams }
+  const { groups, teams, decor } = readHq()
+  return { groups, teams, decor: decor ?? DEFAULT_DECOR }
+}
+
+/** 꾸밈의 시드·테마 중 준 것만 바꾼다. 값 검사는 서버 API 가 한다 */
+export function setDecor(patch: Partial<OfficeDecor>): OfficeDecor {
+  const hq = readHq()
+  const decor = { ...(hq.decor ?? DEFAULT_DECOR), ...patch }
+  hq.decor = decor
+  writeHq(hq)
+  return decor
 }
 
 export class OrderMismatchError extends Error {

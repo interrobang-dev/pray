@@ -1,0 +1,276 @@
+{
+ "name": "office-v4",
+ "description": "5단계 꾸미기 소품 20종: 바닥 14(정수기·커피머신·휴지통·산세베리아·스탠드·사물함·소파·안락의자·옷걸이·프린터·트리·몬스테라·카페 입간판·선물 상자)·벽 6(풍경화·포스터·시계·화이트보드·게시판·액자 둘). 원본은 ~/.claude/jk-corp/sprite-src/v4",
+ "spec": {
+  "tile": 48,
+  "cell": [
+   64,
+   128
+  ],
+  "baseline": 124,
+  "bodyHeight": 108
+ },
+ "props": [
+  {
+   "id": "water-cooler",
+   "sheet": "floor-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 30
+  },
+  {
+   "id": "coffee-machine",
+   "sheet": "floor-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 40
+  },
+  {
+   "id": "trash-bin",
+   "sheet": "floor-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    0
+   ],
+   "width": 20
+  },
+  {
+   "id": "plant-snake",
+   "sheet": "floor-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 30
+  },
+  {
+   "id": "floor-lamp",
+   "sheet": "floor-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 26
+  },
+  {
+   "id": "lockers",
+   "sheet": "floor-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    1
+   ],
+   "width": 60
+  },
+  {
+   "id": "sofa",
+   "sheet": "floor-b.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 110
+  },
+  {
+   "id": "armchair",
+   "sheet": "floor-b.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 50
+  },
+  {
+   "id": "coat-rack",
+   "sheet": "floor-b.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 34
+  },
+  {
+   "id": "printer",
+   "sheet": "floor-b.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 44
+  },
+  {
+   "id": "wall-landscape",
+   "sheet": "wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 84
+  },
+  {
+   "id": "wall-poster",
+   "sheet": "wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 44
+  },
+  {
+   "id": "wall-clock",
+   "sheet": "wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    0
+   ],
+   "width": 34
+  },
+  {
+   "id": "wall-whiteboard",
+   "sheet": "wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 100
+  },
+  {
+   "id": "wall-corkboard",
+   "sheet": "wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 84
+  },
+  {
+   "id": "wall-photos",
+   "sheet": "wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    1
+   ],
+   "width": 64,
+   "whole": true
+  },
+  {
+   "id": "xmas-tree",
+   "sheet": "theme.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 44
+  },
+  {
+   "id": "monstera",
+   "sheet": "theme.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 54
+  },
+  {
+   "id": "cafe-sign",
+   "sheet": "theme.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 36
+  },
+  {
+   "id": "gifts",
+   "sheet": "theme.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 38
+  }
+ ]
+}

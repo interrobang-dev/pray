@@ -13,7 +13,7 @@
 | 2 | 인물 프리셋 8~10명 × 4상태 + 색 바꾸기. 목록 아바타·Off Duty 머리도 프리셋에서 (v1 인물 9명 × 4상태·세션별 고르기·색 바꾸기. 목록 아바타·Off Duty 머리는 도트일 때 그 인물 idle 첫 칸의 머리 44×44 — 목록은 사무실 그림 설정을 따른다). v3 에서 9명을 더해 18명(리더 4·팀원 14, 남녀 각 9) |
 | 3 | 환경: 바닥·벽·창 4시간대·섬 바닥·Focus Zone·Off Duty 거리·소품 (v2 로 했다. 아래 "환경 (v2)". 퇴근 머리는 아직 클래식 그림) |
 | 4 | 팀장·파트장 캐릭터 편집 (`hq.json` 의 `characters` = 세션 ID → `{ id, hair, top }`). ✎ 이름 모달에서 인물(지금 18명) 중 고르기와 머리(기본 + 8색)·윗옷(기본 + 10색) 색 바꾸기까지 했다. 색 바꾸기는 `tools/sprites/mask.py` 마스크(인물마다 표본 상자·세로 범위를 레시피에 적는다 — 위치만으로는 피부·바지가 섞였다) + 밝기 차이를 지키는 HSL 바꾸기 (`web/src/recolor.ts`) |
-| 5 | 다시 꾸미기 (테마·decor) |
+| 5 | 다시 꾸미기 (테마·decor). 소품 20종 office-v4 + 시드로 놓기 + 테마 4개(기본·카페·숲·겨울). 아래 "꾸미기 (v4)" |
 | 6 | 클래식 제거 |
 | 7 (선택) | 글로 새 인물 생성 |
 
@@ -151,6 +151,26 @@ web/public/office/  빌드 결과. Vite 가 web/dist/office/ 로 복사하고 �
 | 벽 창에 시간대 4종을 그리면 벽·창틀이 판마다 달라진다 | 벽은 유리를 마젠타로 한 장만, 창밖은 한 장에 4시간대를 같은 스카이라인으로 그리게 해 뒤에 깐다 (스카이라인이 4판 모두 같게 나왔다) |
 | 9-slice(파티션·테두리)는 생성으로 맞추기 어렵다 | 바닥만 생성 타일, 테두리·이름표는 도트 px Graphics |
 | 해상도 3 으로 그린 12px 한글을 1배에서 3배 축소하면 가는 획이 빠진다 | 도트 px 글자 resolution = 지금 배율 (`dotTextResolution`) |
+
+## 꾸미기 (v4)
+
+원본 `~/.claude/jk-corp/sprite-src/v4/` (시트 4장 `floor-a`·`floor-b`·`wall`·`theme` 와 `prompts/`(프롬프트·생성 스크립트·로그)), 레시피 `tools/sprites/recipes/office-v4.json`, 결과 `web/public/office/office-v4.*` (소품만). 스타일 참고로 v2 `props.png` 를 `--ref` 로 붙였다. 생성 4회 = 시트 4장 × 1 (다시 생성 없음).
+
+| 시트 | 격자 | 소품 (폭, 도트 px) |
+|---|---|---|
+| `floor-a.png` | 3×2 | water-cooler 30·coffee-machine 40·trash-bin 20·plant-snake 30·floor-lamp 26·lockers 60 |
+| `floor-b.png` | 2×2 | sofa 110·armchair 50·coat-rack 34·printer 44 |
+| `wall.png` (앞에서 본 벽걸이) | 3×2 | wall-landscape 84·wall-poster 44·wall-clock 34·wall-whiteboard 100·wall-corkboard 84·wall-photos 64 (`whole`: 떨어진 액자 둘을 한 소품으로) |
+| `theme.png` | 2×2 | xmas-tree 44·monstera 54·cafe-sign 36·gifts 38 |
+
+놓기·테마는 `web/src/officeDecor.ts` (CLAUDE.md 핵심 개념 "도트 꾸미기"). 정해 둔 것:
+
+| 문제 | 정한 것 |
+|---|---|
+| 벽 타일은 거의 전부 창이라 액자를 걸 벽이 없다 | 장식을 거는 창 칸만 유리 자리를 벽색으로 메운다 (이웃 칸은 비워 창이 남는다) |
+| 소품이 책상·이름표·말풍선·끌기 영역을 가리면 안 된다 | 소품이 차지하는 칸 = 그림 크기를 타일로 올린 것, 섬 둘레 1타일과 그룹 위 줄·파티션·걸레받이 줄은 쓰지 않는다. 벽 앞 줄의 키 큰 소품만 벽 위로 올라간다 |
+| 테마마다 바닥 타일을 새로 그리면 생성이 많다 | 바닥·카펫·러그는 tint 로 색만 바꾸고 소품 풀로 분위기를 바꾼다 (카페 따뜻한 갈색, 숲 초록, 겨울 푸른빛) |
+| 꾸미기 도구를 캔버스 위에 띄우면 승인 대기 화살표를 가린다 | 헤더에 둔다 |
 
 ## 이름 규칙
 

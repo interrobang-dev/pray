@@ -1,0 +1,510 @@
+{
+ "frames": {
+  "prop/armchair": {
+   "frame": {
+    "x": 814,
+    "y": 2,
+    "w": 50,
+    "h": 55
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 50,
+    "h": 55
+   },
+   "sourceSize": {
+    "w": 50,
+    "h": 55
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-sign": {
+   "frame": {
+    "x": 866,
+    "y": 2,
+    "w": 36,
+    "h": 41
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 36,
+    "h": 41
+   },
+   "sourceSize": {
+    "w": 36,
+    "h": 41
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/coat-rack": {
+   "frame": {
+    "x": 156,
+    "y": 2,
+    "w": 34,
+    "h": 75
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 34,
+    "h": 75
+   },
+   "sourceSize": {
+    "w": 34,
+    "h": 75
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/coffee-machine": {
+   "frame": {
+    "x": 584,
+    "y": 2,
+    "w": 40,
+    "h": 60
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 60
+   },
+   "sourceSize": {
+    "w": 40,
+    "h": 60
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/floor-lamp": {
+   "frame": {
+    "x": 96,
+    "y": 2,
+    "w": 26,
+    "h": 77
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 26,
+    "h": 77
+   },
+   "sourceSize": {
+    "w": 26,
+    "h": 77
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/gifts": {
+   "frame": {
+    "x": 940,
+    "y": 2,
+    "w": 38,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 38,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 38,
+    "h": 32
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/lockers": {
+   "frame": {
+    "x": 2,
+    "y": 2,
+    "w": 60,
+    "h": 97
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 60,
+    "h": 97
+   },
+   "sourceSize": {
+    "w": 60,
+    "h": 97
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/monstera": {
+   "frame": {
+    "x": 758,
+    "y": 2,
+    "w": 54,
+    "h": 57
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 54,
+    "h": 57
+   },
+   "sourceSize": {
+    "w": 54,
+    "h": 57
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/plant-snake": {
+   "frame": {
+    "x": 124,
+    "y": 2,
+    "w": 30,
+    "h": 76
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 30,
+    "h": 76
+   },
+   "sourceSize": {
+    "w": 30,
+    "h": 76
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/printer": {
+   "frame": {
+    "x": 626,
+    "y": 2,
+    "w": 44,
+    "h": 60
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 44,
+    "h": 60
+   },
+   "sourceSize": {
+    "w": 44,
+    "h": 60
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/sofa": {
+   "frame": {
+    "x": 294,
+    "y": 2,
+    "w": 110,
+    "h": 70
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 110,
+    "h": 70
+   },
+   "sourceSize": {
+    "w": 110,
+    "h": 70
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/trash-bin": {
+   "frame": {
+    "x": 68,
+    "y": 101,
+    "w": 20,
+    "h": 24
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 24
+   },
+   "sourceSize": {
+    "w": 20,
+    "h": 24
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/wall-clock": {
+   "frame": {
+    "x": 904,
+    "y": 2,
+    "w": 34,
+    "h": 35
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 34,
+    "h": 35
+   },
+   "sourceSize": {
+    "w": 34,
+    "h": 35
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/wall-corkboard": {
+   "frame": {
+    "x": 452,
+    "y": 2,
+    "w": 84,
+    "h": 65
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 84,
+    "h": 65
+   },
+   "sourceSize": {
+    "w": 84,
+    "h": 65
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/wall-landscape": {
+   "frame": {
+    "x": 672,
+    "y": 2,
+    "w": 84,
+    "h": 60
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 84,
+    "h": 60
+   },
+   "sourceSize": {
+    "w": 84,
+    "h": 60
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/wall-photos": {
+   "frame": {
+    "x": 2,
+    "y": 101,
+    "w": 64,
+    "h": 30
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 30
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 30
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/wall-poster": {
+   "frame": {
+    "x": 538,
+    "y": 2,
+    "w": 44,
+    "h": 62
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 44,
+    "h": 62
+   },
+   "sourceSize": {
+    "w": 44,
+    "h": 62
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/wall-whiteboard": {
+   "frame": {
+    "x": 192,
+    "y": 2,
+    "w": 100,
+    "h": 71
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 100,
+    "h": 71
+   },
+   "sourceSize": {
+    "w": 100,
+    "h": 71
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/water-cooler": {
+   "frame": {
+    "x": 64,
+    "y": 2,
+    "w": 30,
+    "h": 78
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 30,
+    "h": 78
+   },
+   "sourceSize": {
+    "w": 30,
+    "h": 78
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/xmas-tree": {
+   "frame": {
+    "x": 406,
+    "y": 2,
+    "w": 44,
+    "h": 68
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 44,
+    "h": 68
+   },
+   "sourceSize": {
+    "w": 44,
+    "h": 68
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  }
+ },
+ "animations": {},
+ "meta": {
+  "app": "jk-corp tools/sprites/build.py",
+  "image": "office-v4.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 980,
+   "h": 133
+  },
+  "scale": 1,
+  "jkCorp": {
+   "spec": {
+    "tile": 48,
+    "cell": [
+     64,
+     128
+    ],
+    "baseline": 124,
+    "bodyHeight": 108
+   },
+   "characters": [],
+   "animations": {},
+   "tiles": {},
+   "props": {}
+  }
+ }
+}

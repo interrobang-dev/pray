@@ -1,3 +1,4 @@
+import type { OfficeDecor } from './officeDecor'
 export type SessionStatus = 'working' | 'my-turn' | 'needs-approval' | 'idle' | 'ended' | 'unknown'
 
 /** 근무 = 살아 있는 세션. 휴식 = 호스트·트레이 재시작 중이라 잠깐 꺼진 웹 세션(호스트가 다시 띄운다). 퇴근 = 끝난 웹 세션(다시 출근할 수 있다) */
@@ -122,6 +123,8 @@ export interface Team {
 export interface Office {
   groups: Group[]
   teams: Team[]
+  /** 도트 꾸밈 (시드·테마). 옛 서버 응답에는 없다 */
+  decor?: OfficeDecor
 }
 
 export interface ToolUse {
