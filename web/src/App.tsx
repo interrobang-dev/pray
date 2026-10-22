@@ -9,7 +9,7 @@ import {
 } from 'react'
 import { Terminal } from './Terminal'
 import { Chat, type Jump, type JumpTarget } from './Chat'
-import { Office, type OfficeFocus } from './Office'
+import { Office, type OfficeFocus, type OfficeStyle } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
@@ -50,6 +50,19 @@ function readIsOfficeHidden(): boolean {
     return localStorage.getItem(OFFICE_HIDDEN_KEY) === 'true'
   } catch {
     return false
+  }
+}
+
+/** 사무실 그림 방식(클래식·도트)을 남기는 localStorage 키 (이 브라우저만) */
+const OFFICE_STYLE_KEY = 'jk-corp.officeStyle'
+const OFFICE_STYLE_LABELS: Record<OfficeStyle, string> = { classic: '클래식', dot: '도트' }
+
+/** 저장된 사무실 그림 방식. 읽지 못하거나 모르는 값이면 클래식 */
+function readOfficeStyle(): OfficeStyle {
+  try {
+    return localStorage.getItem(OFFICE_STYLE_KEY) === 'dot' ? 'dot' : 'classic'
+  } catch {
+    return 'classic'
   }
 }
 
@@ -255,6 +268,8 @@ export function App() {
   const isNarrow = useMediaQuery(NARROW_QUERY)
   /** 헤더 버튼으로 사무실을 숨겼는지 (localStorage). 폰 폭은 원래 사무실이 없어 이 값과 무관하다 */
   const [isOfficeHidden, setIsOfficeHidden] = useState(readIsOfficeHidden)
+  /** 사무실 그림 방식 (localStorage). 헤더 버튼으로 바꾼다 */
+  const [officeStyle, setOfficeStyle] = useState<OfficeStyle>(readOfficeStyle)
   /** 데스크톱에서 사무실을 숨긴 화면: 패널이 목록 오른쪽 폭을 다 쓰고, 세션을 안 골랐으면 그 자리에 안내 */
   const isOfficeHiddenLayout = !isNarrow && isOfficeHidden
   const [theme, setTheme] = useState<ThemeChoice>(themeChoice)
@@ -489,6 +504,16 @@ export function App() {
     setIsOfficeHidden(isHidden)
     try {
       localStorage.setItem(OFFICE_HIDDEN_KEY, String(isHidden))
+    } catch {
+      // 저장하지 못하면 이 화면에서만 바뀐다
+    }
+  }
+
+  function toggleOfficeStyle() {
+    const next: OfficeStyle = officeStyle === 'classic' ? 'dot' : 'classic'
+    setOfficeStyle(next)
+    try {
+      localStorage.setItem(OFFICE_STYLE_KEY, next)
     } catch {
       // 저장하지 못하면 이 화면에서만 바뀐다
     }
@@ -961,6 +986,17 @@ export function App() {
                 <OfficeToggleIcon isShown={!isOfficeHidden} />
               </button>
             )}
+            {/* 사무실이 보일 때만 (숨겼거나 폰 폭이면 바꿀 그림이 없다) */}
+            {!isNarrow && !isOfficeHidden && (
+              <button
+                className="icon"
+                onClick={toggleOfficeStyle}
+                title={`사무실 그림: ${OFFICE_STYLE_LABELS[officeStyle]}`}
+                aria-label={`사무실 그림: ${OFFICE_STYLE_LABELS[officeStyle]}`}
+              >
+                <OfficeStyleIcon style={officeStyle} />
+              </button>
+            )}
           </header>
           <div className="toolbar">
             <button onClick={() => setIsGroupForm(true)} title="새 그룹">
@@ -1116,6 +1152,7 @@ export function App() {
         {isOfficeHiddenLayout && !hasPanel && <div className="office-empty">왼쪽에서 세션을 고르면 대화가 열립니다</div>}
         {!isNarrow && !isOfficeHidden && (
           <Office
+            style={officeStyle}
             office={office}
             sessions={snapshot.sessions}
             selectedId={selectedId}
@@ -1412,6 +1449,20 @@ function OfficeToggleIcon({ isShown }: { isShown: boolean }) {
           <rect x="5" y="2" width="4" height="10" fill="currentColor" opacity="0.5" />
           <path d="M9.5 1.5v11" stroke="currentColor" />
         </>
+      )}
+    </svg>
+  )
+}
+
+/** 헤더의 사무실 그림 아이콘. 지금 고른 것을 보인다: 클래식 = 테두리 상자 안 작은 사각형, 도트 = 2×2 칸을 엇갈려 채운 도트 */
+function OfficeStyleIcon({ style }: { style: OfficeStyle }) {
+  return (
+    <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+      <rect x="0.5" y="0.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" />
+      {style === 'classic' ? (
+        <rect x="4.5" y="4.5" width="5" height="5" fill="currentColor" opacity="0.5" />
+      ) : (
+        <path d="M3 3h4v4H3zM7 7h4v4H7z" fill="currentColor" />
       )}
     </svg>
   )
