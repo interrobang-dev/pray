@@ -24,10 +24,10 @@ describe('parseUsage', () => {
     )
     expect(usage.plan).toBe('max')
     expect(usage.fetchedAt).toBe(now.toISOString())
-    expect(usage.limits.map((l) => [l.label, l.percent])).toEqual([
-      ['5h', 33],
-      ['W', 23],
-      ['W Fable', 6],
+    expect(usage.limits.map((l) => [l.label, l.kind, l.model, l.percent])).toEqual([
+      ['5h', 'session', null, 33],
+      ['wk', 'weekly_all', null, 23],
+      ['Fable', 'weekly_scoped', 'Fable', 6],
     ])
   })
 
@@ -40,9 +40,9 @@ describe('parseUsage', () => {
       null,
       now,
     )
-    expect(usage.limits.map((l) => [l.label, l.percent])).toEqual([
-      ['5h', 10],
-      ['W', 20],
+    expect(usage.limits.map((l) => [l.label, l.kind, l.model, l.percent])).toEqual([
+      ['5h', 'session', null, 10],
+      ['wk', 'weekly_all', null, 20],
     ])
   })
 })

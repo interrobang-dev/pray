@@ -3,8 +3,12 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 
 export interface UsageLimit {
-  /** 사용자에게 보여줄 이름 (예: "5h", "W", "W Fable") */
+  /** 상태 표시줄에 보여줄 짧은 이름 (예: "5h", "wk", "Fable") */
   label: string
+  /** 한도 종류 (session·weekly_all·weekly_scoped 등). 화면이 상세 창의 긴 이름을 정한다 */
+  kind: string
+  /** 모델별 한도의 모델 표시 이름. 아니면 null */
+  model: string | null
   percent: number
   resetsAt: string
   severity: string
@@ -31,15 +35,17 @@ interface RawLimit {
 
 const KIND_LABELS: Record<string, string> = {
   session: '5h',
-  weekly_all: 'W',
+  weekly_all: 'wk',
 }
 
 function labelOf(limit: RawLimit): string {
   const fixed = KIND_LABELS[limit.kind]
   if (fixed) return fixed
-  const model = limit.scope?.model?.display_name
-  if (model) return `W ${model}`
-  return limit.kind
+  return modelOf(limit) ?? limit.kind
+}
+
+function modelOf(limit: RawLimit): string | null {
+  return limit.scope?.model?.display_name || null
 }
 
 /** /api/oauth/usage 응답에서 화면에 쓸 값만 뽑는다. `limits` 배열이 없으면 five_hour / seven_day 로 대체 */
@@ -55,6 +61,8 @@ export function parseUsage(raw: unknown, plan: string | null, now: Date): Usage 
     plan,
     limits: source.map((limit) => ({
       label: labelOf(limit),
+      kind: limit.kind,
+      model: modelOf(limit),
       percent: Math.round(limit.percent ?? 0),
       resetsAt: limit.resets_at,
       severity: limit.severity ?? 'normal',

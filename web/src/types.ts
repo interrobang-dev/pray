@@ -149,6 +149,8 @@ export const statusLabel: Record<SessionStatus, string> = {
 
 export interface UsageLimit {
   label: string
+  kind: string
+  model: string | null
   percent: number
   resetsAt: string
   severity: string
