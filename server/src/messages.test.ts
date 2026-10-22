@@ -271,6 +271,62 @@ describe('parseMessages: messages sent while claude is working', () => {
     ])
   })
 
+  it('starts the queue over where a claude process left the session (cost-state): what it left queued is not queued', () => {
+    // 실제 jsonl 의 꼴 (Claude Code 2.1.306 → 2.1.307, 호스트 재시작): 죽기 직전에 넣은 알림·말은 dequeue 가 없고,
+    // 나가며 cost-state · last-prompt · cost-state 를 남긴다. 다시 뜬 프로세스는 못 받은 알림을 stopped 알림으로 새로 넣고 꺼낸다
+    const costState = line({ type: 'cost-state', sessionId: 's', totalCostUSD: 1 })
+    const completed = '<task-notification>\n<task-id>b4</task-id>\n<status>completed</status>\n</task-notification>'
+    const stopped = '<task-notification>\n<task-id>b4</task-id>\n<status>stopped</status>\n</task-notification>'
+    const jsonl = [
+      user('u1', '재시작 진행'),
+      enqueue(completed),
+      enqueue('못 받은 말'),
+      costState,
+      line({ type: 'last-prompt', lastPrompt: '재시작 진행', sessionId: 's' }),
+      costState,
+      enqueue(stopped),
+      dequeue(),
+      assistant('a1', 'No response requested.'),
+      user('u2', stopped),
+      enqueue('다음 일'),
+      dequeue(),
+      user('u3', '다음 일'),
+    ].join('\n')
+
+    expect(view(parseMessages(jsonl))).toEqual([
+      ['user', '재시작 진행', false],
+      ['assistant', 'No response requested.', false],
+      ['system', stopped, false],
+      ['user', '다음 일', false],
+    ])
+    expect(queuedPrompts(jsonl)).toEqual([])
+  })
+
+  it('takes a dequeue by the text claude received right after it, so a leftover without cost-state does not shift later ones', () => {
+    // 강제 종료로 cost-state 없이 남은 것은 알 수 없어 그대로 남지만, 그 뒤 dequeue 가 한 칸씩 밀려 받은 말이 대기 중으로 보이지는 않는다
+    const jsonl = [
+      enqueue('남은 말', 't1'),
+      enqueue('다음 일', 't2'),
+      dequeue(),
+      user('u1', '다음 일'),
+      enqueue('또 다른 일', 't3'),
+      dequeue(),
+      user('u2', '또 다른 일'),
+      enqueue('대기 중인 말', 't4'),
+    ].join('\n')
+
+    expect(view(parseMessages(jsonl))).toEqual([
+      ['user', '다음 일', false],
+      ['user', '또 다른 일', false],
+      ['user', '남은 말', true],
+      ['user', '대기 중인 말', true],
+    ])
+    expect(queuedPrompts(jsonl).map((prompt) => prompt.text)).toEqual(['남은 말', '대기 중인 말'])
+    // 뒤에 같은 글이 없으면(슬래시 명령·글 없는 enqueue) 맨 앞을 뺀다
+    const command = [enqueue(undefined), enqueue('대기 중인 말'), dequeue(), user('u1', '<command-name>/ledger</command-name>')].join('\n')
+    expect(queuedPrompts(command)).toEqual([{ raw: '대기 중인 말', text: '대기 중인 말' }])
+  })
+
   it('queuedPrompts: the queued user messages in order, raw content and unwrapped text, without content-less or system ones', () => {
     const pasted = '\n\n<pasted_content id="ab12">\n긴 지시\n</pasted_content id="ab12">\n'
     const jsonl = [
