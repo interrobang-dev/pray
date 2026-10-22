@@ -216,7 +216,7 @@ function relayPreview(text: string): string {
 }
 
 /** 한 줄의 시각 "10:12". 오늘이 아니면 "10/21 10:12" */
-function formatClock(iso: string): string {
+export function formatClock(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
   const time = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })

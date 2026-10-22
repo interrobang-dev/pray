@@ -11,10 +11,12 @@ import { Terminal } from './Terminal'
 import { Chat, type Jump, type JumpTarget } from './Chat'
 import { Office } from './Office'
 import { UsagePanel } from './UsagePanel'
+import { FlowPanel } from './FlowPanel'
 import { Modal, Segmented } from './Modal'
 import {
   attendanceOf,
   statusLabel,
+  type FlowStatus,
   type Office as OfficeData,
   type Group,
   type OffDuty,
@@ -203,6 +205,10 @@ export function App() {
   const [office, setOffice] = useState<OfficeData>(EMPTY_OFFICE)
   const [isConnected, setIsConnected] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** 오른쪽 패널 자리에 플로우 알림 패널을 열었는지. 세션 패널과 같은 자리라 세션을 고르면 닫힌다 */
+  const [isFlowOpen, setIsFlowOpen] = useState(false)
+  /** 플로우 안 읽은 수 (전역 SSE flow). 아직 못 받았으면(flow 를 모르는 옛 서버 포함) null */
+  const [flowStatus, setFlowStatus] = useState<FlowStatus | null>(null)
   const [isGroupForm, setIsGroupForm] = useState(false)
   /** 팀 추가 모달. 그룹 헤더의 "+ 팀" 으로 열리며 그 그룹에 고정 */
   const [teamForm, setTeamForm] = useState<{ groupId: string } | null>(null)
@@ -260,6 +266,7 @@ export function App() {
       setIsConnected(true)
     })
     source.addEventListener('office', (event) => setOffice(JSON.parse((event as MessageEvent).data)))
+    source.addEventListener('flow', (event) => setFlowStatus(JSON.parse((event as MessageEvent).data)))
     source.addEventListener('transcript', (event) => {
       const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
       setTranscriptVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
@@ -314,12 +321,20 @@ export function App() {
       setJump(null)
       setJumpBack(null)
     }
+    setIsFlowOpen(false)
     setSelectedId(sessionId)
+  }
+
+  /** 오른쪽 패널을 플로우 알림으로 바꾼다. 세션 선택은 닫힌다 (다시 고르면 대화 탭부터, 점프·돌아가기도 끝) */
+  function openFlow() {
+    setSelectedId(null)
+    setIsFlowOpen(true)
   }
 
   /** 세션의 대화 탭을 열고 target 으로 간다 (점프·돌아가기) */
   function openJump(sessionId: string, target: JumpTarget) {
     setTab('chat')
+    setIsFlowOpen(false)
     setSelectedId(sessionId)
     setJump({ id: nextJumpIdRef.current++, sessionId, target })
   }
@@ -874,10 +889,12 @@ export function App() {
   const presentSessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'present')
   const workingCount = presentSessions.filter((s) => s.status === 'working').length
   const approvalSessions = presentSessions.filter((s) => s.status === 'needs-approval')
+  /** 오른쪽 패널 자리에 무엇이든 열려 있는지 (세션 또는 플로우) */
+  const hasPanel = selected !== null || isFlowOpen
 
   return (
     <div className="app">
-      <main className={`layout${selected ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}`}>
+      <main className={`layout${hasPanel ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}`}>
         <aside>
           <header>
             <h1>jk-corp</h1>
@@ -906,6 +923,7 @@ export function App() {
               New Session
             </button>
           </div>
+          <FlowRow status={flowStatus} isSelected={isFlowOpen} onOpen={openFlow} />
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
             {office.groups.map((group, groupIndex) => {
               const teams = office.teams.filter((t) => t.groupId === group.id)
@@ -1046,7 +1064,7 @@ export function App() {
           </Modal>
         )}
         {/* 폰 폭과 사무실을 숨겼을 때는 PixiJS 를 돌리지 않도록 마운트하지 않는다 (CSS 로 숨기기만 하면 캔버스가 계속 돈다) */}
-        {isOfficeHiddenLayout && !selected && <div className="office-empty">왼쪽에서 세션을 고르면 대화가 열립니다</div>}
+        {isOfficeHiddenLayout && !hasPanel && <div className="office-empty">왼쪽에서 세션을 고르면 대화가 열립니다</div>}
         {!isNarrow && !isOfficeHidden && (
           <Office
             office={office}
@@ -1058,6 +1076,14 @@ export function App() {
             onEditTeam={editTeam}
             onEditGroup={editGroup}
             onUpdateGroupBounds={updateGroupBounds}
+          />
+        )}
+        {isFlowOpen && !selected && (
+          <FlowPanel
+            unreadAlarmCount={flowStatus?.unreadAlarmCount ?? null}
+            unreadChatCount={flowStatus?.unreadChatCount ?? null}
+            isNarrow={isNarrow}
+            onClose={() => setIsFlowOpen(false)}
           />
         )}
         {selected && (
@@ -1225,6 +1251,52 @@ function OffDutyBar({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * 툴바 아래 플로우 한 줄: 아이콘 · "Flow" · "알림 N · 채팅 N". 누르면 오른쪽 패널이 플로우 알림이 된다.
+ * 둘 다 0 이면 회색, 하나라도 있으면 강조. 아직 못 셌으면 "…", 키 없음이면 "키 없음", 확인 실패면 짧게 (전문은 title. 앞 수가 있으면 수 + ⚠)
+ */
+function FlowRow({ status, isSelected, onOpen }: { status: FlowStatus | null; isSelected: boolean; onOpen: () => void }) {
+  const hasCounts = status !== null && status.unreadAlarmCount !== null && status.unreadChatCount !== null
+  const hasUnread = hasCounts && (status.unreadAlarmCount! > 0 || status.unreadChatCount! > 0)
+  let summary: string
+  let title = '플로우 알림 보기'
+  if (status === null) summary = '…'
+  else if (!status.isConfigured) {
+    summary = '키 없음'
+    title = '~/.claude/flow-key.env 에 FLOW_API_KEY 가 없습니다'
+  } else if (hasCounts) summary = `알림 ${status.unreadAlarmCount} · 채팅 ${status.unreadChatCount}`
+  else summary = status.error ? '확인 실패' : '…'
+  if (status?.isConfigured && status.error) title = `플로우 확인 실패: ${status.error}`
+  return (
+    <button
+      className={['flow-row', isSelected ? 'selected' : '', hasUnread ? 'unread' : ''].join(' ')}
+      onClick={onOpen}
+      title={title}
+    >
+      <FlowIcon />
+      <span className="flow-row-name">Flow</span>
+      <span className={status?.isConfigured && status.error && !hasCounts ? 'flow-row-summary error' : 'flow-row-summary'}>{summary}</span>
+      {status?.isConfigured && status.error && hasCounts && <span className="flow-row-warning">⚠</span>}
+    </button>
+  )
+}
+
+/** 플로우 줄 아이콘: 종 (알림) */
+function FlowIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M4 11.5V7a4 4 0 0 1 8 0v4.5l1 1.5H3l1-1.5zM6.5 13.5a1.5 1.5 0 0 0 3 0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 
