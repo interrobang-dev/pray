@@ -119,6 +119,16 @@ header button.icon svg {
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
+/* New Group·New Session: 아이콘(App.tsx NewGroupIcon·NewSessionIcon)과 글자를 한 줄로 */
+.toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.toolbar button svg {
+  flex-shrink: 0;
+}
 /* 모달 안의 폼 */
 .create {
   display: flex;
@@ -2069,6 +2079,11 @@ li.group.drop-after::after {
   .toolbar,
   .approval {
     flex-wrap: wrap;
+  }
+  /* New Group·New Session: 손가락으로 누르기 쉽게 40px */
+  .toolbar button {
+    min-height: 40px;
+    padding: 0 14px;
   }
   /* 상태 표시줄은 목록 화면에서만. 세션 패널에서는 입력칸이 화면 맨 아래에 붙어야 한다.
      390px 에 한 줄로 들어가게 간격을 줄이고 "Remaining"·연결 상태 글자를 뺀다 (연결 상태는 점과 재시작 ↻ 만, 뜻은 title).

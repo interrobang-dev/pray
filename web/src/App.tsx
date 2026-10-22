@@ -201,7 +201,7 @@ export function App() {
   const [isGroupForm, setIsGroupForm] = useState(false)
   /** 팀 추가 모달. 그룹 헤더의 "+ 팀" 으로 열리며 그 그룹에 고정 */
   const [teamForm, setTeamForm] = useState<{ groupId: string } | null>(null)
-  /** 세션 추가 모달. 팀 헤더의 "+" 면 그 팀 직속, 파트 소제목의 "+" 면 그 파트, 툴바의 "+ 세션" 이면 로비(폴더 직접 입력) */
+  /** 세션 추가 모달. 팀 헤더의 "+" 면 그 팀 직속, 파트 소제목의 "+" 면 그 파트, 툴바의 "New Session" 이면 로비(폴더 직접 입력) */
   const [sessionForm, setSessionForm] = useState<{ teamId: string | null; partId: string | null } | null>(null)
   const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
   /** 팀·파트 세션 추가 모달에 미리 채울 이름. 서버가 성을 고른 "[Dev] 성" 이고, 보일 때는 세그먼트에 맞춰 역할만 바꾼다 */
@@ -882,9 +882,13 @@ export function App() {
             )}
           </header>
           <div className="toolbar">
-            <button onClick={() => setIsGroupForm(true)}>+ 그룹</button>
-            <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable}>
-              + 세션 (로비)
+            <button onClick={() => setIsGroupForm(true)} title="새 그룹">
+              <NewGroupIcon />
+              New Group
+            </button>
+            <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable} title="로비에 새 세션">
+              <NewSessionIcon />
+              New Session
             </button>
           </div>
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
@@ -1298,6 +1302,33 @@ function TerminalTabIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  )
+}
+
+/** 툴바 New Group 아이콘: 겹친 상자 (뒤 상자는 앞 상자에 가리지 않은 부분만) */
+function NewGroupIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <rect x="2.5" y="5.5" width="9" height="8" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
+      <path
+        d="M5.5 5.5V4A1.5 1.5 0 0 1 7 2.5h5A1.5 1.5 0 0 1 13.5 4v5a1.5 1.5 0 0 1-1.5 1.5h-.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** 툴바 New Session 아이콘: 사람 (세션 = 사무실 직원. 패널 탭의 말풍선·터미널과 겹치지 않게) */
+function NewSessionIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <circle cx="8" cy="5" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M3.5 13.5a4.5 4.5 0 0 1 9 0" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   )
 }
