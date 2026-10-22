@@ -1879,10 +1879,10 @@ li.group.drop-after::after {
   z-index: 8;
   box-sizing: border-box;
   width: 300px;
-  padding: 10px 12px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   font-size: 12px;
   color: var(--text);
   white-space: normal;
@@ -1891,20 +1891,43 @@ li.group.drop-after::after {
   border-radius: 8px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
 }
+/* 머리: Claude 별 + "Claude", 그 아래 갱신 시각. 아래 옅은 구분선 */
+.usage-head {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.usage-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.usage-mark {
+  flex-shrink: 0;
+}
+.usage-mark line {
+  stroke: #d97757;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.usage-sub {
+  margin-top: 2px;
+  color: var(--muted);
+}
 .usage-note {
   margin: 0;
 }
-.usage-row-head {
+.usage-rows {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 14px;
 }
-.usage-row-head span {
-  color: var(--muted);
+.usage-name {
+  font-size: 13px;
 }
-/* 남은 비율 막대. 색은 상태 표시줄 숫자와 같은 규칙 (남은 30%↓ 노랑, 10%↓ 빨강) */
+/* 남은 비율 막대. 기본 회색, 상태 표시줄 숫자와 같은 규칙으로 남은 30%↓ 노랑, 10%↓ 빨강 */
 .usage-bar {
-  margin: 4px 0 3px;
+  margin: 7px 0 6px;
   height: 6px;
   border-radius: 3px;
   background: var(--line);
@@ -1913,37 +1936,54 @@ li.group.drop-after::after {
 .usage-bar span {
   display: block;
   height: 100%;
-  background: var(--green);
+  background: var(--muted);
 }
-.usage-row.warn .usage-row-head span {
+/* 막대 아래 "39% left" ··· "Resets in 56m". 리셋 날짜·시각은 이 줄의 툴팁 */
+.usage-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+}
+.usage-row.warn .usage-left {
   color: #e0a63a;
 }
 .usage-row.warn .usage-bar span {
   background: #e0a63a;
 }
-.usage-row.danger .usage-row-head span {
+.usage-row.danger .usage-left {
   color: #d6453d;
 }
 .usage-row.danger .usage-bar span {
   background: #d6453d;
 }
-.usage-reset {
-  font-size: 11px;
-  color: var(--muted);
-}
-.usage-popover-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 8px;
+/* 구분선 아래 "Claude Account" 와 이메일 ··· 요금제 */
+.usage-account {
+  padding-top: 12px;
   border-top: 1px solid var(--line);
+}
+.usage-account-label {
+  margin-bottom: 6px;
   font-size: 11px;
   color: var(--muted);
 }
-.usage-popover-foot button {
+.usage-account-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+.usage-email {
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usage-plan {
+  flex-shrink: 0;
   margin-left: auto;
-  padding: 2px 8px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -2045,15 +2085,11 @@ li.group.drop-after::after {
   .status-right {
     flex-shrink: 0;
   }
-  /* 사용량 상세 창: 화면 폭에 맞춘다 (양옆 16px). ↻ 는 손가락으로 누르기 쉽게 */
+  /* 사용량 상세 창: 화면 폭에 맞춘다 (양옆 16px) */
   .usage-popover {
     left: 16px;
     right: 16px;
     width: auto;
-  }
-  .usage-popover-foot button {
-    min-width: 44px;
-    min-height: 36px;
   }
   /* 16px 이 되면 안내 문구가 두 줄로 넘쳐 한 줄 입력칸에 스크롤바가 생긴다 */
   .composer textarea::placeholder,

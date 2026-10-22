@@ -16,6 +16,8 @@ export interface UsageLimit {
 
 export interface Usage {
   plan: string | null
+  /** 로그인된 Claude 계정 이메일 (~/.claude.json 의 oauthAccount.emailAddress). 못 읽으면 null */
+  email: string | null
   limits: UsageLimit[]
   fetchedAt: string
 }
@@ -24,6 +26,7 @@ export type UsageResult = { ok: true; usage: Usage } | { ok: false; reason: stri
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 const credentialsPath = join(homedir(), '.claude', '.credentials.json')
+const claudeJsonPath = join(homedir(), '.claude.json')
 
 interface RawLimit {
   kind: string
@@ -49,7 +52,7 @@ function modelOf(limit: RawLimit): string | null {
 }
 
 /** /api/oauth/usage 응답에서 화면에 쓸 값만 뽑는다. `limits` 배열이 없으면 five_hour / seven_day 로 대체 */
-export function parseUsage(raw: unknown, plan: string | null, now: Date): Usage {
+export function parseUsage(raw: unknown, account: { plan: string | null; email: string | null }, now: Date): Usage {
   const body = raw as { limits?: RawLimit[]; five_hour?: RawLimit; seven_day?: RawLimit }
   const source: RawLimit[] = Array.isArray(body.limits)
     ? body.limits
@@ -58,7 +61,8 @@ export function parseUsage(raw: unknown, plan: string | null, now: Date): Usage 
         body.seven_day && { ...body.seven_day, kind: 'weekly_all', percent: (body.seven_day as unknown as { utilization: number }).utilization },
       ].filter((l): l is RawLimit => Boolean(l))
   return {
-    plan,
+    plan: account.plan,
+    email: account.email,
     limits: source.map((limit) => ({
       label: labelOf(limit),
       kind: limit.kind,
@@ -82,6 +86,16 @@ async function readCredentials(): Promise<{ accessToken: string; plan: string | 
   }
 }
 
+/** Claude Code 가 로그인 때 ~/.claude.json 에 남긴 계정 이메일. 읽기만 한다 (Claude Code 가 수시로 다시 쓰는 파일이라 쓰는 중이면 해석에 실패할 수 있다). 없거나 못 읽으면 null */
+export async function readAccountEmail(path = claudeJsonPath): Promise<string | null> {
+  try {
+    const email = JSON.parse(await readFile(path, 'utf8'))?.oauthAccount?.emailAddress
+    return typeof email === 'string' && email ? email : null
+  } catch {
+    return null
+  }
+}
+
 /** 비공식 엔드포인트. Claude Code 가 로그인 시 저장한 OAuth 토큰을 그대로 쓴다. 토큰 갱신은 하지 않는다 (Claude Code 가 실행 중일 때 스스로 갱신) */
 export async function fetchUsage(now = new Date()): Promise<UsageResult> {
   const credentials = await readCredentials()
@@ -97,7 +111,8 @@ export async function fetchUsage(now = new Date()): Promise<UsageResult> {
   }
   if (response.status === 401) return { ok: false, reason: '토큰 만료. claude 세션을 하나 실행하면 갱신됨' }
   if (!response.ok) return { ok: false, reason: `usage 조회 실패: HTTP ${response.status}` }
-  return { ok: true, usage: parseUsage(await response.json(), credentials.plan, now) }
+  const raw: unknown = await response.json()
+  return { ok: true, usage: parseUsage(raw, { plan: credentials.plan, email: await readAccountEmail() }, now) }
 }
 
 /** 브라우저가 여러 개 떠 있어도 호출 횟수를 ttl 당 1회로 제한 */

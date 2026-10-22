@@ -158,6 +158,8 @@ export interface UsageLimit {
 
 export interface Usage {
   plan: string | null
+  /** 로그인된 Claude 계정 이메일. 못 읽으면 null, 옛 서버 응답에는 빠져 있다 */
+  email?: string | null
   limits: UsageLimit[]
   fetchedAt: string
 }
