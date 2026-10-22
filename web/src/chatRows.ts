@@ -17,7 +17,10 @@ export interface Work {
   toolCounts: { name: string; count: number }[]
   /** 첫 메시지부터 묶음 다음 메시지(답변·relay)까지. 다음 메시지가 없으면 마지막 메시지까지 */
   durationMs: number
-  /** 세션이 작업 중이고 대화 맨 끝(대기 메시지 제외)의 묶음 */
+  /**
+   * 아직 안 끝난 묶음 = 차례가 진행 중이고 대화 맨 끝(대기 메시지 제외)의 묶음. 접지 않고 대화처럼 보인다.
+   * 아직 답변인지 모르는 가장 최근 글도 따로 빼지 않고 parts 의 제자리에 든다
+   */
   isInProgress: boolean
 }
 
@@ -37,7 +40,7 @@ interface RunItem {
   toolUses: ToolUse[]
 }
 
-function workOf(parts: WorkPart[], run: RunItem[]): Work {
+function workOf(parts: WorkPart[], run: RunItem[], isInProgress: boolean): Work {
   const toolUses = parts.flatMap((part) => part.toolUses)
   const counts = new Map<string, number>()
   for (const toolUse of toolUses) counts.set(toolUse.name, (counts.get(toolUse.name) ?? 0) + 1)
@@ -50,24 +53,31 @@ function workOf(parts: WorkPart[], run: RunItem[]): Work {
     toolCount: toolUses.length,
     toolCounts: [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     durationMs: Math.max(0, durationMs) || 0,
-    isInProgress: false,
+    isInProgress,
   }
 }
 
-/** relay·질문 카드 사이의 메시지들. 답변이 이 안에 있으면 묶음을 답변 바로 위에 둔다. 도구가 하나도 없으면 묶지 않고 글 말풍선 그대로 */
-function runRows<S>(run: RunItem[], answer: ChatMessage | undefined): ChatRow<S>[] {
+/**
+ * relay·질문 카드 사이의 메시지들. 답변이 이 안에 있으면 묶음을 답변 바로 위에 둔다. 도구가 하나도 없으면 묶지 않고 글 말풍선 그대로.
+ * 진행 중이면 답변을 빼지 않는다 (Chat 이 parts 를 시간 순서대로 그린다)
+ */
+function runRows<S>(run: RunItem[], answer: ChatMessage | undefined, isInProgress: boolean): ChatRow<S>[] {
+  const separateAnswer = isInProgress ? undefined : answer
   const parts: WorkPart[] = run
-    .map(({ message, toolUses }) => ({ message, text: message === answer || !message.text ? null : message.text, toolUses }))
+    .map(({ message, toolUses }) => ({ message, text: message === separateAnswer || !message.text ? null : message.text, toolUses }))
     .filter((part) => part.text !== null || part.toolUses.length > 0)
   const rows: ChatRow<S>[] = parts.some((part) => part.toolUses.length > 0)
-    ? [{ kind: 'work', work: workOf(parts, run) }]
+    ? [{ kind: 'work', work: workOf(parts, run, isInProgress) }]
     : parts.map((part) => ({ kind: 'text', message: part.message }))
-  if (answer && run.some((item) => item.message === answer)) rows.push({ kind: 'text', message: answer })
+  if (separateAnswer && run.some((item) => item.message === separateAnswer)) rows.push({ kind: 'text', message: separateAnswer })
   return rows
 }
 
-/** 사람 쪽·system 메시지 사이의 claude 메시지들. 마지막으로 글이 있는 메시지의 글만 답변이다 */
-function segmentRows<S>(segment: ChatMessage[], classify: (toolUse: ToolUse, message: ChatMessage) => S | null): ChatRow<S>[] {
+/**
+ * 사람 쪽·system 메시지 사이의 claude 메시지들. 마지막으로 글이 있는 메시지의 글만 답변이다.
+ * isLive 면 이 구간이 진행 중인 차례의 끝이라 마지막 relay·질문 카드 뒤의 묶음이 진행 중이다
+ */
+function segmentRows<S>(segment: ChatMessage[], classify: (toolUse: ToolUse, message: ChatMessage) => S | null, isLive: boolean): ChatRow<S>[] {
   const answer = [...segment].reverse().find((message) => message.text)
   const rows: ChatRow<S>[] = []
   let run: RunItem[] = []
@@ -82,42 +92,37 @@ function segmentRows<S>(segment: ChatMessage[], classify: (toolUse: ToolUse, mes
     run.push({ message, toolUses })
     // 지금 화면처럼 메시지 안에서는 글·일반 도구 다음에 relay·질문 카드. 그 자리에서 묶음을 나눈다
     if (specials.length > 0) {
-      rows.push(...runRows<S>(run, answer), ...specials)
+      rows.push(...runRows<S>(run, answer, false), ...specials)
       run = []
     }
   }
-  rows.push(...runRows<S>(run, answer))
+  rows.push(...runRows<S>(run, answer, isLive))
   return rows
 }
 
 /**
  * 대화 메시지 → 화면 줄. 사람 쪽·system 메시지(대기 중 포함)가 구간을 나누고, 구간 안의 claude 중간 설명 글과 일반 도구 호출
- * (classify 가 null 을 준 것)을 작업 묶음 하나로 접는다. 작업 중이면 대화 맨 끝(대기 메시지 제외) 묶음이 진행 중이다.
- * classify 는 도구 호출과 그 호출이 든 메시지를 받는다
+ * (classify 가 null 을 준 것)을 작업 묶음 하나로 접는다. 차례가 진행 중(isTurnInProgress)이고 대화 맨 끝(대기 메시지 제외)이
+ * claude 메시지면 그 구간의 마지막 묶음은 아직 안 끝난 것이라 진행 중이다. classify 는 도구 호출과 그 호출이 든 메시지를 받는다
  */
 export function buildChatRows<S>(
   messages: ChatMessage[],
   classify: (toolUse: ToolUse, message: ChatMessage) => S | null,
-  isWorking: boolean,
+  isTurnInProgress: boolean,
 ): ChatRow<S>[] {
+  const lastMessage = [...messages].reverse().find((message) => !message.isQueued)
+  const liveMessage = isTurnInProgress && lastMessage?.role === 'assistant' ? lastMessage : undefined
   const rows: ChatRow<S>[] = []
   let segment: ChatMessage[] = []
+  const flushSegment = () => segmentRows(segment, classify, liveMessage !== undefined && segment.at(-1) === liveMessage)
   for (const message of messages) {
     if (message.role === 'assistant') {
       segment.push(message)
       continue
     }
-    rows.push(...segmentRows(segment, classify), { kind: 'message', message })
+    rows.push(...flushSegment(), { kind: 'message', message })
     segment = []
   }
-  rows.push(...segmentRows(segment, classify))
-  if (!isWorking) return rows
-  const isQueuedRow = (row: ChatRow<S> | undefined) => row?.kind === 'message' && row.message.isQueued === true
-  let lastIndex = rows.length - 1
-  while (isQueuedRow(rows[lastIndex])) lastIndex--
-  // 묶음이 맨 끝이거나 바로 뒤가 그 답변(지금 글)이면 진행 중. 묶음 바로 뒤의 글 말풍선은 늘 그 묶음의 답변이다 (묶음 뒤에는 답변·relay·질문 카드·구간 끝만 온다)
-  const workIndex = rows[lastIndex]?.kind === 'text' ? lastIndex - 1 : lastIndex
-  const row = rows[workIndex]
-  if (row?.kind === 'work') rows[workIndex] = { kind: 'work', work: { ...row.work, isInProgress: true } }
+  rows.push(...flushSegment())
   return rows
 }

@@ -313,18 +313,42 @@ function shortToolName(name: string): string {
   return match ? `${match[1]}/${match[2]}` : name
 }
 
-/** "작업 14개 · Bash 6 · Read 5 · Edit 3 · 2분 10초 · 진행 중". 시간은 1초 미만이면 뺀다 */
+/** "작업 14개 · Bash 6 · Read 5 · Edit 3 · 2분 10초". 시간은 1초 미만이면 뺀다 */
 function workTitle(work: Work): string {
   const counts = work.toolCounts.slice(0, WORK_TOOL_NAMES_SHOWN).map(({ name, count }) => `${shortToolName(name)} ${count}`)
   const duration = work.durationMs >= 1000 ? [formatDuration(work.durationMs)] : []
-  return [`작업 ${work.toolCount}개`, ...counts, ...duration, ...(work.isInProgress ? ['진행 중'] : [])].join(' · ')
+  return [`작업 ${work.toolCount}개`, ...counts, ...duration].join(' · ')
 }
 
 /**
- * 답변 전 작업 묶음 한 줄. 누르면 아래에 설명 글(마크다운)·도구 줄이 시간 순서대로 펼쳐진다. 접혀 있으면 안쪽을 그리지 않는다 (마크다운 파싱을 피하려고).
+ * 묶음 안 claude 메시지 말풍선들: 설명 글(마크다운)·도구 줄을 시간 순서대로.
  * 설명 글이 있는 말풍선은 점프로 찾아 갈 수 있다 (data-jump-key = 메시지 ID. 글 없는 것은 답변 말풍선과 ID 가 겹쳐 빼고)
  */
+function WorkParts({ work, highlightKey }: { work: Work; highlightKey: string | null }) {
+  return (
+    <>
+      {work.parts.map((part) => (
+        <div
+          key={part.message.id}
+          className={`msg assistant${part.text && highlightKey === part.message.id ? ' jump-highlight' : ''}`}
+          data-jump-key={part.text ? part.message.id : undefined}
+        >
+          {part.text && <MarkdownText text={part.text} />}
+          {part.toolUses.map((toolUse) => (
+            <ToolBlock key={toolUse.id} toolUse={toolUse} />
+          ))}
+        </div>
+      ))}
+    </>
+  )
+}
+
+/**
+ * 답변 전 작업 묶음. 끝난 묶음은 한 줄이고 누르면 아래에 말풍선들이 펼쳐진다. 접혀 있으면 안쪽을 그리지 않는다 (마크다운 파싱을 피하려고).
+ * 아직 안 끝난 묶음(진행 중)은 접지 않고 말풍선들을 대화처럼 그대로 둔다 (진행 중 표시는 대화 맨 아래 작업 중 표시기 하나)
+ */
 function WorkLine({ work, isOpen, onToggle, highlightKey }: { work: Work; isOpen: boolean; onToggle: () => void; highlightKey: string | null }) {
+  if (work.isInProgress) return <WorkParts work={work} highlightKey={highlightKey} />
   const title = workTitle(work)
   return (
     <div className="work">
@@ -333,18 +357,7 @@ function WorkLine({ work, isOpen, onToggle, highlightKey }: { work: Work; isOpen
       </button>
       {isOpen && (
         <div className="work-items">
-          {work.parts.map((part) => (
-            <div
-              key={part.message.id}
-              className={`msg assistant${part.text && highlightKey === part.message.id ? ' jump-highlight' : ''}`}
-              data-jump-key={part.text ? part.message.id : undefined}
-            >
-              {part.text && <MarkdownText text={part.text} />}
-              {part.toolUses.map((toolUse) => (
-                <ToolBlock key={toolUse.id} toolUse={toolUse} />
-              ))}
-            </div>
-          ))}
+          <WorkParts work={work} highlightKey={highlightKey} />
         </div>
       )}
     </div>
@@ -787,7 +800,11 @@ export function Chat({
     return (id: string) => spawnedNames.get(id) ?? sessionNames[id] ?? id.slice(0, 8)
   }, [messages, sessionNames])
 
-  /** 화면 줄: 구간마다 claude 의 중간 설명 글·일반 도구 호출을 작업 묶음으로 접고, relay 한 줄·질문 카드는 그 자리에 둔다 */
+  /**
+   * 화면 줄: 구간마다 claude 의 중간 설명 글·일반 도구 호출을 작업 묶음으로 접고, relay 한 줄·질문 카드는 그 자리에 둔다.
+   * 차례가 진행 중이면 맨 끝 묶음은 접지 않는다. 승인 대기도 진행 중이다 (승인 창이 뜰 때마다 접혔다 펼쳐지지 않게)
+   */
+  const isTurnInProgress = isWorking || isApprovalNeeded
   const rows = useMemo(
     () =>
       buildChatRows<Special>(
@@ -798,10 +815,13 @@ export function Chat({
           const asked = askedOf(toolUse)
           return asked ? { kind: 'asked', asked } : null
         },
-        isWorking,
+        isTurnInProgress,
       ),
-    [messages, memberNameOf, isWorking],
+    [messages, memberNameOf, isTurnInProgress],
   )
+  /** 접지 않고 대화처럼 보이는 진행 중 묶음. 이게 바뀌면(접힘) 대화 길이가 갑자기 줄어든다 */
+  const liveWorkRow = rows.find((row) => row.kind === 'work' && row.work.isInProgress)
+  const liveWorkKey = liveWorkRow?.kind === 'work' ? liveWorkRow.work.key : null
   /** 펼친 작업 묶음 키 (Work.key). 몇 초마다 대화를 다시 받아도 접히지 않게 여기 둔다. 세션을 바꾸면 비운다 */
   const [openWorkKeys, setOpenWorkKeys] = useState<ReadonlySet<string>>(() => new Set())
 
@@ -863,6 +883,13 @@ export function Chat({
   useEffect(() => {
     if (isWorking && isAtBottomRef.current) scrollToBottom()
   }, [isWorking])
+
+  // 진행 중 묶음이 접히면 대화가 갑자기 줄어든다 (스크롤 이벤트가 없을 수 있다). 그리기 전에, 맨 아래를 보고 있었으면 맨 아래에 두고
+  // 위를 읽던 중이면 움직이지 않고 "맨 아래를 보고 있는지" 만 다시 잰다 (줄어든 만큼 맨 아래에 닿았을 수 있다)
+  useLayoutEffect(() => {
+    if (isAtBottomRef.current) scrollToBottom()
+    else onMessagesScroll()
+  }, [liveWorkKey])
 
   // 제안이 뜨면 대화 끝에 말풍선 자리(suggestion-space)가 생긴다. 맨 아래를 보고 있었으면 그 자리까지 내려 방금 끝난 응답 끝이 말풍선에 가리지 않게
   useEffect(() => {
