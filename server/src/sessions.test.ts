@@ -2,7 +2,8 @@ import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { TranscriptCache } from './sessions.js'
+import { displayStatus, TranscriptCache } from './sessions.js'
+import type { HookState } from './hookState.js'
 
 const SESSION = 'a56abbde-182b-475e-ab39-c3cf9c7933a7'
 const OTHER = 'b71b8d90-4669-4e3c-ac7d-3bb381806d49'
@@ -102,5 +103,31 @@ describe('TranscriptCache', () => {
     const done = '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>'
     appendFileSync(path, `${JSON.stringify({ type: 'user', message: { content: done } })}\n`)
     expect((await cache.analyze(SESSION))?.shells).toEqual([])
+  })
+})
+
+describe('displayStatus', () => {
+  const hook = (status: HookState['status'], statusBeforeEnd: HookState['statusBeforeEnd'] = null): HookState => ({
+    status,
+    cwd: 'D:/x',
+    lastAssistantText: '마지막 말',
+    pendingTool: null,
+    updatedAt: '2026-10-22T00:00:00.000Z',
+    workingSince: null,
+    statusBeforeEnd,
+  })
+
+  it('shows a present session that ended before resume as my-turn or idle', () => {
+    expect(displayStatus(hook('ended', 'my-turn'), 'present')).toBe('my-turn')
+    expect(displayStatus(hook('ended', 'working'), 'present')).toBe('idle')
+    expect(displayStatus(hook('ended', 'needs-approval'), 'present')).toBe('idle')
+    expect(displayStatus(hook('ended', null), 'present')).toBe('idle')
+  })
+
+  it('keeps the hook status for break and off sessions and for other statuses', () => {
+    expect(displayStatus(hook('ended', 'my-turn'), 'break')).toBe('ended')
+    expect(displayStatus(hook('ended', 'my-turn'), 'off')).toBe('ended')
+    expect(displayStatus(hook('working'), 'present')).toBe('working')
+    expect(displayStatus(undefined, 'present')).toBe('unknown')
   })
 })

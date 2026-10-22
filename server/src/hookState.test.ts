@@ -62,6 +62,23 @@ describe('applyHook workingSince', () => {
   })
 })
 
+describe('applyHook statusBeforeEnd', () => {
+  it('remembers the status right before SessionEnd', () => {
+    const stopped = applyHook(undefined, { ...base, hook_event_name: 'Stop' }, now)
+    expect(applyHook(stopped, { ...base, hook_event_name: 'SessionEnd' }, now)?.statusBeforeEnd).toBe('my-turn')
+    const working = applyHook(undefined, { ...base, hook_event_name: 'UserPromptSubmit' }, now)
+    expect(applyHook(working, { ...base, hook_event_name: 'SessionEnd' }, now)?.statusBeforeEnd).toBe('working')
+  })
+
+  it('is null when SessionEnd comes first and after any other event', () => {
+    const ended = applyHook(undefined, { ...base, hook_event_name: 'SessionEnd' }, now)
+    expect(ended?.statusBeforeEnd).toBeNull()
+    const stopped = applyHook(undefined, { ...base, hook_event_name: 'Stop' }, now)
+    const endedAfterStop = applyHook(stopped, { ...base, hook_event_name: 'SessionEnd' }, now)
+    expect(applyHook(endedAfterStop, { ...base, hook_event_name: 'UserPromptSubmit' }, now)?.statusBeforeEnd).toBeNull()
+  })
+})
+
 describe('applyQuestionDenied', () => {
   const at = (iso: string) => new Date(iso)
   /** 앞 차례가 끝나고 새 차례에서 질문을 띄운 상태 */
@@ -80,6 +97,7 @@ describe('applyQuestionDenied', () => {
       pendingTool: null,
       updatedAt: '2026-10-21T00:00:20.000Z',
       workingSince: '2026-10-21T00:00:00.000Z',
+      statusBeforeEnd: null,
     })
   })
 
@@ -114,6 +132,7 @@ describe('applyInterrupted', () => {
       pendingTool: null,
       updatedAt: '2026-10-21T00:00:20.000Z',
       workingSince: null,
+      statusBeforeEnd: null,
     })
   })
 

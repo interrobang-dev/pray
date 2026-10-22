@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import type { Stats } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import type { AskQuestion, Session, Shell } from './types.js'
+import type { AskQuestion, Session, SessionStatus, Shell } from './types.js'
 import type { HookState } from './hookState.js'
 import { summarizeTranscript, type TranscriptSummary } from './transcript.js'
 import { runningShells } from './shells.js'
@@ -130,6 +130,17 @@ export async function isLiveSession(sessionId: string): Promise<boolean> {
   return (await readLiveSessions(sessionsDir)).some((s) => s.sessionId === sessionId)
 }
 
+/**
+ * 화면에 보일 상태. 호스트 재시작 때 claude 가 끝나며 SessionEnd 가 오는데 --resume 으로 다시 떠도 SessionStart 훅이 오지 않아
+ * 근무 중인데 ended 로 남는다. 그래서 근무 중인 ended 는 끝나기 직전이 my-turn 이면 my-turn, 아니면 idle 로 보인다
+ * (working·needs-approval 은 프로세스와 함께 사라졌다). 휴식·퇴근은 훅 상태 그대로
+ */
+export function displayStatus(hook: HookState | undefined, attendance: Session['attendance']): SessionStatus {
+  if (!hook) return 'unknown'
+  if (attendance !== 'present' || hook.status !== 'ended') return hook.status
+  return hook.statusBeforeEnd === 'my-turn' ? 'my-turn' : 'idle'
+}
+
 export async function listSessions(
   hookStates: Map<string, HookState>,
   webSessions: Map<string, string>,
@@ -177,7 +188,7 @@ export async function listSessions(
         cwd,
         name: names[id] ?? null,
         title: transcript?.title ?? null,
-        status: hook?.status ?? 'unknown',
+        status: displayStatus(hook, attendance),
         kind: isWeb ? 'web' : 'external',
         attendance,
         isAlive: attendance === 'present',

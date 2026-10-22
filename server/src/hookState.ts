@@ -16,6 +16,8 @@ export interface HookState {
   updatedAt: string
   /** 이번 차례(UserPromptSubmit)를 시작한 시각. updatedAt 은 도구를 쓸 때마다 바뀌어 이걸 따로 둔다. 시작을 못 봤으면 null */
   workingSince: string | null
+  /** SessionEnd 직전 상태. 호스트 재시작으로 끝났다가 --resume 으로 다시 뜬 세션을 ended 대신 보여 줄 때 쓴다. ended 가 아니면 null */
+  statusBeforeEnd: SessionStatus | null
 }
 
 const statusByEvent: Record<string, SessionStatus> = {
@@ -74,5 +76,6 @@ export function applyHook(
         : isSameTurn
           ? previous?.workingSince ?? null
           : null,
+    statusBeforeEnd: payload.hook_event_name === 'SessionEnd' ? previous?.status ?? null : null,
   }
 }
