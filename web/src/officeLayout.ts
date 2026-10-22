@@ -21,6 +21,8 @@ const NEW_ISLAND = { w: SEAT_STEP + DESK_TILES_W + 2 * ISLAND_PADDING, h: DESK_T
 const MIN_GROUP = { w: NEW_ISLAND.w + 2 * GROUP_MARGIN, h: NEW_ISLAND.h + 2 * GROUP_MARGIN }
 const LOBBY_COLUMNS = 2
 const LOBBY_W = 1 + LOBBY_COLUMNS * SEAT_STEP + 1
+/** Focus Zone 위쪽 이름표 전용 줄 (첫 줄 자리 말풍선이 이름표를 가리지 않게). 자리는 그 아래 + 테두리 1타일부터 */
+export const LOBBY_SIGN_H = 1
 
 export interface Point {
   x: number
@@ -148,12 +150,12 @@ export function layoutOffice(office: Office, sessions: Session[]): OfficeLayout 
     x: placed.length ? Math.max(...placed.map((r) => r.x + r.w)) + GAP : 0,
     y: 0,
     w: LOBBY_W,
-    h: Math.max(rows * SEAT_STEP + 2, ...placed.map((r) => r.y + r.h)),
+    h: Math.max(LOBBY_SIGN_H + rows * SEAT_STEP + 2, ...placed.map((r) => r.y + r.h)),
   }
   lobbySessions.forEach((session, index) => {
     seats.set(session.id, {
       x: lobby.x + 1 + (index % LOBBY_COLUMNS) * SEAT_STEP,
-      y: lobby.y + 1 + Math.floor(index / LOBBY_COLUMNS) * SEAT_STEP,
+      y: lobby.y + LOBBY_SIGN_H + 1 + Math.floor(index / LOBBY_COLUMNS) * SEAT_STEP,
     })
   })
   return { seated, seats, islands, groupAreas, lobby, right: lobby.x + lobby.w, bottom: lobby.y + lobby.h }

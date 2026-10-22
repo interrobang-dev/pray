@@ -6,6 +6,7 @@ import {
   DESK_TILES_H,
   DESK_TILES_W,
   GROUP_MARGIN,
+  LOBBY_SIGN_H,
   SEAT_STEP,
   dropIsland,
   layoutOffice,
@@ -61,6 +62,7 @@ const COLOR = {
   bubbleLine: 0xb5b8c5,
   alert: 0xffd3d3,
   alertLine: 0xe05a5a,
+  alertText: 0xc22f2f,
   select: 0x3f9c4b,
   gold: 0xd9a63a,
   silver: 0xa9b0bd,
@@ -402,23 +404,25 @@ function drawZone(zone: Rect): Container {
   }
 
   // 2열 자리마다 1인 칸막이 부스·스탠드 조명·머그·헤드폰
-  const boothRows = Math.max(1, Math.floor((zone.h - 2) / SEAT_STEP))
+  // 맨 위 1타일은 이름표 줄이라 자리(부스)는 그 아래부터 (officeLayout.ts 의 자리와 같다)
+  const signRowH = LOBBY_SIGN_H * TILE
+  const boothRows = Math.max(1, Math.floor((zone.h - LOBBY_SIGN_H - 2) / SEAT_STEP))
   for (let row = 0; row < boothRows; row++) {
     for (let column = 0; column < 2; column++) {
       const seatX = (1 + column * SEAT_STEP) * TILE
-      const seatY = (1 + row * SEAT_STEP) * TILE
+      const seatY = (LOBBY_SIGN_H + 1 + row * SEAT_STEP) * TILE
       drawFocusBooth(graphics, seatX, seatY, row * 2 + column)
     }
   }
 
   container.addChild(graphics)
 
-  // 구역 가장자리 책장·화분 (첫 줄 말풍선 자리 y=2..15 오른쪽은 비워 둔다)
-  container.addChild(drawPlant(4, 24, false))
-  container.addChild(drawBookshelf(width - 16, 18, false))
-  if (height >= 120) container.addChild(drawPlant(width - 14, 58, false))
-  if (height >= 176) container.addChild(drawBookshelf(width - 16, 80, false))
-  if (height >= 220) container.addChild(drawPlant(width - 14, 122, false))
+  // 구역 가장자리 책장·화분 (자리와 같이 이름표 줄만큼 내린다. 첫 줄 말풍선 자리 오른쪽은 비워 둔다)
+  container.addChild(drawPlant(4, signRowH + 24, false))
+  container.addChild(drawBookshelf(width - 16, signRowH + 18, false))
+  if (height >= signRowH + 120) container.addChild(drawPlant(width - 14, signRowH + 58, false))
+  if (height >= signRowH + 176) container.addChild(drawBookshelf(width - 16, signRowH + 80, false))
+  if (height >= signRowH + 220) container.addChild(drawPlant(width - 14, signRowH + 122, false))
   container.addChild(drawBookshelf(46, height - 13, true))
   container.addChild(drawPlant(width - 16, height - 11, true))
   container.addChild(drawPlant(4, height - 9, false))
@@ -429,8 +433,9 @@ function drawZone(zone: Rect): Container {
     .fill(COLOR.partition)
     .rect(0, 10, name.width + 8, 1)
     .fill(COLOR.boothWallTop)
-  sign.position.set(6, 3)
-  name.position.set(10, 4)
+  // 이름표 줄(맨 위 1타일) 안. 첫 줄 자리 말풍선 상자 위 끝(y=12)에 닿지 않게 테두리 위에 붙인다
+  sign.position.set(6, 1)
+  name.position.set(10, 2)
   name.eventMode = 'none'
   container.addChild(sign, name)
   return container
@@ -582,6 +587,8 @@ interface DeskParts {
   container: Container
   /** 휴식 세션은 null (빈 의자) */
   figure: Figure | null
+  /** 말풍선이 없으면 null. 책상 컨테이너가 아니라 말풍선 층에 넣는다 */
+  bubble: DeskBubble | null
 }
 
 const DESK_W = DESK_TILES_W * TILE
@@ -656,31 +663,106 @@ function drawDesk(session: Session, seat: Point, isSelected: boolean): DeskParts
   }
   container.addChild(tag, mask, name)
 
-  // 말풍선
-  const bubbleText = isOnBreak
-    ? null
-    : session.status === 'needs-approval'
-      ? `승인 필요: ${session.pendingTool ?? '?'}`
-      : session.status === 'my-turn'
-        ? (session.lastAssistantText?.split('\n')[0] ?? '끝났어요').slice(0, 50)
-        : null
-  if (bubbleText) {
-    const isAlert = session.status === 'needs-approval'
-    const text = label(bubbleText, 6, COLOR.text, 80)
-    const bw = text.width + 6
-    const bh = text.height + 4
-    const bubble = new Graphics()
-    bubble.rect(0, 0, bw, bh).fill(isAlert ? COLOR.alert : COLOR.bubble)
-    bubble.rect(0, 0, bw, bh).stroke({ width: 1, color: isAlert ? COLOR.alertLine : COLOR.bubbleLine })
-    bubble.rect(6, bh, 2, 2).fill(isAlert ? COLOR.alertLine : COLOR.bubbleLine).rect(6, bh, 1, 1).fill(isAlert ? COLOR.alert : COLOR.bubble)
-    bubble.position.set(2, -bh - 3)
-    text.position.set(5, -bh - 1)
-    container.addChild(bubble, text)
-  }
-
   container.eventMode = 'static'
   container.cursor = 'pointer'
-  return { container, figure }
+  return { container, figure, bubble: drawBubble(session, container.x, container.y) }
+}
+
+// ---------- 말풍선 ----------
+
+/** 접힌 말풍선 최대 폭 (책상 폭 + 조금. 자리 간격 48px 안이라 옆 자리 말풍선과 안 겹친다) */
+const BUBBLE_MAX_W = 44
+/** 펼친 말풍선 줄바꿈 폭과 최대 글자 수 */
+const BUBBLE_EXPANDED_W = 160
+const BUBBLE_EXPANDED_MAX_CHARS = 300
+/**
+ * 말풍선 상자 아래 끝 (책상 기준). 자리 간격이 책상 높이와 같아 위아래 책상 사이에 빈 줄이 없으므로,
+ * 상자는 윗줄 책상 이름표(이 책상 기준 -9..0) 위에 두고 가는 꼬리를 자기 머리(1)까지 내려 누구 것인지 보인다
+ */
+const BUBBLE_BOX_BOTTOM = -10
+const BUBBLE_TAIL_END = 1
+
+interface DeskBubble {
+  /** 책상과 같은 자리에 둔다 (말풍선 층은 모든 책상 위. 끌 때 책상과 같이 옮긴다) */
+  container: Container
+  compact: Container
+  expanded: Container
+}
+
+/** 한 줄로 maxWidth 안에 들어가게 끝을 … 로 자른다 */
+function fitOneLine(text: Text, content: string, maxWidth: number): void {
+  text.text = content
+  if (text.width <= maxWidth) return
+  const characters = Array.from(content)
+  let low = 0
+  let high = characters.length
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    text.text = `${characters.slice(0, middle).join('').trimEnd()}…`
+    if (text.width <= maxWidth) low = middle
+    else high = middle - 1
+  }
+  text.text = `${characters.slice(0, low).join('').trimEnd()}…`
+}
+
+/** 말풍선 상자(아래 끝 BUBBLE_BOX_BOTTOM) + 자기 머리까지 내려오는 꼬리 */
+function bubbleBox(text: Text, isAlert: boolean): Container {
+  const box = new Container()
+  const bw = Math.ceil(text.width) + 4
+  const bh = Math.ceil(text.height) + 2
+  const fill = isAlert ? COLOR.alert : COLOR.bubble
+  const line = isAlert ? COLOR.alertLine : COLOR.bubbleLine
+  const g = new Graphics()
+  g.rect(0, 0, bw, bh).fill(fill)
+  g.rect(0, 0, bw, bh).stroke({ width: 1, color: line })
+  // 윗줄 이름표를 지나므로 이름 글자를 덜 가리게 왼쪽 끝 (이름표는 가운데 정렬이라 여기는 대개 "[" 자리)
+  g.rect(1, bh, 1, BUBBLE_TAIL_END - BUBBLE_BOX_BOTTOM).fill(line)
+  text.position.set(2, 1)
+  box.addChild(g, text)
+  box.position.set(2, BUBBLE_BOX_BOTTOM - bh)
+  return box
+}
+
+/**
+ * my-turn 은 마지막 말, 승인 대기는 빨간 "! 도구". 접힌 것은 한 줄 말줄임으로 책상 폭 안,
+ * 펼친 것(마우스를 올렸거나 선택한 세션)은 전체 글. 휴식 세션은 훅 상태가 남아 있어도 없다
+ */
+function drawBubble(session: Session, x: number, y: number): DeskBubble | null {
+  if (attendanceOf(session) === 'break') return null
+  const isAlert = session.status === 'needs-approval'
+  const tool = session.pendingTool ?? '?'
+  const lastText = session.lastAssistantText ?? '끝났어요'
+  const compactText = isAlert ? `! ${tool}` : session.status === 'my-turn' ? (lastText.split('\n')[0] ?? '') : ''
+  if (!compactText) return null
+  const fullText = isAlert
+    ? `승인 필요: ${tool}`
+    : lastText.length > BUBBLE_EXPANDED_MAX_CHARS
+      ? `${lastText.slice(0, BUBBLE_EXPANDED_MAX_CHARS).trimEnd()}…`
+      : lastText
+  const textColor = isAlert ? COLOR.alertText : COLOR.text
+  const compactLabel = label('', 6, textColor)
+  fitOneLine(compactLabel, compactText, BUBBLE_MAX_W - 4)
+  const expandedLabel = new Text({
+    text: fullText,
+    style: {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: 6,
+      fill: textColor,
+      wordWrap: true,
+      wordWrapWidth: BUBBLE_EXPANDED_W,
+      breakWords: true,
+    },
+    resolution: MAX_ZOOM,
+  })
+  const compact = bubbleBox(compactLabel, isAlert)
+  const expanded = bubbleBox(expandedLabel, isAlert)
+  expanded.visible = false
+  const container = new Container()
+  container.position.set(x, y)
+  container.addChild(compact, expanded)
+  // 보이기만 한다. 아래에 깔린 윗줄 책상·팀/파트 이름표(끌기)를 누르는 것을 가로채지 않게
+  container.eventMode = 'none'
+  return { container, compact, expanded }
 }
 
 // ---------- 건물 밖 ----------
@@ -835,6 +917,8 @@ export function Office(props: Props) {
         let isRedrawPending = false
         /** 지금 그려진 시간대. 1분마다 바뀌었는지 보고 바뀌었으면 다시 그린다 */
         let drawnPhase = dayPhaseOf(new Date())
+        /** 마우스를 올린 책상(또는 그 말풍선)의 세션. 다시 그려도 펼친 채 남게 여기 둔다 */
+        let hoveredDeskId: string | null = null
 
         /** 화면 좌표 → world 아트 픽셀 */
         const toWorld = (event: FederatedPointerEvent) => ({
@@ -1033,7 +1117,10 @@ export function Office(props: Props) {
           clampPan()
           /** 그 팀들의 책상 그림 (끌 때 같이 옮긴다) */
           const deskViewsOf = (teamIds: Set<string>) =>
-            layout.seated.flatMap((s) => (s.teamId && teamIds.has(s.teamId) ? (desks.get(s.id)?.container ?? []) : []))
+            layout.seated.flatMap((s) => {
+              const parts = s.teamId && teamIds.has(s.teamId) ? desks.get(s.id) : undefined
+              return parts ? [parts.container, ...(parts.bubble ? [parts.bubble.container] : [])] : []
+            })
           for (const area of layout.groupAreas) {
             const parts = drawGroup(area, () => {
               if (!isDragged) latest.current.onEditGroup(area.group)
@@ -1109,22 +1196,52 @@ export function Office(props: Props) {
             street.addChild(overflow)
           }
           street.addChild(tooltip)
-          // 아래쪽 책상이 위쪽을 가리도록 y 순 정렬
+          // 아래쪽 책상이 위쪽을 가리도록 y 순 정렬. 말풍선은 모든 책상 위 층
           const ordered = [...layout.seated].sort((a, b) => layout.seats.get(a.id)!.y - layout.seats.get(b.id)!.y)
+          const bubbleLayer = new Container()
           for (const session of ordered) {
             const parts = drawDesk(session, layout.seats.get(session.id)!, session.id === selectedId)
             parts.container.on('pointertap', () => {
               if (!isDragged) latest.current.onSelect(session.id)
             })
+            parts.container.on('pointerover', () => {
+              if (pan?.isMoved || signDrag) return
+              hoveredDeskId = session.id
+              updateBubbles()
+            })
+            parts.container.on('pointerout', () => {
+              if (hoveredDeskId !== session.id) return
+              hoveredDeskId = null
+              updateBubbles()
+            })
             world.addChild(parts.container)
+            if (parts.bubble) bubbleLayer.addChild(parts.bubble.container)
             desks.set(session.id, parts)
             if (parts.figure && session.status === 'working') working.add(session.id)
             if (session.status === 'needs-approval' && attendanceOf(session) === 'present') {
               approvalDesks.push({ session, rect: { ...layout.seats.get(session.id)!, w: DESK_TILES_W, h: DESK_TILES_H } })
             }
           }
+          world.addChild(bubbleLayer)
+          updateBubbles()
         }
         redrawRef.current = redraw
+
+        /** 마우스를 올린 책상과 선택한 세션의 말풍선만 전체 글로 펼치고 맨 위로 (마우스를 올린 것이 가장 위) */
+        const updateBubbles = () => {
+          const { selectedId } = latest.current
+          for (const [id, parts] of desks) {
+            if (!parts.bubble) continue
+            const isExpanded = id === selectedId || id === hoveredDeskId
+            parts.bubble.compact.visible = !isExpanded
+            parts.bubble.expanded.visible = isExpanded
+          }
+          for (const id of [selectedId, hoveredDeskId]) {
+            const bubble = id ? desks.get(id)?.bubble : undefined
+            const layer = bubble?.container.parent
+            if (bubble && layer) layer.setChildIndex(bubble.container, layer.children.length - 1)
+          }
+        }
         // 시간대가 바뀌면 창밖·Off Duty 띠를 다시 그린다 (매 프레임이 아니라 1분마다 확인)
         const phaseTimer = setInterval(() => {
           if (dayPhaseOf(new Date()) !== drawnPhase) redraw()
