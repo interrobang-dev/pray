@@ -30,12 +30,40 @@ export function Terminal({ sessionId }: Props) {
         body: JSON.stringify(body),
       })
 
-    term.onData((data) => void post('input', { data }))
+    // 한글 조합 중 Shift+Enter 는 조합 확정 글자(xterm 이 compositionend 뒤 onData 로 보낸다)가 나간 직후에 줄바꿈을 보낸다.
+    // 바로 보내면 마지막 글자가 줄바꿈 뒤로 간다
+    let isNewlinePending = false
+    // 조합을 확정한 Enter 가 아직 눌려 있음. macOS 꼴은 확정 뒤 같은 Enter 의 keydown 이 한 번 더 온다
+    let isComposedEnterDown = false
+    let newlineFallbackTimer: ReturnType<typeof setTimeout> | undefined
+    const flushNewline = () => {
+      clearTimeout(newlineFallbackTimer)
+      if (!isNewlinePending) return
+      isNewlinePending = false
+      void post('input', { data: NEWLINE_KEYS })
+    }
+    term.onData((data) => {
+      void post('input', { data })
+      flushNewline()
+    })
     // xterm.js 는 Shift+Enter 도 Enter 와 같은 \r 을 보내 Claude Code 가 제출로 받는다. 줄바꿈 값으로 바꿔 보낸다
     term.attachCustomKeyEventHandler((event) => {
+      if (event.key === 'Enter' && event.type === 'keyup') isComposedEnterDown = false
       const isShiftEnter = event.key === 'Enter' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
       if (!isShiftEnter) return true
-      if (event.type === 'keydown') void post('input', { data: NEWLINE_KEYS })
+      // textarea 에 \n 이 들어가면 xterm 이 조합 확정 글자와 같이 "녕\n" 으로 보낸다
+      if (event.type === 'keypress') event.preventDefault()
+      if (event.type !== 'keydown') return false
+      if (event.isComposing || event.keyCode === 229) {
+        isNewlinePending = true
+        isComposedEnterDown = true
+        newlineFallbackTimer = setTimeout(flushNewline, 100)
+        return false
+      }
+      event.preventDefault()
+      // 꾹 눌러 반복되는 keydown 은 보낸다
+      if (isComposedEnterDown && !event.repeat) return false
+      void post('input', { data: NEWLINE_KEYS })
       return false
     })
     term.onResize(({ cols, rows }) => void post('resize', { cols, rows }))
@@ -57,6 +85,7 @@ export function Terminal({ sessionId }: Props) {
     })
 
     return () => {
+      clearTimeout(newlineFallbackTimer)
       source.close()
       observer.disconnect()
       term.dispose()
