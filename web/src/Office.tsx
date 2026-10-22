@@ -26,6 +26,8 @@ const DEFAULT_ZOOM = 2
 const WHEEL_STEP = 50
 /** 누른 뒤 이만큼(화면 px) 움직이기 전에는 클릭 */
 const DRAG_THRESHOLD_PX = 5
+/** 팀·책상으로 부드럽게 이동하는 시간 (ms) */
+const FOCUS_DURATION_MS = 300
 const TILE = 16
 const WALL_H = 40
 /** 그룹·책상 원점. 바닥 격자가 x=0, y=WALL_H 부터 TILE 간격이라 둘 다 TILE 배수여야 격자선과 맞는다 */
@@ -68,10 +70,18 @@ const COLOR = {
   partLine: 0xc3c7d2,
 }
 
+/** 사무실 화면이 이동해 보여 줄 대상. 같은 대상을 다시 눌러도 움직이도록 매번 새 id 를 붙인다 */
+export type OfficeFocus =
+  | { id: number; kind: 'team'; teamId: string }
+  | { id: number; kind: 'session'; sessionId: string }
+
 interface Props {
   office: OfficeData
   sessions: Session[]
   selectedId: string | null
+  focus: OfficeFocus | null
+  /** 질문 카드가 떠 있으면 숫자 키는 질문 카드가 쓴다 */
+  hasQuestionCard: boolean
   onSelect: (sessionId: string) => void
   /** 그룹 이름표를 끌어 놓음. 안의 팀들도 같은 만큼 옮긴다 */
   onMoveGroup: (groupId: string, position: { x: number; y: number }) => void
@@ -481,12 +491,14 @@ function drawDesk(session: Session, seat: Point, isSelected: boolean): DeskParts
 // ---------- 컴포넌트 ----------
 
 export function Office(props: Props) {
-  const { office, sessions, selectedId } = props
+  const { office, sessions, selectedId, focus } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<Application | null>(null)
   const latest = useRef(props)
   latest.current = props
   const redrawRef = useRef<() => void>(() => {})
+  const focusRef = useRef<(target: OfficeFocus) => void>(() => {})
+  const handledFocusIdRef = useRef(focus?.id ?? 0)
 
   useEffect(() => {
     const host = hostRef.current
@@ -496,7 +508,7 @@ export function Office(props: Props) {
     const desks = new Map<string, DeskParts>()
     const working = new Set<string>()
     let frame = 0
-    let removeWheel = () => {}
+    let removeListeners = () => {}
     let disconnectResize = () => {}
 
     void app
@@ -519,6 +531,8 @@ export function Office(props: Props) {
         /** 바탕 크기 (아트 px): 내용 + 오른쪽·아래로 화면 한 장 (그룹을 옮겨 놓을 빈 자리) */
         const map = { w: 0, h: 0 }
         const islandViews = new Map<string, Container>()
+        // 팀·책상으로 부드럽게 이동하는 애니메이션 (300ms ease-out). 휠·끌기를 시작하면 멈춘다
+        let focusMove: { from: Point; to: Point; elapsed: number } | null = null
         // 빈 곳(이름표 밖)을 누르고 DRAG_THRESHOLD_PX 넘게 움직이면 맵 이동
         let pan: { start: Point; worldStart: Point; isMoved: boolean } | null = null
         // 이름표 끌기: 그룹(안의 섬·책상과 같이) 또는 팀 섬(책상과 같이). 끄는 동안 타일 단위로 그림만 옮기고 놓을 때 저장한다
@@ -541,16 +555,80 @@ export function Office(props: Props) {
           y: (event.global.y - world.y) / zoom,
         })
 
+        const clampWorld = (x: number, y: number): Point => ({
+          x: Math.round(Math.max(app.screen.width - map.w * zoom, Math.min(0, x))),
+          y: Math.round(Math.max(app.screen.height - map.h * zoom, Math.min(0, y))),
+        })
+
         const clampPan = () => {
-          world.x = Math.round(Math.max(app.screen.width - map.w * zoom, Math.min(0, world.x)))
-          world.y = Math.round(Math.max(app.screen.height - map.h * zoom, Math.min(0, world.y)))
+          const clamped = clampWorld(world.x, world.y)
+          world.position.set(clamped.x, clamped.y)
         }
+
+        // 세션을 골라 오른쪽 패널이 열리거나 닫힌 직후에는 ResizeObserver 보다 먼저 불리므로 바뀐 칸 크기로 먼저 맞춘다
+        const syncSize = () => {
+          if (host.clientWidth > 0 && host.clientHeight > 0 && (host.clientWidth !== app.screen.width || host.clientHeight !== app.screen.height)) {
+            app.resize()
+          }
+        }
+
+        /** 타일 사각형이 화면 가운데 오도록 이동한다. isOnlyOutside 면 이미 화면 안에 다 보일 때는 움직이지 않는다 */
+        const moveToRect = (rect: Rect, isOnlyOutside: boolean) => {
+          syncSize()
+          const left = PAD_X + rect.x * TILE
+          const top = PAD_Y + rect.y * TILE
+          const width = rect.w * TILE
+          const height = rect.h * TILE
+          if (
+            isOnlyOutside &&
+            world.x + left * zoom >= 0 &&
+            world.x + (left + width) * zoom <= app.screen.width &&
+            world.y + top * zoom >= 0 &&
+            world.y + (top + height) * zoom <= app.screen.height
+          ) {
+            focusMove = null
+            return
+          }
+          const to = clampWorld(
+            app.screen.width / 2 - (left + width / 2) * zoom,
+            app.screen.height / 2 - (top + height / 2) * zoom,
+          )
+          if (to.x === world.x && to.y === world.y) {
+            focusMove = null
+            return
+          }
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            focusMove = null
+            world.position.set(to.x, to.y)
+            return
+          }
+          focusMove = { from: { x: world.x, y: world.y }, to, elapsed: 0 }
+        }
+
+        const focusTeam = (teamId: string) => {
+          const layout = layoutOffice(latest.current.office, latest.current.sessions)
+          const island = layout.islands.find((i) => i.team.id === teamId)
+          if (island) moveToRect(island, false)
+        }
+
+        const applyFocus = (target: OfficeFocus) => {
+          handledFocusIdRef.current = target.id
+          if (target.kind === 'team') {
+            focusTeam(target.teamId)
+            return
+          }
+          const layout = layoutOffice(latest.current.office, latest.current.sessions)
+          const seat = layout.seats.get(target.sessionId)
+          if (seat) moveToRect({ ...seat, w: DESK_TILES_W, h: DESK_TILES_H }, true)
+        }
+        focusRef.current = applyFocus
 
         // 휠 = 확대·축소. 한 칸에 정수 배율 한 단계, 커서 아래 지점이 그대로 남게
         let wheelDelta = 0
         const onWheel = (event: WheelEvent) => {
           event.preventDefault()
           if (event.deltaY === 0 || pan || signDrag) return
+          focusMove = null
           // 줄·쪽 단위(deltaMode 1·2)는 한 번이 한 칸
           const delta = event.deltaMode === 0 ? event.deltaY : Math.sign(event.deltaY) * WHEEL_STEP
           if (Math.sign(delta) !== Math.sign(wheelDelta)) wheelDelta = 0
@@ -569,12 +647,53 @@ export function Office(props: Props) {
           // 바탕 크기(화면 한 장 여유)가 배율에 따라 달라 다시 그린다 (그 안에서 clampPan)
           redraw()
         }
+
+        let isPointerInside = host.matches(':hover')
+        const onMouseMove = (event: MouseEvent) => {
+          const bounds = host.getBoundingClientRect()
+          isPointerInside =
+            event.clientX >= bounds.left && event.clientX < bounds.right && event.clientY >= bounds.top && event.clientY < bounds.bottom
+        }
+        const onMouseLeave = () => {
+          isPointerInside = false
+        }
+        // 마우스가 사무실 위에 있을 때 숫자 키 1~9 = 왼쪽 목록 순서의 n번째 팀 섬으로 이동 (질문 카드 숫자 키가 우선)
+        const onKeyDown = (event: KeyboardEvent) => {
+          if (!isPointerInside && !host.matches(':hover')) return
+          if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || event.isComposing || !/^[1-9]$/.test(event.key)) return
+          if (latest.current.hasQuestionCard || document.querySelector('.question-card')) return
+          const active = document.activeElement
+          if (
+            (event.target instanceof HTMLElement &&
+              (event.target.isContentEditable || Boolean(event.target.closest('input, textarea, select, [contenteditable="true"]')))) ||
+            (active instanceof HTMLElement &&
+              (active.isContentEditable || Boolean(active.closest('input, textarea, select, [contenteditable="true"]'))))
+          ) {
+            return
+          }
+          const { office } = latest.current
+          // App.tsx 가 왼쪽 목록에 팀을 그리는 순서 그대로 (그룹별 팀 → 그룹이 지워진 팀)
+          const orderedTeams = [
+            ...office.groups.flatMap((group) => office.teams.filter((t) => t.groupId === group.id)),
+            ...office.teams.filter((t) => !office.groups.some((g) => g.id === t.groupId)),
+          ]
+          const team = orderedTeams[Number(event.key) - 1]
+          if (team) focusTeam(team.id)
+        }
         host.addEventListener('wheel', onWheel, { passive: false })
-        removeWheel = () => host.removeEventListener('wheel', onWheel)
+        host.addEventListener('mouseleave', onMouseLeave)
+        window.addEventListener('mousemove', onMouseMove)
+        window.addEventListener('keydown', onKeyDown)
+        removeListeners = () => {
+          host.removeEventListener('wheel', onWheel)
+          host.removeEventListener('mouseleave', onMouseLeave)
+          window.removeEventListener('mousemove', onMouseMove)
+          window.removeEventListener('keydown', onKeyDown)
+        }
 
         // resizeTo 는 창 크기가 바뀔 때만 다시 잰다. 패널을 여닫을 때처럼 사무실 칸만 바뀌어도 캔버스가 따라가게
         // (안 하면 패널이 열린 채 다시 보인 사무실이 580px 캔버스로 남아, 패널을 닫으면 오른쪽이 빈다)
-        const resizeObserver = new ResizeObserver(() => app.resize())
+        const resizeObserver = new ResizeObserver(() => syncSize())
         resizeObserver.observe(host)
         disconnectResize = () => resizeObserver.disconnect()
 
@@ -584,6 +703,7 @@ export function Office(props: Props) {
         ) => {
           // 맵 이동이 시작되지 않게
           event.stopPropagation()
+          focusMove = null
           isDragged = false
           signDrag = {
             start: toWorld(event),
@@ -680,6 +800,10 @@ export function Office(props: Props) {
           if (!pan) return
           const moved = { x: event.global.x - pan.start.x, y: event.global.y - pan.start.y }
           if (!pan.isMoved && Math.hypot(moved.x, moved.y) < DRAG_THRESHOLD_PX) return
+          if (!pan.isMoved) {
+            focusMove = null
+            pan.worldStart = { x: world.x - moved.x, y: world.y - moved.y }
+          }
           pan.isMoved = true
           isDragged = true
           world.x = pan.worldStart.x + moved.x
@@ -705,6 +829,17 @@ export function Office(props: Props) {
 
         let elapsed = 0
         app.ticker.add((ticker) => {
+          if (focusMove) {
+            focusMove.elapsed += ticker.deltaMS
+            const progress = Math.min(1, focusMove.elapsed / FOCUS_DURATION_MS)
+            const eased = 1 - (1 - progress) ** 3
+            const next = clampWorld(
+              focusMove.from.x + (focusMove.to.x - focusMove.from.x) * eased,
+              focusMove.from.y + (focusMove.to.y - focusMove.from.y) * eased,
+            )
+            world.position.set(next.x, next.y)
+            if (progress >= 1) focusMove = null
+          }
           elapsed += ticker.deltaMS
           if (elapsed < 350) return
           elapsed = 0
@@ -721,11 +856,14 @@ export function Office(props: Props) {
         })
 
         redraw()
+        if (latest.current.focus && latest.current.focus.id !== handledFocusIdRef.current) {
+          applyFocus(latest.current.focus)
+        }
       })
 
     return () => {
       isDisposed = true
-      removeWheel()
+      removeListeners()
       disconnectResize()
       host.replaceChildren()
       if (appRef.current) {
@@ -738,6 +876,11 @@ export function Office(props: Props) {
   useEffect(() => {
     redrawRef.current()
   }, [office, sessions, selectedId])
+
+  useEffect(() => {
+    if (!focus || focus.id === handledFocusIdRef.current) return
+    focusRef.current(focus)
+  }, [focus])
 
   return <div ref={hostRef} className="office" />
 }

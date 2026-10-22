@@ -9,7 +9,7 @@ import {
 } from 'react'
 import { Terminal } from './Terminal'
 import { Chat, type Jump, type JumpTarget } from './Chat'
-import { Office } from './Office'
+import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
@@ -230,6 +230,9 @@ export function App() {
   /** 상태 표시줄 Shells 창에서 고른 shell. 그 세션 대화의 ShellsButton 이 그 shell 을 고른 채 모달을 연 뒤 비운다 */
   const [shellRequest, setShellRequest] = useState<(ShellRequest & { sessionId: string }) | null>(null)
   const nextShellRequestIdRef = useRef(1)
+  /** 사무실 화면이 이동해 보여 줄 팀·세션. 목록 팀 이름 클릭·세션 선택(사무실 책상 클릭 제외) 때마다 새 id 로 넘긴다 */
+  const [officeFocus, setOfficeFocus] = useState<OfficeFocus | null>(null)
+  const nextFocusIdRef = useRef(1)
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
   /** 목록 맨 아래 "퇴근" 구역을 펼쳤는지. 기본 접힘 */
   const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
@@ -311,15 +314,23 @@ export function App() {
   /**
    * 세션을 고른다. 다른 세션이면 대화 탭으로 연다 (같은 세션을 다시 누르면 보던 탭 그대로).
    * 탭과 선택을 한 번에 바꾼다 — 따로 바꾸면 새 세션의 터미널이 잠깐 붙어 그 pty 크기를 바꾼다.
-   * 다른 세션을 직접 고르면 점프·돌아가기는 끝난다
+   * 다른 세션을 직접 고르면 점프·돌아가기는 끝난다. 목록·상태 표시줄에서 고르면 사무실 화면도 그 책상으로 옮긴다
    */
-  function selectSession(sessionId: string) {
+  function selectSession(sessionId: string, isOfficeFocused = true) {
     if (sessionId !== selectedId) {
       setTab('chat')
       setJump(null)
       setJumpBack(null)
     }
     setSelectedId(sessionId)
+    if (isOfficeFocused && !isNarrow && !isOfficeHidden) {
+      setOfficeFocus({ id: nextFocusIdRef.current++, kind: 'session', sessionId })
+    }
+  }
+
+  function focusTeam(teamId: string) {
+    if (isNarrow || isOfficeHidden) return
+    setOfficeFocus({ id: nextFocusIdRef.current++, kind: 'team', teamId })
   }
 
   /** 세션의 대화 탭을 열고 target 으로 간다 (점프·돌아가기) */
@@ -366,7 +377,7 @@ export function App() {
       return
     }
     const { sessionId, isTrustFailed } = (await response.json()) as { sessionId: string; isTrustFailed?: boolean }
-    selectSession(sessionId)
+    selectSession(sessionId, false)
     setSessionForm(null)
     if (isTrustFailed) alert(SESSION_TRUST_FAILED_MESSAGE)
   }
@@ -418,7 +429,7 @@ export function App() {
       return
     }
     const { sessionId, isTrustFailed } = (await leadResponse.json()) as { sessionId: string; isTrustFailed?: boolean }
-    selectSession(sessionId)
+    selectSession(sessionId, false)
     // worktree 신뢰 실패는 위에서 이미 알렸다 (같은 폴더라 같은 이유)
     if (isTrustFailed && !(isWorktree && !isTrusted)) alert(SESSION_TRUST_FAILED_MESSAGE)
   }
@@ -773,7 +784,9 @@ export function App() {
         data-team-id={position ? team.id : undefined}
       >
         <div className="team-head">
-          <span className="name">{team.name}</span>
+          <span className="name" onClick={() => focusTeam(team.id)}>
+            {team.name}
+          </span>
           {members.length > 0 && <span className="count">{members.length}</span>}
           <span className="head-actions">
             <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="팀 직속 세션 추가">
@@ -1088,7 +1101,9 @@ export function App() {
             office={office}
             sessions={snapshot.sessions}
             selectedId={selectedId}
-            onSelect={selectSession}
+            focus={officeFocus}
+            hasQuestionCard={Boolean(isSelectedLiveWeb && selected.question?.questions.length)}
+            onSelect={(sessionId) => selectSession(sessionId, false)}
             onMoveGroup={moveGroup}
             onMoveTeam={moveTeam}
             onEditTeam={editTeam}

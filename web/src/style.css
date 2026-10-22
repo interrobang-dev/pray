@@ -504,6 +504,7 @@ li.group.drop-after::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
 }
 .session {
   display: grid;
