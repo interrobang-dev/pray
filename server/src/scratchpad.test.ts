@@ -11,6 +11,7 @@ import {
   isSessionId,
   listScratchpad,
   resolveScratchpadFile,
+  resolveSessionTempFile,
   safeAttachmentName,
   saveAttachment,
 } from './scratchpad.js'
@@ -219,5 +220,55 @@ describe('saving attachments', () => {
     }
     await expect(saveAttachment(pad, 'a.txt', Buffer.from('x'))).rejects.toThrow()
     expect(existsSync(join(outside, 'a.txt'))).toBe(false)
+  })
+})
+
+describe('session temp files (background shell output)', () => {
+  // <base>/proj/<SESSION>/tasks/b1.output, 옆 세션 <base>/proj/<OTHER>/tasks/b2.output, base 밖 <outside>
+  let base: string
+  let outside: string
+  let hasJunction = true
+
+  beforeAll(() => {
+    base = mkdtempSync(join(tmpdir(), 'jk-session-temp-'))
+    outside = mkdtempSync(join(tmpdir(), 'jk-session-outside-'))
+    mkdirSync(join(base, 'proj', SESSION, 'tasks'), { recursive: true })
+    mkdirSync(join(base, 'proj', OTHER, 'tasks'), { recursive: true })
+    writeFileSync(join(base, 'proj', SESSION, 'tasks', 'b1.output'), 'one')
+    writeFileSync(join(base, 'proj', OTHER, 'tasks', 'b2.output'), 'other')
+    writeFileSync(join(base, 'proj', 'loose.output'), 'not in a session folder')
+    writeFileSync(join(outside, 'secret.output'), 'outside')
+    try {
+      symlinkSync(outside, join(base, 'proj', SESSION, 'escape'), 'junction')
+    } catch {
+      hasJunction = false
+    }
+  })
+
+  afterAll(() => {
+    rmSync(base, { recursive: true, force: true })
+    rmSync(outside, { recursive: true, force: true })
+  })
+
+  it('accepts only files inside that session folder, by real path', async () => {
+    const own = join(base, 'proj', SESSION, 'tasks', 'b1.output')
+    expect(await resolveSessionTempFile(SESSION, own, base)).toMatch(/b1\.output$/)
+    expect(await resolveSessionTempFile(SESSION.toUpperCase(), own.toLowerCase(), base)).toMatch(/b1\.output$/i)
+    const rejected = [
+      join(base, 'proj', OTHER, 'tasks', 'b2.output'),
+      join(base, 'proj', 'loose.output'),
+      join(outside, 'secret.output'),
+      join(base, 'proj', SESSION, 'tasks', '..', '..', OTHER, 'tasks', 'b2.output'),
+      join(base, 'proj', SESSION, 'tasks', 'missing.output'),
+      join(base, 'proj', SESSION, 'tasks'),
+      'proj/' + SESSION + '/tasks/b1.output',
+    ]
+    for (const path of rejected) expect(await resolveSessionTempFile(SESSION, path, base), path).toBeNull()
+    expect(await resolveSessionTempFile('..', own, base)).toBeNull()
+  })
+
+  it('rejects a path that leaves through a junction', async () => {
+    if (!hasJunction) return
+    expect(await resolveSessionTempFile(SESSION, join(base, 'proj', SESSION, 'escape', 'secret.output'), base)).toBeNull()
   })
 })

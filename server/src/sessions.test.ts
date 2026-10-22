@@ -86,4 +86,21 @@ describe('TranscriptCache', () => {
     expect((await cache.summarize(SESSION))?.title).toBe('BBBB')
     expect((await cache.summarize(OTHER))?.title).toBe('AAAA')
   })
+
+  it('keeps running background shells next to the summary and updates them after an append', async () => {
+    const path = join(projects, 'D--a', `${SESSION}.jsonl`)
+    const input = { command: 'npx vite', run_in_background: true }
+    const call = { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input }] } }
+    const text = 'Command running in background with ID: b1. Output is being written to: C:\\t\\b1.output.'
+    const result = {
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: text }] },
+      toolUseResult: { backgroundTaskId: 'b1' },
+    }
+    writeFileSync(path, `${JSON.stringify(call)}\n${JSON.stringify(result)}\n`)
+    expect((await cache.analyze(SESSION))?.shells.map((s) => s.id)).toEqual(['b1'])
+    const done = '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>'
+    appendFileSync(path, `${JSON.stringify({ type: 'user', message: { content: done } })}\n`)
+    expect((await cache.analyze(SESSION))?.shells).toEqual([])
+  })
 })

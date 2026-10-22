@@ -89,6 +89,23 @@ export async function listScratchpad(dir: string, limit = MAX_FILES): Promise<{ 
   return { files, isTruncated: false }
 }
 
+/**
+ * 세션의 Claude Code 임시 폴더(<base>/<프로젝트 슬러그>/<세션 ID>/, scratchpad·tasks 의 부모) 안의 파일이면 그 실제 경로.
+ * 링크를 풀어 밖이거나, 다른 세션 폴더거나, 없거나, 파일이 아니면 null. path 는 jsonl 에 적힌 절대 경로 (백그라운드 shell 출력 파일)
+ */
+export async function resolveSessionTempFile(sessionId: string, path: string, baseDir = claudeTempDir): Promise<string | null> {
+  if (!isSessionId(sessionId) || !isAbsolute(path) || path.includes('\0')) return null
+  try {
+    const realBase = await realpath(baseDir)
+    const real = await realpath(path)
+    const parts = relative(realBase, real).split(sep)
+    if (!isInside(realBase, real) || parts.length < 3 || parts[1].toLowerCase() !== sessionId.toLowerCase()) return null
+    return (await stat(real)).isFile() ? real : null
+  } catch {
+    return null
+  }
+}
+
 /** 요청 경로를 scratchpad 안 실제 파일 경로로. 꼴이 잘못됐거나, 링크를 풀어 밖이거나, 없거나, 파일이 아니면 null */
 export async function resolveScratchpadFile(scratchpad: string, path: string): Promise<string | null> {
   if (!isSafeRelativePath(path)) return null

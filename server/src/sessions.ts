@@ -2,9 +2,10 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import type { Stats } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import type { AskQuestion, Session } from './types.js'
+import type { AskQuestion, Session, Shell } from './types.js'
 import type { HookState } from './hookState.js'
 import { summarizeTranscript, type TranscriptSummary } from './transcript.js'
+import { runningShells } from './shells.js'
 import { readLiveSessions } from './liveSessions.js'
 import { partOfSession, roleOf, teamOf, type Team } from '@jk-corp/host/team'
 import type { OffDutyRecord, WebSessionRecord } from '@jk-corp/host/hq'
@@ -13,21 +14,26 @@ const claudeDir = join(homedir(), '.claude')
 export const projectsDir = join(claudeDir, 'projects')
 const sessionsDir = join(claudeDir, 'sessions')
 
-interface CachedSummary {
+/** jsonl 한 번 읽어 세션 목록에 쓰는 것: 요약과 지금 도는 백그라운드 shell */
+export interface TranscriptAnalysis {
+  summary: TranscriptSummary
+  shells: Shell[]
+}
+
+interface CachedSummary extends TranscriptAnalysis {
   size: number
   mtimeMs: number
-  summary: TranscriptSummary
 }
 
 /**
- * 세션 jsonl 의 경로와 요약을 서버 메모리에 둔다. 세션 목록은 5초마다 다시 만드는데
- * 끝난 세션의 파일은 바뀌지 않으므로, 크기·수정 시각이 그대로면 다시 읽지 않고 요약을 재사용한다
+ * 세션 jsonl 의 경로와 요약·백그라운드 shell 을 서버 메모리에 둔다. 세션 목록은 5초마다 다시 만드는데
+ * 끝난 세션의 파일은 바뀌지 않으므로, 크기·수정 시각이 그대로면 다시 읽지 않고 재사용한다
  */
 export class TranscriptCache {
   private readonly projectsDir: string
   /** 세션 ID → jsonl 경로. 찾은 것만 둔다 (새 세션은 잠시 뒤 파일이 생긴다) */
   private readonly paths = new Map<string, string>()
-  /** jsonl 경로 → 읽기 직전의 크기·수정 시각과 그때의 요약 */
+  /** jsonl 경로 → 읽기 직전의 크기·수정 시각과 그때의 요약·shell */
   private readonly summaries = new Map<string, CachedSummary>()
 
   constructor(projectsDir: string) {
@@ -47,11 +53,15 @@ export class TranscriptCache {
   }
 
   async summarize(sessionId: string): Promise<TranscriptSummary | null> {
+    return (await this.analyze(sessionId))?.summary ?? null
+  }
+
+  async analyze(sessionId: string): Promise<TranscriptAnalysis | null> {
     const found = await this.locate(sessionId)
     if (!found) return null
     const { size, mtimeMs } = found.stats
     const cached = this.summaries.get(found.path)
-    if (cached && cached.size === size && cached.mtimeMs === mtimeMs) return cached.summary
+    if (cached && cached.size === size && cached.mtimeMs === mtimeMs) return cached
     let jsonl: string
     try {
       jsonl = await readFile(found.path, 'utf8')
@@ -60,9 +70,9 @@ export class TranscriptCache {
       return null
     }
     // stat 을 읽기 전에 했으므로 그 사이 덧붙은 내용은 다음 번에 크기가 달라 다시 읽는다
-    const summary = summarizeTranscript(jsonl)
-    this.summaries.set(found.path, { size, mtimeMs, summary })
-    return summary
+    const analysis: CachedSummary = { size, mtimeMs, summary: summarizeTranscript(jsonl), shells: runningShells(jsonl) }
+    this.summaries.set(found.path, analysis)
+    return analysis
   }
 
   /** ids 에 없는 세션의 캐시를 지운다 (메모리가 계속 늘지 않게) */
@@ -150,7 +160,8 @@ export async function listSessions(
     [...ids].map(async (id): Promise<Session> => {
       const liveEntry = live.find((s) => s.sessionId === id)
       const hook = hookStates.get(id)
-      const transcript = await transcripts.summarize(id)
+      const analysis = await transcripts.analyze(id)
+      const transcript = analysis?.summary
       // 근무가 이긴다 (터미널에서 직접 resume 한 퇴근 세션은 근무 중인 외부 세션)
       const attendance = liveEntry || webSessions.has(id) ? 'present' : recordedById.has(id) ? 'break' : 'off'
       const record = recordedById.get(id) ?? offDutyById.get(id)
@@ -182,6 +193,8 @@ export async function listSessions(
         role: roleOf(id, isWeb, team, part),
         question: heldQuestions ? { questions: heldQuestions } : null,
         suggestion: isWeb ? (suggestions.get(id) ?? null) : null,
+        // 프로세스가 없으면(휴식·퇴근) 그 프로세스가 띄운 shell 도 없다
+        shells: attendance === 'present' ? (analysis?.shells ?? []) : [],
       }
     }),
   )

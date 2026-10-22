@@ -52,8 +52,10 @@ import {
   isSessionId,
   listScratchpad,
   resolveScratchpadFile,
+  resolveSessionTempFile,
   saveAttachment,
 } from './scratchpad.js'
+import { parseShells, readTail } from './shells.js'
 import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
 import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts, withoutQueued } from './messages.js'
@@ -399,6 +401,36 @@ app.get('/api/sessions/:id/files/raw', async (req, res) => {
   res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
   if (isActive) res.set('Content-Security-Policy', 'sandbox')
   res.sendFile(file, { dotfiles: 'allow' })
+})
+
+/** Claude Code 백그라운드 작업 ID 꼴 (실제는 b + 영문·숫자 8자) */
+const SHELL_ID = /^[A-Za-z0-9_-]{1,64}$/
+const DEFAULT_SHELL_LINES = 20
+const MAX_SHELL_LINES = 200
+
+/**
+ * 백그라운드 shell 출력의 마지막 ?lines= 줄 (기본 20, 최대 200) → { lines, isTruncated, size }.
+ * 파일 경로는 jsonl 에 적힌 그 shell 의 것만 쓰고, 그 세션의 Claude Code 임시 폴더 안인지 realpath 로 확인한다.
+ * 이미 끝난 shell 도 jsonl 에 있으면 준다 (목록에서 막 빠진 것을 눌렀을 때)
+ */
+app.get('/api/sessions/:id/shells/:shellId/output', async (req, res) => {
+  const { id: sessionId, shellId } = req.params
+  const rawLines = req.query.lines
+  const count = rawLines === undefined ? DEFAULT_SHELL_LINES : typeof rawLines === 'string' ? Number(rawLines) : NaN
+  if (!isSessionId(sessionId) || !SHELL_ID.test(shellId) || !Number.isInteger(count) || count < 1) {
+    res.status(400).json({ message: '세션 ID·shell ID 또는 lines(1 이상 정수) 형식 오류' })
+    return
+  }
+  const jsonl = await findTranscript(sessionId)
+  const shell = jsonl ? parseShells(jsonl).find((s) => s.id === shellId) : undefined
+  const file = shell?.outputPath ? await resolveSessionTempFile(sessionId, shell.outputPath) : null
+  // 확인한 뒤 읽기 전에 지워졌을 수도 있다
+  const tail = file ? await readTail(file, Math.min(count, MAX_SHELL_LINES)).catch(() => null) : null
+  if (!tail) {
+    res.status(404).json({ message: 'shell 또는 출력 파일 없음' })
+    return
+  }
+  res.json(tail)
 })
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
