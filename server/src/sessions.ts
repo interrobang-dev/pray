@@ -8,7 +8,7 @@ import { summarizeTranscript, type TranscriptSummary } from './transcript.js'
 import { runningShells } from './shells.js'
 import { readLiveSessions } from './liveSessions.js'
 import { partOfSession, roleOf, teamOf, type Team } from '@jk-corp/host/team'
-import type { OffDutyRecord, SessionCharacter, WebSessionRecord } from '@jk-corp/host/hq'
+import type { OffDutyRecord, SessionCharacter, SessionGender, WebSessionRecord } from '@jk-corp/host/hq'
 
 const claudeDir = join(homedir(), '.claude')
 export const projectsDir = join(claudeDir, 'projects')
@@ -156,6 +156,8 @@ export async function listSessions(
   offDuty: OffDutyRecord[] = [],
   /** hq.json characters (사용자가 고른 도트 인물) */
   characters: Record<string, SessionCharacter> = {},
+  /** hq.json genders (서버가 이름을 지은 세션의 성별) */
+  genders: Record<string, SessionGender> = {},
 ): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
   const recordedById = new Map(recorded.map((r) => [r.sessionId, r]))
@@ -190,6 +192,7 @@ export async function listSessions(
         cwd,
         name: names[id] ?? null,
         character: characters[id] ?? null,
+        gender: genders[id] ?? null,
         title: transcript?.title ?? null,
         status: displayStatus(hook, attendance),
         kind: isWeb ? 'web' : 'external',

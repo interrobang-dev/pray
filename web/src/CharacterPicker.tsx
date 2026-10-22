@@ -4,7 +4,7 @@ import { pickDotCharacter, type DotCharacter } from './dotCharacter'
 import { HAIR_COLORS, TOP_COLORS } from './recolor'
 
 /** 도트 사무실이 읽는 인물 아틀라스 그림 (Office.tsx 의 DOT_SHEET_URL 과 같은 판) */
-const IMAGE_URL = '/office/office-v1.png'
+const IMAGE_URL = '/office/office-v3.png'
 /** 썸네일은 셀(64×128) 위쪽만: 앉은 몸 위 끝(≈16)부터 무릎 근처까지 */
 const THUMB_TOP = 12
 const THUMB_H = 80
@@ -67,7 +67,18 @@ function Thumb({ frame }: { frame: Rect | undefined }) {
  * 지시자(팀장·파트장)의 도트 사무실 인물 고르기: "자동"(세션 ID 해시로 리더 풀에서 고른 인물) + 인물 프리셋 전부.
  * 인물을 고르면 머리·윗옷 색 칸과 큰 미리보기가 나온다 (인물을 바꾸면 색은 기본색으로)
  */
-export function CharacterPicker({ sessionId, value, onChange }: { sessionId: string; value: CharacterChoice; onChange: (choice: CharacterChoice) => void }) {
+export function CharacterPicker({
+  sessionId,
+  gender,
+  value,
+  onChange,
+}: {
+  sessionId: string
+  /** 세션 성별. "자동" 이 사무실과 같은 인물을 보이게 */
+  gender: 'male' | 'female' | null
+  value: CharacterChoice
+  onChange: (choice: CharacterChoice) => void
+}) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [art, setArt] = useState<RecolorArt | null>(null)
@@ -89,7 +100,7 @@ export function CharacterPicker({ sessionId, value, onChange }: { sessionId: str
   }, [])
   if (error) return <p className="form-hint">{error}</p>
   if (!sheet) return <p className="form-hint">인물 목록을 읽는 중…</p>
-  const autoId = pickDotCharacter(sessionId, true, sheet.characters)
+  const autoId = pickDotCharacter(sessionId, true, sheet.characters, gender)
   const options: { id: string | null; label: string; frameId: string | null }[] = [
     { id: null, label: '자동', frameId: autoId },
     ...sheet.characters.map((character) => ({ id: character.id, label: character.id, frameId: character.id })),

@@ -77,11 +77,17 @@ const THEME_LABELS: Record<ThemeChoice, string> = { light: '라이트', dark: '�
 const SESSION_TRUST_FAILED_MESSAGE =
   '신뢰 표시를 남기지 못했습니다. 이 폴더에서 처음 뜨는 세션이면 터미널 탭에서 신뢰를 직접 허용해야 합니다 (기본 선택 "No, exit" 를 그대로 두면 세션이 꺼집니다).'
 
-/** 세션 추가 모달이 미리 채우는 이름 "[역할] 성" 의 역할 (사용자 확정). 팀장·파트장 모두 Lead */
+/** 세션 추가 모달이 미리 채우는 이름 "[역할] 이름" 의 역할 (사용자 확정). 팀장·파트장 모두 Lead */
 const MEMBER_ROLE_TAG = 'Dev'
 const LEAD_ROLE_TAG = 'Lead'
 
-/** "[역할] 성" 의 역할 부분만 바꾼다 (성은 그대로) */
+/** 이름 추천 API 응답. 성별은 서버가 그 이름에 맞춰 정한다 (옛 서버 응답에는 없다) */
+interface MemberNameSuggestion {
+  name: string
+  gender?: 'male' | 'female'
+}
+
+/** "[역할] 이름" 의 역할 부분만 바꾼다 (이름은 그대로) */
 function withRoleTag(name: string, roleTag: string): string {
   return name.replace(/^\[[^\]]*\]/, `[${roleTag}]`)
 }
@@ -233,8 +239,11 @@ export function App() {
   /** 세션 추가 모달. 팀 헤더의 "+" 면 그 팀 직속, 파트 소제목의 "+" 면 그 파트, 툴바의 "New Session" 이면 로비(폴더 직접 입력) */
   const [sessionForm, setSessionForm] = useState<{ teamId: string | null; partId: string | null } | null>(null)
   const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
-  /** 팀·파트 세션 추가 모달에 미리 채울 이름. 서버가 성을 고른 "[Dev] 성" 이고, 보일 때는 세그먼트에 맞춰 역할만 바꾼다 */
-  const [suggestedSessionName, setSuggestedSessionName] = useState<string | null>(null)
+  /**
+   * 팀·파트 세션 추가 모달에 미리 채울 이름과 그 성별. 서버가 이름을 고른 "[Dev] 이름" 이고, 보일 때는 세그먼트에 맞춰 역할만 바꾼다.
+   * 성별은 이 이름을 그대로 쓸 때만 세션 생성에 넘긴다
+   */
+  const [suggestedSessionName, setSuggestedSessionName] = useState<MemberNameSuggestion | null>(null)
   /** 사용자가 이름 칸에 직접 쓴 값. null 이면 아직 안 고쳤다 — 고친 뒤로는 미리 채운 이름·세그먼트로 바꾸지 않는다 */
   const [typedSessionName, setTypedSessionName] = useState<string | null>(null)
   /** 파트 추가 모달. 팀 "⋯" 의 "파트 추가" 로 열린다 */
@@ -324,9 +333,9 @@ export function App() {
     const query = new URLSearchParams({ role: MEMBER_ROLE_TAG })
     if (sessionForm.partId) query.set('partId', sessionForm.partId)
     fetch(`/api/team/${sessionForm.teamId}/member-name?${query}`)
-      .then((r) => (r.ok ? (r.json() as Promise<{ name: string }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<MemberNameSuggestion>) : null))
       .then((data) => {
-        if (!isCancelled && data) setSuggestedSessionName(data.name)
+        if (!isCancelled && data) setSuggestedSessionName(data)
       })
       .catch(() => {})
     return () => {
@@ -414,11 +423,14 @@ export function App() {
     event.preventDefault()
     if (!sessionForm) return
     const form = new FormData(event.currentTarget)
+    // 추천 이름을 그대로 쓸 때만 그 성별을 넘긴다 (직접 고친 이름은 성별 없음)
+    const isSuggestedName = Boolean(sessionForm.teamId) && typedSessionName === null && suggestedSessionName !== null
     const response = await postJson('/api/sessions', 'POST', {
       cwd: sessionForm.teamId ? undefined : form.get('cwd'),
       teamId: sessionForm.teamId ?? undefined,
       partId: sessionForm.partId ?? undefined,
       name: form.get('name'),
+      gender: isSuggestedName ? suggestedSessionName?.gender : undefined,
       isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
     })
     if (!response.ok) {
@@ -461,17 +473,17 @@ export function App() {
     if (isLinked) alert(`이미 있던 worktree·브랜치 ${part.worktree?.branch} 로 연결했습니다 (현재 HEAD 에서 새로 만들지 않음).\n${part.worktree?.cwd}`)
     setPartForm(null)
     if (!isPartLeadSpawned) return
-    // 세션 추가 모달의 파트장과 같은 "[Lead] 성". 추천을 못 받으면 이름 없이 (자동 제목)
+    // 세션 추가 모달의 파트장과 같은 "[Lead] 이름" 과 그 성별. 추천을 못 받으면 이름 없이 (자동 제목)
     const leadQuery = new URLSearchParams({ role: LEAD_ROLE_TAG, partId: part.id })
     const leadName = await fetch(`/api/team/${partForm.teamId}/member-name?${leadQuery}`)
-      .then((r) => (r.ok ? (r.json() as Promise<{ name: string }>) : null))
-      .then((data) => data?.name)
-      .catch(() => undefined)
+      .then((r) => (r.ok ? (r.json() as Promise<MemberNameSuggestion>) : null))
+      .catch(() => null)
     const leadResponse = await postJson('/api/sessions', 'POST', {
       teamId: partForm.teamId,
       partId: part.id,
       isLead: true,
-      name: leadName,
+      name: leadName?.name,
+      gender: leadName?.gender,
     })
     if (!leadResponse.ok) {
       alert((await leadResponse.json()).message ?? '파트장 생성 실패')
@@ -790,7 +802,7 @@ export function App() {
     const hasLiveLead = Boolean(leadSessionId && snapshot.sessions.some((s) => s.id === leadSessionId && s.isAlive))
     const leadLabel = part ? '파트장' : '팀장'
     const roleTag = sessionRole === 'lead' ? LEAD_ROLE_TAG : MEMBER_ROLE_TAG
-    const sessionName = typedSessionName ?? (team && suggestedSessionName ? withRoleTag(suggestedSessionName, roleTag) : '')
+    const sessionName = typedSessionName ?? (team && suggestedSessionName ? withRoleTag(suggestedSessionName.name, roleTag) : '')
     return (
       <Modal
         title={
@@ -1177,7 +1189,12 @@ export function App() {
               {renameTarget.role === 'lead' && (
                 <>
                   <span className="form-hint">도트 사무실 인물 (클래식 그림·목록 아바타에는 안 보인다)</span>
-                  <CharacterPicker sessionId={renameTarget.id} value={renameCharacter} onChange={setRenameCharacter} />
+                  <CharacterPicker
+                    sessionId={renameTarget.id}
+                    gender={renameTarget.gender ?? null}
+                    value={renameCharacter}
+                    onChange={setRenameCharacter}
+                  />
                 </>
               )}
               <div className="actions">

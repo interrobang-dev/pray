@@ -51,6 +51,9 @@ export interface SessionCharacter {
   top: string | null
 }
 
+/** 서버가 지은 이름 "[역할] 이름" 의 성별. 도트 사무실이 그 성별 인물을 고른다 */
+export type SessionGender = 'male' | 'female'
+
 interface HqFile extends Office {
   webSessions: WebSessionRecord[]
   offDuty: OffDutyRecord[]
@@ -58,6 +61,8 @@ interface HqFile extends Office {
   sessionNames: Record<string, string>
   /** 사용자가 고른 도트 인물. 없으면 화면이 세션 ID 해시로 고른다. 이름과 같이 지운다 */
   characters: Record<string, SessionCharacter>
+  /** 서버가 이름을 지은 세션의 성별. 사용자가 직접 지은 이름이면 없다. 이름과 같이 지운다 */
+  genders: Record<string, SessionGender>
 }
 
 const hqDir = join(homedir(), '.claude', 'jk-corp')
@@ -88,6 +93,7 @@ function readHq(): HqFile {
     teams,
     sessionNames: rest.sessionNames ?? {},
     characters: rest.characters ?? {},
+    genders: rest.genders ?? {},
   }
 }
 
@@ -149,13 +155,14 @@ export function removeWebSession(sessionId: string): void {
   writeHq(hq)
 }
 
-/** 다시 출근할 수 없는 웹 세션(대화가 없음)의 기록과 이름·고른 인물을 지운다. webSessions 에 없으면 아무것도 쓰지 않고 false */
+/** 다시 출근할 수 없는 웹 세션(대화가 없음)의 기록과 이름·고른 인물·성별을 지운다. webSessions 에 없으면 아무것도 쓰지 않고 false */
 export function discardWebSession(sessionId: string): boolean {
   const hq = readHq()
   if (!hq.webSessions.some((s) => s.sessionId === sessionId)) return false
   hq.webSessions = hq.webSessions.filter((s) => s.sessionId !== sessionId)
   delete hq.sessionNames[sessionId]
   delete hq.characters[sessionId]
+  delete hq.genders[sessionId]
   writeHq(hq)
   return true
 }
@@ -189,18 +196,19 @@ export function returnFromOffDuty(sessionId: string): WebSessionRecord | null {
   return webSession
 }
 
-/** 퇴근 기록과 그 세션 이름·고른 인물을 지운다. 없으면 false */
+/** 퇴근 기록과 그 세션 이름·고른 인물·성별을 지운다. 없으면 false */
 export function removeOffDuty(sessionId: string): boolean {
   const hq = readHq()
   if (!hq.offDuty.some((s) => s.sessionId === sessionId)) return false
   hq.offDuty = hq.offDuty.filter((s) => s.sessionId !== sessionId)
   delete hq.sessionNames[sessionId]
   delete hq.characters[sessionId]
+  delete hq.genders[sessionId]
   writeHq(hq)
   return true
 }
 
-/** 보관 기간이 지난 퇴근 기록과 그 이름·고른 인물을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
+/** 보관 기간이 지난 퇴근 기록과 그 이름·고른 인물·성별을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
 export function pruneOffDuty(now = Date.now()): string[] {
   const hq = readHq()
   const expired = hq.offDuty.filter((s) => now - Date.parse(s.endedAt) > OFF_DUTY_RETENTION_MS).map((s) => s.sessionId)
@@ -209,6 +217,7 @@ export function pruneOffDuty(now = Date.now()): string[] {
   for (const sessionId of expired) {
     delete hq.sessionNames[sessionId]
     delete hq.characters[sessionId]
+    delete hq.genders[sessionId]
   }
   writeHq(hq)
   return expired
@@ -236,6 +245,18 @@ export function setCharacter(sessionId: string, character: SessionCharacter | nu
   const hq = readHq()
   if (character) hq.characters[sessionId] = character
   else delete hq.characters[sessionId]
+  writeHq(hq)
+}
+
+export function listGenders(): Record<string, SessionGender> {
+  return readHq().genders
+}
+
+/** null 이면 지운다 (도트 인물을 성별 없이 고른다) */
+export function setGender(sessionId: string, gender: SessionGender | null): void {
+  const hq = readHq()
+  if (gender) hq.genders[sessionId] = gender
+  else delete hq.genders[sessionId]
   writeHq(hq)
 }
 

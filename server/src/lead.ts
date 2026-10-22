@@ -30,7 +30,7 @@ export function leadSystemPrompt(team: Team, part: Part | null = null): string {
     '- 한 팀원이 일을 5개쯤 처리했으면 정리하고 새로 만든다 (맥락 비대 방지).',
     '- 할 일 없이 30분 넘게 쉰 팀원은 정리한다.',
     '- 동시에 살아 있는 팀원은 파일이 겹치지 않는 영역별 1명, 최대 3명이다 (팀원은 같은 작업 트리를 쓴다).',
-    '- 팀원을 만들 때 jk_spawn_member 의 role 에 영역 약어를 준다 (FE·BE·FS·UI/UX·QA·Ops·Docs·Research). 이름 "[역할] 성" 은 서버가 붙인다.',
+    '- 팀원을 만들 때 jk_spawn_member 의 role 에 영역 약어를 준다 (FE·BE·FS·UI/UX·QA·Ops·Docs·Research). 이름 "[역할] 이름" 은 서버가 붙인다.',
     '- 네가 만들지 않은 세션(외부 세션, 사람이 만든 세션)은 절대 정리하지 않는다.',
   ].join('\n')
 }

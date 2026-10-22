@@ -1,10 +1,16 @@
-/** 팀원 이름 "[역할] 성" 의 성. 한국 성 로마자와 영미 성을 섞는다. LLM 이 고르면 흔한 성이 반복돼 서버가 뽑는다 */
-export const SURNAMES = [
-  'Kim', 'Lee', 'Park', 'Choi', 'Jung', 'Kang', 'Cho', 'Yoon', 'Jang', 'Lim',
-  'Han', 'Oh', 'Seo', 'Shin', 'Kwon', 'Hwang', 'Ahn', 'Song', 'Hong', 'Yoo',
-  'Jeon', 'Ko', 'Moon', 'Yang', 'Bae', 'Baek',
-  'Smith', 'Johnson', 'Brown', 'Miller', 'Davis', 'Wilson', 'Taylor', 'Clark', 'Lewis', 'Walker',
-  'Young', 'King', 'Moore', 'Hall', 'Allen', 'Wright', 'Scott', 'Green', 'Baker', 'Adams',
+import type { SessionGender } from '@jk-corp/host/hq'
+
+/**
+ * 팀원 이름 "[역할] 이름" 의 이름. 한국 이름 로마자와 영미 이름을 섞고, 성별이 이름에서 자연스럽게 읽히는 것만 둔다
+ * (도트 사무실이 그 성별 인물을 고른다). LLM 이 고르면 흔한 이름이 반복돼 서버가 뽑는다
+ */
+export const FEMALE_NAMES = [
+  'Minji', 'Jisoo', 'Seoyeon', 'Soyeon', 'Yuna', 'Haeun', 'Eunji', 'Sujin', 'Hyejin', 'Yejin', 'Dahye', 'Seulgi', 'Jieun',
+  'Emma', 'Olivia', 'Sophia', 'Emily', 'Grace', 'Chloe', 'Hannah', 'Lily', 'Sarah', 'Mia', 'Anna', 'Ella',
+]
+export const MALE_NAMES = [
+  'Junho', 'Minjun', 'Seojun', 'Dohyun', 'Jihoon', 'Hyunwoo', 'Donghyun', 'Jaewon', 'Minho', 'Taehyun', 'Sangwoo', 'Joonyoung', 'Kyungsoo',
+  'Daniel', 'James', 'Ethan', 'Noah', 'Liam', 'Lucas', 'Henry', 'Oliver', 'Jacob', 'Ryan', 'Samuel', 'Owen',
 ]
 
 const MAX_ROLE_LENGTH = 12
@@ -17,25 +23,38 @@ export function parseMemberRole(role: unknown): string | null {
   return trimmed
 }
 
-/** 이름의 성 부분 (소문자). "[FE] Hong" → "hong", "[BE] Kim 2" → "kim 2". "[역할]" 꼴이 아니면 이름 전체 */
-export function surnameOf(name: string): string {
+/** 'male'·'female' 이면 그대로, 아니면 null */
+export function parseGender(gender: unknown): SessionGender | null {
+  return gender === 'male' || gender === 'female' ? gender : null
+}
+
+/** 이름의 역할 뒤 부분 (소문자). "[FE] Minji" → "minji", "[BE] Junho 2" → "junho 2". "[역할]" 꼴이 아니면 이름 전체 */
+export function givenNameOf(name: string): string {
   const match = /^\[[^\]]*\]\s*(.*)$/.exec(name.trim())
   return (match ? match[1] : name).trim().toLowerCase()
 }
 
 /**
- * "[역할] 성". usedNames(같은 팀 세션 이름)에 쓰인 성은 역할이 달라도 피한다 (성이 같으면 헷갈려서).
- * 성이 다 쓰였으면 "Kim 2" 처럼 숫자를 붙인 것 중에서, 그것도 다 쓰였으면 3, 4… 로 고른다
+ * "[역할] 이름" 과 그 이름의 성별. usedNames(같은 팀 세션 이름)에 쓰인 이름은 역할이 달라도 피한다 (이름이 같으면 헷갈려서).
+ * 옛 "[역할] 성" 이름은 겹칠 이름이 없어 그냥 지나간다. 이름이 다 쓰였으면 "Minji 2" 처럼 숫자를 붙인 것 중에서, 그것도 다 쓰였으면 3, 4… 로 고른다
  */
-export function pickMemberName(role: string, usedNames: readonly string[], random: () => number = Math.random): string {
-  const used = new Set(usedNames.map(surnameOf))
+export function pickMemberName(
+  role: string,
+  usedNames: readonly string[],
+  random: () => number = Math.random,
+): { name: string; gender: SessionGender } {
+  const used = new Set(usedNames.map(givenNameOf))
+  const all = [
+    ...FEMALE_NAMES.map((name) => ({ name, gender: 'female' as const })),
+    ...MALE_NAMES.map((name) => ({ name, gender: 'male' as const })),
+  ]
   for (let suffix = 1; ; suffix++) {
-    const candidates = SURNAMES.map((surname) => (suffix === 1 ? surname : `${surname} ${suffix}`)).filter(
-      (candidate) => !used.has(candidate.toLowerCase()),
-    )
+    const candidates = all
+      .map(({ name, gender }) => ({ name: suffix === 1 ? name : `${name} ${suffix}`, gender }))
+      .filter((candidate) => !used.has(candidate.name.toLowerCase()))
     if (candidates.length > 0) {
-      const index = Math.min(candidates.length - 1, Math.floor(random() * candidates.length))
-      return `[${role}] ${candidates[index]}`
+      const { name, gender } = candidates[Math.min(candidates.length - 1, Math.floor(random() * candidates.length))]
+      return { name: `[${role}] ${name}`, gender }
     }
   }
 }

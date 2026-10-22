@@ -52,3 +52,43 @@ describe('dotLookOf', () => {
     expect(dotLookOf({ id: ids[0], role: null }, [])).toBeNull()
   })
 })
+
+describe('gender', () => {
+  const gendered: DotCharacter[] = [
+    { id: 'boss-m', pool: 'lead', gender: 'male' },
+    { id: 'boss-f', pool: 'lead', gender: 'female' },
+    { id: 'dev-m1', pool: 'member', gender: 'male' },
+    { id: 'dev-m2', pool: 'member', gender: 'male' },
+    { id: 'dev-f1', pool: 'member', gender: 'female' },
+    { id: 'dev-f2', pool: 'member', gender: 'female' },
+  ]
+
+  it('picks a character of the same pool and gender', () => {
+    for (const id of ids.slice(0, 50)) {
+      expect(pickDotCharacter(id, false, gendered, 'female')).toMatch(/^dev-f/)
+      expect(pickDotCharacter(id, false, gendered, 'male')).toMatch(/^dev-m/)
+      expect(pickDotCharacter(id, true, gendered, 'female')).toBe('boss-f')
+    }
+    const picked = new Set(ids.map((id) => pickDotCharacter(id, false, gendered, 'female')))
+    expect(picked).toEqual(new Set(['dev-f1', 'dev-f2']))
+  })
+
+  it('ignores the gender when the pool has no one of it, or the atlas has no genders', () => {
+    const maleLeadsOnly = gendered.filter((c) => c.id !== 'boss-f')
+    expect(pickDotCharacter(ids[0], true, maleLeadsOnly, 'female')).toBe('boss-m')
+    for (const id of ids.slice(0, 20)) expect(pickDotCharacter(id, false, characters, 'male')).toBe(pickDotCharacter(id, false, characters))
+  })
+
+  it('is the same as before without a gender', () => {
+    for (const id of ids.slice(0, 20)) expect(pickDotCharacter(id, false, gendered, null)).toBe(pickDotCharacter(id, false, gendered))
+    const all = new Set(ids.map((id) => pickDotCharacter(id, false, gendered)))
+    expect(all.size).toBe(4)
+  })
+
+  it('dotLookOf uses the session gender, but a chosen character comes first', () => {
+    expect(dotLookOf({ id: ids[2], role: null, gender: 'female' }, gendered)?.id).toMatch(/^dev-f/)
+    expect(dotLookOf({ id: ids[2], role: 'lead', gender: 'male' }, gendered)?.id).toBe('boss-m')
+    const character = { id: 'dev-m1', hair: null, top: null }
+    expect(dotLookOf({ id: ids[2], role: null, gender: 'female', character }, gendered)?.id).toBe('dev-m1')
+  })
+})

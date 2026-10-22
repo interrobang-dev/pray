@@ -1,4 +1,4 @@
-import type { SessionCharacter } from '@jk-corp/host/hq'
+import type { SessionCharacter, SessionGender } from '@jk-corp/host/hq'
 
 export type SessionStatus =
   | 'working'
@@ -47,6 +47,8 @@ export interface Session {
   shells: Shell[]
   /** 사용자가 고른 도트 사무실 인물 (hq.json characters). 없으면 null — 화면이 세션 ID 해시로 고른다. 바꾸기는 PUT /api/sessions/:id/character */
   character: SessionCharacter | null
+  /** 서버가 이름 "[역할] 이름" 을 지을 때 정한 성별 (hq.json genders). 직접 지은 이름이면 null — 도트 인물을 성별 없이 고른다 */
+  gender: SessionGender | null
 }
 
 /** 백그라운드 shell (Bash·PowerShell 의 run_in_background, 시간 초과로 백그라운드로 넘어간 것 포함) */

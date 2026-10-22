@@ -37,7 +37,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          '팀원 역할 약어 (1~12자). 이름 "[역할] 성" 은 서버가 붙여 결과 member.name 으로 돌려준다. 권장: FE(화면), BE(서버·호스트), FS(풀스택), UI/UX, QA(검증·테스트), Ops(배포·인프라), Docs(문서), Research(조사)',
+          '팀원 역할 약어 (1~12자). 이름 "[역할] 이름" 은 서버가 붙여 결과 member.name 으로 돌려준다. 권장: FE(화면), BE(서버·호스트), FS(풀스택), UI/UX, QA(검증·테스트), Ops(배포·인프라), Docs(문서), Research(조사)',
         ),
       name: z.string().optional().describe('예전 방식의 팀원 이름. role 이 있으면 쓰지 않는다. role 과 name 중 하나는 필요'),
       instruction: z.string().optional().describe('첫 지시 (선택)'),

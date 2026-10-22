@@ -11,12 +11,14 @@ import {
   addPart,
   addTeam,
   listCharacters,
+  listGenders,
   listOffDuty,
   listSessionNames,
   listTeams,
   listWebSessions,
   readOffice,
   setCharacter,
+  setGender,
   setSessionName,
   removeTeam,
   setDesk,
@@ -37,6 +39,7 @@ import {
   type Group,
   type Part,
   type PartPatch,
+  type SessionGender,
   type Team,
   type TeamPatch,
 } from '@jk-corp/host/hq'
@@ -66,7 +69,7 @@ import { makeUsageCache } from './usage.js'
 import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
-import { parseMemberRole, pickMemberName } from './memberName.js'
+import { givenNameOf, parseGender, parseMemberRole, pickMemberName } from './memberName.js'
 import {
   createWorktree,
   markFolderTrusted,
@@ -222,6 +225,7 @@ async function snapshotPayload() {
       listWebSessions(),
       listOffDuty(),
       listCharacters(),
+      listGenders(),
     ),
   }
 }
@@ -275,13 +279,15 @@ app.get('/api/sessions', async (_req, res) => {
  * isLead 면 그 지휘 단위의 지시자로 (팀장 또는 파트장. 살아 있는 지시자가 이미 있으면 거부)
  */
 app.post('/api/sessions', async (req, res) => {
-  const { cwd: rawCwd, teamId, partId, prompt, isLead, name } = req.body as {
+  const { cwd: rawCwd, teamId, partId, prompt, isLead, name, gender } = req.body as {
     cwd?: string
     teamId?: string
     partId?: string
     prompt?: string
     isLead?: boolean
     name?: string
+    /** 이름 추천 API 가 준 성별. 화면은 추천 이름을 그대로 쓸 때만 넘긴다 */
+    gender?: unknown
   }
   const team = teamId ? findTeam(teamId) : undefined
   if (teamId && !team) {
@@ -329,7 +335,11 @@ app.post('/api/sessions', async (req, res) => {
   }
   // worktree 없는 파트는 폴더로 구분이 안 되므로 소속을 기록한다
   if (team && part && !part.worktree) setPartOf(team.id, sessionId, part.id)
-  if (name?.trim()) setSessionName(sessionId, name)
+  if (name?.trim()) {
+    setSessionName(sessionId, name)
+    const parsedGender = parseGender(gender)
+    if (parsedGender) setGender(sessionId, parsedGender)
+  }
   // 신뢰 확인 창(기본 "No, exit")에 막혀 세션이 꺼지지 않게 띄우기 전에 폴더를 신뢰로 기록한다. 실패해도 띄우고 화면이 경고한다
   const isTrustFailed = markFolderTrusted(cwd) === false
   host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
@@ -490,6 +500,9 @@ app.patch('/api/sessions/:id', (req, res) => {
     res.status(400).json({ message: 'name 필요 (빈 문자열이면 삭제)' })
     return
   }
+  // 역할만 바꾸면 성별을 두고, 이름 부분이 바뀌거나 지우면 성별도 지운다 (새 이름과 성별이 안 맞을 수 있어서)
+  const oldName = listSessionNames()[req.params.id]
+  if (oldName !== undefined && (!name.trim() || givenNameOf(oldName) !== givenNameOf(name))) setGender(req.params.id, null)
   setSessionName(req.params.id, name)
   res.json({})
   void broadcast()
@@ -1047,12 +1060,12 @@ app.put('/api/team/:teamId/desks/:sessionId', (req, res) => {
 
 /**
  * 방금 이름을 붙인 팀원 (세션 ID → 팀·이름). 호스트가 띄워 세션 목록에 나타나기 전에 같은 팀 팀원을 또 만들면
- * (팀장이 도구를 동시에 부르면) 목록만 봐서는 성이 겹치므로 잠깐 들고 있는다
+ * (팀장이 도구를 동시에 부르면) 목록만 봐서는 이름이 겹치므로 잠깐 들고 있는다
  */
 const recentMemberNames = new Map<string, { teamId: string; name: string }>()
 const RECENT_MEMBER_NAME_MS = 60_000
 
-/** 같은 팀(파트 포함)에 쓰인 이름: 근무·휴식·퇴근 세션 이름 + 방금 붙인 팀원 이름. pickMemberName 이 이 성들을 피한다 */
+/** 같은 팀(파트 포함)에 쓰인 이름: 근무·휴식·퇴근 세션 이름 + 방금 붙인 팀원 이름. pickMemberName 이 이 이름들을 피한다 */
 async function usedMemberNames(teamId: string): Promise<string[]> {
   const { sessions } = await snapshotPayload()
   return [
@@ -1062,7 +1075,7 @@ async function usedMemberNames(teamId: string): Promise<string[]> {
 }
 
 /**
- * 세션 추가 모달에 미리 채울 이름 "[role] 성" → { name }. 성 회피는 팀 전체 기준 (?partId= 는 확인만 한다).
+ * 세션 추가 모달에 미리 채울 이름 "[role] 이름" → { name, gender }. 이름 회피는 팀 전체 기준 (?partId= 는 확인만 한다).
  * 추천만 하고 recentMemberNames 에 넣지 않는다 — 모달을 열기만 하고 닫을 수 있어서
  */
 app.get('/api/team/:teamId/member-name', async (req, res) => {
@@ -1073,12 +1086,12 @@ app.get('/api/team/:teamId/member-name', async (req, res) => {
     res.status(400).json({ message: 'role 은 1~12자이고 [ ] 와 줄바꿈이 없어야 함 (예: Dev, Lead, PL)' })
     return
   }
-  res.json({ name: pickMemberName(role, await usedMemberNames(unit.team.id)) })
+  res.json(pickMemberName(role, await usedMemberNames(unit.team.id)))
 })
 
 /**
  * 지휘 단위로 팀원 세션을 띄운다. 팀 직속·worktree 파트는 cwd 판정으로 자동 합류, worktree 없는 파트는 소속을 기록.
- * role 이 있으면 이름은 서버가 "[role] 성" 으로 붙인다 (같은 팀 근무·휴식·퇴근 세션에 쓰인 성은 피한다).
+ * role 이 있으면 이름은 서버가 "[role] 이름" 으로 붙이고 성별을 기록한다 (같은 팀 근무·휴식·퇴근 세션에 쓰인 이름은 피한다).
  * name 만 오면 그대로 쓴다 (role 인자가 생기기 전의 팀장 MCP)
  */
 app.post('/api/team/:teamId/members', async (req, res) => {
@@ -1094,13 +1107,14 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   }
   const sessionId = randomUUID()
   let memberName: string
+  let memberGender: SessionGender | null = null
   if (role != null) {
     const parsedRole = parseMemberRole(role)
     if (!parsedRole) {
       res.status(400).json({ message: 'role 은 1~12자이고 [ ] 와 줄바꿈이 없어야 함 (예: FE, BE, QA)' })
       return
     }
-    memberName = pickMemberName(parsedRole, await usedMemberNames(team.id))
+    ;({ name: memberName, gender: memberGender } = pickMemberName(parsedRole, await usedMemberNames(team.id)))
   } else if (name?.trim()) {
     memberName = name.trim()
   } else {
@@ -1120,6 +1134,7 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   setTimeout(() => recentMemberNames.delete(sessionId), RECENT_MEMBER_NAME_MS)
   // 팀원 이름을 화면에도 보이게
   setSessionName(sessionId, memberName)
+  if (memberGender) setGender(sessionId, memberGender)
   const member = { sessionId, name: memberName, cwd }
   if (!instruction) {
     res.json({ member, task: null, isTrustFailed })
