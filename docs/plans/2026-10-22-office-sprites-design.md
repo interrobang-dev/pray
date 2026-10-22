@@ -10,7 +10,7 @@
 |---|---|
 | 0 | 규격·파이프라인 (이 문서, `tools/sprites/`, 임시 에셋 `web/public/office/office-v0.*`) |
 | 1 | 스프라이트 엔진 교체: Office.tsx 에 도트 모드. 설정으로 클래식/도트 전환, TILE 48·world 1배 |
-| 2 | 인물 프리셋 8~10명 × 4상태 + 색 바꾸기. 목록 아바타·Off Duty 머리도 프리셋에서 |
+| 2 | 인물 프리셋 8~10명 × 4상태 + 색 바꾸기. 목록 아바타·Off Duty 머리도 프리셋에서 (v1 로 인물 9명 × 4상태와 세션별 고르기까지 했다. 색 바꾸기·목록 아바타·Off Duty 머리는 남음) |
 | 3 | 환경: 바닥·벽·창 4시간대·섬 바닥·Focus Zone·Off Duty 거리·소품 |
 | 4 | 팀장·파트장 캐릭터 편집 (`hq.json` 의 `characters`) |
 | 5 | 다시 꾸미기 (테마·decor) |
@@ -60,7 +60,7 @@ y  ~20..100 의자 (prop/desk 보다 먼저, 사람 뒤)
 
 **바뀌는 점**: 지금은 my-turn 도 손을 든다. 도트판에서는 손 들기를 승인 대기에만 쓴다 — 큰 그림에서 손 든 사람이 여럿이면 급한 사람(승인 대기)이 안 보여서다. my-turn 은 말풍선이 있어 여전히 구분된다.
 
-v0 에셋에는 typing·raise-hand 만 있다. 1단계에서 idle·doze 가 없으면 typing 0번 프레임을 멈춰 쓰고(idle), doze 는 같은 프레임을 흐리게 한다 — 2단계에서 생성한다. 흐리게는 반투명이 아니라 tint(어둡게)다 — 반투명이면 뒤 의자가 비친다. 아틀라스에 `char/<인물>/idle`·`doze` 애니메이션이 생기면 코드 수정 없이 그것을 쓴다.
+v0 에셋에는 typing·raise-hand 만 있고 v1 은 넷 다 있다. 아틀라스에 idle·doze 가 없으면 typing 0번 프레임을 멈춰 쓰고(idle), doze 는 같은 프레임을 흐리게 한다 — 2단계에서 생성한다. 흐리게는 반투명이 아니라 tint(어둡게)다 — 반투명이면 뒤 의자가 비친다. 아틀라스에 `char/<인물>/idle`·`doze` 애니메이션이 생기면 코드 수정 없이 그것을 쓴다.
 
 ## 파일 배치
 
@@ -76,6 +76,24 @@ web/public/office/  빌드 결과. Vite 가 web/dist/office/ 로 복사하고 �
 ```
 
 원본은 저장소 밖이므로 원본을 잃으면 그 판은 다시 만들 수 없다 (결과 PNG 는 커밋되어 남는다). 원본 폴더는 판마다 새로 만들고 덮어쓰지 않는다.
+
+## 인물 프리셋 (v1)
+
+원본 `~/.claude/jk-corp/sprite-src/v1/` (기준 그림 `<인물>-base.png`, 행 `<인물>-<상태>.png`, 쓴 묘사·요청·행 프롬프트는 `prompts/`), 레시피 `tools/sprites/recipes/office-v1.json`. 레시피의 `pool` 이 아틀라스 `meta.jkCorp.characters` 로 들어가고 화면은 세션 ID 해시로 풀 안에서 고른다 (`web/src/dotCharacter.ts`).
+
+| id | 풀 | 모습 |
+|---|---|---|
+| lead | lead | 남, 갈색 머리, 하늘색 셔츠·남색 넥타이 (v0 팀장. typing·raise-hand 는 v0 행) |
+| lead-suit | lead | 여, 낮은 쪽머리, 갈색 피부, 회색 정장·금색 명찰 |
+| member | member | 여, 검은 단발, 머스터드 니트 (v0 팀원. raise-hand 는 v0 행) |
+| hoodie | member | 남, 검은 곱슬, 짙은 갈색 피부, 초록 후드 |
+| flannel | member | 남, 금발 투블럭, 동그란 안경, 빨간 체크 셔츠 |
+| ponytail | member | 여, 구릿빛 붉은 하이 포니테일, 주근깨, 라벤더 블라우스 |
+| cardigan | member | 남, 똥머리·짧은 수염, 올리브 피부, 남색 가디건 |
+| turtleneck | member | 여(50대), 은발 단발, 안경, 청록 터틀넥 |
+| afro | member | 여, 둥근 아프로, 짙은 갈색 피부, 주황 줄무늬 |
+
+생성 46회 = 기준 그림 7 + 상태 행 32(새 인물 7 × 4, v0 둘의 idle·doze) + 다시 생성 7(afro raise-hand·doze, ponytail doze, flannel idle, member typing 2번·doze). raise-hand 4번째 칸이 반대 팔인 인물(lead·member·flannel·cardigan·turtleneck)은 `use` 로 뺐다. 색 바꾸기(recolor)는 하지 않았다 — 다시 생성으로 맞췄다.
 
 ## 이름 규칙
 
@@ -130,7 +148,9 @@ PixiJS 8 `Spritesheet` 가 그대로 읽는 TexturePacker hash 꼴 + `meta.jkCor
 | 기준 그림만 붙이면 다른 사람이 나온다 | 인물을 글로 자세히 (위 2) |
 | 상태마다 배율이 달라진다 (든 팔까지 키로 잼) | 발 기준선 고정, 발 중심 ±18% 띠 안에서 머리 위 끝을 재고, 한 상태 안에서는 배율 하나(중앙값) |
 | raise-hand 4번째 칸이 반대 팔 (두 인물 모두) | 레시피 `use` 로 빼고 0·1·2·1 로 돈다. 프롬프트에 "Never switch to the other arm" 을 넣었다 (효과 미확인) |
-| 같은 인물인데 행마다 머리색·눈매가 조금 다르다 (팀원 typing 은 푸른 검정·날카로운 눈) | 2단계에서 행을 다시 생성하거나 recolor 로 머리색을 맞춘다. 같은 행 안에서는 일정했다 |
+| 같은 인물인데 행마다 머리색·눈매·머리 모양이 다르다 (v0 팀원 typing 은 푸른 검정·날카로운 눈, v1 flannel idle 은 주황빛 금발, afro 는 행에 따라 둥근 아프로/정수리 퍼프) | 그 행만 다시 생성. 묘사에 색을 못 박고 아닌 것도 쓴다 ("golden-yellow blond (not orange, not ginger)", "full round afro (not a puff on top)"). 머리 모양이 흔들리면 마음에 드는 행의 첫 칸을 새 기준 그림으로 prepare 를 다시 한다 (afro). 같은 행 안에서는 일정했다 |
+| 행이 옆으로 앉은 모습으로 나온다 (v1 ponytail doze, member typing 다시 생성 1번째) | 동작 글 앞에 "front view: … facing straight toward the viewer … (never turned sideways, never in profile)" 를 붙여 다시 생성 — 두 번 모두 바로잡혔다. 요청 파일 `req-doze-front.json`·`req-typing-front.json` |
+| gen-set 기본 동시 실행이 6 이다 | `--concurrency` 로 줄인다 (한 번에 4건 이하) |
 | 흰 배경을 크로마로 빼다 전부 투명 (이전 시험) | 마젠타 배경으로 생성, 키는 build.py 가 직접 빼고 알파를 검사 |
 | 벽·바닥을 타일 경계 검은 선과 함께 그린다 | 프롬프트에 "Do NOT draw tile boundaries" 추가. v0 는 선을 지워 이었지만 바닥에 점선 이음매, 벽에 옅은 세로선이 남았다 (3단계에서 다시 생성) |
 | 시트 칸 밖 떨어진 선(책상 아래 가로선) | 가장 긴 덩어리만 남긴다 (`main_piece`) |

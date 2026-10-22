@@ -170,6 +170,7 @@ def main() -> None:
             'scale': 1,
             'jkCorp': {
                 'spec': recipe['spec'],
+                'characters': [{'id': c['id'], 'pool': c.get('pool', 'member')} for c in recipe.get('characters', [])],
                 'animations': {key: {'fps': value['fps'], 'loop': value['loop']} for key, value in animations.items()},
                 'tiles': tile_files,
                 'props': prop_meta,

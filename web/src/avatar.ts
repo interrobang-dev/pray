@@ -11,7 +11,8 @@ const HAIR_COLORS = [0x2b2b2b, 0x5a3b22, 0xc9a06a, 0x8b4a3b, 0x3b4f8a, 0xd9d9d9,
 const SKIN_COLORS = [0xf6d5b8, 0xf0c9a6, 0xe3b48f]
 const SHIRT_COLORS = [0xfafafa, 0x3b4a73, 0x5c9a5c, 0x8a6a4f, 0x9aa0ad, 0x6b9bd1, 0xd98c8c, 0xe8c76a]
 
-function hashOf(id: string): number {
+/** 세션 ID → 32비트 해시 (FNV-1a). 도트 인물 고르기(dotCharacter.ts)도 쓴다 */
+export function hashOf(id: string): number {
   let hash = 2166136261
   for (const ch of id) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619) >>> 0
   return hash

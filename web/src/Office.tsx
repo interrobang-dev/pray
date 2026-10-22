@@ -15,6 +15,7 @@ import {
 } from 'pixi.js'
 import { attendanceOf, type Office as OfficeData, type Group, type Session, type Team } from './types'
 import { avatarOf, type Avatar } from './avatar'
+import { pickDotCharacter, type DotCharacter } from './dotCharacter'
 import {
   DESK_TILES_H,
   DESK_TILES_W,
@@ -44,7 +45,7 @@ const DEFAULT_ZOOM_INDEX = 1
 /** 도트 타일(48px) ÷ 아트 타일(16px) */
 const DOT_SCALE = 3
 const DOT_TILE = 48
-const DOT_SHEET_URL = '/office/office-v0.json'
+const DOT_SHEET_URL = '/office/office-v1.json'
 /** 휠 delta 를 이만큼 모으면 한 단계 (마우스 휠 한 칸 ≈ 100. 트랙패드의 잔 delta 는 모아서) */
 const WHEEL_STEP = 50
 /** 누른 뒤 이만큼(화면 px) 움직이기 전에는 클릭 */
@@ -702,8 +703,10 @@ function drawDesk(session: Session, seat: Point, isSelected: boolean): DeskParts
 
 // ---------- 도트 ----------
 
-/** office-v0.json 의 meta.jkCorp (tools/sprites/build.py 가 쓴다) */
+/** 아틀라스 JSON 의 meta.jkCorp (tools/sprites/build.py 가 쓴다) */
 interface DotSheetMeta {
+  /** 인물 프리셋과 풀. v0 처럼 없으면 인물 id lead·member 를 그대로 쓴다 */
+  characters?: DotCharacter[]
   animations: Record<string, { fps: number; loop: boolean }>
   tiles: Record<string, { image: string; w: number; h: number }>
   props: Record<string, { screen?: Rect }>
@@ -803,8 +806,9 @@ function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: Do
 
   let animation: AnimatedSprite | null = null
   if (!isOnBreak) {
-    // v0 는 두 인물뿐이라 팀장·파트장과 나머지로 나눈다 (2단계에서 인물 프리셋)
-    const { textures, fps, isDim } = dotFrames(art, isLead ? 'lead' : 'member', dotStateOf(session.status))
+    // 세션 ID 해시로 인물 프리셋을 고른다 (지시자는 리더 풀)
+    const character = pickDotCharacter(session.id, isLead, art.meta.characters ?? []) ?? (isLead ? 'lead' : 'member')
+    const { textures, fps, isDim } = dotFrames(art, character, dotStateOf(session.status))
     animation = new AnimatedSprite({ textures, autoUpdate: false })
     animation.position.set(DOT_DESK.personX, DOT_DESK.baseline)
     // 반투명은 뒤 의자가 비쳐 보여 색만 어둡게

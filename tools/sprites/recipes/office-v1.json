@@ -1,0 +1,481 @@
+{
+ "name": "office-v1",
+ "description": "2단계 인물 프리셋 9명(리더 2·팀원 7) × typing·raise-hand·idle·doze. 가구·벽·바닥은 v0 원본 그대로. 원본은 ~/.claude/jk-corp/sprite-src/v1",
+ "spec": {
+  "tile": 48,
+  "cell": [
+   64,
+   128
+  ],
+  "baseline": 124,
+  "bodyHeight": 108
+ },
+ "characters": [
+  {
+   "id": "lead",
+   "pool": "lead",
+   "_who": "a young male office team leader with short messy dark-brown hair, thick eyebrows, two dark eyes, light skin, a light-blue dress shirt with rolled-up sleeves, a navy necktie, a black belt with a silver buckle, charcoal-grey slacks and dark-brown shoes. Not a woman, no ponytail, no lanyard, no jacket.",
+   "rows": [
+    {
+     "state": "typing",
+     "strip": "lead-typing.png",
+     "count": 4,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "strip": "lead-raise-hand.png",
+     "count": 4,
+     "fps": 6,
+     "sequence": [
+      0,
+      1,
+      2,
+      1
+     ],
+     "use": [
+      0,
+      1,
+      2
+     ],
+     "_note": "4번째 칸은 반대 팔이라 뺀다"
+    },
+    {
+     "state": "idle",
+     "strip": "lead-idle.png",
+     "count": 4,
+     "fps": 3
+    },
+    {
+     "state": "doze",
+     "strip": "lead-doze.png",
+     "count": 4,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "lead-suit",
+   "pool": "lead",
+   "_who": "a female office team leader in her thirties with black hair pulled back into a neat low bun, two dark eyes, warm medium-brown skin, small pearl earrings, a tailored charcoal-grey blazer over a white blouse, a small gold name badge pinned on the blazer, charcoal-grey trousers and black low-heel shoes. Not a man, no glasses, no tie, no lanyard, no bag.",
+   "rows": [
+    {
+     "state": "typing",
+     "strip": "lead-suit-typing.png",
+     "count": 4,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "strip": "lead-suit-raise-hand.png",
+     "count": 4,
+     "fps": 6,
+     "sequence": [
+      0,
+      1,
+      2,
+      3
+     ]
+    },
+    {
+     "state": "idle",
+     "strip": "lead-suit-idle.png",
+     "count": 4,
+     "fps": 3
+    },
+    {
+     "state": "doze",
+     "strip": "lead-suit-doze.png",
+     "count": 4,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "member",
+   "pool": "member",
+   "_who": "a young female office worker with shoulder-length straight black hair with a side part and short bangs, two dark eyes, light-tan skin, small round gold earrings, a mustard-yellow knit sweater over a white collared shirt with collar points visible, dark-navy straight trousers and white sneakers. Not a man, no tie, no glasses, no lanyard, no bag.",
+   "rows": [
+    {
+     "state": "typing",
+     "strip": "member-typing.png",
+     "count": 4,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "strip": "member-raise-hand.png",
+     "count": 4,
+     "fps": 6,
+     "sequence": [
+      0,
+      1,
+      2,
+      1
+     ],
+     "use": [
+      0,
+      1,
+      2
+     ],
+     "_note": "4번째 칸은 반대 팔이라 뺀다"
+    },
+    {
+     "state": "idle",
+     "strip": "member-idle.png",
+     "count": 4,
+     "fps": 3
+    },
+    {
+     "state": "doze",
+     "strip": "member-doze.png",
+     "count": 4,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "hoodie",
+   "pool": "member",
+   "_who": "a young male developer with short black curly hair, two dark eyes, deep dark-brown skin, a forest-green hoodie with the hood down and white drawstrings, blue jeans and white sneakers. Not a woman, no glasses, no tie, no beard, no hat, no headphones.",
+   "rows": [
+    {
+     "state": "typing",
+     "strip": "hoodie-typing.png",
+     "count": 4,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "strip": "hoodie-raise-hand.png",
+     "count": 4,
+     "fps": 6,
+     "sequence": [
+      0,
+      1,
+      2,
+      3
+     ]
+    },
+    {
+     "state": "idle",
+     "strip": "hoodie-idle.png",
+     "count": 4,
+     "fps": 3
+    },
+    {
+     "state": "doze",
+     "strip": "hoodie-doze.png",
+     "count": 4,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "flannel",
+   "pool": "member",
+   "_who": "a young male developer with short blond hair shaved on the sides, round black-framed glasses, two blue eyes, fair pinkish skin, an open red-and-dark-red checked flannel shirt over a plain grey t-shirt, khaki chino trousers and brown sneakers. Not a woman, no tie, no beard, no hat.",
+   "rows": [
+    {
+     "state": "typing",
+     "strip": "flannel-typing.png",
+     "count": 4,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "strip": "flannel-raise-hand.png",
+     "count": 4,
+     "fps": 6,
+     "sequence": [
+      0,
+      1,
+      2,
+      1
+     ],
+     "use": [
+      0,
+      1,
+      2
+     ],
+     "_note": "4번째 칸은 반대 팔이라 뺀다"
+    },
+    {
+     "state": "idle",
+     "strip": "flannel-idle.png",
+     "count": 4,
+     "fps": 3
+    },
+    {
+     "state": "doze",
+     "strip": "flannel-doze.png",
+     "count": 4,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "ponytail",
+   "pool": "member",
+   "_who": "a young female designer with long copper-red hair tied in a high ponytail, two green eyes, fair skin with light freckles, a lavender blouse with short puffed sleeves, black wide-leg trousers and black flat shoes. Not a man, no glasses, no tie, no earrings, no bag.",
+   "rows": [
+    {
+     "state": "typing",
+     "strip": "ponytail-typing.png",
+     "count": 4,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "strip": "ponytail-raise-hand.png",
+     "count": 4,
+     "fps": 6,
+     "sequence": [
+      0,
+      1,
+      2,
+      3
+     ]
+    },
+    {
+     "state": "idle",
+     "strip": "ponytail-idle.png",
+     "count": 4,
+     "fps": 3
+    },
+    {
+     "state": "doze",
+     "strip": "ponytail-doze.png",
+     "count": 4,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "cardigan",
+   "pool": "member",
+   "_who": "a male engineer in his thirties with black hair tied in a small bun on top of the head, a short neat black beard, two dark eyes, tan olive skin, a navy-blue cardigan over a white crew-neck t-shirt, light-grey trousers and dark-grey sneakers. Not a woman, no glasses, no tie, no hat.",
+   "rows": [
+    {
+     "state": "typing",
+     "strip": "cardigan-typing.png",
+     "count": 4,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "strip": "cardigan-raise-hand.png",
+     "count": 4,
+     "fps": 6,
+     "sequence": [
+      0,
+      1,
+      2,
+      1
+     ],
+     "use": [
+      0,
+      1,
+      2
+     ],
+     "_note": "4번째 칸은 반대 팔이라 뺀다"
+    },
+    {
+     "state": "idle",
+     "strip": "cardigan-idle.png",
+     "count": 4,
+     "fps": 3
+    },
+    {
+     "state": "doze",
+     "strip": "cardigan-doze.png",
+     "count": 4,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "turtleneck",
+   "pool": "member",
+   "_who": "an older female engineer in her fifties with a short silver-grey bob haircut, thin black rectangular glasses, two dark eyes, light skin, a teal turtleneck sweater, brown trousers and brown loafers. Not a man, no tie, no earrings, no bag.",
+   "rows": [
+    {
+     "state": "typing",
+     "strip": "turtleneck-typing.png",
+     "count": 4,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "strip": "turtleneck-raise-hand.png",
+     "count": 4,
+     "fps": 6,
+     "sequence": [
+      0,
+      1,
+      2,
+      1
+     ],
+     "use": [
+      0,
+      1,
+      2
+     ],
+     "_note": "4번째 칸은 반대 팔이라 뺀다"
+    },
+    {
+     "state": "idle",
+     "strip": "turtleneck-idle.png",
+     "count": 4,
+     "fps": 3
+    },
+    {
+     "state": "doze",
+     "strip": "turtleneck-doze.png",
+     "count": 4,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "afro",
+   "pool": "member",
+   "_who": "a young female analyst with a big round black afro puff hairstyle, two dark eyes, deep brown skin, small gold hoop earrings, an orange-and-white horizontal striped long-sleeve shirt, olive-green trousers and white sneakers. Not a man, no glasses, no tie, no bag.",
+   "rows": [
+    {
+     "state": "typing",
+     "strip": "afro-typing.png",
+     "count": 4,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "strip": "afro-raise-hand.png",
+     "count": 4,
+     "fps": 6,
+     "sequence": [
+      0,
+      1,
+      2,
+      3
+     ]
+    },
+    {
+     "state": "idle",
+     "strip": "afro-idle.png",
+     "count": 4,
+     "fps": 3
+    },
+    {
+     "state": "doze",
+     "strip": "afro-doze.png",
+     "count": 4,
+     "fps": 3
+    }
+   ]
+  }
+ ],
+ "props": [
+  {
+   "id": "desk",
+   "sheet": "props-sheet.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 96,
+   "meta": {
+    "screen": {
+     "x": 59,
+     "y": 6,
+     "w": 26,
+     "h": 13,
+     "_note": "모니터 화면 안쪽 (스프라이트 좌표). 켜짐 표시를 덧그릴 자리. 다시 만들면 다시 잰다"
+    }
+   }
+  },
+  {
+   "id": "chair",
+   "sheet": "props-sheet.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 54
+  },
+  {
+   "id": "bookshelf",
+   "sheet": "props-sheet.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 88
+  },
+  {
+   "id": "plant",
+   "sheet": "props-sheet.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 40
+  }
+ ],
+ "tiles": [
+  {
+   "id": "wall",
+   "sheet": "room-sheet.png",
+   "crop": [
+    108,
+    214,
+    779,
+    731
+   ],
+   "inset": 4,
+   "fillDarkLines": {
+    "keep": [
+     110,
+     45,
+     553,
+     307
+    ]
+   },
+   "tiles": [
+    3,
+    2
+   ]
+  },
+  {
+   "id": "floor",
+   "sheet": "room-sheet.png",
+   "crop": [
+    1070,
+    214,
+    1666,
+    731
+   ],
+   "removeGridLines": true,
+   "tiles": [
+    3,
+    3
+   ]
+  }
+ ]
+}
