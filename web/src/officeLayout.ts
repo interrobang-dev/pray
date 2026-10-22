@@ -49,7 +49,7 @@ export interface GroupArea extends Rect {
 }
 
 export interface OfficeLayout {
-  /** 자리가 있는 세션: 근무·휴식 (퇴근은 그리지 않는다). office.teams 에 없는 팀을 가리키는 세션(office 를 받기 전·팀을 막 지운 뒤)도 자리가 없어 뺀다 */
+  /** 자리가 있는 세션: 근무·휴식 (퇴근은 책상 없이 건물 밖 띠에 그린다). office.teams 에 없는 팀을 가리키는 세션(office 를 받기 전·팀을 막 지운 뒤)도 자리가 없어 뺀다 */
   seated: Session[]
   /** 책상 왼쪽 위 (절대 좌표) */
   seats: Map<string, Point>

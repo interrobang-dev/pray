@@ -468,18 +468,10 @@ interface Figure {
   raisedHand: Graphics | null
 }
 
-function drawFigure(avatar: Avatar, status: Session['status']): Figure {
+/** 책상과 퇴근 띠에서 같은 머리 스타일·색을 쓴다. 몸통 없이 정수 아트 픽셀 그대로 */
+function drawHead(avatar: Avatar, status: Session['status']): Container {
   const container = new Container()
   const isIdle = status === 'idle' || status === 'unknown' || status === 'ended'
-  const hasRaisedHand = status === 'my-turn' || status === 'needs-approval'
-
-  // 몸통 (셔츠) 10x8, 어깨 둥글게
-  const body = new Graphics()
-  body.rect(3, 12, 10, 9).fill(avatar.shirt)
-  body.rect(2, 13, 1, 7).fill(avatar.shirt).rect(13, 13, 1, 7).fill(avatar.shirt)
-  body.rect(7, 12, 2, 2).fill(COLOR.text)
-  container.addChild(body)
-
   // 머리 12x10 (피부)
   const head = new Graphics().rect(2, 2, 12, 10).fill(avatar.skin)
   head.rect(1, 4, 1, 6).fill(avatar.skin).rect(14, 4, 1, 6).fill(avatar.skin)
@@ -524,6 +516,22 @@ function drawFigure(avatar: Avatar, status: Session['status']): Figure {
   face.rect(7, 10, 2, 1).fill(0xc97b7b)
   if (status === 'needs-approval') face.rect(3, 9, 2, 1).fill(0xf3b0b0).rect(11, 9, 2, 1).fill(0xf3b0b0)
   container.addChild(face)
+
+  return container
+}
+
+function drawFigure(avatar: Avatar, status: Session['status']): Figure {
+  const container = new Container()
+  const hasRaisedHand = status === 'my-turn' || status === 'needs-approval'
+
+  // 몸통 (셔츠) 10x8, 어깨 둥글게
+  const body = new Graphics()
+  body.rect(3, 12, 10, 9).fill(avatar.shirt)
+  body.rect(2, 13, 1, 7).fill(avatar.shirt).rect(13, 13, 1, 7).fill(avatar.shirt)
+  body.rect(7, 12, 2, 2).fill(COLOR.text)
+  container.addChild(body)
+
+  container.addChild(drawHead(avatar, status))
 
   // 손
   const handLeft = new Graphics().rect(1, 19, 3, 2).fill(avatar.skin)
@@ -646,6 +654,44 @@ function drawDesk(session: Session, seat: Point, isSelected: boolean): DeskParts
   return { container, figure }
 }
 
+// ---------- 건물 밖 ----------
+
+const OFF_DUTY_HEIGHT = 6 * TILE
+const OFF_DUTY_HEAD_STEP = 24
+
+/** 사무실 내용 바로 아래, 맵 전체 폭의 거리. 인원이 없어도 그린다 */
+function drawOffDuty(width: number): Container {
+  const container = new Container()
+  const scenery = new Graphics()
+  scenery.rect(0, 0, width, OFF_DUTY_HEIGHT).fill(0x202b46)
+  scenery.rect(0, 0, width, 3).fill(0x111a2d)
+  for (let x = 20; x < width - 2; x += 37) scenery.rect(x, 12 + (x % 3) * 5, 1, 1).fill(0xbfcde2)
+  // 지붕은 계단 모양 픽셀, 창과 가로등은 따뜻한 불빛
+  for (let x = 12; x + 80 < width; x += 96) {
+    scenery.rect(x, 38, 44, 27).fill(0x111c30)
+    for (let step = 0; step < 5; step++) scenery.rect(x + step * 4, 36 - step * 2, 44 - step * 8, 2).fill(0x111c30)
+    scenery.rect(x + 8, 46, 6, 8).fill(0xf5cd7b)
+    scenery.rect(x + 28, 46, 6, 8).fill(0xe8b568)
+    scenery.rect(x + 10, 46, 1, 8).fill(0x7d654e)
+    scenery.rect(x + 30, 46, 1, 8).fill(0x7d654e)
+    scenery.rect(x + 20, 54, 7, 11).fill(0x26344a)
+    scenery.rect(x + 67, 35, 2, 30).fill(0x8390a4)
+    scenery.rect(x + 63, 32, 10, 2).fill(0x101c31)
+    scenery.rect(x + 64, 34, 8, 4).fill(0xffdf96)
+    scenery.rect(x + 65, 38, 6, 2).fill(0xa8936c)
+  }
+  scenery.rect(0, 64, width, 2).fill(0xb2a691)
+  scenery.rect(0, 66, width, 26).fill(0x626b7b)
+  scenery.rect(0, 92, width, 4).fill(0x343f53)
+  for (let x = 0; x < width; x += TILE) scenery.rect(x, 88, Math.min(TILE - 1, width - x), 1).fill(0x77808e)
+  const name = label('Off Duty', 8, 0xf5dfad)
+  name.position.set(12, 7)
+  container.addChild(scenery, name)
+  container.eventMode = 'static'
+  container.cursor = 'grab'
+  return container
+}
+
 // ---------- 컴포넌트 ----------
 
 export function Office(props: Props) {
@@ -686,8 +732,9 @@ export function Office(props: Props) {
         world.scale.set(zoom)
         app.stage.addChild(world)
 
-        /** 바탕 크기 (아트 px): 내용 + 오른쪽·아래로 화면 한 장 (그룹을 옮겨 놓을 빈 자리) */
+        /** 바탕 크기 (아트 px): 내용 + Off Duty 띠 + 오른쪽·아래로 화면 한 장 (그룹을 옮겨 놓을 빈 자리) */
         const map = { w: 0, h: 0 }
+        const offDutyHeads = new Map<string, Rect>()
         const islandViews = new Map<string, Container>()
         // 팀·책상으로 부드럽게 이동하는 애니메이션 (300ms ease-out). 휠·끌기를 시작하면 멈춘다
         let focusMove: { from: Point; to: Point; elapsed: number } | null = null
@@ -698,6 +745,7 @@ export function Office(props: Props) {
           start: Point
           /** 왼쪽·위로 갈 수 있는 한계 (타일, 0 이하) */
           minDelta: Point
+          maxDeltaY: number
           delta: Point
           views: { container: Container; x: number; y: number }[]
           drop: (delta: Point) => void
@@ -778,6 +826,10 @@ export function Office(props: Props) {
           const layout = layoutOffice(latest.current.office, latest.current.sessions)
           const seat = layout.seats.get(target.sessionId)
           if (seat) moveToRect({ ...seat, w: DESK_TILES_W, h: DESK_TILES_H }, true)
+          else {
+            const head = offDutyHeads.get(target.sessionId)
+            if (head) moveToRect(head, true)
+          }
         }
         focusRef.current = applyFocus
 
@@ -866,6 +918,8 @@ export function Office(props: Props) {
           signDrag = {
             start: toWorld(event),
             minDelta: drag.minDelta,
+            // 띠 아래 빈 자리까지는 갈 수 있다. 놓으면 띠가 다시 내용 아래 끝을 따라가므로 띠와 겹친 채 남지 않는다
+            maxDeltaY: Math.floor((map.h - TILE - Math.max(...drag.containers.map((container) => container.y + container.height))) / TILE),
             delta: { x: 0, y: 0 },
             views: drag.containers.map((container) => ({ container, x: container.x, y: container.y })),
             drop: drag.drop,
@@ -880,12 +934,19 @@ export function Office(props: Props) {
           const { office, sessions, selectedId } = latest.current
           world.removeChildren()
           desks.clear()
+          offDutyHeads.clear()
           islandViews.clear()
           working.clear()
           const layout = layoutOffice(office, sessions)
           map.w = PAD_X + layout.right * TILE + Math.ceil(app.screen.width / zoom)
-          map.h = PAD_Y + layout.bottom * TILE + Math.ceil(app.screen.height / zoom)
+          // 띠는 늘 내용(그룹·섬·Focus Zone) 아래 끝 + 1타일. 바닥 격자에 맞는다
+          const streetY = PAD_Y + (layout.bottom + 1) * TILE
+          map.h = streetY + OFF_DUTY_HEIGHT + Math.ceil(app.screen.height / zoom / TILE) * TILE
           world.addChild(drawBackground(map.w, map.h))
+          // 끄는 그룹·섬이 띠를 지날 때 가려지지 않게 바닥 바로 위에 둔다
+          const street = drawOffDuty(map.w)
+          street.y = streetY
+          world.addChild(street)
           clampPan()
           /** 그 팀들의 책상 그림 (끌 때 같이 옮긴다) */
           const deskViewsOf = (teamIds: Set<string>) =>
@@ -922,6 +983,49 @@ export function Office(props: Props) {
             world.addChild(parts.container)
             islandViews.set(team.id, parts.container)
           }
+          const offDuty = sessions.filter((session) => attendanceOf(session) === 'off')
+          const capacity = Math.max(0, Math.floor((map.w - 2 * PAD_X) / OFF_DUTY_HEAD_STEP))
+          // 넘치면 마지막 칸부터 +N 글자 폭을 확보한다. 이름은 hover 때만
+          const overflow = label('', 7, 0xffe4a9)
+          let visibleCount = Math.min(offDuty.length, capacity)
+          while (visibleCount < offDuty.length) {
+            overflow.text = `+${offDuty.length - visibleCount}`
+            if (PAD_X + visibleCount * OFF_DUTY_HEAD_STEP + overflow.width <= map.w - PAD_X || visibleCount === 0) break
+            visibleCount--
+          }
+          const tooltip = new Container()
+          tooltip.eventMode = 'none'
+          tooltip.visible = false
+          const tooltipBackground = new Graphics()
+          const tooltipName = label('', 7, 0xffffff, Math.min(160, map.w - 16))
+          tooltip.addChild(tooltipBackground, tooltipName)
+          offDuty.slice(0, visibleCount).forEach((session, index) => {
+            const head = drawHead(avatarOf(session.id), 'ended')
+            head.position.set(PAD_X + index * OFF_DUTY_HEAD_STEP, 70)
+            if (session.id === selectedId) head.addChildAt(new Graphics().rect(-2, -2, 22, 19).fill(0xa2bfaa), 0)
+            head.eventMode = 'static'
+            head.cursor = 'pointer'
+            head.on('pointerover', () => {
+              if (pan?.isMoved || signDrag) return
+              tooltipName.text = session.name ?? session.title ?? session.id.slice(0, 8)
+              tooltipName.position.set(4, 2)
+              tooltipBackground.clear().rect(0, 0, tooltipName.width + 8, tooltipName.height + 4).fill(0x101a2e)
+              tooltip.position.set(Math.max(4, Math.min(head.x, map.w - tooltipName.width - 12)), head.y - tooltipName.height - 9)
+              tooltip.visible = true
+            })
+            head.on('pointerout', () => { tooltip.visible = false })
+            head.on('pointerdown', () => { tooltip.visible = false })
+            head.on('pointertap', () => {
+              if (!isDragged) latest.current.onSelect(session.id)
+            })
+            street.addChild(head)
+            offDutyHeads.set(session.id, { x: (head.x - PAD_X) / TILE, y: (street.y + head.y - PAD_Y) / TILE, w: 1.25, h: 1 })
+          })
+          if (visibleCount < offDuty.length) {
+            overflow.position.set(PAD_X + visibleCount * OFF_DUTY_HEAD_STEP, 73)
+            street.addChild(overflow)
+          }
+          street.addChild(tooltip)
           // 아래쪽 책상이 위쪽을 가리도록 y 순 정렬
           const ordered = [...layout.seated].sort((a, b) => layout.seats.get(a.id)!.y - layout.seats.get(b.id)!.y)
           for (const session of ordered) {
@@ -947,7 +1051,7 @@ export function Office(props: Props) {
             const point = toWorld(event)
             const next = {
               x: Math.max(signDrag.minDelta.x, Math.round((point.x - signDrag.start.x) / TILE)),
-              y: Math.max(signDrag.minDelta.y, Math.round((point.y - signDrag.start.y) / TILE)),
+              y: Math.min(signDrag.maxDeltaY, Math.max(signDrag.minDelta.y, Math.round((point.y - signDrag.start.y) / TILE))),
             }
             if (next.x === signDrag.delta.x && next.y === signDrag.delta.y) return
             signDrag.delta = next

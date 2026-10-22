@@ -234,7 +234,7 @@ export function App() {
   const [officeFocus, setOfficeFocus] = useState<OfficeFocus | null>(null)
   const nextFocusIdRef = useRef(1)
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
-  /** 목록 맨 아래 "퇴근" 구역을 펼쳤는지. 기본 접힘 */
+  /** 목록 맨 아래 "Off Duty" 구역을 펼쳤는지. 기본 접힘 */
   const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
   /** [다시 출근] 이 받아들여져 근무로 바뀌기를 기다리는 세션 ID → 그때의 퇴근 시각 (다시 퇴근하면 시각이 바뀐다). 기다리는 동안 패널이 "출근 중…" */
   const [returningSessions, setReturningSessions] = useState<Record<string, string>>({})
@@ -917,7 +917,7 @@ export function App() {
   const orphanTeams = office.teams.filter((t) => !office.groups.some((g) => g.id === t.groupId))
   /** 팀·로비에는 근무·휴식 세션. 휴식은 호스트가 다시 띄우면 저절로 돌아오므로 자리를 지킨다 */
   const lobbySessions = snapshot.sessions.filter((s) => !s.teamId && attendanceOf(s) !== 'off')
-  /** 퇴근 세션은 맨 아래 "퇴근" 에 모은다. 서버가 준 순서 그대로 */
+  /** 퇴근 세션은 맨 아래 "Off Duty" 에 모은다. 서버가 준 순서 그대로 */
   const offDutySessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'off')
   /** footer 집계는 근무 세션만. 휴식·퇴근 세션은 훅 상태가 남아 있어도 세지 않는다 */
   const presentSessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'present')
@@ -990,7 +990,7 @@ export function App() {
               <li className="group">
                 <div className="group-label toggle" onClick={() => setIsOffDutyOpen(!isOffDutyOpen)}>
                   <span className="name">
-                    {isOffDutyOpen ? '▾' : '▸'} 퇴근
+                    {isOffDutyOpen ? '▾' : '▸'} Off Duty
                   </span>
                   <span className="count">{offDutySessions.length}</span>
                 </div>
