@@ -1,7 +1,11 @@
+import type { DotCharacter, DotLook } from './dotCharacter'
 import { parseHex, recolorPixels, type RecolorSlot } from './recolor'
 
 /** 인물 아틀라스와 색 바꾸기 마스크 (tools/sprites/mask.py). Office.tsx 의 DOT_SHEET_URL 과 같은 판 */
+const ATLAS_SHEET_URL = '/office/office-v1.json'
 const ATLAS_IMAGE_URL = '/office/office-v1.png'
+/** 머리 그림: 셀(64×128) 안 정사각형. 목록 아바타(22px)는 그 절반, Off Duty 머리는 1/3 (도트 px → 아트 px) */
+export const HEAD_RECT: Rect = { x: 10, y: 10, w: 44, h: 44 }
 const RECOLOR_URL = '/office/office-v1-recolor.json'
 
 export interface Rect {
@@ -20,7 +24,37 @@ export interface RecolorArt {
   bases: BaseColors
 }
 
+export interface CharacterSheet {
+  characters: DotCharacter[]
+  /** 인물 id → idle 첫 칸 (없으면 typing 첫 칸) */
+  frames: Map<string, Rect>
+}
+
+let sheetPromise: Promise<CharacterSheet> | null = null
 let artPromise: Promise<RecolorArt> | null = null
+
+/** 아틀라스 JSON 의 인물 목록·첫 칸을 한 번만 읽는다 (실패하면 다음에 다시) */
+export function loadCharacterSheet(): Promise<CharacterSheet> {
+  sheetPromise ??= fetch(ATLAS_SHEET_URL)
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    })
+    .then((data: { frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }>; meta: { jkCorp: { characters?: DotCharacter[] } } }) => {
+      const characters = data.meta.jkCorp.characters ?? []
+      const frames = new Map<string, Rect>()
+      for (const { id } of characters) {
+        const frame = data.frames[`char/${id}/idle/0`] ?? data.frames[`char/${id}/typing/0`]
+        if (frame) frames.set(id, frame.frame)
+      }
+      return { characters, frames }
+    })
+    .catch((error: unknown) => {
+      sheetPromise = null
+      throw error
+    })
+  return sheetPromise
+}
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -89,4 +123,17 @@ export function paintCharacter(art: RecolorArt, character: string, rects: Rect[]
     x += rect.w
   }
   return canvas
+}
+
+const headUrls = new Map<string, string | null>()
+
+/** 그 인물·색의 머리 그림 data URL (목록 아바타). 조합마다 한 번 만든다. 인물이 아틀라스·마스크에 없으면 null */
+export function headImageUrl(sheet: CharacterSheet, art: RecolorArt, look: DotLook): string | null {
+  const key = `${look.id}|${look.hair}|${look.top}`
+  if (headUrls.has(key)) return headUrls.get(key) ?? null
+  const frame = sheet.frames.get(look.id)
+  const canvas = frame ? paintCharacter(art, look.id, [{ x: frame.x + HEAD_RECT.x, y: frame.y + HEAD_RECT.y, w: HEAD_RECT.w, h: HEAD_RECT.h }], look.hair, look.top) : null
+  const url = canvas ? canvas.toDataURL() : null
+  headUrls.set(key, url)
+  return url
 }

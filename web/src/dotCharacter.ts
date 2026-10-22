@@ -16,3 +16,23 @@ export function pickDotCharacter(sessionId: string, isLead: boolean, characters:
   if (candidates.length === 0) return null
   return candidates[hashOf(sessionId) % candidates.length].id
 }
+
+/** 세션이 앉을 인물과 색 (책상·목록 머리·Off Duty 머리가 같이 쓴다) */
+export interface DotLook {
+  id: string
+  hair: string | null
+  top: string | null
+}
+
+/**
+ * 사용자가 고른 인물(아틀라스에 있을 때만)과 그 색 → 없으면 세션 ID 해시로 고른 프리셋(색 없음). 인물이 하나도 없으면 null
+ */
+export function dotLookOf(
+  session: { id: string; role: string | null; character?: { id: string; hair: string | null; top: string | null } | null },
+  characters: DotCharacter[],
+): DotLook | null {
+  const chosen = session.character
+  if (chosen && characters.some((character) => character.id === chosen.id)) return { id: chosen.id, hair: chosen.hair, top: chosen.top }
+  const id = pickDotCharacter(session.id, session.role === 'lead', characters)
+  return id ? { id, hair: null, top: null } : null
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pickDotCharacter, type DotCharacter } from './dotCharacter'
+import { dotLookOf, pickDotCharacter, type DotCharacter } from './dotCharacter'
 
 const characters: DotCharacter[] = [
   { id: 'boss-a', pool: 'lead' },
@@ -31,5 +31,24 @@ describe('pickDotCharacter', () => {
     const membersOnly = characters.filter((character) => character.pool === 'member')
     expect(pickDotCharacter(ids[0], true, membersOnly)).toMatch(/^dev-/)
     expect(pickDotCharacter(ids[0], false, [])).toBeNull()
+  })
+})
+
+describe('dotLookOf', () => {
+  it('고른 인물이 아틀라스에 있으면 그 인물과 색', () => {
+    const session = { id: ids[0], role: 'lead', character: { id: 'dev-b', hair: '#112233', top: null } }
+    expect(dotLookOf(session, characters)).toEqual({ id: 'dev-b', hair: '#112233', top: null })
+  })
+
+  it('고른 것이 없거나 아틀라스에 없는 인물이면 해시로 고른 프리셋, 색은 없음', () => {
+    for (const character of [null, undefined, { id: 'gone', hair: '#112233', top: '#445566' }]) {
+      const look = dotLookOf({ id: ids[1], role: 'lead', character }, characters)
+      expect(look).toEqual({ id: pickDotCharacter(ids[1], true, characters), hair: null, top: null })
+    }
+    expect(dotLookOf({ id: ids[1], role: null }, characters)?.id).toMatch(/^dev-/)
+  })
+
+  it('인물이 없으면 null', () => {
+    expect(dotLookOf({ id: ids[0], role: null }, [])).toBeNull()
   })
 })

@@ -15,8 +15,8 @@ import {
 } from 'pixi.js'
 import { attendanceOf, type Office as OfficeData, type Group, type Session, type Team } from './types'
 import { avatarOf, type Avatar } from './avatar'
-import { pickDotCharacter, type DotCharacter } from './dotCharacter'
-import { loadRecolorArt, paintCharacter, type RecolorArt } from './characterArt'
+import { dotLookOf, type DotCharacter } from './dotCharacter'
+import { HEAD_RECT, loadRecolorArt, paintCharacter, type RecolorArt } from './characterArt'
 import {
   DESK_TILES_H,
   DESK_TILES_W,
@@ -738,6 +738,8 @@ interface DotArt {
   recolor: RecolorArt | null
   /** 색을 바꾼 인물 프레임: `인물|머리|윗옷` → 프레임 이름 → 텍스처. 처음 그릴 때 만들고 계속 쓴다 */
   recolored: Map<string, Record<string, Texture>>
+  /** Off Duty 머리: `인물|머리|윗옷` → 텍스처 */
+  heads: Map<string, Texture>
 }
 
 /** 아틀라스 둘과 반복 타일을 읽고 확대를 nearest 로 (전역 기본값을 바꾸면 클래식 글자까지 바뀌어 텍스처마다) */
@@ -758,7 +760,7 @@ async function loadDotArt(): Promise<DotArt> {
   )
   const tiles = Object.fromEntries(entries)
   for (const source of [sheet.textureSource, env.textureSource, ...entries.map(([, tile]) => tile.texture.source)]) source.scaleMode = 'nearest'
-  return { sheet, meta, env, tiles, recolor, recolored: new Map() }
+  return { sheet, meta, env, tiles, recolor, recolored: new Map(), heads: new Map() }
 }
 
 /** 그 인물의 프레임 텍스처들. 고른 색이 있으면 색을 바꾼 것 (조합마다 한 번 만든다) */
@@ -786,6 +788,23 @@ function characterTextures(art: DotArt, character: string, hair: string | null, 
   })
   art.recolored.set(key, textures)
   return textures
+}
+
+/** Off Duty 머리 (도트): 그 인물·색 idle 첫 칸의 머리 부분 (목록 아바타와 같은 자리). 인물이 없으면 null */
+function dotHead(art: DotArt, session: Session): Sprite | null {
+  const look = dotLookOf(session, art.meta.characters ?? [])
+  if (!look) return null
+  const key = `${look.id}|${look.hair}|${look.top}`
+  let texture = art.heads.get(key)
+  if (!texture) {
+    const base = characterTextures(art, look.id, look.hair, look.top)[`char/${look.id}/idle/0`]
+    if (!base) return null
+    texture = new Texture({ source: base.source, frame: new Rectangle(base.frame.x + HEAD_RECT.x, base.frame.y + HEAD_RECT.y, HEAD_RECT.w, HEAD_RECT.h) })
+    art.heads.set(key, texture)
+  }
+  const sprite = new Sprite(texture)
+  sprite.scale.set(1 / DOT_SCALE)
+  return sprite
 }
 
 /** 도트 px 로 그리는 하위 컨테이너 (1/DOT_SCALE) */
@@ -1096,11 +1115,9 @@ function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: Do
   let animation: AnimatedSprite | null = null
   if (!isOnBreak) {
     // 사용자가 고른 인물(아틀라스에 있을 때만)과 색 → 세션 ID 해시로 고른 프리셋 (지시자는 리더 풀)
-    const chosen = session.character
-    const isChosen = !!chosen && !!art.meta.characters?.some((c) => c.id === chosen.id)
-    const character =
-      (isChosen ? chosen.id : null) ?? pickDotCharacter(session.id, isLead, art.meta.characters ?? []) ?? (isLead ? 'lead' : 'member')
-    const frames = isChosen ? characterTextures(art, character, chosen.hair, chosen.top) : art.sheet.textures
+    const look = dotLookOf(session, art.meta.characters ?? [])
+    const character = look?.id ?? (isLead ? 'lead' : 'member')
+    const frames = look ? characterTextures(art, character, look.hair, look.top) : art.sheet.textures
     const { textures, fps, isDim } = dotFrames(art, character, dotStateOf(session.status), frames)
     animation = new AnimatedSprite({ textures, autoUpdate: false })
     animation.position.set(DOT_DESK.personX, DOT_DESK.baseline)
@@ -1741,7 +1758,13 @@ export function Office(props: Props) {
           const tooltipName = label('', 7, 0xffffff, Math.min(160, map.w - 16))
           tooltip.addChild(tooltipBackground, tooltipName)
           offDuty.slice(0, visibleCount).forEach((session, index) => {
-            const head = drawHead(avatarOf(session.id), 'ended')
+            // 도트는 그 세션 인물 머리 (책상·목록 아바타와 같은 인물·색), 클래식은 avatar.ts 머리 (눈 감음)
+            const dotHeadSprite = art ? dotHead(art, session) : null
+            const head = dotHeadSprite ? new Container() : drawHead(avatarOf(session.id), 'ended')
+            if (dotHeadSprite) {
+              dotHeadSprite.position.set(2, 0)
+              head.addChild(dotHeadSprite)
+            }
             head.position.set(PAD_X + index * OFF_DUTY_HEAD_STEP, 70)
             if (session.id === selectedId) head.addChildAt(new Graphics().rect(-2, -2, 22, 19).fill(0xa2bfaa), 0)
             head.eventMode = 'static'

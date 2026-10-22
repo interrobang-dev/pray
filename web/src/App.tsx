@@ -16,6 +16,8 @@ import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { FlowPanel } from './FlowPanel'
 import { Modal, Segmented } from './Modal'
 import { CharacterPicker, type CharacterChoice } from './CharacterPicker'
+import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, type RecolorArt } from './characterArt'
+import { dotLookOf } from './dotCharacter'
 import {
   attendanceOf,
   statusLabel,
@@ -273,9 +275,23 @@ export function App() {
   const [isOfficeHidden, setIsOfficeHidden] = useState(readIsOfficeHidden)
   /** 사무실 그림 방식 (localStorage). 헤더 버튼으로 바꾼다 */
   const [officeStyle, setOfficeStyle] = useState<OfficeStyle>(readOfficeStyle)
+  /** 목록 아바타를 도트 인물 머리로 그릴 아틀라스 (사무실 그림이 도트일 때만 읽는다. 못 읽으면 클래식 아바타 그대로) */
+  const [dotHeadArt, setDotHeadArt] = useState<{ sheet: CharacterSheet; art: RecolorArt } | null>(null)
   /** 데스크톱에서 사무실을 숨긴 화면: 패널이 목록 오른쪽 폭을 다 쓰고, 세션을 안 골랐으면 그 자리에 안내 */
   const isOfficeHiddenLayout = !isNarrow && isOfficeHidden
   const [theme, setTheme] = useState<ThemeChoice>(themeChoice)
+
+  useEffect(() => {
+    if (officeStyle !== 'dot' || dotHeadArt) return
+    let isCurrent = true
+    Promise.all([loadCharacterSheet(), loadRecolorArt()]).then(
+      ([sheet, art]) => isCurrent && setDotHeadArt({ sheet, art }),
+      (error: unknown) => console.error('목록 아바타용 도트 인물을 읽지 못해 클래식 아바타로 그린다', error),
+    )
+    return () => {
+      isCurrent = false
+    }
+  }, [officeStyle, dotHeadArt])
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000)
@@ -892,6 +908,8 @@ export function App() {
    */
   function renderSession(session: Session, hasCwd: boolean, teamName?: string) {
     const avatar = avatarOf(session.id)
+    const look = officeStyle === 'dot' && dotHeadArt ? dotLookOf(session, dotHeadArt.sheet.characters) : null
+    const headUrl = look && dotHeadArt ? headImageUrl(dotHeadArt.sheet, dotHeadArt.art, look) : null
     const elapsed = formatElapsed(session.lastAt, now)
     const model = modelLabel(session)
     const attendance = attendanceOf(session)
@@ -909,8 +927,8 @@ export function App() {
           title={isPresent ? statusLabel[session.status] : attendance === 'break' ? '휴식' : '퇴근'}
         />
         <span
-          className={['avatar', roleLabel === '팀장' ? 'lead' : roleLabel === '파트장' ? 'part-lead' : ''].join(' ')}
-          style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties}
+          className={['avatar', roleLabel === '팀장' ? 'lead' : roleLabel === '파트장' ? 'part-lead' : '', headUrl ? 'dot' : ''].join(' ')}
+          style={(headUrl ? { backgroundImage: `url(${headUrl})` } : { '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) }) as CSSProperties}
           role={roleLabel ? 'img' : undefined}
           title={roleLabel ?? undefined}
           aria-label={roleLabel ?? undefined}
