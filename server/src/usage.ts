@@ -75,12 +75,19 @@ export function parseUsage(raw: unknown, account: { plan: string | null; email: 
   }
 }
 
+/** 요금제 이름. rateLimitTier 끝이 `_<숫자>x`(예: default_claude_max_5x)면 배수를 붙여 "max 5x", 아니면 subscriptionType 그대로 */
+export function planOf(subscriptionType: unknown, rateLimitTier: unknown): string | null {
+  if (typeof subscriptionType !== 'string' || !subscriptionType) return null
+  const multiplier = typeof rateLimitTier === 'string' ? /_(\d+)x$/.exec(rateLimitTier)?.[1] : undefined
+  return multiplier ? `${subscriptionType} ${multiplier}x` : subscriptionType
+}
+
 async function readCredentials(): Promise<{ accessToken: string; plan: string | null } | null> {
   try {
     const parsed = JSON.parse(await readFile(credentialsPath, 'utf8'))
     const oauth = parsed.claudeAiOauth
     if (typeof oauth?.accessToken !== 'string') return null
-    return { accessToken: oauth.accessToken, plan: oauth.subscriptionType ?? null }
+    return { accessToken: oauth.accessToken, plan: planOf(oauth.subscriptionType, oauth.rateLimitTier) }
   } catch {
     return null
   }

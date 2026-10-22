@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { makeUsageCache, parseUsage, readAccountEmail } from './usage.js'
+import { makeUsageCache, parseUsage, planOf, readAccountEmail } from './usage.js'
 
 const now = new Date('2026-10-20T04:00:00Z')
 
@@ -49,6 +49,30 @@ describe('parseUsage', () => {
       ['5h', 'session', null, 10],
       ['wk', 'weekly_all', null, 20],
     ])
+  })
+})
+
+describe('planOf', () => {
+  it('appends the Max multiplier from rateLimitTier', () => {
+    expect(planOf('max', 'default_claude_max_5x')).toBe('max 5x')
+    expect(planOf('max', 'default_claude_max_20x')).toBe('max 20x')
+  })
+
+  it('keeps subscriptionType when the tier has no multiplier', () => {
+    expect(planOf('pro', 'default_claude_ai')).toBe('pro')
+    expect(planOf('max', 'default_claude_max_x')).toBe('max')
+    expect(planOf('max', '')).toBe('max')
+  })
+
+  it('keeps subscriptionType without the key or with a non-string tier', () => {
+    expect(planOf('max', undefined)).toBe('max')
+    expect(planOf('max', null)).toBe('max')
+    expect(planOf('max', 5)).toBe('max')
+  })
+
+  it('is null without subscriptionType', () => {
+    expect(planOf(undefined, 'default_claude_max_5x')).toBeNull()
+    expect(planOf('', 'default_claude_max_5x')).toBeNull()
   })
 })
 
