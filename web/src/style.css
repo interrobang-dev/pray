@@ -264,6 +264,41 @@ header button.icon svg {
   border-radius: 6px;
   padding: 7px 9px;
 }
+/* 이름 모달의 도트 인물 고르기: 썸네일 격자 (아틀라스를 배경으로 잘라 보인다) */
+.character-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+}
+.character-picker button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.character-picker button.is-selected {
+  border-color: var(--green);
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+.character-thumb {
+  display: block;
+  width: 64px;
+  height: 80px;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.character-name {
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .create button.primary {
   background: var(--green);
   color: var(--on-accent);

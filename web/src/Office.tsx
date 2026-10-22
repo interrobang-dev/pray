@@ -1056,8 +1056,12 @@ function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: Do
 
   let animation: AnimatedSprite | null = null
   if (!isOnBreak) {
-    // 세션 ID 해시로 인물 프리셋을 고른다 (지시자는 리더 풀)
-    const character = pickDotCharacter(session.id, isLead, art.meta.characters ?? []) ?? (isLead ? 'lead' : 'member')
+    // 사용자가 고른 인물(아틀라스에 있을 때만) → 세션 ID 해시로 고른 프리셋 (지시자는 리더 풀)
+    const chosen = session.character?.id
+    const character =
+      (chosen && art.meta.characters?.some((c) => c.id === chosen) ? chosen : null) ??
+      pickDotCharacter(session.id, isLead, art.meta.characters ?? []) ??
+      (isLead ? 'lead' : 'member')
     const { textures, fps, isDim } = dotFrames(art, character, dotStateOf(session.status))
     animation = new AnimatedSprite({ textures, autoUpdate: false })
     animation.position.set(DOT_DESK.personX, DOT_DESK.baseline)

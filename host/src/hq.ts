@@ -44,11 +44,20 @@ export interface Office {
   teams: Team[]
 }
 
+/** 사용자가 고른 도트 사무실 인물 (프리셋 id). 머리·윗옷 색은 '#rrggbb', null 이면 그 인물 기본색 */
+export interface SessionCharacter {
+  id: string
+  hair: string | null
+  top: string | null
+}
+
 interface HqFile extends Office {
   webSessions: WebSessionRecord[]
   offDuty: OffDutyRecord[]
   /** 사용자가 직접 붙인 세션 이름. 없으면 화면은 jsonl 의 ai-title 을 쓴다. 외부 세션에도 붙일 수 있어 webSessions 와 별도 */
   sessionNames: Record<string, string>
+  /** 사용자가 고른 도트 인물. 없으면 화면이 세션 ID 해시로 고른다. 이름과 같이 지운다 */
+  characters: Record<string, SessionCharacter>
 }
 
 const hqDir = join(homedir(), '.claude', 'jk-corp')
@@ -78,6 +87,7 @@ function readHq(): HqFile {
     offDuty: rest.offDuty ?? [],
     teams,
     sessionNames: rest.sessionNames ?? {},
+    characters: rest.characters ?? {},
   }
 }
 
@@ -139,12 +149,13 @@ export function removeWebSession(sessionId: string): void {
   writeHq(hq)
 }
 
-/** 다시 출근할 수 없는 웹 세션(대화가 없음)의 기록과 이름을 지운다. webSessions 에 없으면 아무것도 쓰지 않고 false */
+/** 다시 출근할 수 없는 웹 세션(대화가 없음)의 기록과 이름·고른 인물을 지운다. webSessions 에 없으면 아무것도 쓰지 않고 false */
 export function discardWebSession(sessionId: string): boolean {
   const hq = readHq()
   if (!hq.webSessions.some((s) => s.sessionId === sessionId)) return false
   hq.webSessions = hq.webSessions.filter((s) => s.sessionId !== sessionId)
   delete hq.sessionNames[sessionId]
+  delete hq.characters[sessionId]
   writeHq(hq)
   return true
 }
@@ -178,23 +189,27 @@ export function returnFromOffDuty(sessionId: string): WebSessionRecord | null {
   return webSession
 }
 
-/** 퇴근 기록과 그 세션 이름을 지운다. 없으면 false */
+/** 퇴근 기록과 그 세션 이름·고른 인물을 지운다. 없으면 false */
 export function removeOffDuty(sessionId: string): boolean {
   const hq = readHq()
   if (!hq.offDuty.some((s) => s.sessionId === sessionId)) return false
   hq.offDuty = hq.offDuty.filter((s) => s.sessionId !== sessionId)
   delete hq.sessionNames[sessionId]
+  delete hq.characters[sessionId]
   writeHq(hq)
   return true
 }
 
-/** 보관 기간이 지난 퇴근 기록과 그 이름을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
+/** 보관 기간이 지난 퇴근 기록과 그 이름·고른 인물을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
 export function pruneOffDuty(now = Date.now()): string[] {
   const hq = readHq()
   const expired = hq.offDuty.filter((s) => now - Date.parse(s.endedAt) > OFF_DUTY_RETENTION_MS).map((s) => s.sessionId)
   if (expired.length === 0) return []
   hq.offDuty = hq.offDuty.filter((s) => !expired.includes(s.sessionId))
-  for (const sessionId of expired) delete hq.sessionNames[sessionId]
+  for (const sessionId of expired) {
+    delete hq.sessionNames[sessionId]
+    delete hq.characters[sessionId]
+  }
   writeHq(hq)
   return expired
 }
@@ -209,6 +224,18 @@ export function setSessionName(sessionId: string, name: string | null): void {
   const trimmed = name?.trim()
   if (trimmed) hq.sessionNames[sessionId] = trimmed
   else delete hq.sessionNames[sessionId]
+  writeHq(hq)
+}
+
+export function listCharacters(): Record<string, SessionCharacter> {
+  return readHq().characters
+}
+
+/** null 이면 지운다 (세션 ID 해시로 고르는 자동으로 복귀) */
+export function setCharacter(sessionId: string, character: SessionCharacter | null): void {
+  const hq = readHq()
+  if (character) hq.characters[sessionId] = character
+  else delete hq.characters[sessionId]
   writeHq(hq)
 }
 

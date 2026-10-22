@@ -10,11 +10,13 @@ import {
   addGroup,
   addPart,
   addTeam,
+  listCharacters,
   listOffDuty,
   listSessionNames,
   listTeams,
   listWebSessions,
   readOffice,
+  setCharacter,
   setSessionName,
   removeTeam,
   setDesk,
@@ -86,6 +88,7 @@ import {
 import type { AskQuestion } from './types.js'
 import { serialRunner } from './serialRunner.js'
 import { applySuggestion } from './suggestion.js'
+import { parseCharacter } from './character.js'
 import { answerBox, decideOutcome, judgeQueue, type QueueJudgement, type UnqueueProgress } from './unqueue.js'
 
 setupFileLog()
@@ -218,6 +221,7 @@ async function snapshotPayload() {
       suggestions,
       listWebSessions(),
       listOffDuty(),
+      listCharacters(),
     ),
   }
 }
@@ -487,6 +491,18 @@ app.patch('/api/sessions/:id', (req, res) => {
     return
   }
   setSessionName(req.params.id, name)
+  res.json({})
+  void broadcast()
+})
+
+/** 도트 사무실 인물 고르기 `{ id, hair?, top? }` (색은 '#rrggbb' 또는 null = 기본색). `{ id: null }` 이면 자동(세션 ID 해시)으로. 화면은 지시자에게만 연다 */
+app.put('/api/sessions/:id/character', (req, res) => {
+  const character = parseCharacter(req.body)
+  if (character === undefined) {
+    res.status(400).json({ message: 'id(소문자·숫자·하이픈 1~40자 또는 null), hair·top(#rrggbb 또는 null) 필요' })
+    return
+  }
+  setCharacter(req.params.id, character)
   res.json({})
   void broadcast()
 })

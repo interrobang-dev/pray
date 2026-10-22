@@ -1,3 +1,5 @@
+import type { SessionCharacter } from '@jk-corp/host/hq'
+
 export type SessionStatus =
   | 'working'
   | 'my-turn'
@@ -43,6 +45,8 @@ export interface Session {
   suggestion: string | null
   /** claude 가 백그라운드로 돌리고 있는 shell (시작 순). 근무 중이 아니면 []. 출력은 GET /api/sessions/:id/shells/:shellId/output */
   shells: Shell[]
+  /** 사용자가 고른 도트 사무실 인물 (hq.json characters). 없으면 null — 화면이 세션 ID 해시로 고른다. 바꾸기는 PUT /api/sessions/:id/character */
+  character: SessionCharacter | null
 }
 
 /** 백그라운드 shell (Bash·PowerShell 의 run_in_background, 시간 초과로 백그라운드로 넘어간 것 포함) */

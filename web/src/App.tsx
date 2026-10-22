@@ -15,6 +15,7 @@ import { UsagePanel } from './UsagePanel'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { FlowPanel } from './FlowPanel'
 import { Modal, Segmented } from './Modal'
+import { CharacterPicker } from './CharacterPicker'
 import {
   attendanceOf,
   statusLabel,
@@ -240,6 +241,8 @@ export function App() {
   const [isPartLeadSpawned, setIsPartLeadSpawned] = useState(true)
   /** 이름 변경 모달의 대상 세션 */
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
+  /** 이름 모달에서 고른 도트 인물 (null = 자동). 지시자일 때만 모달에 보인다 */
+  const [renameCharacter, setRenameCharacter] = useState<string | null>(null)
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   /** 고른 세션의 대화에서 찾아 갈 곳. Chat 이 그 세션 대화를 불러온 뒤 처리하고 비운다 */
   const [jump, setJump] = useState<(Jump & { sessionId: string }) | null>(null)
@@ -534,7 +537,22 @@ export function App() {
       alert((await response.json()).message ?? '이름 변경 실패')
       return
     }
+    const current = renameTarget.character ?? null
+    if (renameTarget.role === 'lead' && renameCharacter !== (current?.id ?? null)) {
+      // 인물을 바꾸면 색은 그 인물 기본색으로
+      const body = renameCharacter ? { id: renameCharacter, hair: null, top: null } : { id: null }
+      const characterResponse = await postJson(`/api/sessions/${renameTarget.id}/character`, 'PUT', body)
+      if (!characterResponse.ok) {
+        alert((await characterResponse.json().catch(() => ({}))).message ?? '인물 변경 실패')
+        return
+      }
+    }
     setRenameTarget(null)
+  }
+
+  function openRename(session: Session) {
+    setRenameCharacter(session.character?.id ?? null)
+    setRenameTarget(session)
   }
 
   function openTeamForm(groupId: string) {
@@ -1137,6 +1155,12 @@ export function App() {
                 placeholder="비우면 자동 제목으로 돌아감"
                 autoFocus
               />
+              {renameTarget.role === 'lead' && (
+                <>
+                  <span className="form-hint">도트 사무실 인물 (클래식 그림·목록 아바타에는 안 보인다)</span>
+                  <CharacterPicker sessionId={renameTarget.id} value={renameCharacter} onChange={setRenameCharacter} />
+                </>
+              )}
               <div className="actions">
                 <button type="submit" className="primary">
                   저장
@@ -1178,7 +1202,7 @@ export function App() {
           <section className="panel">
             <div className="panel-header">
               <b>{displayName(selected)}</b>
-              <button className="rename" title="이름 변경" onClick={() => setRenameTarget(selected)}>
+              <button className="rename" title="이름 변경" onClick={() => openRename(selected)}>
                 ✎
               </button>
               {modelLabel(selected) && (

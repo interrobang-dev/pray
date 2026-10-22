@@ -7,6 +7,7 @@ import {
   addTeam,
   addWebSession,
   discardWebSession,
+  listCharacters,
   listOffDuty,
   listSessionNames,
   listTeams,
@@ -21,6 +22,7 @@ import {
   reorderGroups,
   reorderTeams,
   returnFromOffDuty,
+  setCharacter,
   setSessionName,
   updateGroup,
 } from './hq.js'
@@ -223,19 +225,31 @@ describe('off duty records', () => {
     addWebSession(record)
     setSessionName('a', '서버 개발자')
     setSessionName('other', '남의 이름')
+    setCharacter('a', { id: 'afro', hair: null, top: '#c4453c' })
+    setCharacter('other', { id: 'lead', hair: null, top: null })
     moveToOffDuty('a', end)
     expect(removeOffDuty('a')).toBe(true)
     expect(listOffDuty()).toEqual([])
     expect(listSessionNames()).toEqual({ other: '남의 이름' })
+    expect(listCharacters()).toEqual({ other: { id: 'lead', hair: null, top: null } })
+  })
+
+  it('sets and clears a chosen character', () => {
+    setCharacter('a', { id: 'afro', hair: '#2b2622', top: null })
+    expect(listCharacters()).toEqual({ a: { id: 'afro', hair: '#2b2622', top: null } })
+    setCharacter('a', null)
+    expect(listCharacters()).toEqual({})
   })
 
   it('discards a web session that cannot be resumed together with its name', () => {
     addWebSession(record)
     setSessionName('a', '서버 개발자')
+    setCharacter('a', { id: 'afro', hair: null, top: null })
     expect(discardWebSession('a')).toBe(true)
     expect(listWebSessions()).toEqual([])
     expect(listOffDuty()).toEqual([])
     expect(listSessionNames()).toEqual({})
+    expect(listCharacters()).toEqual({})
   })
 
   it('prunes records older than the retention period with their names', () => {
@@ -247,11 +261,13 @@ describe('off duty records', () => {
     ]) {
       addWebSession({ ...record, sessionId })
       setSessionName(sessionId, sessionId)
+      setCharacter(sessionId, { id: 'lead', hair: null, top: null })
       moveToOffDuty(sessionId, { ...end, endedAt })
     }
     expect(pruneOffDuty(now)).toEqual(['old'])
     expect(listOffDuty().map((r) => r.sessionId)).toEqual(['edge', 'new'])
     expect(listSessionNames()).toEqual({ edge: 'edge', new: 'new' })
+    expect(Object.keys(listCharacters())).toEqual(['edge', 'new'])
     const before = readFileSync(hqPath, 'utf8')
     expect(pruneOffDuty(now)).toEqual([])
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
