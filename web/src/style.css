@@ -839,7 +839,7 @@ li.group.drop-after::after {
   line-height: 16px;
   color: var(--muted);
 }
-/* 대기 메시지 취소 결과 한 줄 (Chat.tsx). system 글처럼 가운데 작은 회색, 몇 초 뒤 사라진다 */
+/* 대기 메시지 취소·중지 결과 한 줄 (Chat.tsx). system 글처럼 가운데 작은 회색, 몇 초 뒤 사라진다 */
 .queue-notice {
   align-self: center;
   font-size: 11px;
@@ -1095,9 +1095,14 @@ li.group.drop-after::after {
   align-items: center;
   gap: 8px;
 }
-/* 작업 중 표시기 (Chat.tsx). claude 쪽(왼쪽)의 작은 말풍선에 점 세 개가 차례로 출렁인다 */
-.typing {
+/* 작업 중 표시기 (Chat.tsx). claude 쪽(왼쪽)의 작은 말풍선에 점 세 개가 차례로 출렁인다. 옆에 [중지] */
+.typing-row {
   align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.typing {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1135,6 +1140,16 @@ li.group.drop-after::after {
     transform: translateY(0);
     opacity: 0.4;
   }
+}
+/* 작업 중 표시기 옆 [중지] (Chat.tsx). 누르면 "중지 중…" */
+.interrupt {
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #c84a3f;
+}
+.interrupt:hover:not(:disabled) {
+  border-color: #c84a3f;
 }
 @media (prefers-reduced-motion: reduce) {
   .typing-dots span {
@@ -2021,6 +2036,12 @@ li.group.drop-after::after {
   .queued-cancel {
     padding: 4px 10px;
     font-size: 12px;
+  }
+  /* 작업 중 [중지]: 표시기 말풍선 높이만큼 키운다 */
+  .interrupt {
+    min-height: 36px;
+    padding: 6px 14px;
+    font-size: 13px;
   }
   /* 작업 묶음 줄: 손가락으로 누르기 쉽게 누르는 자리만 위아래로 넓힌다 (음수 여백이라 줄 간격은 그대로) */
   .work-summary {

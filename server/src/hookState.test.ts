@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyHook, applyQuestionDenied } from './hookState.js'
+import { applyHook, applyInterrupted, applyQuestionDenied } from './hookState.js'
 
 const base = { session_id: 's1', cwd: 'D:/x' }
 const now = new Date('2026-10-20T00:00:00Z')
@@ -93,5 +93,40 @@ describe('applyQuestionDenied', () => {
     const stopped = applyHook(undefined, { ...base, hook_event_name: 'Stop' }, now)
     expect(applyQuestionDenied(stopped, now)).toBe(stopped)
     expect(applyQuestionDenied(undefined, now)).toBeUndefined()
+  })
+})
+
+describe('applyInterrupted', () => {
+  const at = (iso: string) => new Date(iso)
+  /** 앞 차례가 끝나고 새 차례에서 도구를 쓰는 중 */
+  const working = () => {
+    const stopped = applyHook(undefined, { ...base, hook_event_name: 'Stop', last_assistant_message: '앞 차례' }, now)
+    const started = applyHook(stopped, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:00Z'))
+    return applyHook(started, { ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, at('2026-10-21T00:00:10Z'))
+  }
+  const turnStartedAt = '2026-10-21T00:00:00.000Z'
+
+  it('turns the interrupted turn into my-turn, keeping the last words of the previous turn', () => {
+    expect(applyInterrupted(working(), turnStartedAt, at('2026-10-21T00:00:20Z'))).toEqual({
+      status: 'my-turn',
+      cwd: 'D:/x',
+      lastAssistantText: '앞 차례',
+      pendingTool: null,
+      updatedAt: '2026-10-21T00:00:20.000Z',
+      workingSince: null,
+    })
+  })
+
+  it('leaves it alone when another turn started or a hook already changed it', () => {
+    const next = applyHook(working(), { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:15Z'))
+    expect(applyInterrupted(next, turnStartedAt, now)).toBe(next)
+    const stopped = applyHook(working(), { ...base, hook_event_name: 'Stop' }, at('2026-10-21T00:00:15Z'))
+    expect(applyInterrupted(stopped, turnStartedAt, now)).toBe(stopped)
+    expect(applyInterrupted(undefined, null, now)).toBeUndefined()
+  })
+
+  it('matches a turn whose start was not seen (server restarted mid-turn)', () => {
+    const resumed = applyHook(undefined, { ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, now)
+    expect(applyInterrupted(resumed, null, now)?.status).toBe('my-turn')
   })
 })

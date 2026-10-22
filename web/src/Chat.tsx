@@ -103,6 +103,7 @@ function notificationTitle(notification: TaskNotification): string {
 }
 
 const COMPACT_SUMMARY_TITLE = '대화 압축됨 · 이전 대화를 요약해 이어감'
+const INTERRUPT_TITLE = '중지됨'
 
 /** 가운데 작은 한 줄 (보고 말풍선이 되지 않는 알림·대화 압축 요약). 원문은 접어 둔다 (글자 그대로. HTML 로 꽂지 않는다) */
 function NoticeLine({ title, raw, isFailed = false }: { title: string; raw: string; isFailed?: boolean }) {
@@ -457,8 +458,19 @@ function formatDuration(ms: number): string {
   return `${seconds}초`
 }
 
-/** 메신저의 "입력 중…" 같은 작업 중 표시기. 1초 타이머가 이 컴포넌트만 다시 그리게 따로 둔다 (대화 전체 마크다운 파싱을 피하려고) */
-function WorkingIndicator({ since }: { since: string | null }) {
+/**
+ * 메신저의 "입력 중…" 같은 작업 중 표시기. 1초 타이머가 이 컴포넌트만 다시 그리게 따로 둔다 (대화 전체 마크다운 파싱을 피하려고).
+ * onInterrupt 가 있으면 옆에 [중지] (누른 뒤 서버 결과가 올 때까지 "중지 중…")
+ */
+function WorkingIndicator({
+  since,
+  onInterrupt,
+  isInterrupting,
+}: {
+  since: string | null
+  onInterrupt: (() => void) | null
+  isInterrupting: boolean
+}) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!since) return
@@ -467,17 +479,24 @@ function WorkingIndicator({ since }: { since: string | null }) {
     return () => clearInterval(timer)
   }, [since])
   return (
-    <div className="typing" role="status">
-      <span className="typing-dots" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </span>
-      <span>
-        작업 중
-        {/* 매초 바뀌는 글자를 화면 낭독기가 계속 읽지 않게 */}
-        {since && <span aria-hidden="true"> · {formatDuration(now - Date.parse(since))}</span>}
-      </span>
+    <div className="typing-row">
+      <div className="typing" role="status">
+        <span className="typing-dots" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+        <span>
+          작업 중
+          {/* 매초 바뀌는 글자를 화면 낭독기가 계속 읽지 않게 */}
+          {since && <span aria-hidden="true"> · {formatDuration(now - Date.parse(since))}</span>}
+        </span>
+      </div>
+      {onInterrupt && (
+        <button type="button" className="interrupt" disabled={isInterrupting} onClick={onInterrupt} title="claude 의 작업을 멈춘다 (터미널의 Esc 와 같다)">
+          {isInterrupting ? '중지 중…' : '중지'}
+        </button>
+      )}
     </div>
   )
 }
@@ -509,6 +528,18 @@ const CANCEL_OUTCOME_LABELS: Record<string, string> = {
 }
 /** 취소 결과 한 줄을 보여 주는 시간 */
 const CANCEL_NOTICE_MS = 6_000
+
+/** 중지 결과 (서버 outcome) → 대화 맨 아래 한 줄. 멈춘 것(stopped)은 대화의 "중지됨" 줄과 표시기가 사라지는 것으로 충분해 알리지 않는다 */
+const INTERRUPT_OUTCOME_LABELS: Record<string, string | null> = {
+  stopped: null,
+  continued: '중지됨 · 대기 중이던 메시지를 이어서 처리합니다',
+  restored: '중지됨 · 응답 전이라 보낸 글이 claude 입력칸에 남음 (다음 글과 이어 붙음): 터미널 탭에서 확인',
+  unknown: '중지 못 했을 수 있음: 터미널 탭에서 확인',
+}
+/** 중지 결과 한 줄을 보여 주는 시간. 입력칸에 남은 글 안내는 읽을 시간이 더 필요하다 */
+const INTERRUPT_NOTICE_MS = 10_000
+/** "중지 중…" 을 [중지] 로 되돌리기까지 (서버가 결말을 최대 3초 기다리므로 그보다 길게) */
+const INTERRUPT_STUCK_MS = 8_000
 
 const PASTE_TAG = /<\/?pasted_content id="[^"]*">/g
 
@@ -569,6 +600,12 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
    */
   const lastQueuedId = useMemo(() => [...messages].reverse().find((m) => m.isQueued && m.role === 'user' && !m.from)?.id ?? null, [messages])
   const canCancelQueued = isWritable && isWorking && !isApprovalNeeded && !isAsking
+  /** 작업 중 표시기 옆 [중지]. 대기 메시지 취소와 같은 조건 (승인 대기·질문 중 Esc 는 도구 거부·질문 거절이 된다. 서버도 다시 확인한다) */
+  const canInterrupt = isWritable && isWorking && !isApprovalNeeded && !isAsking
+  /** [중지] 를 누른 뒤 "중지 중…". 멈췄으면 표시기가 사라질 때까지 둔다 */
+  const [isInterrupting, setIsInterrupting] = useState(false)
+  /** 중지 결과·실패 한 줄. INTERRUPT_NOTICE_MS 뒤 사라진다 */
+  const [interruptNotice, setInterruptNotice] = useState<string | null>(null)
   const nextPendingIdRef = useRef(1)
   const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -653,6 +690,8 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
     sessionIdRef.current = sessionId
     setCancellingId(null)
     setCancelNotice(null)
+    setIsInterrupting(false)
+    setInterruptNotice(null)
     setPendings([])
     setOpenWorkKeys(new Set())
     isFirstLoadRef.current = true
@@ -742,6 +781,49 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
     const timer = setTimeout(() => setCancelNotice(null), CANCEL_NOTICE_MS)
     return () => clearTimeout(timer)
   }, [cancelNotice])
+
+  // 작업이 끝나면 "중지 중…" 도 끝. 멈췄다는데 상태가 안 바뀌면(그 사이 새 차례가 시작됨) 잠시 뒤 [중지] 로 되돌린다
+  useEffect(() => {
+    if (!isWorking) setIsInterrupting(false)
+  }, [isWorking])
+  useEffect(() => {
+    if (!isInterrupting) return
+    const timer = setTimeout(() => setIsInterrupting(false), INTERRUPT_STUCK_MS)
+    return () => clearTimeout(timer)
+  }, [isInterrupting])
+
+  useEffect(() => {
+    if (!interruptNotice) return
+    const timer = setTimeout(() => setInterruptNotice(null), INTERRUPT_NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [interruptNotice])
+
+  /** 작업 중인 claude 를 멈춘다. 서버가 Esc 를 보내고 jsonl 로 결말을 확인해 준다 (최대 몇 초). 확인 창 없음 */
+  async function interrupt() {
+    const requestSessionId = sessionId
+    setIsInterrupting(true)
+    setInterruptNotice(null)
+    let notice: string | null
+    let isStopped = false
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/interrupt`, { method: 'POST' })
+      const body = (await response.json().catch(() => ({}))) as { outcome?: string; message?: string }
+      const outcome = body.outcome ?? ''
+      isStopped = response.ok && (outcome === 'stopped' || outcome === 'restored')
+      // stopped 의 null(알리지 않음)이 ?? 로 unknown 문구가 되지 않게 키가 있는지로 본다
+      notice = response.ok
+        ? Object.hasOwn(INTERRUPT_OUTCOME_LABELS, outcome)
+          ? INTERRUPT_OUTCOME_LABELS[outcome]
+          : INTERRUPT_OUTCOME_LABELS.unknown
+        : `중지 못 함: ${body.message ?? `HTTP ${response.status}`}`
+    } catch {
+      notice = '중지 실패: 네트워크 오류'
+    }
+    if (sessionIdRef.current !== requestSessionId) return
+    // 멈췄으면 서버가 바꾼 상태가 와서 표시기가 사라질 때까지 "중지 중…" 그대로 (응답과 상태 갱신 사이에 [중지] 가 깜박이지 않게)
+    if (!isStopped) setIsInterrupting(false)
+    setInterruptNotice(notice)
+  }
 
   /** 마지막 대기 메시지를 Claude Code 대기열에서 뺀다. 서버가 ↑ 로 전부 꺼내고 나머지를 다시 넣은 뒤 결과를 준다 (몇 초 걸린다) */
   async function cancelQueued(message: ChatMessage) {
@@ -834,6 +916,8 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
             }
             // 대화 압축 요약: 사람 말이 아니라 한 줄. 요약 원문은 접어 둔다
             if (message.isCompactSummary) return <NoticeLine key={message.id} title={COMPACT_SUMMARY_TITLE} raw={message.text} />
+            // 중지(Esc) 기록: 사람 말이 아니라 한 줄. 원문은 접어 둔다
+            if (message.isInterrupt) return <NoticeLine key={message.id} title={INTERRUPT_TITLE} raw={message.text} />
             // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 말풍선, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
             const parts = message.role === 'system' ? splitNotifications(message.text) : null
             if (parts) {
@@ -907,8 +991,19 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
               대기 메시지 · {cancelNotice}
             </div>
           )}
+          {interruptNotice && (
+            <div className="queue-notice" role="status">
+              {interruptNotice}
+            </div>
+          )}
           {messages.length === 0 && pendings.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
-          {isWorking && <WorkingIndicator since={workingSince} />}
+          {isWorking && (
+            <WorkingIndicator
+              since={workingSince}
+              onInterrupt={canInterrupt ? () => void interrupt() : null}
+              isInterrupting={isInterrupting}
+            />
+          )}
           {/* 맨 아래로 내렸을 때 마지막 글이 제안 말풍선 위에 오게 비워 두는 자리. bottomRef 앞이라 scrollToBottom 이 여기까지 보여 준다 */}
           {isSuggestionShown && <div className="suggestion-space" aria-hidden="true" />}
           <div ref={bottomRef} />

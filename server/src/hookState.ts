@@ -37,6 +37,16 @@ export function applyQuestionDenied(previous: HookState | undefined, now: Date =
   return { ...previous, status: 'working', pendingTool: null, updatedAt: now.toISOString() }
 }
 
+/**
+ * 웹에서 중지(Esc)하고 jsonl 로 멈춘 것을 확인한 뒤의 상태. Claude Code 는 중지에 Stop 훅을 보내지 않아(실측) working 으로 남으므로
+ * 서버가 my-turn 으로 돌린다. Esc 를 보낸 그 차례(turnStartedAt = 그때의 workingSince)가 아직 working 일 때만 —
+ * 그 사이 다른 훅으로 바뀌었으면 그대로 둔다. lastAssistantText 는 손대지 않는다 (중지에는 마지막 말이 없다)
+ */
+export function applyInterrupted(previous: HookState | undefined, turnStartedAt: string | null, now: Date = new Date()): HookState | undefined {
+  if (previous?.status !== 'working' || previous.workingSince !== turnStartedAt) return previous
+  return { ...previous, status: 'my-turn', pendingTool: null, updatedAt: now.toISOString(), workingSince: null }
+}
+
 export function applyHook(
   previous: HookState | undefined,
   payload: HookPayload,

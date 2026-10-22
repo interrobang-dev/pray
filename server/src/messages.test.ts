@@ -136,6 +136,36 @@ describe('parseMessages', () => {
     const record: InstructionRecord = { sessionId: 'member', fromSessionId: 'lead-1', text: summary, at: '' }
     expect(attachInstructions(messages, [record], () => '팀장')[1].from).toBeUndefined()
   })
+
+  it('turns the interrupt lines (Esc) into system messages, and keeps a person quoting one as a person', () => {
+    // 실측 꼴: 도구 실행 중 Esc 면 거부된 도구 결과 다음 "… for tool use]", 글을 쓰던 중이면 "[Request interrupted by user]". 둘 다 interruptedMessageId 가 붙는다
+    const interrupt = (uuid: string, text: string) =>
+      line({ type: 'user', uuid, timestamp: uuid, interruptedMessageId: 'msg_1', message: { role: 'user', content: [{ type: 'text', text }] } })
+    const jsonl = [
+      line({ type: 'user', uuid: 'u1', timestamp: 'u1', message: { role: 'user', content: '일 해 줘' } }),
+      line({ type: 'assistant', uuid: 'a1', timestamp: 'a1', message: { id: 'm1', content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: {} }] } }),
+      line({
+        type: 'user',
+        uuid: 'r1',
+        timestamp: 'r1',
+        toolUseResult: 'User rejected tool use',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu1', is_error: true, content: "The user doesn't want to proceed with this tool use." }] },
+      }),
+      interrupt('i1', '[Request interrupted by user for tool use]'),
+      line({ type: 'user', uuid: 'u2', timestamp: 'u2', message: { role: 'user', content: '왜 [Request interrupted by user] 가 떴지?' } }),
+      interrupt('i2', '[Request interrupted by user]'),
+    ].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(messages.map((m) => [m.id, m.role, m.text, m.isInterrupt ?? false])).toEqual([
+      ['u1', 'user', '일 해 줘', false],
+      ['a1', 'assistant', '', false],
+      ['i1', 'system', '[Request interrupted by user for tool use]', true],
+      ['u2', 'user', '왜 [Request interrupted by user] 가 떴지?', false],
+      ['i2', 'system', '[Request interrupted by user]', true],
+    ])
+    expect(messages[1].toolUses[0].result).toBe("The user doesn't want to proceed with this tool use.")
+  })
 })
 
 describe('parseMessages: messages sent while claude is working', () => {

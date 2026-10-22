@@ -43,7 +43,8 @@ import { setupFileLog } from '@jk-corp/host/runtime'
 import { configDir, readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
 import { makeSendCode } from './mail.js'
-import { applyHook, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
+import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
+import { decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptJudgement } from './interrupt.js'
 import { findTranscript, isLiveSession, listSessions, projectsDir } from './sessions.js'
 import { contentTypeOf, findScratchpad, isSessionId, listScratchpad, resolveScratchpadFile } from './scratchpad.js'
 import { summarizeTranscript } from './transcript.js'
@@ -87,6 +88,8 @@ const heldQuestions = new Map<
 const suggestions = new Map<string, string>()
 /** 진행 중인 대기 메시지 취소 (세션당 하나). mod 의 입력칸 알림(POST /api/hook/prompt-box)이 단계를 넘긴다. 메모리에만 */
 const unqueues = new Map<string, UnqueueProgress>()
+/** 진행 중인 중지 (Esc 를 보내고 jsonl 결말을 기다리는 세션). 그동안 같은 세션의 중지·대기 메시지 취소를 막는다. 메모리에만 */
+const interrupts = new Set<string>()
 
 const config = readConfig()
 const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
@@ -504,6 +507,11 @@ app.post('/api/sessions/:id/queue/cancel-last', async (req, res) => {
     res.status(409).json({ message: '이미 취소하는 중' })
     return
   }
+  // 중지 중에 ↑ 가 들어가면 멈춘 뒤의 입력칸에서 이전 입력 기록을 불러온다
+  if (interrupts.has(sessionId)) {
+    res.status(409).json({ message: '중지하는 중' })
+    return
+  }
   const queued = queuedPrompts(jsonl)
   if (queued.at(-1)?.text !== text) {
     res.status(409).json({ message: '대기열의 마지막 메시지가 아님 (이미 받았을 수 있음)' })
@@ -542,6 +550,76 @@ app.post('/api/sessions/:id/queue/cancel-last', async (req, res) => {
     if (unqueues.get(sessionId) === progress) unqueues.delete(sessionId)
   }
 })
+
+/** 중지 키. Claude Code CLI 에서 작업 중에 누르는 Esc 와 같다. Ctrl+C 는 두 번 들어가면 claude 가 종료돼 쓰지 않는다 */
+const ESC_KEY = '\x1b'
+/** Esc 뒤 jsonl 에 중지가 적히기를 기다리는 시간 (실측은 0.1초 안). 안 적히면 응답 전 중지였는지로 가린다 (interrupt.ts) */
+const INTERRUPT_RECORD_TIMEOUT_MS = 3_000
+const INTERRUPT_POLL_MS = 100
+
+/**
+ * 작업 중인 claude 를 멈춘다 (pty 에 Esc 하나). 근무 중인 웹 세션이 working 이고 승인 대기·질문 중·대기 메시지 취소 중이 아닐 때만
+ * (승인 대기·질문에서 Esc 는 도구 거부·질문 거절이다). Claude Code 는 중지에 Stop 훅을 보내지 않으므로 jsonl 로 결말을 보고
+ * 멈췄으면(stopped·restored) 서버가 상태를 my-turn 으로 돌린다. 팀원이면 running task 를 실패로 끝낸다.
+ * 끝나면 { outcome: stopped·continued·restored·unknown } (interrupt.ts). 화면은 /input 으로 Esc 를 직접 보내지 않는다
+ */
+app.post('/api/sessions/:id/interrupt', async (req, res) => {
+  const sessionId = req.params.id
+  if (!host.sessions.some((s) => s.sessionId === sessionId)) {
+    res.status(404).json({ message: '웹 세션이 아님' })
+    return
+  }
+  const conflict = interrupts.has(sessionId) ? '이미 중지하는 중' : interruptConflict(sessionId)
+  if (conflict) {
+    res.status(409).json({ message: conflict })
+    return
+  }
+  interrupts.add(sessionId)
+  try {
+    const jsonl = (await findTranscript(sessionId)) ?? ''
+    // 위 await 사이에 차례가 끝났거나 질문·대기 취소가 시작됐을 수 있어 다시 본다
+    const lateConflict = interruptConflict(sessionId)
+    if (lateConflict) {
+      res.status(409).json({ message: lateConflict })
+      return
+    }
+    const turnStartedAt = hookStates.get(sessionId)?.workingSince ?? null
+    // 마지막 조각이 쓰다 만 줄이면 그 줄부터 본다
+    const fromLine = jsonl.split('\n').length - 1
+    const wasAwaitingFirstResponse = isAwaitingFirstResponse(jsonl)
+    if (!host.send({ type: 'input', sessionId, data: ESC_KEY })) {
+      res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+      return
+    }
+    let judgement: InterruptJudgement = 'unknown'
+    const deadline = Date.now() + INTERRUPT_RECORD_TIMEOUT_MS
+    while (true) {
+      judgement = judgeInterrupt((await findTranscript(sessionId)) ?? '', fromLine)
+      if (judgement !== 'unknown' || Date.now() >= deadline) break
+      await sleep(INTERRUPT_POLL_MS)
+    }
+    const outcome = decideInterrupt(judgement, wasAwaitingFirstResponse)
+    // 대기 메시지로 이어서 일해도(continued) 지시받은 일은 멈췄다. 기록이 없으면(unknown) 멈췄는지 몰라 그대로 둔다
+    if (outcome !== 'unknown') tasks.markInterrupted(sessionId)
+    if (outcome === 'stopped' || outcome === 'restored') {
+      const next = applyInterrupted(hookStates.get(sessionId), turnStartedAt)
+      if (next) hookStates.set(sessionId, next)
+    }
+    res.json({ outcome })
+    void broadcast()
+  } finally {
+    interrupts.delete(sessionId)
+  }
+})
+
+/** 중지할 수 없는 이유 (409 문구). 없으면 null. 진행 중인 중지(interrupts)는 부르는 쪽이 본다 (중지 도중의 재확인에는 자기 자신이 들어 있다) */
+function interruptConflict(sessionId: string): string | null {
+  const status = hookStates.get(sessionId)?.status
+  if (heldQuestions.has(sessionId) || status === 'needs-approval') return '승인 대기·질문 중에는 중지할 수 없음 (Esc 가 도구 거부·질문 거절이 된다)'
+  if (status !== 'working') return 'claude 가 작업 중일 때만 중지할 수 있음'
+  if (unqueues.has(sessionId)) return '대기 메시지를 취소하는 중'
+  return null
+}
 
 /**
  * 붙잡은 AskUserQuestion 에 답한다. { answers: { [질문문]: string[] } } = 고른 라벨·직접 입력한 글,

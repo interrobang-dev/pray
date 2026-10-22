@@ -1,3 +1,5 @@
+import { isInterruptText } from './interrupt.js'
+
 export interface ToolUse {
   id: string
   name: string
@@ -19,6 +21,8 @@ export interface ChatMessage {
   isQueued?: boolean
   /** Claude Code 가 대화를 압축하며 남긴 요약 (role system, text 는 요약 원문)에만 있다 */
   isCompactSummary?: true
+  /** 사람이 작업을 중지(Esc)해 Claude Code 가 남긴 "[Request interrupted by user]" 줄 (role system, text 는 원문)에만 있다 */
+  isInterrupt?: true
 }
 
 /** instructions.jsonl 한 줄. 서버가 팀원 터미널에 지시를 보낼 때 남긴다 */
@@ -218,7 +222,9 @@ export function parseMessages(jsonl: string): ChatMessage[] {
         }
       }
       const user = userTextMessage(uuid, timestamp, content)
-      if (user) messages.push(user)
+      // 중지 기록은 사람 쪽 글 줄로 남지만 사람 말이 아니다
+      if (user && isInterruptText(user.text)) messages.push({ ...user, role: 'system', isInterrupt: true })
+      else if (user) messages.push(user)
       continue
     }
 

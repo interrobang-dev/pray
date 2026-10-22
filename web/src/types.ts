@@ -115,6 +115,8 @@ export interface ChatMessage {
   isQueued?: boolean
   /** Claude Code 가 대화를 압축하며 남긴 요약 (role system, text 는 요약 원문). 옛 서버 응답에는 없다 */
   isCompactSummary?: true
+  /** 작업을 중지(Esc)해 Claude Code 가 남긴 "[Request interrupted by user]" 줄 (role system, text 는 원문). 옛 서버 응답에는 없다 */
+  isInterrupt?: true
 }
 
 /** 세션 작업 폴더(scratchpad)의 파일 하나 (`GET /api/sessions/:id/files`) */

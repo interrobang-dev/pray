@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACK_TIMEOUT_MS, TaskConflictError, TaskStore } from './teamState.js'
+import { ACK_TIMEOUT_MS, INTERRUPTED_ERROR, TaskConflictError, TaskStore } from './teamState.js'
 
 function makeStore(startMs = 0) {
   let nowMs = startMs
@@ -56,6 +56,19 @@ describe('TaskStore', () => {
     const task = store.assign('t1', 'm1', 'a')
     store.markExited('m1')
     expect(store.get(task.id)?.status).toBe('failed')
+  })
+
+  it('fails the running task when a person interrupts the member, waking the wait, and ignores a later Stop', async () => {
+    const { store } = makeStore()
+    const task = store.assign('t1', 'm1', 'a')
+    store.applyHook(hook('m1', 'UserPromptSubmit'))
+    const pending = store.wait('t1', task.id, 1000)
+    store.markInterrupted('m1')
+    expect(await pending).toMatchObject({ status: 'failed', error: INTERRUPTED_ERROR, result: null })
+    store.applyHook(hook('m1', 'Stop', '대기 메시지 답'))
+    expect(store.get(task.id)?.status).toBe('failed')
+    // 다음 지시를 받을 수 있다
+    expect(store.assign('t1', 'm1', 'b').status).toBe('running')
   })
 
   it('wakes a pending wait when the task finishes', async () => {

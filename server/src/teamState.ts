@@ -28,11 +28,14 @@ export interface Task {
  */
 export const ACK_TIMEOUT_MS = 13_000
 
+/** 사람이 중지한 task 의 error. 지시자가 jk_wait 결과로 본다 */
+export const INTERRUPTED_ERROR = '사람이 웹 화면에서 팀원의 작업을 중지함'
+
 type Waiter = { taskId: string | null; teamId: string; partId: string | null; resolve: (task: Task | null) => void }
 
 /**
  * 팀장이 팀원에게 준 task 의 상태 기계. 서버 메모리에만 있다 (훅 상태와 같은 수명).
- * 전이: assign → running → (Stop) done | (ack 없음·exit) failed
+ * 전이: assign → running → (Stop) done | (ack 없음·exit·중지) failed
  */
 export class TaskStore {
   private readonly tasks = new Map<string, Task>()
@@ -82,6 +85,12 @@ export class TaskStore {
   markExited(sessionId: string): void {
     const task = this.runningOf(sessionId)
     if (task) this.finish(task, 'failed', null, '팀원 세션이 종료됨')
+  }
+
+  /** 사람이 웹에서 팀원을 중지하면 그 팀원의 running task 는 실패. 중지에는 Stop 훅이 오지 않아 두면 끝나지 않는다 */
+  markInterrupted(sessionId: string): void {
+    const task = this.runningOf(sessionId)
+    if (task) this.finish(task, 'failed', null, INTERRUPTED_ERROR)
   }
 
   /** ack 없이 ACK_TIMEOUT_MS 가 지난 task 를 실패로. 주기적으로 호출한다 */
