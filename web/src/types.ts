@@ -41,6 +41,25 @@ export interface Session {
   question?: { questions: AskQuestion[] } | null
   /** 입력칸에 놓인 Claude Code 다음 입력 제안 (웹 세션만, 세션의 mod 가 서버로 보낸다). 옛 서버 응답에는 빠져 있다 */
   suggestion?: string | null
+  /** claude 가 백그라운드로 띄워 아직 실행 중인 Bash 명령. 근무 중이 아니면 [], 옛 서버 응답에는 빠져 있다 (없는 것으로 본다) */
+  shells?: Shell[]
+}
+
+/** 백그라운드 shell 하나 (Session.shells) */
+export interface Shell {
+  id: string
+  command: string
+  description: string | null
+  startedAt: string
+}
+
+/** shell 출력의 끝부분 (`GET /api/sessions/:id/shells/:shellId/output?lines=`) */
+export interface ShellOutput {
+  lines: string[]
+  /** 출력이 요청한 줄 수보다 길어 마지막 줄들만 왔는지 */
+  isTruncated: boolean
+  /** 출력 전체 크기 (바이트) */
+  size: number
 }
 
 /** claude 가 AskUserQuestion 으로 묻는 질문 하나. 질문은 1~4개, 선택지는 2~4개 */
