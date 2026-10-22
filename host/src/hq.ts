@@ -28,7 +28,7 @@ export interface OffDutyRecord extends WebSessionRecord {
 /** 퇴근 기록 보관 기간. 지나면 기록과 세션 이름을 지운다 */
 export const OFF_DUTY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
-/** 그룹 = 그래픽 공간. 좌표·크기는 타일 단위 */
+/** 그룹 = 그래픽 공간. 좌표·크기는 타일 단위. 화면은 w·h 를 쓰지 않는다 (그룹 크기는 안의 팀 섬으로 정한다) */
 export interface Group {
   id: string
   name: string
@@ -238,11 +238,14 @@ function reorderSlots<T extends { id: string }>(items: T[], ids: string[], isTar
 
 // ---------- 그룹 ----------
 
-/** 기존 그룹들의 오른쪽 끝 옆에 새 그룹을 둔다 */
-export function addGroup(name: string): Group {
+/**
+ * 화면이 빈 자리를 찾아 position 을 준다 (그룹·섬 크기는 화면 배치에서 정해져서). 없거나 타일 좌표가 아니면 기존 그룹들의 오른쪽 끝 옆에 둔다
+ */
+export function addGroup(name: string, position: { x?: unknown; y?: unknown } = {}): Group {
   const hq = readHq()
   const rightEdge = hq.groups.length ? Math.max(...hq.groups.map((r) => r.x + r.w)) + 1 : 0
-  const group: Group = { id: randomUUID().slice(0, 8), name, x: rightEdge, y: 0, w: 10, h: 8 }
+  const { x, y } = isTile(position.x) && isTile(position.y) ? { x: position.x, y: position.y } : { x: rightEdge, y: 0 }
+  const group: Group = { id: randomUUID().slice(0, 8), name, x, y, w: 10, h: 8 }
   hq.groups.push(group)
   writeHq(hq)
   return group
@@ -254,15 +257,30 @@ function isTile(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0
 }
 
-/** 이름·메모·위치·크기 변경. 위치는 0 이상, 크기는 MIN_GROUP_SIZE 이상 타일 정수만 받는다 */
+/** 왼쪽·위로 옮길 때 앵커가 0 밑으로 가는 팀이 있으면 그만큼 덜 옮긴다 (팀들 사이 배치는 그대로) */
+function limitShift(delta: number, anchors: number[]): number {
+  return anchors.length ? Math.max(delta, -Math.min(...anchors)) : delta
+}
+
+/**
+ * 이름·메모·위치·크기 변경. 위치는 0 이상, 크기는 MIN_GROUP_SIZE 이상 타일 정수만 받는다.
+ * 위치가 바뀌면 그 그룹 팀들의 앵커도 같은 만큼 옮긴다 (그룹을 끌면 안의 섬이 같이 움직인다)
+ */
 export function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>): Group | null {
   const hq = readHq()
   const group = hq.groups.find((r) => r.id === id)
   if (!group) return null
   if (patch.name !== undefined) group.name = patch.name
   if (patch.waitingNote !== undefined) group.waitingNote = patch.waitingNote || undefined
-  if (isTile(patch.x)) group.x = patch.x
-  if (isTile(patch.y)) group.y = patch.y
+  const teams = hq.teams.filter((t) => t.groupId === id)
+  const dx = limitShift(isTile(patch.x) ? patch.x - group.x : 0, teams.map((t) => t.x))
+  const dy = limitShift(isTile(patch.y) ? patch.y - group.y : 0, teams.map((t) => t.y))
+  group.x += dx
+  group.y += dy
+  for (const team of teams) {
+    team.x += dx
+    team.y += dy
+  }
   if (isTile(patch.w) && patch.w >= MIN_GROUP_SIZE) group.w = patch.w
   if (isTile(patch.h) && patch.h >= MIN_GROUP_SIZE) group.h = patch.h
   writeHq(hq)
@@ -313,20 +331,22 @@ export class GroupNotFoundError extends Error {
   }
 }
 
-export function addTeam(input: { name: string; cwd: string; groupId: string }): Team {
+/** 앵커(x·y)는 화면이 빈 자리를 찾아 준다. 없거나 타일 좌표가 아니면 같은 그룹 팀들 아래에 둔다 */
+export function addTeam(input: { name: string; cwd: string; groupId: string; x?: unknown; y?: unknown }): Team {
   const hq = readHq()
   if (hq.teams.some((t) => normalizeCwd(t.cwd) === normalizeCwd(input.cwd))) throw new TeamConflictError(input.cwd)
   const group = hq.groups.find((r) => r.id === input.groupId)
   if (!group) throw new GroupNotFoundError()
   const siblings = hq.teams.filter((t) => t.groupId === group.id)
   // 섬 테두리(앵커 -1타일)가 그룹 벽과 겹치지 않게 +2. 같은 그룹의 팀들 아래에 둔다. 겹치면 사용자가 끌어 옮긴다
-  const y = siblings.length ? Math.max(...siblings.map((t) => t.y)) + 5 : group.y + 2
+  const fallback = { x: group.x + 2, y: siblings.length ? Math.max(...siblings.map((t) => t.y)) + 5 : group.y + 2 }
+  const { x, y } = isTile(input.x) && isTile(input.y) ? { x: input.x, y: input.y } : fallback
   const team: Team = {
     id: randomUUID().slice(0, 8),
     name: input.name,
     cwd: input.cwd,
     groupId: group.id,
-    x: group.x + 2,
+    x,
     y,
     desks: {},
     parts: [],

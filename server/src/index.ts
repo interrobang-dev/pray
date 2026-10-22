@@ -890,14 +890,15 @@ async function assignTask(team: Team, part: Part | null, sessionId: string, inst
   res.json(task)
 }
 
+/** x·y(섬 앵커)는 화면이 빈 자리를 찾아 준다. 없으면 hq 가 정한다 */
 app.post('/api/team', (req, res) => {
-  const { name, cwd, groupId } = req.body as { name?: string; cwd?: string; groupId?: string }
+  const { name, cwd, groupId, x, y } = req.body as { name?: string; cwd?: string; groupId?: string; x?: unknown; y?: unknown }
   if (!name?.trim() || !cwd?.trim() || !groupId) {
     res.status(400).json({ message: 'name, cwd, groupId 필요' })
     return
   }
   try {
-    res.json(addTeam({ name: name.trim(), cwd: cwd.trim(), groupId }))
+    res.json(addTeam({ name: name.trim(), cwd: cwd.trim(), groupId, x, y }))
   } catch (error) {
     if (error instanceof TeamConflictError) {
       res.status(409).json({ message: error.message })
@@ -1292,13 +1293,14 @@ app.delete('/api/groups/:id', (req, res) => {
   broadcastOffice()
 })
 
+/** x·y 는 화면이 빈 자리를 찾아 준다. 없으면 hq 가 정한다 */
 app.post('/api/groups', (req, res) => {
-  const { name } = req.body as { name?: string }
+  const { name, x, y } = req.body as { name?: string; x?: unknown; y?: unknown }
   if (!name?.trim()) {
     res.status(400).json({ message: '이름 필요' })
     return
   }
-  res.json(addGroup(name.trim()))
+  res.json(addGroup(name.trim(), { x, y }))
   broadcastOffice()
 })
 
@@ -1349,6 +1351,7 @@ function isIdList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((id) => typeof id === 'string')
 }
 
+/** x·y 가 바뀌면 그 그룹 팀들의 앵커도 같은 만큼 옮긴다 (hq updateGroup) */
 app.patch('/api/groups/:id', (req, res) => {
   const group = updateGroup(req.params.id, req.body as Partial<Omit<Group, 'id'>>)
   if (!group) {

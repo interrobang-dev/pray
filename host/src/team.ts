@@ -21,7 +21,7 @@ export interface Team {
   y: number
   /** 팀장 세션 (선택, 팀당 하나). 팀 직속(파트 없는 세션)만 지휘 */
   leadSessionId?: string
-  /** 앵커 기준 책상 오프셋. 끌어 놓았을 때만 저장 */
+  /** 예전 책상 끌기의 기록 (앵커 기준 오프셋). 화면은 읽지 않는다 — 책상은 인원으로 자동 배치 */
   desks: Record<string, { dx: number; dy: number }>
   parts: Part[]
   /** 팀 폴더 세션의 파트 소속 (sessionId → partId). worktree 파트 소속은 폴더로 정해져 저장하지 않는다 */

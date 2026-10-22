@@ -75,6 +75,7 @@ export interface Group {
   name: string
   x: number
   y: number
+  /** 화면은 쓰지 않는다 (그룹 크기는 안의 팀 섬으로 정한다) */
   w: number
   h: number
   waitingNote?: string
@@ -99,7 +100,7 @@ export interface Team {
   x: number
   y: number
   leadSessionId?: string
-  /** 앵커 기준 책상 오프셋. 끌어 놓았을 때만 저장 */
+  /** 예전 책상 끌기의 기록 (앵커 기준 오프셋). 화면은 읽지 않는다 — 책상은 인원으로 자동 배치 */
   desks: Record<string, { dx: number; dy: number }>
   /** 없으면 빈 배열. 소속은 서버가 판정해 Session.partId 로 준다 */
   parts: Part[]

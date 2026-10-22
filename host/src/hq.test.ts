@@ -22,6 +22,7 @@ import {
   reorderTeams,
   returnFromOffDuty,
   setSessionName,
+  updateGroup,
 } from './hq.js'
 
 // hq.ts 는 import 때 homedir() 로 경로를 정한다. 실제 ~/.claude/jk-corp/hq.json 대신 임시 폴더를 쓴다
@@ -144,6 +145,49 @@ describe('list order', () => {
     expect(() => reorderTeams(g1.id, [u1.id])).toThrow(OrderMismatchError)
     expect(reorderTeams('nope', [t1.id])).toBeNull()
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
+  })
+})
+
+describe('office positions', () => {
+  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
+  afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
+
+  const anchors = () => Object.fromEntries(readOffice().teams.map((t) => [t.name, { x: t.x, y: t.y }]))
+
+  it('moves the teams of a moved group by the same amount and leaves other groups\' teams', () => {
+    const g1 = addGroup('가', { x: 10, y: 10 })
+    const g2 = addGroup('나', { x: 40, y: 0 })
+    addTeam({ name: 't1', cwd: 'C:/a', groupId: g1.id, x: 12, y: 12 })
+    addTeam({ name: 't2', cwd: 'C:/b', groupId: g1.id, x: 20, y: 15 })
+    addTeam({ name: 'u1', cwd: 'C:/c', groupId: g2.id, x: 42, y: 2 })
+    expect(updateGroup(g1.id, { x: 13, y: 6 })).toMatchObject({ x: 13, y: 6 })
+    expect(anchors()).toEqual({ t1: { x: 15, y: 8 }, t2: { x: 23, y: 11 }, u1: { x: 42, y: 2 } })
+  })
+
+  it('keeps team anchors when only the name, note or size changes', () => {
+    const group = addGroup('가', { x: 10, y: 10 })
+    addTeam({ name: 't1', cwd: 'C:/a', groupId: group.id, x: 12, y: 12 })
+    updateGroup(group.id, { name: '나', waitingNote: '메모', w: 20, h: 20 })
+    updateGroup(group.id, { x: -1, y: 1.5 })
+    expect(readOffice().groups[0]).toMatchObject({ name: '나', x: 10, y: 10 })
+    expect(anchors()).toEqual({ t1: { x: 12, y: 12 } })
+  })
+
+  it('moves less when a team anchor would go below zero, keeping the teams\' layout', () => {
+    const group = addGroup('가', { x: 5, y: 5 })
+    addTeam({ name: 't1', cwd: 'C:/a', groupId: group.id, x: 2, y: 7 })
+    addTeam({ name: 't2', cwd: 'C:/b', groupId: group.id, x: 9, y: 3 })
+    expect(updateGroup(group.id, { x: 0, y: 0 })).toMatchObject({ x: 3, y: 2 })
+    expect(anchors()).toEqual({ t1: { x: 0, y: 4 }, t2: { x: 7, y: 0 } })
+  })
+
+  it('places a new group and team at the given tile position, otherwise by the old rule', () => {
+    const g1 = addGroup('가')
+    expect(g1).toMatchObject({ x: 0, y: 0 })
+    expect(addGroup('나', { x: 3, y: 20 })).toMatchObject({ x: 3, y: 20 })
+    expect(addGroup('다', { x: -1, y: 2 })).toMatchObject({ x: 14, y: 0 })
+    expect(addTeam({ name: 't1', cwd: 'C:/a', groupId: g1.id, x: 8, y: 4 })).toMatchObject({ x: 8, y: 4 })
+    expect(addTeam({ name: 't2', cwd: 'C:/b', groupId: g1.id, x: '3', y: 4 })).toMatchObject({ x: 2, y: 9 })
   })
 })
 

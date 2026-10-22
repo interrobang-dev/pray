@@ -10,6 +10,7 @@ import {
 import { Terminal } from './Terminal'
 import { Chat, type Jump, type JumpTarget } from './Chat'
 import { Office } from './Office'
+import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { Modal, Segmented } from './Modal'
@@ -374,7 +375,9 @@ export function App() {
     event.preventDefault()
     if (!teamForm) return
     const form = new FormData(event.currentTarget)
-    const response = await postJson('/api/team', 'POST', { name: form.get('name'), cwd: form.get('cwd'), groupId: teamForm.groupId })
+    // 섬 크기는 화면 배치에서 정해져서 빈 자리도 화면이 찾아 넘긴다 (사무실을 안 띄운 폰에서도 같은 배치로)
+    const anchor = spotForNewTeam(layoutOffice(office, snapshot.sessions), teamForm.groupId)
+    const response = await postJson('/api/team', 'POST', { name: form.get('name'), cwd: form.get('cwd'), groupId: teamForm.groupId, ...anchor })
     if (!response.ok) {
       alert((await response.json()).message ?? '팀 생성 실패')
       return
@@ -423,7 +426,8 @@ export function App() {
   async function createGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const response = await postJson('/api/groups', 'POST', { name: form.get('name') })
+    const spot = spotForNewGroup(layoutOffice(office, snapshot.sessions))
+    const response = await postJson('/api/groups', 'POST', { name: form.get('name'), ...spot })
     if (!response.ok) {
       alert((await response.json()).message ?? '그룹 생성 실패')
       return
@@ -557,19 +561,24 @@ export function App() {
     void postJson(`/api/groups/${group.id}`, 'PATCH', { waitingNote })
   }
 
-  function updateGroupBounds(groupId: string, bounds: Pick<Group, 'x' | 'y' | 'w' | 'h'>) {
-    setOffice((prev) => ({ ...prev, groups: prev.groups.map((r) => (r.id === groupId ? { ...r, ...bounds } : r)) }))
-    void postJson(`/api/groups/${groupId}`, 'PATCH', bounds)
+  /** 그룹 안의 팀들도 같은 만큼 옮긴다 (서버도 PATCH 한 번에 같이 옮긴다) */
+  function moveGroup(groupId: string, position: { x: number; y: number }) {
+    setOffice((prev) => {
+      const group = prev.groups.find((r) => r.id === groupId)
+      if (!group) return prev
+      const dx = position.x - group.x
+      const dy = position.y - group.y
+      return {
+        ...prev,
+        groups: prev.groups.map((r) => (r.id === groupId ? { ...r, ...position } : r)),
+        teams: prev.teams.map((t) => (t.groupId === groupId ? { ...t, x: t.x + dx, y: t.y + dy } : t)),
+      }
+    })
+    void postJson(`/api/groups/${groupId}`, 'PATCH', position)
   }
 
   function patchTeam(teamId: string, patch: Partial<Team>) {
     setOffice((prev) => ({ ...prev, teams: prev.teams.map((t) => (t.id === teamId ? { ...t, ...patch } : t)) }))
-  }
-
-  function moveDesk(teamId: string, sessionId: string, desk: { dx: number; dy: number }) {
-    const team = office.teams.find((t) => t.id === teamId)
-    if (team) patchTeam(teamId, { desks: { ...team.desks, [sessionId]: desk } })
-    void postJson(`/api/team/${teamId}/desks/${sessionId}`, 'PUT', desk)
   }
 
   function moveTeam(teamId: string, anchor: { groupId: string; x: number; y: number }) {
@@ -1080,11 +1089,10 @@ export function App() {
             sessions={snapshot.sessions}
             selectedId={selectedId}
             onSelect={selectSession}
-            onMoveDesk={moveDesk}
+            onMoveGroup={moveGroup}
             onMoveTeam={moveTeam}
             onEditTeam={editTeam}
             onEditGroup={editGroup}
-            onUpdateGroupBounds={updateGroupBounds}
           />
         )}
         {selected && (
