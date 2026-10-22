@@ -10,12 +10,13 @@ import {
   Text,
   TilingSprite,
   type FederatedPointerEvent,
+  Texture,
   type Spritesheet,
-  type Texture,
 } from 'pixi.js'
 import { attendanceOf, type Office as OfficeData, type Group, type Session, type Team } from './types'
 import { avatarOf, type Avatar } from './avatar'
 import { pickDotCharacter, type DotCharacter } from './dotCharacter'
+import { loadRecolorArt, paintCharacter, type RecolorArt } from './characterArt'
 import {
   DESK_TILES_H,
   DESK_TILES_W,
@@ -733,11 +734,22 @@ interface DotArt {
   env: Spritesheet
   /** office-v2 반복 타일 (벽·창밖 4시간대·바닥·그룹 바닥·섬 러그·Focus Zone 카펫·거리) */
   tiles: Record<string, { texture: Texture; meta: DotTileMeta }>
+  /** 인물 머리·윗옷 색 바꾸기 (못 읽으면 null 이고 고른 색 없이 그린다) */
+  recolor: RecolorArt | null
+  /** 색을 바꾼 인물 프레임: `인물|머리|윗옷` → 프레임 이름 → 텍스처. 처음 그릴 때 만들고 계속 쓴다 */
+  recolored: Map<string, Record<string, Texture>>
 }
 
 /** 아틀라스 둘과 반복 타일을 읽고 확대를 nearest 로 (전역 기본값을 바꾸면 클래식 글자까지 바뀌어 텍스처마다) */
 async function loadDotArt(): Promise<DotArt> {
-  const [sheet, env] = await Promise.all([Assets.load<Spritesheet>(DOT_SHEET_URL), Assets.load<Spritesheet>(DOT_ENV_URL)])
+  const [sheet, env, recolor] = await Promise.all([
+    Assets.load<Spritesheet>(DOT_SHEET_URL),
+    Assets.load<Spritesheet>(DOT_ENV_URL),
+    loadRecolorArt().catch((error: unknown) => {
+      console.error('도트 인물 색 바꾸기를 읽지 못해 기본색으로 그린다', error)
+      return null
+    }),
+  ])
   const meta = (sheet.data.meta as unknown as { jkCorp: DotSheetMeta }).jkCorp
   const envMeta = (env.data.meta as unknown as { jkCorp: DotSheetMeta }).jkCorp
   const base = DOT_ENV_URL.slice(0, DOT_ENV_URL.lastIndexOf('/') + 1)
@@ -746,7 +758,34 @@ async function loadDotArt(): Promise<DotArt> {
   )
   const tiles = Object.fromEntries(entries)
   for (const source of [sheet.textureSource, env.textureSource, ...entries.map(([, tile]) => tile.texture.source)]) source.scaleMode = 'nearest'
-  return { sheet, meta, env, tiles }
+  return { sheet, meta, env, tiles, recolor, recolored: new Map() }
+}
+
+/** 그 인물의 프레임 텍스처들. 고른 색이 있으면 색을 바꾼 것 (조합마다 한 번 만든다) */
+function characterTextures(art: DotArt, character: string, hair: string | null, top: string | null): Record<string, Texture> {
+  if ((!hair && !top) || !art.recolor) return art.sheet.textures
+  const key = `${character}|${hair}|${top}`
+  const cached = art.recolored.get(key)
+  if (cached) return cached
+  const prefix = `char/${character}/`
+  const names = Object.keys(art.sheet.textures).filter((name) => name.startsWith(prefix))
+  const originals = names.map((name) => art.sheet.textures[name])
+  const canvas = paintCharacter(art.recolor, character, originals.map(({ frame }) => ({ x: frame.x, y: frame.y, w: frame.width, h: frame.height })), hair, top)
+  if (!canvas) {
+    art.recolored.set(key, art.sheet.textures)
+    return art.sheet.textures
+  }
+  const source = Texture.from(canvas).source
+  source.scaleMode = 'nearest'
+  const textures: Record<string, Texture> = { ...art.sheet.textures }
+  let x = 0
+  names.forEach((name, index) => {
+    const original = originals[index]
+    textures[name] = new Texture({ source, frame: new Rectangle(x, 0, original.frame.width, original.frame.height), defaultAnchor: original.defaultAnchor })
+    x += original.frame.width
+  })
+  art.recolored.set(key, textures)
+  return textures
 }
 
 /** 도트 px 로 그리는 하위 컨테이너 (1/DOT_SCALE) */
@@ -1012,11 +1051,11 @@ function dotStateOf(status: Session['status']): DotState {
 /**
  * 그 인물·상태의 프레임과 fps. 아틀라스에 없는 상태(v0 의 idle·doze)는 typing 0번에 멈춘 한 장이고, doze 대역은 흐리게(isDim) 한다
  */
-function dotFrames(art: DotArt, character: string, state: DotState): { textures: Texture[]; fps: number; isDim: boolean } {
+function dotFrames(art: DotArt, character: string, state: DotState, frames: Record<string, Texture>): { textures: Texture[]; fps: number; isDim: boolean } {
   const key = `char/${character}/${state}`
   const names = art.sheet.data.animations?.[key]
-  if (names) return { textures: names.map((name) => art.sheet.textures[name]), fps: art.meta.animations[key]?.fps ?? 6, isDim: false }
-  return { textures: [art.sheet.textures[`char/${character}/typing/0`]], fps: 0, isDim: state === 'doze' }
+  if (names) return { textures: names.map((name) => frames[name]), fps: art.meta.animations[key]?.fps ?? 6, isDim: false }
+  return { textures: [frames[`char/${character}/typing/0`]], fps: 0, isDim: state === 'doze' }
 }
 
 /** 자리(96×144, 도트 px) 안 배치. 사람은 키보드 앞(가운데보다 조금 왼쪽), 모니터는 책상 오른쪽 */
@@ -1056,13 +1095,13 @@ function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: Do
 
   let animation: AnimatedSprite | null = null
   if (!isOnBreak) {
-    // 사용자가 고른 인물(아틀라스에 있을 때만) → 세션 ID 해시로 고른 프리셋 (지시자는 리더 풀)
-    const chosen = session.character?.id
+    // 사용자가 고른 인물(아틀라스에 있을 때만)과 색 → 세션 ID 해시로 고른 프리셋 (지시자는 리더 풀)
+    const chosen = session.character
+    const isChosen = !!chosen && !!art.meta.characters?.some((c) => c.id === chosen.id)
     const character =
-      (chosen && art.meta.characters?.some((c) => c.id === chosen) ? chosen : null) ??
-      pickDotCharacter(session.id, isLead, art.meta.characters ?? []) ??
-      (isLead ? 'lead' : 'member')
-    const { textures, fps, isDim } = dotFrames(art, character, dotStateOf(session.status))
+      (isChosen ? chosen.id : null) ?? pickDotCharacter(session.id, isLead, art.meta.characters ?? []) ?? (isLead ? 'lead' : 'member')
+    const frames = isChosen ? characterTextures(art, character, chosen.hair, chosen.top) : art.sheet.textures
+    const { textures, fps, isDim } = dotFrames(art, character, dotStateOf(session.status), frames)
     animation = new AnimatedSprite({ textures, autoUpdate: false })
     animation.position.set(DOT_DESK.personX, DOT_DESK.baseline)
     // 반투명은 뒤 의자가 비쳐 보여 색만 어둡게

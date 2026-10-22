@@ -299,6 +299,52 @@ header button.icon svg {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 고른 인물의 큰 미리보기 + 머리·윗옷 색 칸 */
+.character-colors {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.character-preview {
+  flex-shrink: 0;
+  image-rendering: pixelated;
+  background: var(--avatar-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.character-color-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.character-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.character-swatches-label {
+  width: 100%;
+  font-size: 12px;
+  color: var(--muted);
+}
+.create .character-swatches button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+.create .character-swatches button.is-base {
+  border-style: dashed;
+  border-color: var(--muted);
+}
+.create .character-swatches button.is-selected {
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 4px var(--green);
+}
 .create button.primary {
   background: var(--green);
   color: var(--on-accent);

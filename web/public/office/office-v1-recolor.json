@@ -1,0 +1,42 @@
+{
+ "atlas": "office-v1",
+ "mask": "office-v1-recolor.png",
+ "characters": {
+  "lead": {
+   "hair": "#543931",
+   "top": "#c6defa"
+  },
+  "lead-suit": {
+   "hair": "#292928",
+   "top": "#51514f"
+  },
+  "member": {
+   "hair": "#463d39",
+   "top": "#fac12d"
+  },
+  "hoodie": {
+   "hair": "#22201e",
+   "top": "#2a5437"
+  },
+  "flannel": {
+   "hair": "#fcd46b",
+   "top": "#b72420"
+  },
+  "ponytail": {
+   "hair": "#b2422d",
+   "top": "#a995c7"
+  },
+  "cardigan": {
+   "hair": "#343332",
+   "top": "#2a3f63"
+  },
+  "turtleneck": {
+   "hair": "#dbd3c8",
+   "top": "#39858d"
+  },
+  "afro": {
+   "hair": "#22211f",
+   "top": "#e57622"
+  }
+ }
+}

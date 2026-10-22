@@ -15,7 +15,7 @@ import { UsagePanel } from './UsagePanel'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { FlowPanel } from './FlowPanel'
 import { Modal, Segmented } from './Modal'
-import { CharacterPicker } from './CharacterPicker'
+import { CharacterPicker, type CharacterChoice } from './CharacterPicker'
 import {
   attendanceOf,
   statusLabel,
@@ -242,7 +242,7 @@ export function App() {
   /** 이름 변경 모달의 대상 세션 */
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   /** 이름 모달에서 고른 도트 인물 (null = 자동). 지시자일 때만 모달에 보인다 */
-  const [renameCharacter, setRenameCharacter] = useState<string | null>(null)
+  const [renameCharacter, setRenameCharacter] = useState<CharacterChoice>({ id: null, hair: null, top: null })
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   /** 고른 세션의 대화에서 찾아 갈 곳. Chat 이 그 세션 대화를 불러온 뒤 처리하고 비운다 */
   const [jump, setJump] = useState<(Jump & { sessionId: string }) | null>(null)
@@ -538,9 +538,10 @@ export function App() {
       return
     }
     const current = renameTarget.character ?? null
-    if (renameTarget.role === 'lead' && renameCharacter !== (current?.id ?? null)) {
-      // 인물을 바꾸면 색은 그 인물 기본색으로
-      const body = renameCharacter ? { id: renameCharacter, hair: null, top: null } : { id: null }
+    const isCharacterChanged =
+      renameCharacter.id !== (current?.id ?? null) || renameCharacter.hair !== (current?.hair ?? null) || renameCharacter.top !== (current?.top ?? null)
+    if (renameTarget.role === 'lead' && isCharacterChanged) {
+      const body = renameCharacter.id ? renameCharacter : { id: null }
       const characterResponse = await postJson(`/api/sessions/${renameTarget.id}/character`, 'PUT', body)
       if (!characterResponse.ok) {
         alert((await characterResponse.json().catch(() => ({}))).message ?? '인물 변경 실패')
@@ -551,7 +552,7 @@ export function App() {
   }
 
   function openRename(session: Session) {
-    setRenameCharacter(session.character?.id ?? null)
+    setRenameCharacter(session.character ? { ...session.character } : { id: null, hair: null, top: null })
     setRenameTarget(session)
   }
 

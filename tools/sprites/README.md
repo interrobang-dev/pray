@@ -44,3 +44,21 @@ SPRITE_GEN=<sprite-gen 실행 파일> bash tools/sprites/gen.sh gen --provider c
 | `inset`·`removeGridLines`·`fillDarkLines` | v0·v1 벽·바닥용 (가장자리 깎기·검은 격자선 지우기·어두운 선 메우기) |
 
 타일 메타에는 맨 위·아래 줄 최빈색 `top`·`bottom` 이 같이 들어간다 (Off Duty 하늘을 창밖 그림 위로 잇는 색).
+
+## 인물 색 바꾸기 마스크
+
+```bash
+python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v1-recolor.json \
+  --atlas web/public/office/office-v1 --preview <미리보기.png>
+```
+
+아틀라스 옆에 `<레시피 name>.png`(R = 머리·G = 윗옷 가중치)와 `.json`(인물별 기본색)을 쓴다. 아틀라스는 바꾸지 않는다. 인물 그림을 다시 만들었으면 이것도 다시 돌린다.
+
+| 키 (인물 → `hair`·`top`) | 뜻 |
+|---|---|
+| `sample` | idle 첫 칸에서 표본 색을 모을 상자들 [[x0, y0, x1, y1], …] (셀 좌표). 그 부위만 들어가게 작게 잡는다 |
+| `y` | 그 부위를 찾을 셀 세로 범위 [y0, y1] (머리와 같은 색 바지 등을 가른다) |
+| `tolerance` | 표본 색과의 RGB 거리 한도 (기본은 레시피 최상위 값) |
+| `exclude` | 고르지 않을 상자들 (얼굴·안경처럼 색이 비슷한 곳) |
+
+`--preview` 는 인물마다 idle·raise-hand 첫 칸 원본과 마스크(머리 자홍·윗옷 하늘색)를 나란히 그린다. 피부·눈·바지에 색이 묻으면 표본 상자를 줄이거나 `exclude` 를 넣는다.
