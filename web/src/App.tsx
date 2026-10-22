@@ -1083,6 +1083,7 @@ export function App() {
             unreadAlarmCount={flowStatus?.unreadAlarmCount ?? null}
             unreadChatCount={flowStatus?.unreadChatCount ?? null}
             isNarrow={isNarrow}
+            onStatus={setFlowStatus}
             onClose={() => setIsFlowOpen(false)}
           />
         )}

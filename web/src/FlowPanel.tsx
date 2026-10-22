@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Segmented } from './Modal'
 import { formatClock } from './Chat'
-import type { FlowAlarm, FlowAlarmPage } from './types'
+import type { FlowAlarm, FlowAlarmPage, FlowStatus } from './types'
 
 type AlarmFilter = 'unread' | 'all'
 
@@ -33,19 +33,34 @@ async function fetchAlarms(filter: AlarmFilter, cursor: string | null): Promise<
   }
 }
 
+/** 읽음 처리 요청. 성공하면 서버가 다시 센 FlowStatus, 실패하면 서버 문구 */
+async function postRead(path: string): Promise<{ ok: true; status: FlowStatus } | { ok: false; message: string }> {
+  try {
+    const response = await fetch(path, { method: 'POST' })
+    if (response.ok) return { ok: true, status: (await response.json()) as FlowStatus }
+    const { message } = (await response.json().catch(() => ({}))) as { message?: string }
+    return { ok: false, message: message ?? `HTTP ${response.status}` }
+  } catch {
+    return { ok: false, message: '네트워크 오류' }
+  }
+}
+
 /**
- * 오른쪽 패널 자리의 플로우 알림 목록 (읽기만). 안 읽음 | 전체, 50개씩 [더 보기].
- * unreadAlarmCount 가 바뀌면(전역 SSE flow) 첫 쪽부터 다시 받는다
+ * 오른쪽 패널 자리의 플로우 알림 목록. 안 읽음 | 전체, 50개씩 [더 보기], 항목별 [읽음]·머리의 [전체 읽음].
+ * unreadAlarmCount 가 바뀌면(전역 SSE flow) 첫 쪽부터 다시 받는다 — 단 이 패널의 [읽음] 으로 바뀐 것이면 그 항목만 읽음으로 바꾸고 다시 받지 않는다 (더 보기로 받은 쪽·스크롤이 유지되게)
  */
 export function FlowPanel({
   unreadAlarmCount,
   unreadChatCount,
   isNarrow,
+  onStatus,
   onClose,
 }: {
   unreadAlarmCount: number | null
   unreadChatCount: number | null
   isNarrow: boolean
+  /** 읽음 처리 응답의 새 상태. 플로우 줄 숫자를 SSE 를 기다리지 않고 바로 바꾼다 */
+  onStatus: (status: FlowStatus) => void
   onClose: () => void
 }) {
   const [filter, setFilter] = useState<AlarmFilter>('unread')
@@ -57,6 +72,20 @@ export function FlowPanel({
   const [now, setNow] = useState(() => Date.now())
   /** 늦게 온 옛 응답(필터를 바꾸기 전 것 등)을 버리기 위한 요청 번호 */
   const requestIdRef = useRef(0)
+  /** [읽음] 진행 중인 alarmId */
+  const [readingIds, setReadingIds] = useState<Set<string>>(() => new Set())
+  /** [읽음] 실패 문구 (alarmId → 서버 문구) */
+  const [readErrors, setReadErrors] = useState<Record<string, string>>({})
+  const [isReadingAll, setIsReadingAll] = useState(false)
+  const [readAllError, setReadAllError] = useState<string | null>(null)
+  /**
+   * [읽음] 때문에 바뀐 안 읽은 수로는 목록을 다시 받지 않는다. 서버가 읽음 처리 뒤 다시 세어 SSE 를 먼저 보내고 응답하므로
+   * 진행 중인 [읽음] 이 있는 동안의 수 변화는 건너뛰고(pendingReadsRef), 응답이 먼저 오면 그 수(ownCountRef)를 건너뛴다
+   */
+  const pendingReadsRef = useRef(0)
+  const ownCountRef = useRef<number | null | undefined>(undefined)
+  /** 마지막으로 목록을 받은 보기·새로고침 번호. 이것이 바뀌면 늘 다시 받는다 */
+  const loadedRef = useRef<{ filter: AlarmFilter; reloadCount: number } | null>(null)
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000)
@@ -64,6 +93,11 @@ export function FlowPanel({
   }, [])
 
   useEffect(() => {
+    const isCountOnly = loadedRef.current?.filter === filter && loadedRef.current.reloadCount === reloadCount
+    const isOwnChange = pendingReadsRef.current > 0 || (ownCountRef.current !== undefined && ownCountRef.current === unreadAlarmCount)
+    ownCountRef.current = undefined
+    if (isCountOnly && isOwnChange) return
+    loadedRef.current = { filter, reloadCount }
     const requestId = ++requestIdRef.current
     setIsLoading(true)
     void fetchAlarms(filter, null).then((result) => {
@@ -102,12 +136,57 @@ export function FlowPanel({
     setNextCursor(result.hasNext ? result.nextCursor : null)
   }
 
+  async function readAlarm(alarmId: string) {
+    setReadingIds((prev) => new Set(prev).add(alarmId))
+    setReadErrors((prev) => {
+      const next = { ...prev }
+      delete next[alarmId]
+      return next
+    })
+    pendingReadsRef.current++
+    const result = await postRead(`/api/flow/alarms/${encodeURIComponent(alarmId)}/read`)
+    pendingReadsRef.current--
+    setReadingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(alarmId)
+      return next
+    })
+    if (!result.ok) {
+      setReadErrors((prev) => ({ ...prev, [alarmId]: result.message }))
+      return
+    }
+    setAlarms((prev) => prev.map((alarm) => (alarm.alarmId === alarmId ? { ...alarm, isRead: true } : alarm)))
+    // SSE 가 먼저 와 이미 같은 수면 그 렌더에서 다시 받았다 (ref 가 남아 다음 변화를 건너뛰지 않게 두지 않는다)
+    if (result.status.unreadAlarmCount !== unreadAlarmCount) ownCountRef.current = result.status.unreadAlarmCount
+    onStatus(result.status)
+  }
+
+  async function readAll() {
+    if (!confirm(`플로우의 안 읽은 알림 ${unreadAlarmCount}개를 모두 읽음으로 바꿉니다. 되돌릴 수 없습니다.`)) return
+    setIsReadingAll(true)
+    setReadAllError(null)
+    const result = await postRead('/api/flow/alarms/read-all')
+    setIsReadingAll(false)
+    if (!result.ok) {
+      setReadAllError(`전체 읽음 실패: ${result.message}`)
+      return
+    }
+    // 수가 바뀌면 목록을 다시 받는다 (안 읽음 보기는 빈 목록이 된다). 그 전에 보이는 것도 읽음으로
+    setAlarms((prev) => prev.map((alarm) => ({ ...alarm, isRead: true })))
+    onStatus(result.status)
+  }
+
   const isEmpty = !isLoading && !error && alarms.length === 0
 
   return (
     <section className="panel flow-panel">
       <div className="panel-header">
         <b>Flow 알림</b>
+        {(unreadAlarmCount ?? 0) > 0 && (
+          <button className="flow-read-all" onClick={() => void readAll()} disabled={isReadingAll}>
+            {isReadingAll ? '…' : '전체 읽음'}
+          </button>
+        )}
         {/* 폰에서는 패널이 화면 전체라 "뒤로" 가 목록으로 돌아가는 버튼이다 */}
         <button className="close" onClick={onClose} title={isNarrow ? '목록으로' : '닫기'}>
           {isNarrow ? '←' : '×'}
@@ -129,11 +208,23 @@ export function FlowPanel({
           ↻
         </button>
       </div>
+      {readAllError && (
+        <div className="flow-read-error flow-read-all-error" role="alert">
+          {readAllError}
+        </div>
+      )}
       <div className="flow-list">
         {error && <p className="hint flow-error">{error}</p>}
         {isEmpty && <p className="hint">{filter === 'unread' ? '안 읽은 알림이 없습니다' : '알림이 없습니다'}</p>}
         {alarms.map((alarm) => (
-          <FlowAlarmItem key={alarm.alarmId} alarm={alarm} now={now} />
+          <FlowAlarmItem
+            key={alarm.alarmId}
+            alarm={alarm}
+            now={now}
+            isReading={readingIds.has(alarm.alarmId)}
+            readError={readErrors[alarm.alarmId] ?? null}
+            onRead={() => void readAlarm(alarm.alarmId)}
+          />
         ))}
         {nextCursor && !error && (
           <button className="flow-more" onClick={() => void loadMore()} disabled={isLoading}>
@@ -146,8 +237,20 @@ export function FlowPanel({
   )
 }
 
-/** 알림 한 줄: 안 읽음 점 · 프로젝트 · 배지 · 시각 / 문구 / content 한 줄 / 보낸 사람 */
-function FlowAlarmItem({ alarm, now }: { alarm: FlowAlarm; now: number }) {
+/** 알림 한 줄: 안 읽음 점 · 프로젝트 · 배지 · 시각 / 문구 / content 한 줄 / 보낸 사람 · [읽음](안 읽은 것만) / 읽음 실패 문구 */
+function FlowAlarmItem({
+  alarm,
+  now,
+  isReading,
+  readError,
+  onRead,
+}: {
+  alarm: FlowAlarm
+  now: number
+  isReading: boolean
+  readError: string | null
+  onRead: () => void
+}) {
   const text = alarm.message ?? alarm.content
   const detail = alarm.message && alarm.content ? alarm.content : null
   return (
@@ -167,7 +270,19 @@ function FlowAlarmItem({ alarm, now }: { alarm: FlowAlarm; now: number }) {
           {detail}
         </div>
       )}
-      <div className="flow-alarm-from">{alarm.registerName}</div>
+      <div className="flow-alarm-foot">
+        <span className="flow-alarm-from">{alarm.registerName}</span>
+        {!alarm.isRead && (
+          <button className="flow-read" onClick={onRead} disabled={isReading} title="플로우에서 이 알림을 읽음으로">
+            {isReading ? '…' : '읽음'}
+          </button>
+        )}
+      </div>
+      {readError && (
+        <div className="flow-read-error" role="alert">
+          읽음 실패: {readError}
+        </div>
+      )}
     </div>
   )
 }

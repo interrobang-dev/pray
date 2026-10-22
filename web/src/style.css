@@ -2317,6 +2317,26 @@ li.group.drop-after::after {
   display: block;
   margin: 12px auto;
 }
+/* 읽음 처리: 항목 아래쪽 줄의 [읽음](보낸 사람 오른쪽)·머리의 [전체 읽음]·실패 문구 */
+.flow-alarm-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.flow-read,
+.flow-read-all {
+  margin-left: auto;
+  padding: 1px 10px;
+  font-size: 12px;
+}
+.flow-read-error {
+  font-size: 12px;
+  color: var(--error);
+}
+.flow-read-all-error {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
 
 /* 데스크톱에서 사무실을 숨긴 화면 (App.tsx isOfficeHiddenLayout. 폰 폭에는 이 클래스가 붙지 않는다).
    세션을 골랐으면 패널이 목록 오른쪽 폭을 다 쓰고, 안 골랐으면 그 자리에 안내 한 줄 */
@@ -2622,5 +2642,16 @@ li.group.drop-after::after {
   }
   .flow-refresh {
     min-width: 40px;
+  }
+  .flow-read,
+  .flow-read-all {
+    min-height: 36px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+  /* 패널 헤더 grid 에서 이름 뒤 남은 칸을 다 차지하되 늘어나지 않게 오른쪽 끝에 붙인다 */
+  .flow-read-all {
+    grid-column: 3 / -1;
+    justify-self: end;
   }
 }
