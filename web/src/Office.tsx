@@ -39,9 +39,6 @@ const COLOR = {
   floorLine: 0xd2d3dd,
   wall: 0xf1f1f4,
   wallShadow: 0xdedfe6,
-  sky: [0xcfe6f5, 0xdff0f9, 0xeef7fb],
-  city: 0xb7c3d1,
-  cityWindow: 0xd8e2ec,
   frame: 0xffffff,
   partition: 0xffffff,
   partitionShadow: 0xc9cbd6,
@@ -120,9 +117,39 @@ function label(text: string, size: number, color = COLOR.text, wrapWidth?: numbe
   })
 }
 
+// ---------- 시간대 ----------
+
+/** 이 PC 시각의 시간대. 창밖(위쪽 벽)과 Off Duty 띠만 바뀌고 사무실 안 색은 그대로 */
+type DayPhase = 'morning' | 'day' | 'dusk' | 'night'
+
+/** 아침 6~9시, 낮 9~17시, 노을 17~19시, 밤 19~6시 */
+function dayPhaseOf(date: Date): DayPhase {
+  const hour = date.getHours()
+  return hour >= 6 && hour < 9 ? 'morning' : hour >= 9 && hour < 17 ? 'day' : hour >= 17 && hour < 19 ? 'dusk' : 'night'
+}
+
+/** 창밖: 하늘 세 띠(위→아래), 도시 실루엣, 건물 창 (아침·낮은 불 꺼진 유리색, 노을·밤은 불빛), 밤만 별 */
+const WINDOW_VIEW: Record<DayPhase, { sky: [number, number, number]; city: number; cityWindow: number; hasStars: boolean }> = {
+  morning: { sky: [0xc4dcf0, 0xf3dccd, 0xfbe9cf], city: 0xb4b7c9, cityWindow: 0xe4dfd6, hasStars: false },
+  day: { sky: [0xcfe6f5, 0xdff0f9, 0xeef7fb], city: 0xb7c3d1, cityWindow: 0xd8e2ec, hasStars: false },
+  dusk: { sky: [0x8a7cb8, 0xe7a083, 0xf6c98a], city: 0x5e5674, cityWindow: 0xf5cd7b, hasStars: false },
+  night: { sky: [0x1d2745, 0x26335a, 0x34426c], city: 0x141c30, cityWindow: 0xf5cd7b, hasStars: true },
+}
+
+/** Off Duty 띠: 하늘·맨 위 띠, 집·문, 집 창(불빛 또는 꺼진 유리)·창살, 가로등 불·불빛 아래 번짐, 이름표 글자색 */
+const STREET_VIEW: Record<
+  DayPhase,
+  { sky: number; skyTop: number; house: number; door: number; windows: [number, number]; mullion: number; lamp: number; lampGlow: number | null; label: number; hasStars: boolean }
+> = {
+  morning: { sky: 0xf0cfb4, skyTop: 0xc6d4ea, house: 0x5f6a85, door: 0x444e67, windows: [0xd9e3ea, 0xd2dde6], mullion: 0x8a9bb0, lamp: 0xd5dae2, lampGlow: null, label: 0x3a3550, hasStars: false },
+  day: { sky: 0xa9d2ee, skyTop: 0x8fc0e4, house: 0x6f7d96, door: 0x4c5870, windows: [0xc7dbe8, 0xbdd3e2], mullion: 0x8a9bb0, lamp: 0xd5dae2, lampGlow: null, label: 0x2b3a55, hasStars: false },
+  dusk: { sky: 0xd98a72, skyTop: 0x6f5f9c, house: 0x2d2a42, door: 0x1f1d30, windows: [0xf5cd7b, 0xe8b568], mullion: 0x7d654e, lamp: 0xffdf96, lampGlow: 0xa8936c, label: 0xfff1d6, hasStars: false },
+  night: { sky: 0x202b46, skyTop: 0x111a2d, house: 0x111c30, door: 0x26344a, windows: [0xf5cd7b, 0xe8b568], mullion: 0x7d654e, lamp: 0xffdf96, lampGlow: 0xa8936c, label: 0xf5dfad, hasStars: true },
+}
+
 // ---------- 배경 ----------
 
-function drawBackground(widthPx: number, heightPx: number): Container {
+function drawBackground(widthPx: number, heightPx: number, phase: DayPhase): Container {
   const container = new Container()
   const g = new Graphics()
   g.rect(0, 0, widthPx, heightPx).fill(COLOR.floor)
@@ -134,18 +161,20 @@ function drawBackground(widthPx: number, heightPx: number): Container {
   g.rect(0, WALL_H - 3, widthPx, 3).fill(COLOR.wallShadow)
   const winTop = 4
   const winH = 26
-  g.rect(0, winTop, widthPx, 9).fill(COLOR.sky[0])
-  g.rect(0, winTop + 9, widthPx, 9).fill(COLOR.sky[1])
-  g.rect(0, winTop + 18, widthPx, winH - 18).fill(COLOR.sky[2])
+  const view = WINDOW_VIEW[phase]
+  g.rect(0, winTop, widthPx, 9).fill(view.sky[0])
+  g.rect(0, winTop + 9, widthPx, 9).fill(view.sky[1])
+  g.rect(0, winTop + 18, widthPx, winH - 18).fill(view.sky[2])
+  if (view.hasStars) for (let x = 9; x < widthPx; x += 23) g.rect(x, winTop + 2 + (x % 4) * 2, 1, 1).fill(0xbfcde2)
   // 도시 실루엣 (결정적 난수)
   let seed = 7
   const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
   for (let x = 2; x < widthPx; ) {
     const w = 3 + Math.floor(rand() * 4)
     const h = 3 + Math.floor(rand() * 8)
-    g.rect(x, winTop + winH - h, w, h).fill(COLOR.city)
+    g.rect(x, winTop + winH - h, w, h).fill(view.city)
     for (let wy = winTop + winH - h + 1; wy < winTop + winH - 1; wy += 2) {
-      if (rand() > 0.5) g.rect(x + 1, wy, 1, 1).fill(COLOR.cityWindow)
+      if (rand() > 0.5) g.rect(x + 1, wy, 1, 1).fill(view.cityWindow)
     }
     x += w + 1 + Math.floor(rand() * 4)
   }
@@ -660,31 +689,32 @@ const OFF_DUTY_HEIGHT = 6 * TILE
 const OFF_DUTY_HEAD_STEP = 24
 
 /** 사무실 내용 바로 아래, 맵 전체 폭의 거리. 인원이 없어도 그린다 */
-function drawOffDuty(width: number): Container {
+function drawOffDuty(width: number, phase: DayPhase): Container {
   const container = new Container()
+  const view = STREET_VIEW[phase]
   const scenery = new Graphics()
-  scenery.rect(0, 0, width, OFF_DUTY_HEIGHT).fill(0x202b46)
-  scenery.rect(0, 0, width, 3).fill(0x111a2d)
-  for (let x = 20; x < width - 2; x += 37) scenery.rect(x, 12 + (x % 3) * 5, 1, 1).fill(0xbfcde2)
-  // 지붕은 계단 모양 픽셀, 창과 가로등은 따뜻한 불빛
+  scenery.rect(0, 0, width, OFF_DUTY_HEIGHT).fill(view.sky)
+  scenery.rect(0, 0, width, 3).fill(view.skyTop)
+  if (view.hasStars) for (let x = 20; x < width - 2; x += 37) scenery.rect(x, 12 + (x % 3) * 5, 1, 1).fill(0xbfcde2)
+  // 지붕은 계단 모양 픽셀. 창과 가로등은 노을·밤에 따뜻한 불빛, 아침·낮엔 꺼짐
   for (let x = 12; x + 80 < width; x += 96) {
-    scenery.rect(x, 38, 44, 27).fill(0x111c30)
-    for (let step = 0; step < 5; step++) scenery.rect(x + step * 4, 36 - step * 2, 44 - step * 8, 2).fill(0x111c30)
-    scenery.rect(x + 8, 46, 6, 8).fill(0xf5cd7b)
-    scenery.rect(x + 28, 46, 6, 8).fill(0xe8b568)
-    scenery.rect(x + 10, 46, 1, 8).fill(0x7d654e)
-    scenery.rect(x + 30, 46, 1, 8).fill(0x7d654e)
-    scenery.rect(x + 20, 54, 7, 11).fill(0x26344a)
+    scenery.rect(x, 38, 44, 27).fill(view.house)
+    for (let step = 0; step < 5; step++) scenery.rect(x + step * 4, 36 - step * 2, 44 - step * 8, 2).fill(view.house)
+    scenery.rect(x + 8, 46, 6, 8).fill(view.windows[0])
+    scenery.rect(x + 28, 46, 6, 8).fill(view.windows[1])
+    scenery.rect(x + 10, 46, 1, 8).fill(view.mullion)
+    scenery.rect(x + 30, 46, 1, 8).fill(view.mullion)
+    scenery.rect(x + 20, 54, 7, 11).fill(view.door)
     scenery.rect(x + 67, 35, 2, 30).fill(0x8390a4)
     scenery.rect(x + 63, 32, 10, 2).fill(0x101c31)
-    scenery.rect(x + 64, 34, 8, 4).fill(0xffdf96)
-    scenery.rect(x + 65, 38, 6, 2).fill(0xa8936c)
+    scenery.rect(x + 64, 34, 8, 4).fill(view.lamp)
+    if (view.lampGlow !== null) scenery.rect(x + 65, 38, 6, 2).fill(view.lampGlow)
   }
   scenery.rect(0, 64, width, 2).fill(0xb2a691)
   scenery.rect(0, 66, width, 26).fill(0x626b7b)
   scenery.rect(0, 92, width, 4).fill(0x343f53)
   for (let x = 0; x < width; x += TILE) scenery.rect(x, 88, Math.min(TILE - 1, width - x), 1).fill(0x77808e)
-  const name = label('Off Duty', 8, 0xf5dfad)
+  const name = label('Off Duty', 8, view.label)
   name.position.set(12, 7)
   container.addChild(scenery, name)
   container.eventMode = 'static'
@@ -760,6 +790,7 @@ export function Office(props: Props) {
     let frame = 0
     let removeListeners = () => {}
     let disconnectResize = () => {}
+    let stopPhaseTimer = () => {}
 
     void app
       .init({ resizeTo: host, background: COLOR.floor, antialias: false, roundPixels: true, resolution: 1 })
@@ -802,6 +833,8 @@ export function Office(props: Props) {
         let isDragged = false
         /** 이름표를 끄는 동안 미룬 다시 그리기 (그 사이 다시 그리면 끌던 그림이 원래 자리로 돌아간다) */
         let isRedrawPending = false
+        /** 지금 그려진 시간대. 1분마다 바뀌었는지 보고 바뀌었으면 다시 그린다 */
+        let drawnPhase = dayPhaseOf(new Date())
 
         /** 화면 좌표 → world 아트 픽셀 */
         const toWorld = (event: FederatedPointerEvent) => ({
@@ -991,9 +1024,10 @@ export function Office(props: Props) {
           // 띠는 늘 내용(그룹·섬·Focus Zone) 아래 끝 + 1타일. 바닥 격자에 맞는다
           const streetY = PAD_Y + (layout.bottom + 1) * TILE
           map.h = streetY + OFF_DUTY_HEIGHT + Math.ceil(app.screen.height / zoom / TILE) * TILE
-          world.addChild(drawBackground(map.w, map.h))
+          drawnPhase = dayPhaseOf(new Date())
+          world.addChild(drawBackground(map.w, map.h, drawnPhase))
           // 끄는 그룹·섬이 띠를 지날 때 가려지지 않게 바닥 바로 위에 둔다
-          const street = drawOffDuty(map.w)
+          const street = drawOffDuty(map.w, drawnPhase)
           street.y = streetY
           world.addChild(street)
           clampPan()
@@ -1091,6 +1125,11 @@ export function Office(props: Props) {
           }
         }
         redrawRef.current = redraw
+        // 시간대가 바뀌면 창밖·Off Duty 띠를 다시 그린다 (매 프레임이 아니라 1분마다 확인)
+        const phaseTimer = setInterval(() => {
+          if (dayPhaseOf(new Date()) !== drawnPhase) redraw()
+        }, 60_000)
+        stopPhaseTimer = () => clearInterval(phaseTimer)
 
         // 승인 대기 책상이 화면 밖이면 그쪽 가장자리에 빨간 화살표. 화면 좌표라 world 가 아니라 stage 에 둔다 (redraw 가 지우지 않는다)
         const overlay = new Container()
@@ -1320,6 +1359,7 @@ export function Office(props: Props) {
       isDisposed = true
       removeListeners()
       disconnectResize()
+      stopPhaseTimer()
       host.replaceChildren()
       if (appRef.current) {
         appRef.current.destroy(true, { children: true })
