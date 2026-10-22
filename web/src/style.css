@@ -228,14 +228,16 @@ header button.icon svg {
 }
 .toolbar {
   display: flex;
+  flex-direction: column;
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
-/* New Group·New Session: 아이콘(App.tsx NewGroupIcon·NewSessionIcon)과 글자를 한 줄로 */
+/* New Group·New Session: 위아래로 쌓여 툴바 폭 전체를 쓰고, 아이콘(App.tsx NewGroupIcon·NewSessionIcon)과 글자는 버튼 안 왼쪽에 한 줄로 */
 .toolbar button {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
   white-space: nowrap;
 }
@@ -2570,7 +2572,6 @@ li.group.drop-after::after {
   .create select {
     font-size: 16px;
   }
-  .toolbar,
   .approval {
     flex-wrap: wrap;
   }
