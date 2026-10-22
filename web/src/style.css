@@ -1,6 +1,6 @@
 /* 화면 테마 (theme.ts): <html data-theme="light|dark">. 아래는 라이트 값이고 다크는 바로 다음 블록이 덮는다.
    색은 여기 변수로만 쓴다 — 그대로 두는 것: 사무실 캔버스(Office.tsx 의 COLOR, --floor 는 그 바닥색), 터미널 탭(원래 어두움),
-   HTML 미리보기 iframe 바탕(문서는 흰 바탕을 전제), Claude 별(브랜드색), 아바타 머리·피부(avatar.ts) */
+   HTML 미리보기 iframe 바탕(문서는 흰 바탕을 전제), Claude 별(브랜드색) */
 :root {
   color-scheme: light;
   --bg: #f7f7fa;
@@ -714,41 +714,13 @@ li.group.drop-after::after {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  image-rendering: pixelated;
   background: var(--avatar-bg);
-  position: relative;
-  overflow: hidden;
 }
-.avatar::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 4px;
-  width: 12px;
-  height: 10px;
-  background: var(--skin);
-  border-radius: 2px;
-}
-.avatar::after {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 2px;
-  width: 12px;
-  height: 4px;
-  background: var(--hair);
-  border-radius: 2px 2px 0 0;
-}
-/* 도트 사무실일 때: 그 세션 인물의 머리 그림 (44px 를 절반으로) */
-.avatar.dot {
+/* 그 세션 도트 인물의 머리 그림 (44px 를 절반으로). 아틀라스를 읽기 전·못 읽으면 빈 칩 */
+.avatar.head {
   background-size: 22px 22px;
-  image-rendering: auto;
 }
-.avatar.dot::before,
-.avatar.dot::after {
-  content: none;
-}
-/* 팀장 금색·파트장 은색 테두리 (사무실 명패·이름표 밑줄과 같은 계열). 안쪽 그림자라 아바타 크기·줄 높이가 그대로이고 얼굴(안쪽 5px부터)과 겹치지 않는다 */
+/* 팀장 금색·파트장 은색 테두리 (사무실 명패·이름표 밑줄과 같은 계열). 안쪽 그림자라 아바타 크기·줄 높이가 그대로다 */
 .avatar.lead {
   box-shadow: inset 0 0 0 2px var(--gold);
 }
@@ -798,7 +770,26 @@ li.group.drop-after::after {
   display: block;
   image-rendering: pixelated;
 }
-/* 헤더의 꾸밈 테마 고르기 (도트 사무실일 때 다시 꾸미기 버튼 옆). 아이콘 버튼과 같은 높이 */
+/* 사무실 그림(아틀라스)을 못 읽었을 때: 캔버스 대신 안내 한 줄 */
+.office.office-failed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+}
+.office-failed button {
+  font: inherit;
+  color: var(--green);
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+/* 헤더의 꾸밈 테마 고르기 (다시 꾸미기 버튼 옆). 아이콘 버튼과 같은 높이 */
 header select.decor-theme {
   height: 22px;
   padding: 0 2px;

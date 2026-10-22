@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AnimatedSprite,
   Application,
@@ -14,7 +14,6 @@ import {
   type Spritesheet,
 } from 'pixi.js'
 import { attendanceOf, type Office as OfficeData, type Group, type Session, type Team } from './types'
-import { avatarOf, type Avatar } from './avatar'
 import { dotLookOf, type DotCharacter } from './dotCharacter'
 import { HEAD_RECT, loadRecolorArt, paintCharacter, type RecolorArt } from './characterArt'
 import { DEFAULT_DECOR, planDecor, themeOf, WALL_BAY_TILES, type DecorTheme, type FloorDecor, type PropSizes, type WallDecor } from './officeDecor'
@@ -33,16 +32,13 @@ import {
 } from './officeLayout'
 
 /**
- * 사무실 그림 방식. 클래식 = Graphics 로 그린 16px 도트, 도트 = 생성 스프라이트(타일 48px, docs/plans/2026-10-22-office-sprites-design.md).
- * world 좌표는 두 방식 모두 "아트 픽셀"(타일 16px) 단위이고 world 컨테이너를 키워 보인다.
- * 클래식은 정수 배율 1~4배(기본 2배). 도트는 world 를 DOT_SCALE 배 더 키우고(타일 48 화면 px = 1배) 스프라이트는 1/DOT_SCALE 로 줄인
- * 하위 컨테이너에 48px 좌표로 그린다 — 배치(officeLayout.ts)·끌기·포커스 계산이 방식과 관계없이 같다.
- * 도트의 바닥·벽·창밖·그룹·섬·Focus Zone·Off Duty 띠·말풍선도 도트 px 하위 컨테이너에 그린다 (환경 에셋 office-v2). 퇴근 머리만 클래식 그림을 키워 쓴다
+ * 사무실 그림은 생성 도트 스프라이트(타일 48px, docs/plans/2026-10-22-office-sprites-design.md).
+ * world 좌표는 "아트 픽셀"(타일 16px) 단위이고 world 를 DOT_SCALE 배 더 키워(타일 48 화면 px = 1배) 보인다.
+ * 스프라이트·이름표·말풍선은 1/DOT_SCALE 로 줄인 하위 컨테이너에 도트 px(48px 타일) 좌표로 그린다 — 배치(officeLayout.ts)·끌기·포커스 계산은 아트 px 그대로다
  */
-export type OfficeStyle = 'classic' | 'dot'
-/** 배율 단계 (도트는 타일 48px 기준. 0.5배는 전체 보기용 예외) */
-const ZOOM_STEPS: Record<OfficeStyle, number[]> = { classic: [1, 2, 3, 4], dot: [0.5, 1, 2, 3] }
-/** 마운트할 때 배율 = 단계 목록의 이 번째 (클래식 2배, 도트 1배) */
+/** 배율 단계 (타일 48px 기준. 0.5배는 전체 보기용 예외) */
+const ZOOM_STEPS = [0.5, 1, 2, 3]
+/** 마운트할 때 배율 = 단계 목록의 이 번째 (1배) */
 const DEFAULT_ZOOM_INDEX = 1
 /** 도트 타일(48px) ÷ 아트 타일(16px) */
 const DOT_SCALE = 3
@@ -67,26 +63,15 @@ const PAD_Y = WALL_H + TILE
 
 const COLOR = {
   floor: 0xdcdde6,
-  floorLine: 0xd2d3dd,
-  wall: 0xf1f1f4,
-  wallShadow: 0xdedfe6,
   frame: 0xffffff,
   partition: 0xffffff,
   partitionShadow: 0xc9cbd6,
   green: 0x6fae5e,
   greenDark: 0x4f9a4a,
-  greenLight: 0x8fd080,
-  desk: 0xffffff,
-  deskFront: 0xf1f1f4,
   deskLeg: 0xb9bbc6,
-  chair: 0xffffff,
   chairLine: 0xcfd1db,
-  bezel: 0x9a9ca8,
-  screenOff: 0x3a3e4a,
   screenOn: 0x4aa3e8,
   text: 0x2b2f3a,
-  pot: 0xe8e8ea,
-  potLine: 0xc6c7d0,
   postit: 0xfde77a,
   bubble: 0xffffff,
   bubbleLine: 0xb5b8c5,
@@ -97,20 +82,9 @@ const COLOR = {
   gold: 0xd9a63a,
   silver: 0xa9b0bd,
   partLine: 0xc3c7d2,
-  carpet: 0xede3d2,
-  carpetPattern: 0xe2d5bf,
-  carpetHighlight: 0xf6efe3,
   carpetBorder: 0xc8b598,
   carpetShadow: 0xb7a284,
-  boothMat: 0xe5d9c5,
-  boothWall: 0xdfd5c5,
   boothWallTop: 0xc69c68,
-  boothWallShadow: 0xb5a792,
-  woodLight: 0xd8b88c,
-  woodMid: 0xb89466,
-  woodDark: 0x755638,
-  lampShade: 0xd99b38,
-  lampGlow: 0xffe885,
 }
 
 /** 사무실 화면이 이동해 보여 줄 대상. 같은 대상을 다시 눌러도 움직이도록 매번 새 id 를 붙인다 */
@@ -119,8 +93,6 @@ export type OfficeFocus =
   | { id: number; kind: 'session'; sessionId: string }
 
 interface Props {
-  /** 바뀌면 캔버스를 새로 만든다 (배율·이동 위치는 처음으로) */
-  style: OfficeStyle
   office: OfficeData
   sessions: Session[]
   selectedId: string | null
@@ -136,13 +108,10 @@ interface Props {
   onEditGroup: (group: Group) => void
 }
 
-/**
- * world 아트 픽셀 단위 글자의 해상도 = world 가 가장 크게 커질 때의 배율 (그래야 흐리지 않다).
- * 클래식 4, 도트 9 (3배 × DOT_SCALE). 사무실 하나가 마운트될 때 그 방식으로 정한다
- */
-let textResolution = ZOOM_STEPS.classic[ZOOM_STEPS.classic.length - 1]
+/** world 아트 픽셀 단위 글자(Off Duty +N·이름 툴팁, 승인 화살표 배지)의 해상도 = world 가 가장 크게 커질 때의 배율 9 (3배 × DOT_SCALE). 그래야 흐리지 않다 */
+const TEXT_RESOLUTION = ZOOM_STEPS[ZOOM_STEPS.length - 1] * DOT_SCALE
 
-function label(text: string, size: number, color = COLOR.text, wrapWidth?: number, resolution = textResolution): Text {
+function label(text: string, size: number, color = COLOR.text, wrapWidth?: number, resolution = TEXT_RESOLUTION): Text {
   return new Text({
     text,
     style: {
@@ -168,90 +137,12 @@ function dayPhaseOf(date: Date): DayPhase {
   return hour >= 6 && hour < 9 ? 'morning' : hour >= 9 && hour < 17 ? 'day' : hour >= 17 && hour < 19 ? 'dusk' : 'night'
 }
 
-/** 창밖: 하늘 세 띠(위→아래), 도시 실루엣, 건물 창 (아침·낮은 불 꺼진 유리색, 노을·밤은 불빛), 밤만 별 */
-const WINDOW_VIEW: Record<DayPhase, { sky: [number, number, number]; city: number; cityWindow: number; hasStars: boolean }> = {
-  morning: { sky: [0xc4dcf0, 0xf3dccd, 0xfbe9cf], city: 0xb4b7c9, cityWindow: 0xe4dfd6, hasStars: false },
-  day: { sky: [0xcfe6f5, 0xdff0f9, 0xeef7fb], city: 0xb7c3d1, cityWindow: 0xd8e2ec, hasStars: false },
-  dusk: { sky: [0x8a7cb8, 0xe7a083, 0xf6c98a], city: 0x5e5674, cityWindow: 0xf5cd7b, hasStars: false },
-  night: { sky: [0x1d2745, 0x26335a, 0x34426c], city: 0x141c30, cityWindow: 0xf5cd7b, hasStars: true },
-}
-
-/** Off Duty 띠: 하늘·맨 위 띠, 집·문, 집 창(불빛 또는 꺼진 유리)·창살, 가로등 불·불빛 아래 번짐, 이름표 글자색 */
-const STREET_VIEW: Record<
-  DayPhase,
-  { sky: number; skyTop: number; house: number; door: number; windows: [number, number]; mullion: number; lamp: number; lampGlow: number | null; label: number; hasStars: boolean }
-> = {
-  morning: { sky: 0xf0cfb4, skyTop: 0xc6d4ea, house: 0x5f6a85, door: 0x444e67, windows: [0xd9e3ea, 0xd2dde6], mullion: 0x8a9bb0, lamp: 0xd5dae2, lampGlow: null, label: 0x3a3550, hasStars: false },
-  day: { sky: 0xa9d2ee, skyTop: 0x8fc0e4, house: 0x6f7d96, door: 0x4c5870, windows: [0xc7dbe8, 0xbdd3e2], mullion: 0x8a9bb0, lamp: 0xd5dae2, lampGlow: null, label: 0x2b3a55, hasStars: false },
-  dusk: { sky: 0xd98a72, skyTop: 0x6f5f9c, house: 0x2d2a42, door: 0x1f1d30, windows: [0xf5cd7b, 0xe8b568], mullion: 0x7d654e, lamp: 0xffdf96, lampGlow: 0xa8936c, label: 0xfff1d6, hasStars: false },
-  night: { sky: 0x202b46, skyTop: 0x111a2d, house: 0x111c30, door: 0x26344a, windows: [0xf5cd7b, 0xe8b568], mullion: 0x7d654e, lamp: 0xffdf96, lampGlow: 0xa8936c, label: 0xf5dfad, hasStars: true },
-}
-
-// ---------- 배경 ----------
-
-function drawBackground(widthPx: number, heightPx: number, phase: DayPhase): Container {
-  const container = new Container()
-  const g = new Graphics()
-  g.rect(0, 0, widthPx, heightPx).fill(COLOR.floor)
-  for (let x = 0; x < widthPx; x += TILE) g.rect(x, WALL_H, 1, heightPx - WALL_H).fill(COLOR.floorLine)
-  for (let y = WALL_H; y < heightPx; y += TILE) g.rect(0, y, widthPx, 1).fill(COLOR.floorLine)
-
-  // 벽과 통유리창
-  g.rect(0, 0, widthPx, WALL_H).fill(COLOR.wall)
-  g.rect(0, WALL_H - 3, widthPx, 3).fill(COLOR.wallShadow)
-  const winTop = 4
-  const winH = 26
-  const view = WINDOW_VIEW[phase]
-  g.rect(0, winTop, widthPx, 9).fill(view.sky[0])
-  g.rect(0, winTop + 9, widthPx, 9).fill(view.sky[1])
-  g.rect(0, winTop + 18, widthPx, winH - 18).fill(view.sky[2])
-  if (view.hasStars) for (let x = 9; x < widthPx; x += 23) g.rect(x, winTop + 2 + (x % 4) * 2, 1, 1).fill(0xbfcde2)
-  // 도시 실루엣 (결정적 난수)
-  let seed = 7
-  const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
-  for (let x = 2; x < widthPx; ) {
-    const w = 3 + Math.floor(rand() * 4)
-    const h = 3 + Math.floor(rand() * 8)
-    g.rect(x, winTop + winH - h, w, h).fill(view.city)
-    for (let wy = winTop + winH - h + 1; wy < winTop + winH - 1; wy += 2) {
-      if (rand() > 0.5) g.rect(x + 1, wy, 1, 1).fill(view.cityWindow)
-    }
-    x += w + 1 + Math.floor(rand() * 4)
-  }
-  g.rect(0, winTop + winH - 2, widthPx, 2).fill(COLOR.wallShadow)
-  // 창틀
-  g.rect(0, winTop - 1, widthPx, 1).fill(COLOR.frame)
-  g.rect(0, winTop + winH, widthPx, 2).fill(COLOR.frame)
-  for (let x = 0; x < widthPx; x += 48) g.rect(x, winTop - 1, 2, winH + 2).fill(COLOR.frame)
-  container.addChild(g)
-  return container
-}
-
-// ---------- 소품 ----------
-
-function drawPlant(x: number, y: number, isLarge: boolean): Graphics {
-  const g = new Graphics()
-  const potW = isLarge ? 8 : 5
-  const potH = isLarge ? 6 : 4
-  g.rect(x, y, potW, potH).fill(COLOR.pot).rect(x, y + potH - 1, potW, 1).fill(COLOR.potLine)
-  const cx = x + Math.floor(potW / 2)
-  const leaves: [number, number, number][] = isLarge
-    ? [
-        [-4, -3, COLOR.greenDark],
-        [1, -3, COLOR.greenDark],
-        [-2, -6, COLOR.green],
-        [2, -5, COLOR.green],
-        [-1, -9, COLOR.greenLight],
-        [-5, -7, COLOR.green],
-        [3, -8, COLOR.greenLight],
-      ]
-    : [
-        [-2, -2, COLOR.greenDark],
-        [0, -3, COLOR.green],
-        [1, -1, COLOR.greenLight],
-      ]
-  for (const [dx, dy, color] of leaves) g.rect(cx + dx, y + dy, 3, 3).fill(color)
-  return g
+/** Off Duty 띠: 이름표 글자색, 밤에는 하늘에 별 */
+const STREET_VIEW: Record<DayPhase, { label: number; hasStars: boolean }> = {
+  morning: { label: 0x3a3550, hasStars: false },
+  day: { label: 0x2b3a55, hasStars: false },
+  dusk: { label: 0xfff1d6, hasStars: false },
+  night: { label: 0xf5dfad, hasStars: true },
 }
 
 // ---------- 그룹 ----------
@@ -262,370 +153,17 @@ interface GroupParts {
   sign: Graphics
 }
 
-/** 크기는 저장된 w·h 가 아니라 그려지는 영역(안의 섬들을 다 담는다) */
-function drawGroup(area: GroupArea, onEdit: () => void): GroupParts {
-  const { group } = area
-  const container = new Container()
-  container.position.set(PAD_X + area.x * TILE, PAD_Y + area.y * TILE)
-  const w = area.w * TILE
-  const h = area.h * TILE
-  const g = new Graphics()
-  g.rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.25 })
-  g.rect(0, 0, w, 3).fill(COLOR.partition).rect(0, 3, w, 1).fill(COLOR.partitionShadow)
-  g.rect(0, 0, 3, h).fill(COLOR.partition).rect(3, 0, 1, h).fill(COLOR.partitionShadow)
-  g.rect(w - 3, 0, 3, h).fill(COLOR.partition).rect(w - 4, 0, 1, h).fill(COLOR.partitionShadow)
-  g.rect(0, h - 4, w, 2).fill(COLOR.partition).rect(0, h - 2, w, 2).fill(COLOR.green)
-  container.addChild(g)
-
-  const name = label(group.name, 7)
-  const sign = new Graphics().rect(0, 0, name.width + 8, 11).fill(COLOR.partition).rect(0, 10, name.width + 8, 1).fill(COLOR.green)
-  sign.position.set(6, 5)
-  name.position.set(10, 6)
-  container.addChild(sign, name)
-
-  sign.eventMode = 'static'
-  sign.cursor = 'move'
-  // 글자가 이름표 위에 있어 맞으면 그룹 바닥을 누른 것이 된다 (부모가 interactive 면 글자도 맞는다)
-  name.eventMode = 'none'
-
-  container.addChild(drawPlant(w - 14, 8, true))
-  container.addChild(drawPlant(6, h - 14, false))
-
-  if (group.waitingNote) {
-    const text = label(group.waitingNote, 6, COLOR.text, 70)
-    const note = new Graphics().rect(0, 0, text.width + 6, text.height + 5).fill(COLOR.postit)
-    note.rect(0, 0, text.width + 6, 1).fill(0xe8cf4e)
-    const x = w - 24 - text.width - 6
-    note.position.set(x, 6)
-    text.position.set(x + 3, 8)
-    container.addChild(note, text)
-  }
-
-  container.eventMode = 'static'
-  container.cursor = 'grab'
-  container.on('pointertap', (event: FederatedPointerEvent) => {
-    if (event.detail === 2) onEdit()
-  })
-  return { container, sign }
-}
-
-/** Focus Zone 가장자리 원목 책장. isHorizontal 이면 위쪽 벽면 가로 책장, 아니면 오른쪽 가장자리 3단 세로 책장 */
-function drawBookshelf(x: number, y: number, isHorizontal: boolean): Graphics {
-  const graphics = new Graphics()
-  const bookColors = [0xd96b52, 0x6fae5e, 0x5b8ec9, 0xd9a63a, 0x8c73b8, 0xf1ebe1]
-  if (isHorizontal) {
-    const width = 32
-    const height = 10
-    graphics.rect(x, y, width, height).fill(COLOR.woodMid)
-    graphics.rect(x, y, width, 2).fill(COLOR.woodLight)
-    graphics.rect(x + 2, y + 2, width - 4, height - 4).fill(COLOR.woodDark)
-    graphics.rect(x, y + height - 2, width, 2).fill(COLOR.woodLight)
-    const books: [number, number, number, number][] = [
-      [3, 3, 3, bookColors[0]],
-      [6, 4, 2, bookColors[5]],
-      [8, 3, 3, bookColors[2]],
-      [11, 4, 2, bookColors[3]],
-      [15, 3, 3, bookColors[1]],
-      [18, 4, 3, bookColors[4]],
-      [21, 3, 2, bookColors[5]],
-      [25, 3, 3, bookColors[0]],
-      [28, 4, 2, bookColors[2]],
-    ]
-    for (const [offsetX, offsetY, bookWidth, bookColor] of books) {
-      graphics.rect(x + offsetX, y + offsetY, bookWidth, height - 2 - offsetY).fill(bookColor)
-    }
-    return graphics
-  }
-  const width = 12
-  const height = 32
-  graphics.rect(x, y, width, height).fill(COLOR.woodMid)
-  graphics.rect(x, y, width, 2).fill(COLOR.woodLight)
-  for (let shelfIndex = 0; shelfIndex < 3; shelfIndex++) {
-    const shelfTop = y + 3 + shelfIndex * 9
-    graphics.rect(x + 2, shelfTop, width - 4, 7).fill(COLOR.woodDark)
-    graphics.rect(x + 1, shelfTop + 7, width - 2, 2).fill(COLOR.woodLight)
-    const firstColor = bookColors[(shelfIndex * 2) % bookColors.length]
-    const secondColor = bookColors[(shelfIndex * 2 + 1) % bookColors.length]
-    const thirdColor = bookColors[(shelfIndex * 2 + 3) % bookColors.length]
-    graphics.rect(x + 2, shelfTop + 1, 2, 6).fill(firstColor)
-    graphics.rect(x + 4, shelfTop + 2, 2, 5).fill(secondColor)
-    graphics.rect(x + 6, shelfTop + 1, 3, 6).fill(thirdColor)
-  }
-  return graphics
-}
-
-/**
- * Focus Zone 자리마다 그리는 1인 칸막이 부스(낮은 파티션 + 우드 사이드 선반)와 스탠드 조명·머그·헤드폰.
- * 책상(0..32, 20..39)·캐릭터(4..21, 2..23)·모니터(22..32, 10..22)·이름표(-6..38, 39..48)·말풍선(y<0) 바깥에 그려 가리지 않는다
- */
-function drawFocusBooth(graphics: Graphics, seatX: number, seatY: number, seatIndex: number): void {
-  const mugColors = [0xd96b52, 0x5d9b78, 0x5b8ec9, 0xd9a63a]
-  const mugColor = mugColors[seatIndex % mugColors.length]
-
-  // 부스 안쪽 바닥 매트
-  graphics.rect(seatX - 1, seatY + 2, 41, 34).fill(COLOR.boothMat)
-
-  // ㄷ자형 낮은 파티션 (뒷벽·왼쪽 날개·오른쪽 날개)
-  graphics.rect(seatX - 3, seatY, 46, 2).fill(COLOR.boothWall)
-  graphics.rect(seatX - 3, seatY, 46, 1).fill(COLOR.boothWallTop)
-  graphics.rect(seatX + 22, seatY + 2, 21, 1).fill(COLOR.boothWall).rect(seatX + 22, seatY + 3, 21, 1).fill(COLOR.boothWallShadow)
-
-  graphics.rect(seatX - 3, seatY, 2, 36).fill(COLOR.boothWall)
-  graphics.rect(seatX - 3, seatY, 1, 36).fill(COLOR.boothWallTop)
-  graphics.rect(seatX - 1, seatY + 2, 1, 34).fill(COLOR.boothWallShadow)
-  graphics.rect(seatX - 3, seatY + 35, 4, 2).fill(COLOR.boothWallShadow)
-
-  graphics.rect(seatX + 40, seatY, 2, 36).fill(COLOR.boothWall)
-  graphics.rect(seatX + 41, seatY, 1, 36).fill(COLOR.boothWallTop)
-  graphics.rect(seatX + 42, seatY + 1, 1, 35).fill(COLOR.boothWallShadow)
-  graphics.rect(seatX + 35, seatY + 35, 8, 2).fill(COLOR.boothWallShadow)
-
-  // 책상 오른쪽 보조 사이드 선반과 빈 부스용 기본 상판 (세션이 앉으면 drawDesk 가 0..32 상판을 덮어 그린다)
-  graphics.rect(seatX, seatY + 20, 32, 9).fill(COLOR.woodLight)
-  graphics.rect(seatX, seatY + 29, 32, 6).fill(COLOR.woodMid)
-  graphics.rect(seatX + 32, seatY + 4, 8, 28).fill(COLOR.woodLight)
-  graphics.rect(seatX + 32, seatY + 32, 8, 3).fill(COLOR.woodMid)
-  graphics.rect(seatX + 32, seatY + 4, 1, 28).fill(COLOR.woodMid)
-
-  // 스탠드 조명 (사이드 선반 위쪽)
-  graphics
-    .rect(seatX + 33, seatY + 7, 4, 3)
-    .fill({ color: COLOR.lampGlow, alpha: 0.55 })
-    .rect(seatX + 34, seatY + 7, 2, 2)
-    .fill({ color: 0xfff8cc, alpha: 0.85 })
-  graphics.rect(seatX + 36, seatY + 11, 3, 2).fill(0x5a6070)
-  graphics.rect(seatX + 38, seatY + 6, 1, 5).fill(0x7a8090).rect(seatX + 36, seatY + 5, 2, 1).fill(0x7a8090)
-  graphics.rect(seatX + 34, seatY + 5, 3, 2).fill(COLOR.lampShade).rect(seatX + 34, seatY + 5, 3, 1).fill(0xf0ba59)
-
-  // 머그컵 (사이드 선반 가운데)
-  graphics.rect(seatX + 34, seatY + 20, 4, 1).fill(COLOR.woodMid)
-  graphics.rect(seatX + 34, seatY + 16, 4, 4).fill(mugColor)
-  graphics.rect(seatX + 35, seatY + 16, 2, 1).fill(0x5c3a21)
-  graphics.rect(seatX + 38, seatY + 17, 1, 2).fill(mugColor)
-  graphics.rect(seatX + 35, seatY + 14, 1, 1).fill({ color: 0xffffff, alpha: 0.65 })
-
-  // 헤드폰 (사이드 선반 아래쪽)
-  graphics
-    .rect(seatX + 35, seatY + 24, 3, 1)
-    .fill(0x3a3e4a)
-    .rect(seatX + 34, seatY + 25, 1, 2)
-    .fill(0x3a3e4a)
-    .rect(seatX + 38, seatY + 25, 1, 2)
-    .fill(0x3a3e4a)
-  graphics.rect(seatX + 34, seatY + 27, 2, 3).fill(0x2b2f3a).rect(seatX + 37, seatY + 27, 2, 3).fill(0x2b2f3a)
-  graphics.rect(seatX + 34, seatY + 28, 1, 1).fill(mugColor).rect(seatX + 38, seatY + 28, 1, 1).fill(mugColor)
-}
-
-/** Focus Zone(팀 없는 세션 구역): 따뜻한 색 카펫 바닥(옅은 무늬) + 자리마다 1인 칸막이 부스·조명·소품 + 가장자리 책장·화분 */
-function drawZone(zone: Rect): Container {
-  const container = new Container()
-  container.position.set(PAD_X + zone.x * TILE, PAD_Y + zone.y * TILE)
-  const width = zone.w * TILE
-  const height = zone.h * TILE
-  const graphics = new Graphics()
-
-  // 따뜻한 색 카펫 바닥과 테두리
-  graphics.rect(0, 0, width, height).fill(COLOR.carpet)
-  graphics.rect(0, 0, width, 2).fill(COLOR.carpetBorder).rect(0, height - 2, width, 2).fill(COLOR.carpetShadow)
-  graphics.rect(0, 0, 2, height).fill(COLOR.carpetBorder).rect(width - 2, 0, 2, height).fill(COLOR.carpetBorder)
-  graphics.rect(3, 3, width - 6, 1).fill(COLOR.carpetPattern).rect(3, height - 4, width - 6, 1).fill(COLOR.carpetPattern)
-  graphics.rect(3, 3, 1, height - 6).fill(COLOR.carpetPattern).rect(width - 4, 3, 1, height - 6).fill(COLOR.carpetPattern)
-
-  // 카펫 옅은 직조 무늬
-  for (let y = 6; y < height - 6; y += 8) {
-    for (let x = 6; x < width - 6; x += 8) {
-      graphics.rect(x, y, 2, 1).fill(COLOR.carpetPattern).rect(x, y + 1, 1, 1).fill(COLOR.carpetPattern)
-      if (x + 4 < width - 6 && y + 4 < height - 6) {
-        graphics.rect(x + 4, y + 4, 2, 1).fill(COLOR.carpetHighlight)
-      }
-    }
-  }
-
-  // 2열 자리마다 1인 칸막이 부스·스탠드 조명·머그·헤드폰
-  // 맨 위 1타일은 이름표 줄이라 자리(부스)는 그 아래부터 (officeLayout.ts 의 자리와 같다)
-  const signRowH = LOBBY_SIGN_H * TILE
-  const boothRows = Math.max(1, Math.floor((zone.h - LOBBY_SIGN_H - 2) / SEAT_STEP))
-  for (let row = 0; row < boothRows; row++) {
-    for (let column = 0; column < 2; column++) {
-      const seatX = (1 + column * SEAT_STEP) * TILE
-      const seatY = (LOBBY_SIGN_H + 1 + row * SEAT_STEP) * TILE
-      drawFocusBooth(graphics, seatX, seatY, row * 2 + column)
-    }
-  }
-
-  container.addChild(graphics)
-
-  // 구역 가장자리 책장·화분 (자리와 같이 이름표 줄만큼 내린다. 첫 줄 말풍선 자리 오른쪽은 비워 둔다)
-  container.addChild(drawPlant(4, signRowH + 24, false))
-  container.addChild(drawBookshelf(width - 16, signRowH + 18, false))
-  if (height >= signRowH + 120) container.addChild(drawPlant(width - 14, signRowH + 58, false))
-  if (height >= signRowH + 176) container.addChild(drawBookshelf(width - 16, signRowH + 80, false))
-  if (height >= signRowH + 220) container.addChild(drawPlant(width - 14, signRowH + 122, false))
-  container.addChild(drawBookshelf(46, height - 13, true))
-  container.addChild(drawPlant(width - 16, height - 11, true))
-  container.addChild(drawPlant(4, height - 9, false))
-
-  const name = label('Focus Zone', 7, COLOR.text)
-  const sign = new Graphics()
-    .rect(0, 0, name.width + 8, 11)
-    .fill(COLOR.partition)
-    .rect(0, 10, name.width + 8, 1)
-    .fill(COLOR.boothWallTop)
-  // 이름표 줄(맨 위 1타일) 안. 첫 줄 자리 말풍선 상자 위 끝(y=12)에 닿지 않게 테두리 위에 붙인다
-  sign.position.set(6, 1)
-  name.position.set(10, 2)
-  name.eventMode = 'none'
-  container.addChild(sign, name)
-  return container
-}
-
 interface IslandParts {
   container: Container
   /** 끌면 섬(팀) 이동 */
   sign: Graphics
 }
 
-/** 팀 섬: 연한 바닥 + 점선 테두리 + 팀 이름표 + 파트 구역(옅은 실선 테두리 + 파트 이름표). 파트 구역은 섬 컨테이너에 있어 섬을 끌면 같이 움직인다 */
-function drawIsland(island: Island, onEdit: () => void): IslandParts {
-  const container = new Container()
-  container.position.set(PAD_X + island.x * TILE, PAD_Y + island.y * TILE)
-  const w = island.w * TILE
-  const h = island.h * TILE
-  const g = new Graphics()
-  g.rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.4 })
-  for (let x = 0; x < w; x += 4) g.rect(x, 0, 2, 1).fill(COLOR.greenDark).rect(x, h - 1, 2, 1).fill(COLOR.greenDark)
-  for (let y = 0; y < h; y += 4) g.rect(0, y, 1, 2).fill(COLOR.greenDark).rect(w - 1, y, 1, 2).fill(COLOR.greenDark)
-  container.addChild(g)
-  for (const zone of island.zones) {
-    // 책상 경계에서 좌우 4px, 위로 이름표 자리 12px, 아래 1px
-    const zx = (zone.x - island.x) * TILE - 4
-    const zy = (zone.y - island.y) * TILE - 12
-    const zoneGraphics = new Graphics()
-      .rect(zx, zy, zone.w * TILE + 8, zone.h * TILE + 13)
-      .fill({ color: 0xffffff, alpha: 0.35 })
-      .stroke({ width: 1, color: COLOR.partLine })
-    const partName = label(zone.part.name, 6, 0x5d6675)
-    const partSign = new Graphics()
-      .rect(0, 0, partName.width + 6, 9)
-      .fill(0xffffff)
-      .rect(0, 8, partName.width + 6, 1)
-      .fill(COLOR.silver)
-    partSign.position.set(zx + 2, zy + 1)
-    partName.position.set(zx + 5, zy + 2)
-    container.addChild(zoneGraphics, partSign, partName)
-  }
-  const name = label(island.team.name, 6, COLOR.text)
-  const sign = new Graphics().rect(0, 0, name.width + 6, 9).fill(0xffffff).rect(0, 8, name.width + 6, 1).fill(COLOR.greenDark)
-  sign.position.set(3, 3)
-  name.position.set(6, 4)
-  sign.eventMode = 'static'
-  sign.cursor = 'move'
-  // 그룹 이름표와 같은 이유
-  name.eventMode = 'none'
-  container.addChild(sign, name)
-  container.eventMode = 'static'
-  container.cursor = 'grab'
-  container.on('pointertap', (event: FederatedPointerEvent) => {
-    if (event.detail === 2) onEdit()
-  })
-  return { container, sign }
-}
-
-// ---------- 캐릭터 ----------
-
-interface Figure {
-  container: Container
-  handLeft: Graphics
-  handRight: Graphics
-  raisedHand: Graphics | null
-}
-
-/** 책상과 퇴근 띠에서 같은 머리 스타일·색을 쓴다. 몸통 없이 정수 아트 픽셀 그대로 */
-function drawHead(avatar: Avatar, status: Session['status']): Container {
-  const container = new Container()
-  const isIdle = status === 'idle' || status === 'unknown' || status === 'ended'
-  // 머리 12x10 (피부)
-  const head = new Graphics().rect(2, 2, 12, 10).fill(avatar.skin)
-  head.rect(1, 4, 1, 6).fill(avatar.skin).rect(14, 4, 1, 6).fill(avatar.skin)
-  container.addChild(head)
-
-  // 머리카락: 스타일별
-  const hair = new Graphics()
-  hair.rect(2, 1, 12, 3).fill(avatar.hair).rect(3, 0, 10, 1).fill(avatar.hair)
-  switch (avatar.hairStyle) {
-    case 0: // 짧은 머리
-      hair.rect(1, 2, 1, 4).fill(avatar.hair).rect(14, 2, 1, 4).fill(avatar.hair)
-      break
-    case 1: // 단발
-      hair.rect(1, 2, 2, 9).fill(avatar.hair).rect(13, 2, 2, 9).fill(avatar.hair)
-      break
-    case 2: // 앞머리
-      hair.rect(2, 4, 4, 1).fill(avatar.hair).rect(8, 4, 6, 1).fill(avatar.hair)
-      hair.rect(1, 2, 1, 5).fill(avatar.hair).rect(14, 2, 1, 5).fill(avatar.hair)
-      break
-    case 3: // 올백 + 가르마
-      hair.rect(7, 0, 1, 4).fill(avatar.skin)
-      hair.rect(1, 2, 1, 3).fill(avatar.hair).rect(14, 2, 1, 3).fill(avatar.hair)
-      break
-    case 4: // 포니테일
-      hair.rect(1, 2, 1, 4).fill(avatar.hair).rect(14, 2, 1, 4).fill(avatar.hair)
-      hair.rect(14, 4, 3, 8).fill(avatar.hair).rect(15, 12, 2, 2).fill(avatar.hair)
-      break
-    default: // 긴 머리
-      hair.rect(1, 2, 2, 14).fill(avatar.hair).rect(13, 2, 2, 14).fill(avatar.hair)
-      break
-  }
-  container.addChild(hair)
-
-  // 눈·입
-  const face = new Graphics()
-  if (isIdle) {
-    face.rect(4, 8, 3, 1).fill(COLOR.text).rect(9, 8, 3, 1).fill(COLOR.text)
-  } else {
-    face.rect(4, 7, 3, 2).fill(COLOR.text).rect(9, 7, 3, 2).fill(COLOR.text)
-    face.rect(4, 7, 1, 1).fill(0x6fb3ff).rect(9, 7, 1, 1).fill(0x6fb3ff)
-  }
-  face.rect(7, 10, 2, 1).fill(0xc97b7b)
-  if (status === 'needs-approval') face.rect(3, 9, 2, 1).fill(0xf3b0b0).rect(11, 9, 2, 1).fill(0xf3b0b0)
-  container.addChild(face)
-
-  return container
-}
-
-function drawFigure(avatar: Avatar, status: Session['status']): Figure {
-  const container = new Container()
-  const hasRaisedHand = status === 'my-turn' || status === 'needs-approval'
-
-  // 몸통 (셔츠) 10x8, 어깨 둥글게
-  const body = new Graphics()
-  body.rect(3, 12, 10, 9).fill(avatar.shirt)
-  body.rect(2, 13, 1, 7).fill(avatar.shirt).rect(13, 13, 1, 7).fill(avatar.shirt)
-  body.rect(7, 12, 2, 2).fill(COLOR.text)
-  container.addChild(body)
-
-  container.addChild(drawHead(avatar, status))
-
-  // 손
-  const handLeft = new Graphics().rect(1, 19, 3, 2).fill(avatar.skin)
-  const handRight = new Graphics().rect(12, 19, 3, 2).fill(avatar.skin)
-  container.addChild(handLeft, handRight)
-
-  let raisedHand: Graphics | null = null
-  if (hasRaisedHand) {
-    handRight.visible = false
-    raisedHand = new Graphics().rect(14, 10, 2, 7).fill(avatar.shirt).rect(14, 7, 3, 4).fill(avatar.skin)
-    container.addChild(raisedHand)
-  }
-  return { container, handLeft, handRight, raisedHand }
-}
-
 // ---------- 책상 단위 ----------
 
 interface DeskParts {
   container: Container
-  /** 클래식 캐릭터. 휴식 세션·도트는 null */
-  figure: Figure | null
-  /** 도트 캐릭터. 휴식 세션·클래식은 null. ticker 가 직접 update 한다 (Ticker.shared 에 안 붙인다) */
+  /** 캐릭터. 휴식 세션은 null. ticker 가 직접 update 한다 (Ticker.shared 에 안 붙인다) */
   animation: AnimatedSprite | null
   /** 말풍선이 없으면 null. 책상 컨테이너가 아니라 말풍선 층에 넣는다 */
   bubble: DeskBubble | null
@@ -633,80 +171,6 @@ interface DeskParts {
 
 const DESK_W = DESK_TILES_W * TILE
 const DESK_H = DESK_TILES_H * TILE
-
-/** 휴식 세션(호스트 재시작 중)은 책상을 그대로 두고 캐릭터 없이 빈 의자 + 흐린 이름표. 훅 상태가 남아 있어도 모니터·말풍선은 끈다 */
-function drawDesk(session: Session, seat: Point, isSelected: boolean): DeskParts {
-  const container = new Container()
-  container.position.set(PAD_X + seat.x * TILE, PAD_Y + seat.y * TILE)
-  const avatar = avatarOf(session.id)
-  const isOnBreak = attendanceOf(session) === 'break'
-  const isWorking = session.status === 'working' && !isOnBreak
-  const isExternal = session.kind === 'external'
-
-  // 의자 등받이
-  const chair = new Graphics().rect(5, 4, 14, 14).fill(COLOR.chair).rect(5, 4, 14, 1).fill(COLOR.chairLine)
-  chair.rect(4, 6, 1, 10).fill(COLOR.chairLine).rect(19, 6, 1, 10).fill(COLOR.chairLine)
-  container.addChild(chair)
-
-  const figure = isOnBreak ? null : drawFigure(avatar, session.status)
-  if (figure) {
-    figure.container.position.set(4, 2)
-    container.addChild(figure.container)
-  }
-
-  // 책상
-  const desk = new Graphics()
-  desk.rect(0, 20, DESK_W, 9).fill(COLOR.desk)
-  desk.rect(0, 29, DESK_W, 6).fill(COLOR.deskFront)
-  desk.rect(0, 20, 3, 15).fill(isExternal ? COLOR.deskLeg : COLOR.green)
-  desk.rect(0, 35, DESK_W, 1).fill(COLOR.deskLeg)
-  desk.rect(2, 36, 2, 3).fill(COLOR.deskLeg).rect(DESK_W - 4, 36, 2, 3).fill(COLOR.deskLeg)
-  container.addChild(desk)
-
-  // 모니터 (책상 오른쪽)
-  const monitor = new Graphics()
-  monitor.rect(22, 10, 10, 9).fill(COLOR.bezel)
-  monitor.rect(23, 11, 8, 7).fill(isWorking ? COLOR.screenOn : COLOR.screenOff)
-  if (isWorking) monitor.rect(24, 12, 3, 3).fill(0xdff0ff).rect(28, 13, 2, 2).fill(0xdff0ff)
-  monitor.rect(26, 19, 2, 2).fill(COLOR.bezel).rect(24, 21, 6, 1).fill(COLOR.bezel)
-  container.addChild(monitor)
-
-  // 소품: 연필꽂이 또는 작은 화분
-  if (avatar.hairStyle % 2 === 0) {
-    container.addChild(new Graphics().rect(5, 24, 3, 4).fill(COLOR.greenDark).rect(6, 22, 1, 2).fill(0xe8c76a))
-  } else {
-    container.addChild(drawPlant(5, 24, false))
-  }
-
-  if (isSelected) {
-    container.addChild(new Graphics().rect(-2, 1, DESK_W + 4, DESK_H - 6).stroke({ width: 1, color: COLOR.select }))
-  }
-
-  // 이름표
-  const isLead = session.role === 'lead'
-  const isPartLead = isLead && session.partId !== null
-  const name = label(session.name ?? session.title ?? session.id.slice(0, 8), 6, isExternal ? 0x7a7f8e : COLOR.text)
-  // 자리 간격(3타일)보다 조금 좁게. 책상보다 넓어도 옆 책상과 안 겹친다
-  const tagW = Math.min(name.width + 4, SEAT_STEP * TILE - 4)
-  // 이름표 밑줄: 외부 회색, 팀장 금색, 파트장 은색, 그 외 초록
-  const underline = isExternal ? COLOR.chairLine : isPartLead ? COLOR.silver : isLead ? COLOR.gold : COLOR.green
-  const tag = new Graphics().rect(0, 0, tagW, 9).fill(0xffffff).rect(0, 8, tagW, 1).fill(underline)
-  tag.position.set(Math.floor((DESK_W - tagW) / 2), 39)
-  name.position.set(tag.x + 2, 40)
-  // 팀장·파트장: 책상 앞판 위에 금색 명패 (둘은 이름표 밑줄로 구분)
-  if (isLead) container.addChild(new Graphics().rect(10, 30, 12, 3).fill(COLOR.gold).rect(11, 31, 10, 1).fill(0xf4d77a))
-  const mask = new Graphics().rect(tag.x, 39, tagW, 9).fill(0xffffff)
-  name.mask = mask
-  if (isOnBreak) {
-    tag.alpha = 0.5
-    name.alpha = 0.5
-  }
-  container.addChild(tag, mask, name)
-
-  container.eventMode = 'static'
-  container.cursor = 'pointer'
-  return { container, figure, animation: null, bubble: drawBubble(session, container.x, container.y, false) }
-}
 
 // ---------- 도트 ----------
 
@@ -749,7 +213,7 @@ interface DotArt {
   heads: Map<string, Texture>
 }
 
-/** 아틀라스 둘과 반복 타일을 읽고 확대를 nearest 로 (전역 기본값을 바꾸면 클래식 글자까지 바뀌어 텍스처마다) */
+/** 아틀라스들과 반복 타일을 읽고 확대를 nearest 로 (전역 기본값을 바꾸면 글자까지 바뀌어 텍스처마다) */
 async function loadDotArt(): Promise<DotArt> {
   const [sheet, env, recolor, decor] = await Promise.all([
     Assets.load<Spritesheet>(DOT_SHEET_URL),
@@ -923,7 +387,7 @@ function dotLabel(text: string, size: number, color = COLOR.text, wrapWidth?: nu
   return label(text, size, color, wrapWidth, dotTextResolution)
 }
 
-/** 도트 그룹: 그룹 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽) + 초록 걸레받이(아래) + 이름표·화분·메모. 크기·이벤트는 drawGroup 과 같다 */
+/** 도트 그룹: 그룹 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽) + 초록 걸레받이(아래) + 이름표·화분·메모. 크기는 저장된 w·h 가 아니라 그려지는 영역(안의 섬들을 다 담는다) */
 function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt, theme: DecorTheme, decor: FloorDecor[]): GroupParts {
   const { group } = area
   const container = new Container()
@@ -967,7 +431,7 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt, theme: D
   dot.addChild(sign, name)
   sign.eventMode = 'static'
   sign.cursor = 'move'
-  // drawGroup 과 같은 이유
+  // 부모가 interactive 면 Pixi 가 글자도 맞혀 이름표가 아니라 바닥을 누른 것이 되고, 끌기가 맵 이동이 된다
   name.eventMode = 'none'
 
   if (group.waitingNote) {
@@ -995,7 +459,7 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt, theme: D
   return { container, sign }
 }
 
-/** 도트 팀 섬: 연한 러그 + 테두리, 파트 구역(옅은 바탕 + 은색 테두리 + 이름표). 자리·이벤트는 drawIsland 와 같다 */
+/** 도트 팀 섬: 연한 러그 + 테두리, 파트 구역(옅은 바탕 + 은색 테두리 + 이름표). 파트 구역은 섬 컨테이너에 있어 섬을 끌면 같이 움직인다 */
 function drawDotIsland(island: Island, onEdit: () => void, art: DotArt, theme: DecorTheme): IslandParts {
   const container = new Container()
   container.position.set(PAD_X + island.x * TILE, PAD_Y + island.y * TILE)
@@ -1012,7 +476,7 @@ function drawDotIsland(island: Island, onEdit: () => void, art: DotArt, theme: D
       .stroke({ width: 1, color: 0xe7ecd9, alignment: 1 }),
   )
   for (const zone of island.zones) {
-    // 클래식과 같은 자리: 책상 경계에서 좌우 12, 위로 이름표 자리 36, 아래 3
+    // 책상 경계에서 좌우 12, 위로 이름표 자리 36, 아래 3
     const zx = ((zone.x - island.x) * TILE - 4) * DOT_SCALE
     const zy = ((zone.y - island.y) * TILE - 12) * DOT_SCALE
     const zw = (zone.w * TILE + 8) * DOT_SCALE
@@ -1033,7 +497,7 @@ function drawDotIsland(island: Island, onEdit: () => void, art: DotArt, theme: D
   name.position.set(16, 11)
   sign.eventMode = 'static'
   sign.cursor = 'move'
-  // drawGroup 과 같은 이유
+  // drawDotGroup 과 같은 이유
   name.eventMode = 'none'
   dot.addChild(sign, name)
   container.eventMode = 'static'
@@ -1047,7 +511,7 @@ function drawDotIsland(island: Island, onEdit: () => void, art: DotArt, theme: D
 /**
  * 도트 Focus Zone: 카펫 + 테두리, 자리마다 1인 부스(뒤·양옆 패널, 오른쪽 안 선반) + 선반 위 스탠드 조명·머그 또는 헤드폰,
  * 빈 자리에는 책상까지 (앉은 세션은 책상 컨테이너가 같은 자리에 책상을 다시 그린다), 오른쪽 가장자리 책장·화분.
- * 자리 계산은 drawZone 과 같다 (officeLayout.ts 의 로비 자리). occupied = 앉은 자리의 구역 안 타일 좌표 "x,y"
+ * 자리는 officeLayout.ts 의 로비 자리 (맨 위 LOBBY_SIGN_H 줄은 이름표, 2열·SEAT_STEP 간격). occupied = 앉은 자리의 구역 안 타일 좌표 "x,y"
  */
 function drawDotZone(zone: Rect, art: DotArt, occupied: Set<string>, theme: DecorTheme): Container {
   const container = new Container()
@@ -1074,7 +538,7 @@ function drawDotZone(zone: Rect, art: DotArt, occupied: Set<string>, theme: Deco
     for (let column = 0; column < 2; column++) {
       const seatX = (1 + column * SEAT_STEP) * step
       const seatY = (LOBBY_SIGN_H + 1 + row * SEAT_STEP) * step
-      // 부스(138×107)는 자리 왼쪽 9 밖에서 오른쪽 선반까지, 아래 끝은 책상 앞판 뒤 (클래식 부스 -3..43, 0..37 의 3배)
+      // 부스(138×107)는 자리 왼쪽 9 밖에서 오른쪽 선반까지, 아래 끝은 책상 앞판 뒤
       dot.addChild(dotProp(art, 'booth', seatX + 60, seatY + 111))
       // 선반 위 (부스 그림의 선반 윗면 ≈ 부스 아래에서 50)
       dot.addChild(dotProp(art, 'desk-lamp', seatX + 112, seatY + 62))
@@ -1146,7 +610,7 @@ const DOT_DESK = {
  */
 let dotTextResolution = 1
 
-/** 도트 책상. 그리는 순서: 의자 → 캐릭터 → 책상 → 모니터 켜짐 → 외부 측판·명패 → 이름표. 선택 테두리·말풍선은 클래식과 같다 */
+/** 도트 책상. 그리는 순서: 의자 → 캐릭터 → 책상 → 모니터 켜짐 → 외부 측판·명패 → 이름표. 선택 테두리는 아트 px, 말풍선은 별도 층 */
 function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: DotArt): DeskParts {
   const container = new Container()
   container.position.set(PAD_X + seat.x * TILE, PAD_Y + seat.y * TILE)
@@ -1203,7 +667,7 @@ function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: Do
         .fill(0xdff0ff),
     )
   }
-  // 외부 세션: 책상 왼쪽 측판을 회색으로 (클래식의 회색 측판)
+  // 외부 세션: 책상 왼쪽 측판을 회색으로
   if (isExternal) dot.addChild(new Graphics().rect(deskLeft + 4, deskTop + 42, 6, 24).fill(COLOR.deskLeg))
   // 팀장·파트장: 책상 앞판에 금색 명패 (둘은 이름표 밑줄로 구분)
   if (isLead) dot.addChild(new Graphics().rect(30, deskTop + 46, 36, 9).fill(COLOR.gold).rect(33, deskTop + 49, 30, 3).fill(0xf4d77a))
@@ -1231,23 +695,20 @@ function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: Do
   container.cursor = 'pointer'
   // 든 손·의자처럼 자리 밖으로 나온 부분이 아니라 자리(2×3 타일)만 누르는 곳으로
   container.hitArea = new Rectangle(0, 0, DESK_W, DESK_H)
-  return { container, figure: null, animation, bubble: drawBubble(session, container.x, container.y, true) }
+  return { container, animation, bubble: drawBubble(session, container.x, container.y) }
 }
 
 // ---------- 말풍선 ----------
 
 /**
- * 말풍선 크기. 클래식은 아트 px, 도트는 도트 px (책상 이름표 글자 14 보다 조금 작게) 이고 1/DOT_SCALE 층에 그린다.
+ * 말풍선 크기. 도트 px (책상 이름표 글자 14 보다 조금 작게) 이고 1/DOT_SCALE 층에 그린다.
  * maxW = 접힌 말풍선 최대 폭 (책상 폭 + 조금. 자리 간격 안이라 옆 자리 말풍선과 안 겹친다), expandedW = 펼친 말풍선 줄바꿈 폭.
  * boxBottom = 상자 아래 끝 (책상 기준). 자리 간격이 책상 높이와 같아 위아래 책상 사이에 빈 줄이 없으므로,
- * 상자는 윗줄 책상 이름표(클래식 -9..0, 도트 -20..0) 위에 두고 가는 꼬리를 자기 머리(tailEnd)까지 내려 누구 것인지 보인다
+ * 상자는 윗줄 책상 이름표(-20..0) 위에 두고 가는 꼬리를 자기 머리(tailEnd)까지 내려 누구 것인지 보인다
  */
-const BUBBLE_SIZE = {
-  classic: { font: 6, maxW: 44, expandedW: 160, boxBottom: -10, tailEnd: 1, line: 1, padX: 2, padY: 1, x: 2 },
-  /** 꼬리 끝은 도트 머리 위 끝(셀 16 - 20 = 자리 -4)까지 */
-  dot: { font: 12, maxW: 132, expandedW: 330, boxBottom: -24, tailEnd: -6, line: 2, padX: 5, padY: 2, x: 6 },
-}
-type BubbleSize = (typeof BUBBLE_SIZE)['classic']
+/** 꼬리 끝은 도트 머리 위 끝(셀 16 - 20 = 자리 -4)까지 */
+const BUBBLE_SIZE = { font: 12, maxW: 132, expandedW: 330, boxBottom: -24, tailEnd: -6, line: 2, padX: 5, padY: 2, x: 6 }
+type BubbleSize = typeof BUBBLE_SIZE
 const BUBBLE_EXPANDED_MAX_CHARS = 300
 
 interface DeskBubble {
@@ -1295,7 +756,7 @@ function bubbleBox(text: Text, isAlert: boolean, size: BubbleSize): Container {
  * my-turn 은 마지막 말, 승인 대기는 빨간 "! 도구". 접힌 것은 한 줄 말줄임으로 책상 폭 안,
  * 펼친 것(마우스를 올렸거나 선택한 세션)은 전체 글. 휴식 세션은 훅 상태가 남아 있어도 없다
  */
-function drawBubble(session: Session, x: number, y: number, isDot: boolean): DeskBubble | null {
+function drawBubble(session: Session, x: number, y: number): DeskBubble | null {
   if (attendanceOf(session) === 'break') return null
   const isAlert = session.status === 'needs-approval'
   const tool = session.pendingTool ?? '?'
@@ -1307,8 +768,8 @@ function drawBubble(session: Session, x: number, y: number, isDot: boolean): Des
     : lastText.length > BUBBLE_EXPANDED_MAX_CHARS
       ? `${lastText.slice(0, BUBBLE_EXPANDED_MAX_CHARS).trimEnd()}…`
       : lastText
-  const size = isDot ? BUBBLE_SIZE.dot : BUBBLE_SIZE.classic
-  const resolution = isDot ? dotTextResolution : textResolution
+  const size = BUBBLE_SIZE
+  const resolution = dotTextResolution
   const textColor = isAlert ? COLOR.alertText : COLOR.text
   const compactLabel = label('', size.font, textColor, undefined, resolution)
   fitOneLine(compactLabel, compactText, size.maxW - size.padX * 2)
@@ -1329,9 +790,9 @@ function drawBubble(session: Session, x: number, y: number, isDot: boolean): Des
   expanded.visible = false
   const container = new Container()
   container.position.set(x, y)
-  const layer = isDot ? dotLayer() : container
+  const layer = dotLayer()
   layer.addChild(compact, expanded)
-  if (layer !== container) container.addChild(layer)
+  container.addChild(layer)
   // 보이기만 한다. 아래에 깔린 윗줄 책상·팀/파트 이름표(끌기)를 누르는 것을 가로채지 않게
   container.eventMode = 'none'
   return { container, compact, expanded }
@@ -1342,43 +803,9 @@ function drawBubble(session: Session, x: number, y: number, isDot: boolean): Des
 const OFF_DUTY_HEIGHT = 6 * TILE
 const OFF_DUTY_HEAD_STEP = 24
 
-/** 사무실 내용 바로 아래, 맵 전체 폭의 거리. 인원이 없어도 그린다 */
-function drawOffDuty(width: number, phase: DayPhase): Container {
-  const container = new Container()
-  const view = STREET_VIEW[phase]
-  const scenery = new Graphics()
-  scenery.rect(0, 0, width, OFF_DUTY_HEIGHT).fill(view.sky)
-  scenery.rect(0, 0, width, 3).fill(view.skyTop)
-  if (view.hasStars) for (let x = 20; x < width - 2; x += 37) scenery.rect(x, 12 + (x % 3) * 5, 1, 1).fill(0xbfcde2)
-  // 지붕은 계단 모양 픽셀. 창과 가로등은 노을·밤에 따뜻한 불빛, 아침·낮엔 꺼짐
-  for (let x = 12; x + 80 < width; x += 96) {
-    scenery.rect(x, 38, 44, 27).fill(view.house)
-    for (let step = 0; step < 5; step++) scenery.rect(x + step * 4, 36 - step * 2, 44 - step * 8, 2).fill(view.house)
-    scenery.rect(x + 8, 46, 6, 8).fill(view.windows[0])
-    scenery.rect(x + 28, 46, 6, 8).fill(view.windows[1])
-    scenery.rect(x + 10, 46, 1, 8).fill(view.mullion)
-    scenery.rect(x + 30, 46, 1, 8).fill(view.mullion)
-    scenery.rect(x + 20, 54, 7, 11).fill(view.door)
-    scenery.rect(x + 67, 35, 2, 30).fill(0x8390a4)
-    scenery.rect(x + 63, 32, 10, 2).fill(0x101c31)
-    scenery.rect(x + 64, 34, 8, 4).fill(view.lamp)
-    if (view.lampGlow !== null) scenery.rect(x + 65, 38, 6, 2).fill(view.lampGlow)
-  }
-  scenery.rect(0, 64, width, 2).fill(0xb2a691)
-  scenery.rect(0, 66, width, 26).fill(0x626b7b)
-  scenery.rect(0, 92, width, 4).fill(0x343f53)
-  for (let x = 0; x < width; x += TILE) scenery.rect(x, 88, Math.min(TILE - 1, width - x), 1).fill(0x77808e)
-  const name = label('Off Duty', 8, view.label)
-  name.position.set(12, 7)
-  container.addChild(scenery, name)
-  container.eventMode = 'static'
-  container.cursor = 'grab'
-  return container
-}
-
 /**
- * 도트 Off Duty 거리 (도트 px, 클래식 띠의 3배 자리): 하늘(창밖 그림 맨 위 색) + 먼 도시(그 시간대 창밖 그림) + 집·가로등(시간대별 스프라이트) + 보도.
- * 집·가로등은 클래식처럼 96 아트 px(288) 마다. 퇴근 머리·이름은 부르는 쪽이 아트 px 로 얹는다
+ * 도트 Off Duty 거리 (도트 px, 띠 높이 OFF_DUTY_HEIGHT 의 3배): 하늘(창밖 그림 맨 위 색) + 먼 도시(그 시간대 창밖 그림) + 집·가로등(시간대별 스프라이트) + 보도.
+ * 집·가로등은 96 아트 px(288) 마다. 퇴근 머리·이름은 부르는 쪽이 아트 px 로 얹는다
  */
 function drawDotOffDuty(width: number, phase: DayPhase, art: DotArt): Container {
   const container = new Container()
@@ -1390,7 +817,7 @@ function drawDotOffDuty(width: number, phase: DayPhase, art: DotArt): Container 
   const skyline = dotTiling(art, `view-${phase}`, w, view.meta.h)
   skyline.y = groundY - view.meta.h
   const sky = new Graphics().rect(0, 0, w, skyline.y).fill(hexColor(view.meta.top))
-  // 창밖 그림의 별은 그림 안에만 있어 그 위 단색 하늘에도 클래식처럼 띄엄띄엄
+  // 창밖 그림의 별은 그림 안에만 있어 그 위 단색 하늘에도 띄엄띄엄
   if (STREET_VIEW[phase].hasStars) for (let x = 60; x < w - 6; x += 111) sky.rect(x, 30 + (x % 3) * 18, 3, 3).fill(0xbfcde2)
   dot.addChild(sky, skyline)
   const street = dotTiling(art, 'street', w, OFF_DUTY_HEIGHT * DOT_SCALE - groundY)
@@ -1457,7 +884,9 @@ function drawApprovalArrow(direction: ApprovalDirection): Graphics {
 // ---------- 컴포넌트 ----------
 
 export function Office(props: Props) {
-  const { style, office, sessions, selectedId, focus } = props
+  const { office, sessions, selectedId, focus } = props
+  /** 아틀라스를 못 읽어 캔버스를 만들지 않았다 */
+  const [isArtFailed, setIsArtFailed] = useState(false)
   const hostRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<Application | null>(null)
   const latest = useRef(props)
@@ -1472,7 +901,6 @@ export function Office(props: Props) {
     let isDisposed = false
     const app = new Application()
     const desks = new Map<string, DeskParts>()
-    const working = new Set<string>()
     let frame = 0
     let removeListeners = () => {}
     let disconnectResize = () => {}
@@ -1483,14 +911,15 @@ export function Office(props: Props) {
     void app
       .init({ resizeTo: host, background: COLOR.floor, antialias: false, roundPixels: true, resolution: 1 })
       .then(async () => {
-        // 도트는 첫 그리기 전에 아틀라스를 다 읽는다. 못 읽으면 클래식으로 그린다
-        let art: DotArt | null = null
-        if (style === 'dot') {
-          try {
-            art = await loadDotArt()
-          } catch (error) {
-            console.error('도트 사무실 에셋을 읽지 못해 클래식으로 그린다', error)
-          }
+        // 첫 그리기 전에 아틀라스를 다 읽는다. 못 읽으면 캔버스 없이 안내만 (목록·대화는 그대로)
+        let art: DotArt
+        try {
+          art = await loadDotArt()
+        } catch (error) {
+          console.error('사무실 그림(도트 에셋)을 읽지 못함', error)
+          app.destroy(true)
+          if (!isDisposed) setIsArtFailed(true)
+          return
         }
         if (isDisposed) {
           app.destroy(true)
@@ -1501,14 +930,10 @@ export function Office(props: Props) {
         app.stage.eventMode = 'static'
         app.stage.hitArea = app.screen
         app.stage.cursor = 'grab'
-        const zoomSteps = ZOOM_STEPS[art ? 'dot' : 'classic']
-        /** 아트 px → 배율 1 화면 px (도트는 타일 16 아트 px 를 48 로) */
-        const artScale = art ? DOT_SCALE : 1
-        textResolution = zoomSteps[zoomSteps.length - 1] * artScale
         const world = new Container()
         let zoomIndex = DEFAULT_ZOOM_INDEX
         /** world 배율 (아트 px → 화면 px) */
-        let zoom = zoomSteps[zoomIndex] * artScale
+        let zoom = ZOOM_STEPS[zoomIndex] * DOT_SCALE
         world.scale.set(zoom)
         app.stage.addChild(world)
 
@@ -1632,10 +1057,10 @@ export function Office(props: Props) {
           if (Math.abs(wheelDelta) < WHEEL_STEP) return
           wheelDelta = 0
           // 아래로 굴리면 축소
-          const nextIndex = Math.min(zoomSteps.length - 1, Math.max(0, zoomIndex - Math.sign(delta)))
+          const nextIndex = Math.min(ZOOM_STEPS.length - 1, Math.max(0, zoomIndex - Math.sign(delta)))
           if (nextIndex === zoomIndex) return
           zoomIndex = nextIndex
-          const next = zoomSteps[zoomIndex] * artScale
+          const next = ZOOM_STEPS[zoomIndex] * DOT_SCALE
           const bounds = host.getBoundingClientRect()
           const cursor = { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
           world.x = cursor.x - ((cursor.x - world.x) * next) / zoom
@@ -1726,27 +1151,24 @@ export function Office(props: Props) {
           offDutyHeads.clear()
           approvalDesks = []
           islandViews.clear()
-          working.clear()
           const layout = layoutOffice(office, sessions)
-          // 도트 꾸미기: 테마(바닥·카펫 색과 소품 풀)와 시드로 놓은 소품. 벽 칸은 내용 오른쪽 끝(PAD_X 포함)까지
+          // 꾸미기: 테마(바닥·카펫 색과 소품 풀)와 시드로 놓은 소품. 벽 칸은 내용 오른쪽 끝(PAD_X 포함)까지
           const decorTheme = themeOf(office.decor?.theme)
-          const decorPlan = art
-            ? planDecor(layout, office.decor ?? DEFAULT_DECOR, art.decorSizes, Math.ceil((PAD_X / TILE + layout.right) / WALL_BAY_TILES))
-            : { floor: [], wall: [] }
+          const decorPlan = planDecor(layout, office.decor ?? DEFAULT_DECOR, art.decorSizes, Math.ceil((PAD_X / TILE + layout.right) / WALL_BAY_TILES))
           map.w = PAD_X + layout.right * TILE + Math.ceil(app.screen.width / zoom)
           // 띠는 늘 내용(그룹·섬·Focus Zone) 아래 끝 + 1타일. 바닥 격자에 맞는다
           const streetY = PAD_Y + (layout.bottom + 1) * TILE
           map.h = streetY + OFF_DUTY_HEIGHT + Math.ceil(app.screen.height / zoom / TILE) * TILE
           drawnPhase = dayPhaseOf(new Date())
           dotTextResolution = zoom / DOT_SCALE
-          world.addChild(art ? drawDotBackground(map.w, map.h, art, drawnPhase, decorTheme, decorPlan.wall) : drawBackground(map.w, map.h, drawnPhase))
+          world.addChild(drawDotBackground(map.w, map.h, art, drawnPhase, decorTheme, decorPlan.wall))
           // 끄는 그룹·섬이 띠를 지날 때 가려지지 않게 바닥 바로 위에 둔다
-          const street = art ? drawDotOffDuty(map.w, drawnPhase, art) : drawOffDuty(map.w, drawnPhase)
+          const street = drawDotOffDuty(map.w, drawnPhase, art)
           street.y = streetY
           world.addChild(street)
           // 그룹 밖 꾸미기 소품 (열린 바닥·벽 앞 줄). 그룹·섬과 겹치지 않는 자리라 그 아래 층이어도 가려지지 않는다
           const openDecor = decorPlan.floor.filter((item) => item.groupId === null)
-          if (art && openDecor.length) {
+          if (openDecor.length) {
             const decorLayer = dotLayer()
             decorLayer.position.set(PAD_X, PAD_Y)
             decorLayer.eventMode = 'none'
@@ -1764,9 +1186,7 @@ export function Office(props: Props) {
             const onEdit = () => {
               if (!isDragged) latest.current.onEditGroup(area.group)
             }
-            const parts = art
-              ? drawDotGroup(area, onEdit, art, decorTheme, decorPlan.floor.filter((item) => item.groupId === area.group.id))
-              : drawGroup(area, onEdit)
+            const parts = drawDotGroup(area, onEdit, art, decorTheme, decorPlan.floor.filter((item) => item.groupId === area.group.id))
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               const teamIds = new Set(layout.islands.filter((i) => i.team.groupId === area.group.id).map((i) => i.team.id))
               beginSignDrag(event, {
@@ -1779,23 +1199,19 @@ export function Office(props: Props) {
             })
             world.addChild(parts.container)
           }
-          if (art) {
-            const occupied = new Set(
-              layout.seated.flatMap((session) => {
-                const seat = session.teamId ? undefined : layout.seats.get(session.id)
-                return seat ? [`${seat.x - layout.lobby.x},${seat.y - layout.lobby.y}`] : []
-              }),
-            )
-            world.addChild(drawDotZone(layout.lobby, art, occupied, decorTheme))
-          } else {
-            world.addChild(drawZone(layout.lobby))
-          }
+          const occupied = new Set(
+            layout.seated.flatMap((session) => {
+              const seat = session.teamId ? undefined : layout.seats.get(session.id)
+              return seat ? [`${seat.x - layout.lobby.x},${seat.y - layout.lobby.y}`] : []
+            }),
+          )
+          world.addChild(drawDotZone(layout.lobby, art, occupied, decorTheme))
           for (const island of layout.islands) {
             const { team } = island
             const onEdit = () => {
               if (!isDragged) latest.current.onEditTeam(team)
             }
-            const parts = art ? drawDotIsland(island, onEdit, art, decorTheme) : drawIsland(island, onEdit)
+            const parts = drawDotIsland(island, onEdit, art, decorTheme)
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               beginSignDrag(event, {
                 // 섬 둘레 그룹 벽 여백까지 맵 안에 남게
@@ -1825,9 +1241,9 @@ export function Office(props: Props) {
           const tooltipName = label('', 7, 0xffffff, Math.min(160, map.w - 16))
           tooltip.addChild(tooltipBackground, tooltipName)
           offDuty.slice(0, visibleCount).forEach((session, index) => {
-            // 도트는 그 세션 인물 머리 (책상·목록 아바타와 같은 인물·색), 클래식은 avatar.ts 머리 (눈 감음)
-            const dotHeadSprite = art ? dotHead(art, session) : null
-            const head = dotHeadSprite ? new Container() : drawHead(avatarOf(session.id), 'ended')
+            // 그 세션 인물 머리 (책상·목록 아바타와 같은 인물·색). 인물이 없으면(아틀라스에 인물이 없음) 빈 자리
+            const dotHeadSprite = dotHead(art, session)
+            const head = new Container()
             if (dotHeadSprite) {
               dotHeadSprite.position.set(2, 0)
               head.addChild(dotHeadSprite)
@@ -1862,7 +1278,7 @@ export function Office(props: Props) {
           const bubbleLayer = new Container()
           for (const session of ordered) {
             const seat = layout.seats.get(session.id)!
-            const parts = art ? drawDotDesk(session, seat, session.id === selectedId, art) : drawDesk(session, seat, session.id === selectedId)
+            const parts = drawDotDesk(session, seat, session.id === selectedId, art)
             if (parts.animation) animations.add(parts.animation)
             parts.container.on('pointertap', () => {
               if (!isDragged) latest.current.onSelect(session.id)
@@ -1880,7 +1296,6 @@ export function Office(props: Props) {
             world.addChild(parts.container)
             if (parts.bubble) bubbleLayer.addChild(parts.bubble.container)
             desks.set(session.id, parts)
-            if (parts.figure && session.status === 'working') working.add(session.id)
             if (session.status === 'needs-approval' && attendanceOf(session) === 'present') {
               approvalDesks.push({ session, rect: { ...layout.seats.get(session.id)!, w: DESK_TILES_W, h: DESK_TILES_H } })
             }
@@ -2119,15 +1534,6 @@ export function Office(props: Props) {
           elapsed = 0
           frame = (frame + 1) % 2
           for (const arrow of arrows.values()) arrow.container.alpha = frame && !reducedMotion.matches ? 0.55 : 1
-          for (const [id, parts] of desks) {
-            const { figure } = parts
-            if (!figure) continue
-            if (working.has(id)) {
-              figure.handLeft.y = frame ? -1 : 0
-              figure.handRight.y = frame ? 0 : -1
-            }
-            if (figure.raisedHand) figure.raisedHand.y = frame ? -1 : 0
-          }
         })
 
         redraw()
@@ -2147,7 +1553,7 @@ export function Office(props: Props) {
         appRef.current = null
       }
     }
-  }, [style])
+  }, [])
 
   useEffect(() => {
     redrawRef.current()
@@ -2158,5 +1564,15 @@ export function Office(props: Props) {
     focusRef.current(focus)
   }, [focus])
 
+  if (isArtFailed) {
+    return (
+      <div className="office office-failed">
+        사무실 그림을 읽지 못함 ·{' '}
+        <button type="button" className="link" onClick={() => window.location.reload()}>
+          새로고침
+        </button>
+      </div>
+    )
+  }
   return <div ref={hostRef} className="office" />
 }

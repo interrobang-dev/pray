@@ -1,4 +1,9 @@
-import { hashOf } from './avatar'
+/** 세션 ID → 32비트 해시 (FNV-1a). 같은 세션은 늘 같은 인물 */
+export function hashOf(id: string): number {
+  let hash = 2166136261
+  for (const ch of id) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619) >>> 0
+  return hash
+}
 
 /** 아틀라스 meta.jkCorp.characters 의 인물 하나. pool: lead = 팀장·파트장, member = 나머지. gender 가 없는 아틀라스도 있다 */
 export interface DotCharacter {
