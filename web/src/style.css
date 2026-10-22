@@ -1394,7 +1394,7 @@ li.group.drop-after::after {
   gap: 8px;
   padding: 8px 16px;
   background: #fde3e0;
-  border-top: 1px solid #f5c4bf;
+  border: 1px solid #f5c4bf;
 }
 .approval .yes {
   background: var(--green);
@@ -1411,7 +1411,8 @@ li.group.drop-after::after {
   display: flex;
   flex-direction: column;
   max-height: 60vh;
-  border-top: 2px solid var(--green);
+  overflow: hidden;
+  border: 1px solid var(--green);
   background: var(--panel);
 }
 .question-tabs {
@@ -1602,33 +1603,56 @@ li.group.drop-after::after {
   background: var(--green-soft);
   font-weight: 600;
 }
+/* 입력칸 자리의 떠 있는 카드: 승인 막대·질문 카드·입력 상자·퇴근 막대 (App.tsx OffDutyBar).
+   패널 바닥에 붙은 막대가 아니라 대화 열과 같은 양옆 여백(사무실을 숨기면 960px 열의 --chat-gutter, 아니면 16px)과 아래 12px 을 둔다 */
+.approval,
+.question-card,
+.composer,
+.off-duty {
+  margin: 0 var(--chat-gutter, 16px) 12px;
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 14px rgba(0, 0, 0, 0.05);
+}
+/* 대화 입력 상자 (Chat.tsx): 여러 줄 입력칸 + 오른쪽 아래 보내기. 버튼은 아래에 붙어 글이 길어지면 입력칸만 위로 자란다.
+   첨부 같은 버튼이 생기면 textarea 앞(왼쪽 아래)에 보내기와 같은 높이로 넣는다 */
 .composer {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
+  padding: 8px;
+  border: 1px solid var(--line);
   background: var(--panel);
 }
-.composer {
-  align-items: flex-end;
+/* 포커스는 입력칸이 아니라 상자 테두리로 보인다 (입력칸 포커스 초록 규칙과 같은 색) */
+.composer:has(textarea:focus) {
+  border-color: var(--green);
 }
 .composer textarea {
   flex: 1;
+  min-width: 0;
   resize: none;
   line-height: 1.4;
+  padding: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
-/* 질문 중 (Chat.tsx isAsking). 쓰던 글은 남아 흐리게 보인다 */
-.composer textarea:disabled {
+/* 질문 중 (Chat.tsx isAsking). 상자가 회색이 되고 쓰던 글은 남아 흐리게 보인다 */
+.composer:has(textarea:disabled) {
   background: var(--bg);
+}
+.composer textarea:disabled {
   color: var(--muted);
   cursor: not-allowed;
 }
-/* 보내기: 종이비행기 아이콘의 둥근 정사각형. 한 변 = 한 줄 입력칸 높이(줄 높이 1.4em + 위아래 padding 7px·border 1px).
+/* 보내기: 종이비행기 아이콘의 둥근 정사각형. 한 변 = 한 줄 입력칸 높이(줄 높이 1.4em + 위아래 padding 6px).
    em 이라 입력칸과 글자 크기가 같아야 맞는다 */
 .composer .send {
   flex-shrink: 0;
-  width: calc(1.4em + 16px);
-  height: calc(1.4em + 16px);
+  width: calc(1.4em + 12px);
+  height: calc(1.4em + 12px);
   padding: 0;
   border-radius: 8px;
   display: flex;
@@ -1661,7 +1685,7 @@ li.group.drop-after::after {
   align-items: center;
   gap: 6px 8px;
   padding: 10px 16px;
-  border-top: 1px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--panel);
 }
 .off-duty .off-duty-reason {
@@ -2013,20 +2037,15 @@ li.group.drop-after::after {
   padding: 16px;
   color: var(--muted);
 }
-/* 넓어진 대화 탭: 말풍선 열·버튼 묶음·승인 막대·질문 카드·입력칸·입력칸 자리 안내를 가운데 960px 열로 모은다 (줄이 너무 길어지지 않게).
-   막대 배경·테두리와 대화 스크롤바는 패널 폭 그대로 두려고 max-width 대신 양옆 여백으로 좁힌다. 좁으면 원래 여백 16px.
-   변수 안의 % 는 쓰는 곳에서 풀린다: 여백은 부모(.chat·.messages-pane·.question-card) 폭, 버튼 묶음 left·right 는 .messages-pane 폭 — 모두 대화 폭이다.
+/* 넓어진 대화 탭: 말풍선 열·버튼 묶음·입력칸 자리(승인 막대·질문 카드·입력 상자·퇴근 막대·안내)를 가운데 960px 열로 모은다 (줄이 너무 길어지지 않게).
+   대화 스크롤바는 패널 폭 그대로 두려고 max-width 대신 양옆 여백으로 좁힌다. 좁으면 원래 여백 16px.
+   변수 안의 % 는 쓰는 곳에서 풀린다: 여백은 부모(.chat·.messages-pane) 폭, 버튼 묶음 left·right 는 .messages-pane 폭 — 모두 대화 폭이다.
+   입력칸 자리의 카드는 위 공통 규칙의 margin 으로 이 변수를 쓴다.
    말풍선 최대 폭(82%)·제안 말풍선 최대 폭(70%)은 이 열 기준이 된다 */
 .layout.office-hidden .chat {
   --chat-gutter: max(16px, calc((100% - 960px) / 2));
 }
 .layout.office-hidden .messages,
-.layout.office-hidden .approval,
-.layout.office-hidden .question-tabs,
-.layout.office-hidden .question-body,
-.layout.office-hidden .question-actions,
-.layout.office-hidden .composer,
-.layout.office-hidden .off-duty,
 .layout.office-hidden .chat > .hint {
   padding-left: var(--chat-gutter);
   padding-right: var(--chat-gutter);
