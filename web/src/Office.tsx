@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js'
+import { Application, Container, Graphics, Rectangle, Text, type FederatedPointerEvent } from 'pixi.js'
 import { attendanceOf, type Office as OfficeData, type Group, type Session, type Team } from './types'
 import { avatarOf, type Avatar } from './avatar'
 import {
@@ -692,6 +692,52 @@ function drawOffDuty(width: number): Container {
   return container
 }
 
+// ---------- 승인 대기 화살표 ----------
+
+/** 화면 밖 승인 대기 책상 쪽. 세로 먼저 (up-left 처럼) */
+type ApprovalDirection = 'up' | 'up-right' | 'right' | 'down-right' | 'down' | 'down-left' | 'left' | 'up-left'
+
+/** 화살표 도트 (9×9, # = 칠함). 위·오른쪽 위만 그리고 나머지는 90도씩 돌린다 (각도로 돌리면 도트가 뭉개진다) */
+const ARROW_UP = ['....#....', '...###...', '..#####..', '.#######.', '#########', '...###...', '...###...', '...###...', '...###...']
+const ARROW_UP_RIGHT = ['...######', '....#####', '.....####', '....#####', '...###.##', '..###...#', '.###.....', '###......', '.#.......']
+/** 화살표 도트 한 칸 = 화면 3px (캔버스 배율과 관계없이 같은 크기) */
+const ARROW_PIXEL = 3
+/** 흰 테두리 1칸을 둘러 11칸 */
+const ARROW_SIZE = (ARROW_UP.length + 2) * ARROW_PIXEL
+const ARROW_MARGIN = 6
+
+function rotateClockwise(rows: string[]): string[] {
+  return rows.map((_, r) => rows.map((row) => row[r]).reverse().join(''))
+}
+
+function arrowShape(direction: ApprovalDirection): string[] {
+  const isDiagonal = direction.includes('-')
+  const turns = { up: 0, 'up-right': 0, right: 1, 'down-right': 1, down: 2, 'down-left': 2, left: 3, 'up-left': 3 }[direction]
+  let rows = isDiagonal ? ARROW_UP_RIGHT : ARROW_UP
+  for (let i = 0; i < turns; i++) rows = rotateClockwise(rows)
+  return rows
+}
+
+/** 승인 말풍선과 같은 빨강에 흰 테두리 (어느 바탕 위에서도 보이게) */
+function drawApprovalArrow(direction: ApprovalDirection): Graphics {
+  const rows = arrowShape(direction)
+  const isFilled = (r: number, c: number) => rows[r]?.[c] === '#'
+  const g = new Graphics()
+  for (let r = -1; r <= rows.length; r++) {
+    for (let c = -1; c <= rows.length; c++) {
+      if (isFilled(r, c)) continue
+      const isEdge = [-1, 0, 1].some((dr) => [-1, 0, 1].some((dc) => isFilled(r + dr, c + dc)))
+      if (isEdge) g.rect((c + 1) * ARROW_PIXEL, (r + 1) * ARROW_PIXEL, ARROW_PIXEL, ARROW_PIXEL).fill(COLOR.frame)
+    }
+  }
+  rows.forEach((row, r) => {
+    for (let c = 0; c < row.length; c++) {
+      if (row[c] === '#') g.rect((c + 1) * ARROW_PIXEL, (r + 1) * ARROW_PIXEL, ARROW_PIXEL, ARROW_PIXEL).fill(COLOR.alertLine)
+    }
+  })
+  return g
+}
+
 // ---------- 컴포넌트 ----------
 
 export function Office(props: Props) {
@@ -736,6 +782,8 @@ export function Office(props: Props) {
         const map = { w: 0, h: 0 }
         const offDutyHeads = new Map<string, Rect>()
         const islandViews = new Map<string, Container>()
+        /** 근무 중인 승인 대기 책상 (타일 사각형). redraw 가 정하고 화살표가 매 프레임 화면 밖인지 본다 */
+        let approvalDesks: { session: Session; rect: Rect }[] = []
         // 팀·책상으로 부드럽게 이동하는 애니메이션 (300ms ease-out). 휠·끌기를 시작하면 멈춘다
         let focusMove: { from: Point; to: Point; elapsed: number } | null = null
         // 빈 곳(이름표 밖)을 누르고 DRAG_THRESHOLD_PX 넘게 움직이면 맵 이동
@@ -935,6 +983,7 @@ export function Office(props: Props) {
           world.removeChildren()
           desks.clear()
           offDutyHeads.clear()
+          approvalDesks = []
           islandViews.clear()
           working.clear()
           const layout = layoutOffice(office, sessions)
@@ -1036,9 +1085,150 @@ export function Office(props: Props) {
             world.addChild(parts.container)
             desks.set(session.id, parts)
             if (parts.figure && session.status === 'working') working.add(session.id)
+            if (session.status === 'needs-approval' && attendanceOf(session) === 'present') {
+              approvalDesks.push({ session, rect: { ...layout.seats.get(session.id)!, w: DESK_TILES_W, h: DESK_TILES_H } })
+            }
           }
         }
         redrawRef.current = redraw
+
+        // 승인 대기 책상이 화면 밖이면 그쪽 가장자리에 빨간 화살표. 화면 좌표라 world 가 아니라 stage 에 둔다 (redraw 가 지우지 않는다)
+        const overlay = new Container()
+        app.stage.addChild(overlay)
+        const arrows = new Map<
+          ApprovalDirection,
+          { container: Container; badge: Container; badgeText: Text; badgeBackground: Graphics; targets: { session: Session; rect: Rect }[] }
+        >()
+        let hoveredDirection: ApprovalDirection | null = null
+        const arrowTooltip = new Container()
+        arrowTooltip.eventMode = 'none'
+        arrowTooltip.visible = false
+        const arrowTooltipBackground = new Graphics()
+        const arrowTooltipText = label('', 11)
+        arrowTooltipText.position.set(6, 4)
+        arrowTooltip.addChild(arrowTooltipBackground, arrowTooltipText)
+        /** 방향 → 화면 쪽 단위 벡터 */
+        const unitOf = (direction: ApprovalDirection): Point => ({
+          x: direction.endsWith('left') ? -1 : direction.endsWith('right') ? 1 : 0,
+          y: direction.startsWith('up') ? -1 : direction.startsWith('down') ? 1 : 0,
+        })
+        const showArrowTooltip = (direction: ApprovalDirection) => {
+          const arrow = arrows.get(direction)
+          if (!arrow || pan?.isMoved || signDrag) {
+            arrowTooltip.visible = false
+            return
+          }
+          const names = arrow.targets.map(({ session }) => session.name ?? session.title ?? session.id.slice(0, 8))
+          const shown = names.length > 6 ? [...names.slice(0, 5), `외 ${names.length - 5}명`] : names
+          arrowTooltipText.text = `승인 대기\n${shown.join('\n')}`
+          const w = arrowTooltipText.width + 12
+          const h = arrowTooltipText.height + 8
+          arrowTooltipBackground.clear().rect(0, 0, w, h).fill(COLOR.alert).rect(0, 0, w, h).stroke({ width: 1, color: COLOR.alertLine })
+          // 화살표에서 화면 안쪽으로
+          const unit = unitOf(direction)
+          const { x, y } = arrow.container
+          const left = unit.x > 0 ? x - w - 4 : unit.x < 0 ? x + ARROW_SIZE + 4 : x + ARROW_SIZE / 2 - w / 2
+          const top = unit.y > 0 ? y - h - 4 : unit.y < 0 ? y + ARROW_SIZE + 4 : y + ARROW_SIZE / 2 - h / 2
+          arrowTooltip.position.set(
+            Math.round(Math.max(4, Math.min(app.screen.width - w - 4, left))),
+            Math.round(Math.max(4, Math.min(app.screen.height - h - 4, top))),
+          )
+          arrowTooltip.visible = true
+        }
+        const createArrow = (direction: ApprovalDirection) => {
+          const container = new Container()
+          container.addChild(drawApprovalArrow(direction))
+          const badge = new Container()
+          const badgeBackground = new Graphics()
+          const badgeText = label('', 10, COLOR.frame)
+          badgeText.position.set(3, 0)
+          badge.addChild(badgeBackground, badgeText)
+          container.addChild(badge)
+          container.eventMode = 'static'
+          container.cursor = 'pointer'
+          container.hitArea = new Rectangle(0, 0, ARROW_SIZE, ARROW_SIZE)
+          // 맵 이동이 시작되지 않게 (휠·숫자 키는 host·window 에서 받아 그대로 된다)
+          container.on('pointerdown', (event: FederatedPointerEvent) => {
+            event.stopPropagation()
+            isDragged = false
+          })
+          container.on('pointertap', () => {
+            const nearest = arrows.get(direction)?.targets[0]
+            if (nearest) moveToRect(nearest.rect, true)
+          })
+          container.on('pointerover', () => {
+            hoveredDirection = direction
+            showArrowTooltip(direction)
+          })
+          container.on('pointerout', () => {
+            if (hoveredDirection === direction) hoveredDirection = null
+            arrowTooltip.visible = false
+          })
+          overlay.addChild(container)
+          const arrow = { container, badge, badgeText, badgeBackground, targets: [] }
+          arrows.set(direction, arrow)
+          return arrow
+        }
+        /** 책상 그림(2×3 타일) 전체가 화면 안에 보이지 않으면 화면 밖. 같은 쪽은 하나로 합치고 화면 가운데에서 가까운 순 */
+        const updateApprovalArrows = () => {
+          const width = app.screen.width
+          const height = app.screen.height
+          const center = { x: width / 2, y: height / 2 }
+          const groups = new Map<ApprovalDirection, { session: Session; rect: Rect; screen: Point; distance: number }[]>()
+          for (const target of approvalDesks) {
+            const left = world.x + (PAD_X + target.rect.x * TILE) * zoom
+            const top = world.y + (PAD_Y + target.rect.y * TILE) * zoom
+            const right = left + target.rect.w * TILE * zoom
+            const bottom = top + target.rect.h * TILE * zoom
+            const horizontal = left < 0 ? 'left' : right > width ? 'right' : ''
+            const vertical = top < 0 ? 'up' : bottom > height ? 'down' : ''
+            if (!horizontal && !vertical) continue
+            const direction = (vertical && horizontal ? `${vertical}-${horizontal}` : vertical || horizontal) as ApprovalDirection
+            const screen = { x: (left + right) / 2, y: (top + bottom) / 2 }
+            const list = groups.get(direction) ?? []
+            list.push({ ...target, screen, distance: Math.hypot(screen.x - center.x, screen.y - center.y) })
+            groups.set(direction, list)
+          }
+          for (const [direction, arrow] of arrows) {
+            if (groups.has(direction)) continue
+            arrow.container.destroy({ children: true })
+            arrows.delete(direction)
+            if (hoveredDirection === direction) {
+              hoveredDirection = null
+              arrowTooltip.visible = false
+            }
+          }
+          // 가장자리 화살표는 모서리 화살표 자리를 비워 둔다
+          const edgeMin = ARROW_MARGIN + ARROW_SIZE + 4
+          const clampEdge = (value: number, size: number) => Math.round(Math.max(edgeMin, Math.min(size - edgeMin - ARROW_SIZE, value - ARROW_SIZE / 2)))
+          for (const [direction, list] of groups) {
+            list.sort((a, b) => a.distance - b.distance)
+            const arrow = arrows.get(direction) ?? createArrow(direction)
+            const isCountChanged = arrow.targets.length !== list.length
+            arrow.targets = list
+            const unit = unitOf(direction)
+            const nearest = list[0].screen
+            arrow.container.position.set(
+              unit.x < 0 ? ARROW_MARGIN : unit.x > 0 ? width - ARROW_MARGIN - ARROW_SIZE : clampEdge(nearest.x, width),
+              unit.y < 0 ? ARROW_MARGIN : unit.y > 0 ? height - ARROW_MARGIN - ARROW_SIZE : clampEdge(nearest.y, height),
+            )
+            if (isCountChanged) {
+              arrow.badge.visible = list.length > 1
+              arrow.badgeText.text = String(list.length)
+              const w = arrow.badgeText.width + 6
+              const h = arrow.badgeText.height
+              arrow.badgeBackground.clear().rect(0, 0, w, h).fill(COLOR.alertLine).rect(0, 0, w, h).stroke({ width: 1, color: COLOR.frame })
+              // 개수는 화살표 안쪽 (화면 밖으로 나가지 않게)
+              arrow.badge.position.set(
+                Math.round(ARROW_SIZE / 2 - w / 2 - unit.x * (ARROW_SIZE / 2 + w / 2 - 2)),
+                Math.round(ARROW_SIZE / 2 - h / 2 - unit.y * (ARROW_SIZE / 2 + h / 2 - 2)),
+              )
+            }
+          }
+          overlay.addChild(arrowTooltip)
+          if (hoveredDirection) showArrowTooltip(hoveredDirection)
+        }
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
         app.renderer.on('resize', redraw)
 
         // 이름표가 아닌 곳(배경·그룹·섬·로비·책상)을 누르면 맵 이동 후보. 이름표는 stopPropagation 해서 여기 안 온다
@@ -1102,10 +1292,13 @@ export function Office(props: Props) {
             world.position.set(next.x, next.y)
             if (progress >= 1) focusMove = null
           }
+          // 확대·이동·데이터 갱신을 따라가게 매 프레임 (승인 대기 책상은 몇 개뿐이라 가볍다)
+          updateApprovalArrows()
           elapsed += ticker.deltaMS
           if (elapsed < 350) return
           elapsed = 0
           frame = (frame + 1) % 2
+          for (const arrow of arrows.values()) arrow.container.alpha = frame && !reducedMotion.matches ? 0.55 : 1
           for (const [id, parts] of desks) {
             const { figure } = parts
             if (!figure) continue
