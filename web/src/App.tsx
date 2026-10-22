@@ -56,10 +56,9 @@ const THEME_LABELS: Record<ThemeChoice, string> = { light: '라이트', dark: '�
 const SESSION_TRUST_FAILED_MESSAGE =
   '신뢰 표시를 남기지 못했습니다. 이 폴더에서 처음 뜨는 세션이면 터미널 탭에서 신뢰를 직접 허용해야 합니다 (기본 선택 "No, exit" 를 그대로 두면 세션이 꺼집니다).'
 
-/** 세션 추가 모달이 미리 채우는 이름 "[역할] 성" 의 역할 (사용자 확정) */
+/** 세션 추가 모달이 미리 채우는 이름 "[역할] 성" 의 역할 (사용자 확정). 팀장·파트장 모두 Lead */
 const MEMBER_ROLE_TAG = 'Dev'
 const LEAD_ROLE_TAG = 'Lead'
-const PART_LEAD_ROLE_TAG = 'PL'
 
 /** "[역할] 성" 의 역할 부분만 바꾼다 (성은 그대로) */
 function withRoleTag(name: string, roleTag: string): string {
@@ -382,14 +381,22 @@ export function App() {
       alert((await response.json()).message ?? '파트 생성 실패')
       return
     }
-    const { part, isTrusted } = (await response.json()) as { part: Part; isTrusted: boolean }
+    const { part, isTrusted, isLinked } = (await response.json()) as { part: Part; isTrusted: boolean; isLinked?: boolean }
     if (isWorktree && !isTrusted) alert(`신뢰 표시를 남기지 못했습니다. 이 폴더에서 처음 뜨는 세션은 터미널에서 신뢰를 직접 허용해야 합니다.\n${part.worktree?.cwd}`)
+    if (isLinked) alert(`이미 있던 worktree·브랜치 ${part.worktree?.branch} 로 연결했습니다 (현재 HEAD 에서 새로 만들지 않음).\n${part.worktree?.cwd}`)
     setPartForm(null)
     if (!isPartLeadSpawned) return
+    // 세션 추가 모달의 파트장과 같은 "[Lead] 성". 추천을 못 받으면 이름 없이 (자동 제목)
+    const leadQuery = new URLSearchParams({ role: LEAD_ROLE_TAG, partId: part.id })
+    const leadName = await fetch(`/api/team/${partForm.teamId}/member-name?${leadQuery}`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ name: string }>) : null))
+      .then((data) => data?.name)
+      .catch(() => undefined)
     const leadResponse = await postJson('/api/sessions', 'POST', {
       teamId: partForm.teamId,
       partId: part.id,
       isLead: true,
+      name: leadName,
     })
     if (!leadResponse.ok) {
       alert((await leadResponse.json()).message ?? '파트장 생성 실패')
@@ -497,13 +504,21 @@ export function App() {
     }
   }
 
-  function removePart(team: Team, part: Part) {
+  /** worktree 파트는 서버가 폴더·브랜치도 지운다. 브랜치가 병합되지 않았으면 지울지 물어 ?branch= 로 다시 보낸다 */
+  async function removePart(team: Team, part: Part) {
     const effect = part.worktree
-      ? `worktree 폴더와 브랜치 ${part.worktree.branch} 는 남습니다. 그 폴더의 세션은 팀 폴더 밖이라 로비로 갑니다.`
+      ? `worktree 폴더 ${part.worktree.cwd} 도 지워집니다 (그 폴더에 근무 중인 세션이나 커밋하지 않은 변경이 있으면 지우지 않습니다). 브랜치 ${part.worktree.branch} 는 병합됐으면 지우고, 아니면 다시 묻습니다.`
       : '소속 세션은 종료되지 않고 팀 직속이 됩니다.'
-    if (confirm(`"${part.name}" 파트를 지울까요? ${effect}`)) {
-      void fetch(`/api/team/${team.id}/parts/${part.id}`, { method: 'DELETE' })
+    if (!confirm(`"${part.name}" 파트를 지울까요? ${effect}`)) return
+    const url = `/api/team/${team.id}/parts/${part.id}`
+    let response = await fetch(url, { method: 'DELETE' })
+    let body = (await response.json().catch(() => ({}))) as { code?: string; branch?: string; message?: string }
+    if (response.status === 409 && body.code === 'branch-unmerged') {
+      const isBranchDeleted = confirm(`브랜치 ${body.branch} 가 병합되지 않았습니다. 브랜치도 지울까요? (확인 = 지움, 취소 = 남김)`)
+      response = await fetch(`${url}?branch=${isBranchDeleted ? 'delete' : 'keep'}`, { method: 'DELETE' })
+      body = await response.json().catch(() => ({}))
     }
+    if (!response.ok) alert(body.message ?? '파트 삭제 실패')
   }
 
   function releaseLead(team: Team) {
@@ -667,7 +682,7 @@ export function App() {
     const leadSessionId = part ? part.leadSessionId : team?.leadSessionId
     const hasLiveLead = Boolean(leadSessionId && snapshot.sessions.some((s) => s.id === leadSessionId && s.isAlive))
     const leadLabel = part ? '파트장' : '팀장'
-    const roleTag = sessionRole === 'lead' ? (part ? PART_LEAD_ROLE_TAG : LEAD_ROLE_TAG) : MEMBER_ROLE_TAG
+    const roleTag = sessionRole === 'lead' ? LEAD_ROLE_TAG : MEMBER_ROLE_TAG
     const sessionName = typedSessionName ?? (team && suggestedSessionName ? withRoleTag(suggestedSessionName, roleTag) : '')
     return (
       <Modal
@@ -758,7 +773,7 @@ export function App() {
     const menuItems = [
       { label: '이름 변경', onClick: () => editPart(team, part) },
       ...(part.leadSessionId ? [{ label: '파트장 해제', onClick: () => releasePartLead(team, part) }] : []),
-      { label: '파트 삭제', onClick: () => removePart(team, part) },
+      { label: '파트 삭제', onClick: () => void removePart(team, part) },
     ]
     return (
       <div key={part.id} className="part" title={part.worktree?.cwd ?? team.cwd}>
@@ -1007,7 +1022,7 @@ export function App() {
               />
               <div className="form-hint">
                 {partLocation === 'worktree'
-                  ? '저장소 옆 <저장소>.worktrees/<이름> 폴더, 브랜치 part/<이름> (현재 HEAD 기준. 이름의 영문·숫자만 씀). 병합은 직접'
+                  ? '저장소 옆 <저장소>.worktrees/<이름> 폴더, 브랜치 part/<이름> (현재 HEAD 기준. 이름의 영문·숫자만 씀. 이미 있으면 그 worktree·브랜치에 연결). 병합은 직접'
                   : '팀 폴더 그대로. 다른 파트·팀 직속과 같은 파일을 고치지 않게 나눈다'}
               </div>
               <label className="check">

@@ -62,7 +62,15 @@ import { makeUsageCache } from './usage.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
 import { parseMemberRole, pickMemberName } from './memberName.js'
-import { createWorktree, markFolderTrusted, markTrusted, worktreeSlug, WorktreeError } from './worktree.js'
+import {
+  createWorktree,
+  markFolderTrusted,
+  markTrusted,
+  removeWorktree,
+  worktreeSlug,
+  WorktreeError,
+  type BranchChoice,
+} from './worktree.js'
 import {
   allowDecision,
   buildAnswers,
@@ -1049,7 +1057,10 @@ app.get('/api/team/:teamId/tasks/:taskId/wait', async (req, res) => {
 
 // ---------- 파트 (팀 안의 선택적 지휘 단위) ----------
 
-/** 파트를 만든다. isWorktree 면 저장소 옆 형제 폴더에 worktree·브랜치를 만들고 ~/.claude.json 에 신뢰 표시를 남긴다 */
+/**
+ * 파트를 만든다. isWorktree 면 저장소 옆 형제 폴더에 worktree·브랜치를 만들고 ~/.claude.json 에 신뢰 표시를 남긴다.
+ * 그 자리에 이미 이 저장소의 worktree 나 브랜치 part/<슬러그> 가 있으면 그것으로 연결한다 (응답 isLinked)
+ */
 app.post('/api/team/:teamId/parts', async (req, res) => {
   const team = findTeam(req.params.teamId)
   if (!team) {
@@ -1063,9 +1074,13 @@ app.post('/api/team/:teamId/parts', async (req, res) => {
   }
   let worktree: Part['worktree']
   let isTrusted = false
+  let isLinked = false
   if (isWorktree) {
+    const takenFolders = listTeams().flatMap((t) => t.parts.flatMap((p) => (p.worktree ? [p.worktree.cwd] : [])))
     try {
-      worktree = await createWorktree(team.cwd, worktreeSlug(name, randomUUID().slice(0, 8)))
+      const prepared = await createWorktree(team.cwd, worktreeSlug(name, randomUUID().slice(0, 8)), takenFolders)
+      worktree = { cwd: prepared.cwd, branch: prepared.branch }
+      isLinked = prepared.isLinked
     } catch (error) {
       if (error instanceof WorktreeError) {
         res.status(error.status).json({ message: error.message })
@@ -1076,7 +1091,7 @@ app.post('/api/team/:teamId/parts', async (req, res) => {
     isTrusted = markTrusted(worktree.cwd)
   }
   const part = addPart(team.id, { name, worktree })
-  res.json({ part, isTrusted })
+  res.json({ part, isTrusted, isLinked })
   broadcastOffice()
 })
 
@@ -1090,15 +1105,73 @@ app.patch('/api/team/:teamId/parts/:partId', (req, res) => {
   broadcastOffice()
 })
 
-/** 파트 기록과 소속 기록만 지운다. worktree 폴더·브랜치는 남긴다 (병합 안 된 작업 보호) */
-app.delete('/api/team/:teamId/parts/:partId', (req, res) => {
-  if (!removePart(req.params.teamId, req.params.partId)) {
+/**
+ * 파트 기록과 소속 기록을 지운다. worktree 파트면 그 폴더(git worktree remove)와 브랜치도 지운다:
+ * 그 폴더(하위 폴더 포함)에 근무 중인 세션이 있거나 커밋하지 않은 변경이 있으면 409, 브랜치가 HEAD 에 병합되지 않았으면
+ * ?branch=delete(-D)·keep 이 없을 때 409 { code: 'branch-unmerged', branch }. 지우던 중 git 이 실패하면 500 { message, isPartRemoved }
+ */
+app.delete('/api/team/:teamId/parts/:partId', async (req, res) => {
+  const team = findTeam(req.params.teamId)
+  const part = team?.parts.find((p) => p.id === req.params.partId)
+  if (!team || !part) {
     res.status(404).json({ message: '파트 없음' })
     return
   }
-  res.json({})
-  broadcastOffice()
-  void broadcast()
+  const finish = () => {
+    removePart(team.id, part.id)
+    broadcastOffice()
+    void broadcast()
+  }
+  if (!part.worktree) {
+    finish()
+    res.json({})
+    return
+  }
+  const { branch } = req.query
+  const choice: BranchChoice = branch === 'delete' || branch === 'keep' ? branch : null
+  if (branch !== undefined && choice === null) {
+    res.status(400).json({ message: 'branch 는 delete 또는 keep' })
+    return
+  }
+  // 하위 폴더에서 일하는 세션도 막는다 — Windows 에서 폴더를 쓰는 프로세스가 있으면 git 이 파일만 지우고 폴더를 못 지운다
+  const folder = normalizeCwd(part.worktree.cwd)
+  const { sessions } = await snapshotPayload()
+  const busy = sessions.filter((s) => {
+    const cwd = normalizeCwd(s.cwd)
+    return s.isAlive && (cwd === folder || cwd.startsWith(`${folder}/`))
+  })
+  if (busy.length > 0) {
+    const names = busy.map((s) => s.name ?? s.title ?? s.id.slice(0, 8)).join(', ')
+    res.status(409).json({ message: `먼저 세션을 정리하세요: worktree 폴더에서 근무 중인 세션 ${busy.length}개 (${names})` })
+    return
+  }
+  let removal
+  try {
+    removal = await removeWorktree(team.cwd, part.worktree, choice)
+  } catch (error) {
+    if (error instanceof WorktreeError) {
+      res.status(error.status).json({ message: error.message })
+      return
+    }
+    throw error
+  }
+  if (removal.outcome === 'dirty') {
+    res.status(409).json({ message: `커밋하지 않은 변경이 있어 지우지 않음 (커밋하거나 정리한 뒤 다시): ${part.worktree.cwd}` })
+    return
+  }
+  if (removal.outcome === 'branch-unmerged') {
+    const unmerged = part.worktree.branch
+    res.status(409).json({ code: 'branch-unmerged', branch: unmerged, message: `브랜치 ${unmerged} 가 병합되지 않음` })
+    return
+  }
+  if (removal.outcome === 'failed') {
+    if (removal.isWorktreeGone) finish()
+    const record = removal.isWorktreeGone ? '파트 기록은 지움' : '파트 기록은 남김'
+    res.status(500).json({ message: `${removal.message}. ${record}`, isPartRemoved: removal.isWorktreeGone })
+    return
+  }
+  finish()
+  res.json({ folder: removal.folder, branch: removal.branch })
 })
 
 /** 팀 폴더 세션의 파트 이동 (partId null = 팀 직속). worktree 세션은 폴더로 정해지고, 지시자는 옮기면 지휘를 잃어 거부 */
