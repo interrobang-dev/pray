@@ -168,7 +168,7 @@ export type UsageResult = { ok: true; usage: Usage } | { ok: false; reason: stri
 
 /** 플로우(flow.team) 안 읽은 수 (`GET /api/flow`, 전역 SSE `flow`). 서버 flow.ts 와 손으로 맞춘다 */
 export interface FlowStatus {
-  /** 키 파일에 FLOW_API_KEY 가 있는지. 서버가 막 떠 아직 한 번도 확인하지 않았을 때도 false 다 */
+  /** 키 파일에 FLOW_API_KEY 가 있는지. 서버가 막 떠 아직 확인 전이면 true (수는 null 이라 "…") */
   isConfigured: boolean
   /** 안 읽은 알림 수. 한 번도 못 셌으면 null */
   unreadAlarmCount: number | null

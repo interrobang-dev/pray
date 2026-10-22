@@ -255,7 +255,7 @@ export function makeFlowClient({ fetch: doFetch = fetch, keyPath = flowKeyPath, 
 export type FlowClient = ReturnType<typeof makeFlowClient>
 
 export interface FlowStatus {
-  /** 키 파일에 FLOW_API_KEY 가 있는지 */
+  /** 키 파일에 FLOW_API_KEY 가 있는지. 서버가 막 떠 아직 확인 전이면 true (수는 null) */
   isConfigured: boolean
   /** 안 읽은 알림 수. 한 번도 못 셌으면 null */
   unreadAlarmCount: number | null
@@ -274,6 +274,9 @@ export const INITIAL_FLOW_STATUS: FlowStatus = {
   checkedAt: null,
   error: null,
 }
+
+/** 서버가 막 떠 아직 한 번도 확인하지 않은 상태. 키 없음(INITIAL_FLOW_STATUS)과 가르려고 isConfigured 를 true 로 두고 수는 비운다 (화면은 "…") */
+export const UNCHECKED_FLOW_STATUS: FlowStatus = { ...INITIAL_FLOW_STATUS, isConfigured: true }
 
 /** 한 번 확인한 결과로 다음 상태를 만든다 (순수). 키가 없으면 수를 비우고, 오류면 앞 수를 남긴다 */
 export function nextFlowStatus(
@@ -301,7 +304,7 @@ export function isFlowStatusChanged(previous: FlowStatus, next: FlowStatus): boo
  * 요청 처리 밖(주기 타이머)에서도 부르므로 `check` 는 던지지 않는다. 겹쳐 부르면 serialRunner 가 한 번으로 합친다
  */
 export function makeFlowPoller(client: FlowClient, onChange: (status: FlowStatus) => void, now = () => new Date()) {
-  let status = INITIAL_FLOW_STATUS
+  let status = UNCHECKED_FLOW_STATUS
 
   async function checkOnce(): Promise<void> {
     let result: Parameters<typeof nextFlowStatus>[1]

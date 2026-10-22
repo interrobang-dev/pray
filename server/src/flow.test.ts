@@ -9,6 +9,7 @@ import {
   koreanDateTimeToIso,
   makeFlowClient,
   makeFlowPoller,
+  UNCHECKED_FLOW_STATUS,
   readFlowKey,
   type FlowFetch,
   type FlowStatus,
@@ -300,7 +301,7 @@ describe('flow poller', () => {
   it('reports only when counts or errors change', async () => {
     const state = { alarms: 3, chats: [[1, 1]], isFailing: false }
     const { poller, changes } = setup(state)
-    expect(poller.status()).toEqual(INITIAL_FLOW_STATUS)
+    expect(poller.status()).toEqual(UNCHECKED_FLOW_STATUS)
 
     await poller.check()
     expect(poller.status()).toEqual({
@@ -346,10 +347,11 @@ describe('flow poller', () => {
     expect(changes.map((status) => status.isConfigured)).toEqual([true, false])
   })
 
-  it('does not report on the first check without a key', async () => {
+  it('starts unchecked (configured, no counts) and reports the missing key on the first check', async () => {
     rmSync(keyPath)
     const { poller, changes } = setup({ alarms: 1, chats: [[0]] })
+    expect(poller.status()).toEqual({ isConfigured: true, unreadAlarmCount: null, unreadChatCount: null, checkedAt: null, error: null })
     await poller.check()
-    expect(changes).toHaveLength(0)
+    expect(changes).toEqual([INITIAL_FLOW_STATUS])
   })
 })
