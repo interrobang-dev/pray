@@ -48,6 +48,9 @@
   --gold: #d9a63a;
   --silver: #7d8696;
   --overlay: rgba(43, 47, 58, 0.35);
+  /* 공통 스크롤바 손잡이 / 올렸을 때 (아래 스크롤바 규칙) */
+  --scrollbar-thumb: rgba(43, 47, 58, 0.22);
+  --scrollbar-thumb-hover: rgba(43, 47, 58, 0.4);
   /* 사무실 바닥 (캔버스가 그리기 전 바탕). 캔버스 색과 같아야 해서 다크에서도 그대로 */
   --floor: #dcdde6;
   font-family: system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
@@ -88,6 +91,8 @@
   --avatar-bg: #343844;
   --silver: #a9b0bd;
   --overlay: rgba(0, 0, 0, 0.55);
+  --scrollbar-thumb: rgba(227, 229, 234, 0.2);
+  --scrollbar-thumb-hover: rgba(227, 229, 234, 0.36);
 }
 html,
 body,
@@ -95,6 +100,37 @@ body,
   margin: 0;
   height: 100%;
   background: var(--bg);
+}
+/* 공통 스크롤바 (목록·대화·모달·코드 블록·표·터미널 등 모든 스크롤 영역): 8px, 트랙 투명, 둥근 반투명 손잡이(안쪽 4px)이고 올리거나 끌면 진해지며 6px 로 굵어진다.
+   Chromium(Edge·Chrome·트레이 앱 Electron)·Safari 는 ::-webkit-scrollbar 로 그린다. 표준 scrollbar-width·scrollbar-color 가 걸린 요소에서는
+   Chromium 이 ::-webkit-scrollbar 를 무시하고(모양·hover 를 못 정한다) 기본 thin 폭으로 그리므로, 표준 속성은 ::-webkit-scrollbar 가 없는 브라우저(Firefox)에만 준다.
+   터치 기기(hover: none, 폰)는 OS 오버레이 스크롤바 그대로 둔다 */
+@media (hover: hover) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background-color: var(--scrollbar-thumb);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active {
+    border-width: 1px;
+    background-color: var(--scrollbar-thumb-hover);
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
+  }
 }
 button {
   font: inherit;
@@ -742,11 +778,14 @@ li.group.drop-after::after {
   font-family: inherit;
   color: var(--text);
 }
+/* 터미널 탭은 테마와 관계없이 어두우므로 스크롤바 손잡이도 늘 다크 값 */
 .terminal {
   flex: 1;
   min-height: 0;
   padding: 4px;
   background: #1b1d23;
+  --scrollbar-thumb: rgba(227, 229, 234, 0.2);
+  --scrollbar-thumb-hover: rgba(227, 229, 234, 0.36);
 }
 .chat {
   flex: 1;
