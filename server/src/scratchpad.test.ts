@@ -1,8 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  attachmentFileName,
   contentTypeOf,
   findScratchpad,
   isInside,
@@ -10,6 +11,8 @@ import {
   isSessionId,
   listScratchpad,
   resolveScratchpadFile,
+  safeAttachmentName,
+  saveAttachment,
 } from './scratchpad.js'
 
 const SESSION = 'a56abbde-182b-475e-ab39-c3cf9c7933a7'
@@ -121,5 +124,100 @@ describe('scratchpad on disk', () => {
     if (!hasJunction) return
     const real = (await findScratchpad(SESSION, base))!
     expect(await resolveScratchpadFile(real, 'escape/secret.txt')).toBeNull()
+  })
+})
+
+describe('attachment names', () => {
+  it('keeps the last path segment and drops traversal', () => {
+    expect(safeAttachmentName('../x')).toBe('x')
+    expect(safeAttachmentName('a/b')).toBe('b')
+    expect(safeAttachmentName('..\\..\\Windows\\win.ini')).toBe('win.ini')
+    expect(safeAttachmentName('C:\\Users\\me\\report.pdf')).toBe('report.pdf')
+    expect(safeAttachmentName('dir/')).toBe('attachment')
+  })
+
+  it('replaces control and Windows-reserved characters, strips trailing dots and spaces', () => {
+    expect(safeAttachmentName('a\0b\nc\x7f.txt')).toBe('a_b_c_.txt')
+    expect(safeAttachmentName('C:x.txt')).toBe('C_x.txt')
+    expect(safeAttachmentName('a.txt:stream')).toBe('a.txt_stream')
+    expect(safeAttachmentName('<a>|"b"?*.md')).toBe('_a___b___.md')
+    expect(safeAttachmentName('  notes.txt. . ')).toBe('notes.txt')
+    expect(safeAttachmentName('.env')).toBe('.env')
+  })
+
+  it('uses the default name when nothing is left', () => {
+    for (const raw of ['', '   ', '.', '..', '...', '../..', '/']) expect(safeAttachmentName(raw), raw).toBe('attachment')
+  })
+
+  it('keeps Korean names and normalizes decomposed (macOS) Hangul to NFC', () => {
+    expect(safeAttachmentName('회의 메모.png')).toBe('회의 메모.png')
+    expect(safeAttachmentName('회의'.normalize('NFD') + '.png')).toBe('회의.png')
+  })
+
+  it('cuts long names to 80 characters keeping the extension', () => {
+    const cut = safeAttachmentName('가'.repeat(300) + '.png')
+    expect(Array.from(cut)).toHaveLength(80)
+    expect(cut).toBe('가'.repeat(76) + '.png')
+    // 너무 긴 "확장자" 는 확장자로 보지 않는다
+    expect(safeAttachmentName('a.' + 'b'.repeat(200))).toBe('a.' + 'b'.repeat(78))
+    // 서로게이트 쌍(이모지)을 반으로 자르지 않는다
+    expect(safeAttachmentName('😀'.repeat(100))).toBe('😀'.repeat(80))
+  })
+
+  it('prefixes local date-time and puts the counter after it', () => {
+    const at = new Date(2026, 9, 22, 9, 5, 7)
+    expect(attachmentFileName('a.png', at)).toBe('20261022-090507-a.png')
+    expect(attachmentFileName('a.png', at, 2)).toBe('20261022-090507-2-a.png')
+    // 장치 이름(nul·con)도 접두사가 붙어 보통 이름이 된다
+    expect(attachmentFileName(safeAttachmentName('nul.txt'), at)).toBe('20261022-090507-nul.txt')
+  })
+})
+
+describe('saving attachments', () => {
+  let base: string
+  let outside: string
+
+  beforeAll(() => {
+    base = mkdtempSync(join(tmpdir(), 'jk-attach-test-'))
+    outside = mkdtempSync(join(tmpdir(), 'jk-attach-outside-'))
+  })
+
+  afterAll(() => {
+    rmSync(base, { recursive: true, force: true })
+    rmSync(outside, { recursive: true, force: true })
+  })
+
+  it('creates attachments/, never overwrites, and the files list shows them', async () => {
+    const pad = join(base, 'p1', SESSION, 'scratchpad')
+    mkdirSync(pad, { recursive: true })
+    const real = (await findScratchpad(SESSION, base))!
+    const at = new Date(2026, 9, 22, 9, 5, 7)
+    const first = await saveAttachment(real, '../보고서.pdf', Buffer.from('one'), at)
+    const name = '20261022-090507-보고서.pdf'
+    expect(first).toEqual({ path: join(real, 'attachments', name), name, size: 3 })
+    const second = await saveAttachment(real, '보고서.pdf', Buffer.from('two!'), at)
+    expect(second.name).toBe('20261022-090507-2-보고서.pdf')
+    expect(readFileSync(first.path, 'utf8')).toBe('one')
+    expect(readFileSync(second.path, 'utf8')).toBe('two!')
+    expect((await saveAttachment(real, '', Buffer.alloc(0), at)).size).toBe(0)
+    const { files } = await listScratchpad(real)
+    expect(files.map((f) => f.path).sort()).toEqual([
+      'attachments/20261022-090507-2-보고서.pdf',
+      'attachments/20261022-090507-attachment',
+      'attachments/20261022-090507-보고서.pdf',
+    ])
+    expect(await resolveScratchpadFile(real, `attachments/${first.name}`)).toBe(first.path)
+  })
+
+  it('refuses an attachments junction that leads outside the scratchpad', async () => {
+    const pad = join(base, 'p2', OTHER, 'scratchpad')
+    mkdirSync(pad, { recursive: true })
+    try {
+      symlinkSync(outside, join(pad, 'attachments'), 'junction')
+    } catch {
+      return
+    }
+    await expect(saveAttachment(pad, 'a.txt', Buffer.from('x'))).rejects.toThrow()
+    expect(existsSync(join(outside, 'a.txt'))).toBe(false)
   })
 })

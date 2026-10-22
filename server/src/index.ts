@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import compression from 'compression'
 import express from 'express'
-import type { Response } from 'express'
+import type { Request, Response } from 'express'
 import type { HostMessage } from '@jk-corp/host/protocol'
 import {
   addGroup,
@@ -46,7 +46,14 @@ import { makeSendCode } from './mail.js'
 import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptJudgement } from './interrupt.js'
 import { findTranscript, isLiveSession, listSessions, projectsDir } from './sessions.js'
-import { contentTypeOf, findScratchpad, isSessionId, listScratchpad, resolveScratchpadFile } from './scratchpad.js'
+import {
+  contentTypeOf,
+  findScratchpad,
+  isSessionId,
+  listScratchpad,
+  resolveScratchpadFile,
+  saveAttachment,
+} from './scratchpad.js'
 import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
 import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts, withoutQueued } from './messages.js'
@@ -108,7 +115,10 @@ app.use(
       !String(res.getHeader('Content-Type') ?? '').startsWith('text/event-stream') && compression.filter(req, res),
   }),
 )
-app.use(express.json({ limit: '1mb' }))
+const jsonBody = express.json({ limit: '1mb' })
+/** 첨부 API 경로 (Express 라우팅처럼 대소문자·끝 슬래시 무시). 본문이 파일 바이트 그대로라 .json 파일이 JSON 파서에 먼저 읽히면 안 된다 */
+const ATTACHMENT_PATH = /^\/api\/sessions\/[^/]+\/attachments\/?$/i
+app.use((req, res, next) => (req.method === 'POST' && ATTACHMENT_PATH.test(req.path) ? next() : jsonBody(req, res, next)))
 
 // 로컬(127.0.0.1)은 무인증. 그 외는 로그인 쿠키 필요. 훅·인증 API 는 예외
 app.use('/api', (req, res, next) => {
@@ -381,6 +391,51 @@ app.get('/api/sessions/:id/files/raw', async (req, res) => {
   res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
   if (isActive) res.set('Content-Security-Policy', 'sandbox')
   res.sendFile(file, { dotfiles: 'allow' })
+})
+
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+/** 첨부 본문 = 파일 바이트 그대로. Content-Type 은 파일 형식이라 무엇이든 받는다 */
+const attachmentBody = express.raw({ type: () => true, limit: MAX_ATTACHMENT_BYTES })
+
+/** 첨부 본문을 다 읽는다. 크기 초과(413)·읽기 오류는 body-parser 오류(status 포함)로 던진다 */
+function readAttachmentBody(req: Request, res: Response): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    attachmentBody(req, res, (error?: unknown) =>
+      error ? reject(error) : resolve(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)),
+    )
+  })
+}
+
+/**
+ * 대화 첨부: 본문(파일 바이트 그대로, 20MB 까지)을 세션 scratchpad 의 attachments/ 에 새 파일로 저장한다 (?name= 파일 이름).
+ * scratchpad 는 Claude Code 가 확인 창 없이 읽는 곳이라 응답 path 를 그대로 claude 에게 넘기면 된다. 근무 중인 웹 세션만
+ */
+app.post('/api/sessions/:id/attachments', async (req, res) => {
+  const sessionId = req.params.id
+  if (!isSessionId(sessionId)) {
+    res.status(400).json({ message: '세션 ID 형식 오류' })
+    return
+  }
+  if (!host.sessions.some((s) => s.sessionId === sessionId)) {
+    res.status(409).json({ message: '근무 중인 웹 세션이 아님' })
+    return
+  }
+  // Claude Code 가 세션을 시작할 때 만든다. 없으면 claude 가 확인 창 없이 읽는 곳이 아니므로 만들지 않는다
+  const scratchpad = await findScratchpad(sessionId)
+  if (!scratchpad) {
+    res.status(409).json({ message: '세션 작업 폴더(scratchpad) 없음' })
+    return
+  }
+  let data: Buffer
+  try {
+    data = await readAttachmentBody(req, res)
+  } catch (error) {
+    const isTooLarge = (error as { status?: unknown }).status === 413
+    res.status(isTooLarge ? 413 : 400).json({ message: isTooLarge ? '20MB 를 넘는 파일' : '본문을 읽지 못함' })
+    return
+  }
+  const name = typeof req.query.name === 'string' ? req.query.name : ''
+  res.json(await saveAttachment(scratchpad, name, data))
 })
 
 /** 세션 이름 지정. 빈 문자열이면 지워서 자동 제목(ai-title)으로 돌아간다. 외부 세션에도 붙일 수 있다 */
