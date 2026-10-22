@@ -31,4 +31,16 @@ SPRITE_GEN=<sprite-gen 실행 파일> bash tools/sprites/gen.sh gen --provider c
 
 ## 레시피
 
-`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이), `characters[].rows[]`(`strip`+`count` 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`), `props[]`(시트·격자 칸·폭), `tiles[]`(자를 영역·격자선 지우기·타일 수).
+`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이), `characters[].rows[]`(`strip`+`count` 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`), `props[]`(시트·격자 칸·폭), `tiles[]`(반복 타일):
+
+| 키 | 뜻 |
+|---|---|
+| `crop` | 자를 영역 [x0, y0, x1, y1] (시트 px) |
+| `tiles` 또는 `size` | 결과 크기: 타일 수 [가로, 세로] 또는 px [폭, 높이] (한쪽이 null 이면 비율대로) |
+| `keyed` | 마젠타를 투명으로 (창 유리가 뚫린 벽). 결과 메타에 투명 행 구간 `glass` |
+| `dropRows` | 자를 영역 안에서 뺄 행 구간 [[y0, y1], …] (시트 좌표) — 벽·유리 높이 줄이기 |
+| `seamless` | `x`·`y`·`xy`: 그 방향으로 이음매 없이 반복되는 구간만 남긴다 |
+| `seamlessBands` | 가로 판자 바닥: 줄마다 따로 가로 구간을 고른다 |
+| `inset`·`removeGridLines`·`fillDarkLines` | v0·v1 벽·바닥용 (가장자리 깎기·검은 격자선 지우기·어두운 선 메우기) |
+
+타일 메타에는 맨 위·아래 줄 최빈색 `top`·`bottom` 이 같이 들어간다 (Off Duty 하늘을 창밖 그림 위로 잇는 색).

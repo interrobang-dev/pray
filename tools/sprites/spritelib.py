@@ -162,6 +162,58 @@ def fill_dark_lines(rgb: np.ndarray, keep: tuple[int, int, int, int] | None, dar
     return out
 
 
+def seamless_crop(a: np.ndarray, axis: int, min_fraction: float = 0.6) -> np.ndarray:
+    """
+    이음매 없이 반복되는 구간 [s, s+p) 를 고른다: 열(axis=1)·행(axis=0) s 와 s+p 가 가장 닮은 곳.
+    그러면 반복할 때 s+p-1 다음에 오는 s 가 원래 그림의 s+p 와 같아 경계가 이어진다. p 는 길이의 min_fraction 이상
+    """
+    b = a[..., :3].astype(int)
+    if axis == 0:
+        b = b.transpose(1, 0, 2)
+    length = b.shape[1]
+    best = (float('inf'), 0, length)
+    for period in range(int(length * min_fraction), length):
+        diff = np.abs(b[:, :length - period] - b[:, period:]).mean(axis=(0, 2))
+        start = int(diff.argmin())
+        # 같으면 긴 구간 (반복이 덜 보인다)
+        cost = float(diff[start]) - period * 1e-6
+        if cost < best[0]:
+            best = (cost, start, period)
+    _, start, period = best
+    return a[start:start + period] if axis == 0 else a[:, start:start + period]
+
+
+def seamless_bands_x(a: np.ndarray, dark_ratio: float = 0.75) -> np.ndarray:
+    """
+    가로 판자처럼 줄(어두운 가로 이음선으로 나뉜 띠)마다 가로 반복 구간을 따로 고른다 — 한 구간을 통째로 고르면 줄마다 판자 색이 경계에서 끊긴다.
+    띠마다 고른 폭이 달라 가장 긴 폭으로 늘려(최빈색 축소라 nearest 와 같다) 다시 쌓는다
+    """
+    brightness = a[..., :3].astype(int).sum(axis=2).mean(axis=1)
+    is_line = brightness < np.median(brightness) * dark_ratio
+    bands, start = [], 0
+    for y in range(1, len(is_line)):
+        # 이음선이 끝나는 곳에서 자른다 (이음선은 그 위 띠에 붙는다)
+        if is_line[y - 1] and not is_line[y]:
+            bands.append((start, y))
+            start = y
+    bands.append((start, len(is_line)))
+    pieces = [seamless_crop(a[y0:y1], 1) for y0, y1 in bands if y1 - y0 > 0]
+    width = max(piece.shape[1] for piece in pieces)
+    return np.concatenate([downscale(piece, width, piece.shape[0]) for piece in pieces], axis=0)
+
+
+def mode_color(pixels: np.ndarray) -> str:
+    """불투명 픽셀의 최빈색 (24 단위로 묶어 센 뒤 그 묶음의 중앙값) '#rrggbb'"""
+    solid = pixels.reshape(-1, pixels.shape[-1])
+    if solid.shape[1] == 4:
+        solid = solid[solid[:, 3] > 127]
+    quant = (solid[:, :3] // 24).astype(int)
+    keys = quant[:, 0] * 10000 + quant[:, 1] * 100 + quant[:, 2]
+    values, counts = np.unique(keys, return_counts=True)
+    color = np.median(solid[keys == values[counts.argmax()]][:, :3], axis=0).astype(int)
+    return '#%02x%02x%02x' % tuple(color)
+
+
 # ---------- 확인 ----------
 
 def check_sprite(name: str, a: np.ndarray, is_opaque_tile: bool = False) -> list[str]:

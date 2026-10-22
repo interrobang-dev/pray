@@ -1,0 +1,489 @@
+{
+ "frames": {
+  "prop/bookshelf-low": {
+   "frame": {
+    "x": 828,
+    "y": 2,
+    "w": 96,
+    "h": 69
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 69
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 69
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/bookshelf-tall": {
+   "frame": {
+    "x": 782,
+    "y": 2,
+    "w": 44,
+    "h": 77
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 44,
+    "h": 77
+   },
+   "sourceSize": {
+    "w": 44,
+    "h": 77
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/booth": {
+   "frame": {
+    "x": 538,
+    "y": 2,
+    "w": 138,
+    "h": 107
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 138,
+    "h": 107
+   },
+   "sourceSize": {
+    "w": 138,
+    "h": 107
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/desk-lamp": {
+   "frame": {
+    "x": 970,
+    "y": 2,
+    "w": 30,
+    "h": 35
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 30,
+    "h": 35
+   },
+   "sourceSize": {
+    "w": 30,
+    "h": 35
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/headphones": {
+   "frame": {
+    "x": 28,
+    "y": 136,
+    "w": 24,
+    "h": 21
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 21
+   },
+   "sourceSize": {
+    "w": 24,
+    "h": 21
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/house-day": {
+   "frame": {
+    "x": 2,
+    "y": 2,
+    "w": 132,
+    "h": 132
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 132,
+    "h": 132
+   },
+   "sourceSize": {
+    "w": 132,
+    "h": 132
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/house-dusk": {
+   "frame": {
+    "x": 136,
+    "y": 2,
+    "w": 132,
+    "h": 132
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 132,
+    "h": 132
+   },
+   "sourceSize": {
+    "w": 132,
+    "h": 132
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/house-morning": {
+   "frame": {
+    "x": 270,
+    "y": 2,
+    "w": 132,
+    "h": 132
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 132,
+    "h": 132
+   },
+   "sourceSize": {
+    "w": 132,
+    "h": 132
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/house-night": {
+   "frame": {
+    "x": 404,
+    "y": 2,
+    "w": 132,
+    "h": 132
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 132,
+    "h": 132
+   },
+   "sourceSize": {
+    "w": 132,
+    "h": 132
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/mug": {
+   "frame": {
+    "x": 54,
+    "y": 136,
+    "w": 16,
+    "h": 16
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 16,
+    "h": 16
+   },
+   "sourceSize": {
+    "w": 16,
+    "h": 16
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/plant-large": {
+   "frame": {
+    "x": 926,
+    "y": 2,
+    "w": 42,
+    "h": 48
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 42,
+    "h": 48
+   },
+   "sourceSize": {
+    "w": 42,
+    "h": 48
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/plant-small": {
+   "frame": {
+    "x": 2,
+    "y": 136,
+    "w": 24,
+    "h": 33
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 33
+   },
+   "sourceSize": {
+    "w": 24,
+    "h": 33
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/street-lamp-day": {
+   "frame": {
+    "x": 678,
+    "y": 2,
+    "w": 24,
+    "h": 104
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 104
+   },
+   "sourceSize": {
+    "w": 24,
+    "h": 104
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/street-lamp-dusk": {
+   "frame": {
+    "x": 704,
+    "y": 2,
+    "w": 24,
+    "h": 104
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 104
+   },
+   "sourceSize": {
+    "w": 24,
+    "h": 104
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/street-lamp-morning": {
+   "frame": {
+    "x": 730,
+    "y": 2,
+    "w": 24,
+    "h": 104
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 104
+   },
+   "sourceSize": {
+    "w": 24,
+    "h": 104
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/street-lamp-night": {
+   "frame": {
+    "x": 756,
+    "y": 2,
+    "w": 24,
+    "h": 104
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 104
+   },
+   "sourceSize": {
+    "w": 24,
+    "h": 104
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  }
+ },
+ "animations": {},
+ "meta": {
+  "app": "jk-corp tools/sprites/build.py",
+  "image": "office-v2.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 1002,
+   "h": 171
+  },
+  "scale": 1,
+  "jkCorp": {
+   "spec": {
+    "tile": 48,
+    "cell": [
+     64,
+     128
+    ],
+    "baseline": 124,
+    "bodyHeight": 108
+   },
+   "characters": [],
+   "animations": {},
+   "tiles": {
+    "wall": {
+     "image": "office-v2-tile-wall.png",
+     "w": 144,
+     "h": 120,
+     "top": "#1b1b1b",
+     "bottom": "#1c1d1f",
+     "glass": {
+      "y": 27,
+      "h": 64
+     }
+    },
+    "view-morning": {
+     "image": "office-v2-tile-view-morning.png",
+     "w": 432,
+     "h": 72,
+     "top": "#6bb9fe",
+     "bottom": "#7e8ab2"
+    },
+    "view-day": {
+     "image": "office-v2-tile-view-day.png",
+     "w": 432,
+     "h": 72,
+     "top": "#68bafe",
+     "bottom": "#8594b4"
+    },
+    "view-dusk": {
+     "image": "office-v2-tile-view-dusk.png",
+     "w": 432,
+     "h": 72,
+     "top": "#814ca0",
+     "bottom": "#383a73"
+    },
+    "view-night": {
+     "image": "office-v2-tile-view-night.png",
+     "w": 432,
+     "h": 72,
+     "top": "#0d275b",
+     "bottom": "#061538"
+    },
+    "floor": {
+     "image": "office-v2-tile-floor.png",
+     "w": 144,
+     "h": 144,
+     "top": "#8e5f32",
+     "bottom": "#d3994a"
+    },
+    "group-floor": {
+     "image": "office-v2-tile-group-floor.png",
+     "w": 144,
+     "h": 144,
+     "top": "#8699ad",
+     "bottom": "#8799ad"
+    },
+    "island-rug": {
+     "image": "office-v2-tile-island-rug.png",
+     "w": 144,
+     "h": 144,
+     "top": "#9ba683",
+     "bottom": "#b4be9d"
+    },
+    "focus-carpet": {
+     "image": "office-v2-tile-focus-carpet.png",
+     "w": 144,
+     "h": 144,
+     "top": "#f1daaf",
+     "bottom": "#f1dbb1"
+    },
+    "street": {
+     "image": "office-v2-tile-street.png",
+     "w": 504,
+     "h": 96,
+     "top": "#020502",
+     "bottom": "#3c3e3d"
+    }
+   },
+   "props": {}
+  }
+ }
+}

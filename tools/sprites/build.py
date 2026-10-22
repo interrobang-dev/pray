@@ -22,9 +22,12 @@ from spritelib import (  # noqa: E402
     load_keyed,
     load_rgb,
     main_piece,
+    mode_color,
     normalize_row,
     opaque,
     remove_grid_lines,
+    seamless_bands_x,
+    seamless_crop,
     strip_slots,
     touches_edge,
 )
@@ -77,22 +80,53 @@ def build_props(recipe: dict, source: Path) -> tuple[dict, dict, dict]:
     return sprites, anchors, extras
 
 
-def build_tiles(recipe: dict, source: Path) -> dict:
+def build_tiles(recipe: dict, source: Path) -> tuple[dict, dict]:
+    """
+    반복 타일. 크기는 tiles(타일 수) 또는 size([폭, 높이] px, 한쪽이 null 이면 비율대로).
+    keyed 면 마젠타를 투명으로 (창 유리처럼 뒤가 보이는 벽), dropRows 는 자를 영역 안 행 구간 [y0, y1) (시트 좌표) 을 빼고 잇는다,
+    seamless 'x'·'y'·'xy' 면 그 방향으로 이음매 없이 반복되는 구간만 남긴다 (spritelib.seamless_crop),
+    seamlessBands 면 가로 판자 줄마다 따로 가로 구간을 고른다 (spritelib.seamless_bands_x)
+    """
     tile = recipe['spec']['tile']
-    tiles = {}
+    tiles, metas = {}, {}
     for item in recipe.get('tiles', []):
         x0, y0, x1, y1 = item['crop']
-        rgb = load_rgb(source / item['sheet'])[y0:y1, x0:x1]
+        is_keyed = item.get('keyed', False)
+        image = load_keyed(source / item['sheet']) if is_keyed else opaque(load_rgb(source / item['sheet']))
+        keep = np.ones(image.shape[0], bool)
+        for d0, d1 in item.get('dropRows', []):
+            keep[d0:d1] = False
+        rows_kept = np.nonzero(keep[y0:y1])[0] + y0
+        a = image[rows_kept][:, x0:x1]
         inset = item.get('inset', 0)
         if inset:
-            rgb = rgb[inset:-inset, inset:-inset]
+            a = a[inset:-inset, inset:-inset]
         if item.get('removeGridLines'):
-            rgb = remove_grid_lines(rgb)
+            a = opaque(remove_grid_lines(a[..., :3]))
         if 'fillDarkLines' in item:
-            rgb = fill_dark_lines(rgb, tuple(item['fillDarkLines'].get('keep') or ()) or None)
-        columns, rows = item['tiles']
-        tiles[item['id']] = opaque(downscale(opaque(rgb), columns * tile, rows * tile)[..., :3])
-    return tiles
+            a = opaque(fill_dark_lines(a[..., :3], tuple(item['fillDarkLines'].get('keep') or ()) or None))
+        for axis in item.get('seamless', ''):
+            a = seamless_crop(a, 1 if axis == 'x' else 0)
+        if item.get('seamlessBands'):
+            a = seamless_bands_x(a)
+        if 'size' in item:
+            width, height = item['size']
+            width = width or max(1, round(a.shape[1] * height / a.shape[0]))
+            height = height or max(1, round(a.shape[0] * width / a.shape[1]))
+        else:
+            width, height = item['tiles'][0] * tile, item['tiles'][1] * tile
+        small = downscale(a, width, height)
+        if not is_keyed:
+            small = opaque(small[..., :3])
+        tiles[item['id']] = small
+        meta = {'top': mode_color(small[:2]), 'bottom': mode_color(small[-2:])}
+        if is_keyed:
+            # 투명 픽셀이 있는 행 구간 = 창 유리 (뒤에 창밖을 깐다)
+            rows = np.nonzero((small[..., 3] == 0).any(axis=1))[0]
+            if len(rows):
+                meta['glass'] = {'y': int(rows.min()), 'h': int(rows.max() - rows.min() + 1)}
+        metas[item['id']] = meta
+    return tiles, metas
 
 
 def pack(sprites: dict[str, np.ndarray], max_width: int = 1024) -> tuple[np.ndarray, dict]:
@@ -131,10 +165,11 @@ def main() -> None:
     prop_sprites, prop_anchors, prop_meta = build_props(recipe, args.source_dir)
     sprites.update(prop_sprites)
     anchors.update(prop_anchors)
-    tiles = build_tiles(recipe, args.source_dir)
+    tiles, tile_metas = build_tiles(recipe, args.source_dir)
+    keyed_tiles = {item['id'] for item in recipe.get('tiles', []) if item.get('keyed')}
 
     problems = [p for sprite_name, a in sprites.items() for p in check_sprite(sprite_name, a)]
-    problems += [p for tile_name, a in tiles.items() for p in check_sprite(f'tile/{tile_name}', a, is_opaque_tile=True)]
+    problems += [p for tile_name, a in tiles.items() for p in check_sprite(f'tile/{tile_name}', a, is_opaque_tile=tile_name not in keyed_tiles)]
     if problems:
         print('\n'.join(problems), file=sys.stderr)
         sys.exit(1)
@@ -158,7 +193,7 @@ def main() -> None:
     for tile_name, a in tiles.items():
         file = f'{name}-tile-{tile_name}.png'
         Image.fromarray(a).save(args.out / file, optimize=True)
-        tile_files[tile_name] = {'image': file, 'w': a.shape[1], 'h': a.shape[0]}
+        tile_files[tile_name] = {'image': file, 'w': a.shape[1], 'h': a.shape[0], **tile_metas[tile_name]}
     data = {
         'frames': frames,
         'animations': {key: value['frames'] for key, value in animations.items()},

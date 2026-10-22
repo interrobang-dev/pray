@@ -11,7 +11,7 @@
 | 0 | 규격·파이프라인 (이 문서, `tools/sprites/`, 임시 에셋 `web/public/office/office-v0.*`) |
 | 1 | 스프라이트 엔진 교체: Office.tsx 에 도트 모드. 설정으로 클래식/도트 전환, TILE 48·world 1배 |
 | 2 | 인물 프리셋 8~10명 × 4상태 + 색 바꾸기. 목록 아바타·Off Duty 머리도 프리셋에서 (v1 로 인물 9명 × 4상태와 세션별 고르기까지 했다. 색 바꾸기·목록 아바타·Off Duty 머리는 남음) |
-| 3 | 환경: 바닥·벽·창 4시간대·섬 바닥·Focus Zone·Off Duty 거리·소품 |
+| 3 | 환경: 바닥·벽·창 4시간대·섬 바닥·Focus Zone·Off Duty 거리·소품 (v2 로 했다. 아래 "환경 (v2)". 퇴근 머리는 아직 클래식 그림) |
 | 4 | 팀장·파트장 캐릭터 편집 (`hq.json` 의 `characters`) |
 | 5 | 다시 꾸미기 (테마·decor) |
 | 6 | 클래식 제거 |
@@ -94,6 +94,33 @@ web/public/office/  빌드 결과. Vite 가 web/dist/office/ 로 복사하고 �
 | afro | member | 여, 둥근 아프로, 짙은 갈색 피부, 주황 줄무늬 |
 
 생성 46회 = 기준 그림 7 + 상태 행 32(새 인물 7 × 4, v0 둘의 idle·doze) + 다시 생성 7(afro raise-hand·doze, ponytail doze, flannel idle, member typing 2번·doze). raise-hand 4번째 칸이 반대 팔인 인물(lead·member·flannel·cardigan·turtleneck)은 `use` 로 뺐다. 색 바꾸기(recolor)는 하지 않았다 — 다시 생성으로 맞췄다.
+
+## 환경 (v2)
+
+원본 `~/.claude/jk-corp/sprite-src/v2/` (프롬프트는 `prompts/<이름>.txt` 와 그것을 만든 `prompts/write_prompts.py`), 레시피 `tools/sprites/recipes/office-v2.json`, 결과 `web/public/office/office-v2.*`. 스타일 참고로 v0 `props-sheet.png` 를 `--ref` 로 붙였다. 인물·책상·의자는 v1 아틀라스를 그대로 읽고 v2 에는 환경만 넣었다 (v1 을 다시 묶으면 1.2MB 가 한 벌 더 생긴다).
+
+| 원본 | 결과 | 자르는 법 |
+|---|---|---|
+| `wall.png` 창 유리를 마젠타로 그린 벽 띠 | 타일 `wall` 144×120 (유리 투명) | 창틀 기둥 가운데 → 다음 기둥 가운데 한 칸 (양끝이 기둥 반쪽이라 이어진다). `dropRows` 로 벽·유리 행을 빼 높이 120 = WALL_H × 3 |
+| `views.png` 같은 스카이라인 4시간대를 위아래로 | 타일 `view-morning·day·dusk·night` 432×72 | 패널마다 자른다. 건물이 양끝에 닿지 않게 시켜 가로로 저절로 이어진다 |
+| `floor.png` 나무 바닥 | 타일 `floor` 144×144 | 세로 `seamless`, 가로는 판자 줄마다 따로 (`seamlessBands`) |
+| `group-floor.png`·`island-rug.png`·`focus-carpet.png` | 타일 144×144 | `seamless: xy` |
+| `street.png` 보도 띠 | 타일 `street` 504×96 | 판석 이음선부터 6장 (주기 탐색은 경계에 좁은 판석을 남겼다) |
+| `houses.png` 4열(시간대) × 집·가로등 | `prop/house-<시간대>` 132, `prop/street-lamp-<시간대>` 24 | 격자 칸 |
+| `props.png` | `prop/plant-large` 42·`plant-small` 24·`bookshelf-tall` 44·`bookshelf-low` 96 | 격자 칸 |
+| `booth.png` | `prop/booth` 138·`desk-lamp` 30·`mug` 16·`headphones` 24 | 격자 칸 |
+
+생성 19회 = 10종 × 1 + 다시 9회. 첫 10회 중 9회는 C 드라이브가 꽉 차 codex 가 image_gen 을 못 돌린 실패("image_gen tool never ran")였고 같은 프롬프트로 다시 돌려 그대로 썼다. 다시 그린(내용 때문에 다시 생성한) 것은 없다.
+
+배운 점:
+
+| 문제 | 대응 |
+|---|---|
+| "seamless tileable" 이라고 시켜도 가장자리가 안 이어진다 | `seamless_crop`: 열(행) s 와 s+p 가 가장 닮은 구간 [s, s+p) 를 고른다. 무늬 카펫·러그는 이것으로 이음매가 없어졌다 |
+| 가로 판자는 한 구간을 통째로 고르면 줄마다 판자 색이 경계에서 끊긴다 | `seamless_bands_x`: 어두운 가로 이음선으로 띠를 나눠 띠마다 고른 뒤 가장 긴 폭으로 늘려 쌓는다 |
+| 벽 창에 시간대 4종을 그리면 벽·창틀이 판마다 달라진다 | 벽은 유리를 마젠타로 한 장만, 창밖은 한 장에 4시간대를 같은 스카이라인으로 그리게 해 뒤에 깐다 (스카이라인이 4판 모두 같게 나왔다) |
+| 9-slice(파티션·테두리)는 생성으로 맞추기 어렵다 | 바닥만 생성 타일, 테두리·이름표는 도트 px Graphics |
+| 해상도 3 으로 그린 12px 한글을 1배에서 3배 축소하면 가는 획이 빠진다 | 도트 px 글자 resolution = 지금 배율 (`dotTextResolution`) |
 
 ## 이름 규칙
 

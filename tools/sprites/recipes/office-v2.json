@@ -1,0 +1,39 @@
+{
+ "name": "office-v2",
+ "description": "3단계 환경: 바닥·벽(창 유리 투명)·창밖 4시간대·그룹 바닥·섬 러그·Focus Zone 카펫·부스·거리(보도·집·가로등 4시간대)·소품. 인물·책상·의자는 office-v1 을 그대로 쓴다. 원본은 ~/.claude/jk-corp/sprite-src/v2",
+ "spec": { "tile": 48, "cell": [64, 128], "baseline": 124, "bodyHeight": 108 },
+ "props": [
+  { "id": "plant-large", "sheet": "props.png", "grid": [2, 2], "cell": [0, 0], "width": 42 },
+  { "id": "plant-small", "sheet": "props.png", "grid": [2, 2], "cell": [1, 0], "width": 24 },
+  { "id": "bookshelf-tall", "sheet": "props.png", "grid": [2, 2], "cell": [0, 1], "width": 44 },
+  { "id": "bookshelf-low", "sheet": "props.png", "grid": [2, 2], "cell": [1, 1], "width": 96 },
+  { "id": "booth", "sheet": "booth.png", "grid": [2, 2], "cell": [0, 0], "width": 138 },
+  { "id": "desk-lamp", "sheet": "booth.png", "grid": [2, 2], "cell": [1, 0], "width": 30 },
+  { "id": "mug", "sheet": "booth.png", "grid": [2, 2], "cell": [0, 1], "width": 16 },
+  { "id": "headphones", "sheet": "booth.png", "grid": [2, 2], "cell": [1, 1], "width": 24 },
+  { "id": "house-morning", "sheet": "houses.png", "grid": [4, 2], "cell": [0, 0], "width": 132 },
+  { "id": "house-day", "sheet": "houses.png", "grid": [4, 2], "cell": [1, 0], "width": 132 },
+  { "id": "house-dusk", "sheet": "houses.png", "grid": [4, 2], "cell": [2, 0], "width": 132 },
+  { "id": "house-night", "sheet": "houses.png", "grid": [4, 2], "cell": [3, 0], "width": 132 },
+  { "id": "street-lamp-morning", "sheet": "houses.png", "grid": [4, 2], "cell": [0, 1], "width": 24 },
+  { "id": "street-lamp-day", "sheet": "houses.png", "grid": [4, 2], "cell": [1, 1], "width": 24 },
+  { "id": "street-lamp-dusk", "sheet": "houses.png", "grid": [4, 2], "cell": [2, 1], "width": 24 },
+  { "id": "street-lamp-night", "sheet": "houses.png", "grid": [4, 2], "cell": [3, 1], "width": 24 }
+ ],
+ "tiles": [
+  {
+   "id": "wall", "sheet": "wall.png", "keyed": true, "crop": [499, 161, 843, 587],
+   "dropRows": [[177, 187], [203, 225], [300, 367], [517, 539], [560, 578]], "size": [144, 120],
+   "_note": "창틀 기둥 가운데부터 다음 기둥 가운데까지 = 한 칸 (양끝이 기둥 반쪽이라 이어진다). 벽·유리 행을 빼 높이를 WALL_H × 3 = 120 에 맞춘다"
+  },
+  { "id": "view-morning", "sheet": "views.png", "crop": [18, 17, 1518, 258], "size": [432, 72] },
+  { "id": "view-day", "sheet": "views.png", "crop": [18, 272, 1518, 516], "size": [432, 72] },
+  { "id": "view-dusk", "sheet": "views.png", "crop": [18, 532, 1518, 750], "size": [432, 72] },
+  { "id": "view-night", "sheet": "views.png", "crop": [18, 767, 1518, 990], "size": [432, 72] },
+  { "id": "floor", "sheet": "floor.png", "crop": [335, 113, 1200, 910], "seamless": "y", "seamlessBands": true, "size": [144, 144] },
+  { "id": "group-floor", "sheet": "group-floor.png", "crop": [120, 120, 1134, 1134], "seamless": "xy", "size": [144, 144] },
+  { "id": "island-rug", "sheet": "island-rug.png", "crop": [120, 120, 1135, 1135], "seamless": "xy", "size": [144, 144] },
+  { "id": "focus-carpet", "sheet": "focus-carpet.png", "crop": [336, 97, 1200, 926], "seamless": "xy", "size": [144, 144] },
+  { "id": "street", "sheet": "street.png", "crop": [145, 232, 1771, 542], "size": [null, 96], "_note": "판석 이음선(x 145)부터 6장 뒤 이음선 앞까지 = 이어지는 한 칸" }
+ ]
+}
