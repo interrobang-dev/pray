@@ -15,8 +15,9 @@ import { flushSync } from 'react-dom'
 import { buildChatRows, type ChatRow, type Work } from './chatRows'
 import { FilesButton, formatSize } from './Files'
 import { MarkdownText } from './Markdown'
+import { ShellsButton, type ShellRequest } from './Shells'
 import { NEWLINE_KEYS } from './Terminal'
-import type { AskQuestion, ChatMessage, ToolUse } from './types'
+import type { AskQuestion, ChatMessage, Shell, ToolUse } from './types'
 
 /**
  * 대화를 불러온 뒤 찾아 갈 곳. 지시·보고 = 팀원 대화에서 글이 같은 메시지 (같은 글이 여럿이면 at 과 시각이 가장 가까운 것),
@@ -54,6 +55,11 @@ interface Props {
   onJumpHandled: () => void
   /** 지시·보고 한 줄을 누름: 그 팀원 세션을 열고 target 으로 간다. rowKey 는 돌아올 때 찾을 이 줄 */
   onOpenRelay: (memberSessionId: string, target: JumpTarget, rowKey: string) => void
+  /** 실행 중인 백그라운드 shell. 있으면 오른쪽 아래 버튼 묶음에 ">_" 버튼 */
+  shells: Shell[]
+  /** 상태 표시줄 Shells 창에서 고른 이 세션의 shell. ShellsButton 이 그 shell 을 고른 채 모달을 열고 onShellRequestHandled 로 비운다 */
+  shellRequest: ShellRequest | null
+  onShellRequestHandled: () => void
 }
 
 function summarizeInput(name: string, input: unknown): string {
@@ -790,6 +796,9 @@ export function Chat({
   jump,
   onJumpHandled,
   onOpenRelay,
+  shells,
+  shellRequest,
+  onShellRequestHandled,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   /** messages 가 어느 세션 것인지. 세션을 바꾼 뒤 새 대화가 오기 전까지는 앞 세션 것이 남아 있어 점프는 이것이 맞을 때만 처리한다 */
@@ -1404,7 +1413,8 @@ export function Chat({
           {isSuggestionShown && <div className="suggestion-space" aria-hidden="true" />}
           <div ref={bottomRef} />
         </div>
-        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 제안 → 폴더 → "↓" 로 쌓인다 */}
+        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 제안 → 폴더 → shell → "↓" 로 쌓인다.
+            자주 뜨고 숨는 것일수록 위에 둔다: "↓" 가 스크롤마다 바뀌어도 아래 버튼은 그대로이고, shell 이 뜨고 끝나도 폴더는 그대로다 */}
         <div className="pane-buttons">
           {!isAtBottom && (
             <button
@@ -1417,6 +1427,7 @@ export function Chat({
               ↓{hasUnread && <span className="to-bottom-dot" />}
             </button>
           )}
+          <ShellsButton key={`shells:${sessionId}`} sessionId={sessionId} shells={shells} request={shellRequest} onRequestHandled={onShellRequestHandled} />
           <FilesButton key={sessionId} sessionId={sessionId} version={version} />
           {isSuggestionShown && (
             <button type="button" className="suggestion" onClick={fillSuggestion} title={suggestion ?? undefined} aria-label={`제안을 입력칸에 채우기: ${suggestion}`}>

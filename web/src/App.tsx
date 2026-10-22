@@ -11,7 +11,7 @@ import { Terminal } from './Terminal'
 import { Chat, type Jump, type JumpTarget } from './Chat'
 import { Office } from './Office'
 import { UsagePanel } from './UsagePanel'
-import { ShellsBar, ShellsStatus, type SessionShells, type ShellRequest } from './Shells'
+import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { Modal, Segmented } from './Modal'
 import {
   attendanceOf,
@@ -22,6 +22,7 @@ import {
   type Part,
   type Session,
   type SessionStatus,
+  type Shell,
   type Team,
 } from './types'
 import { avatarOf, cssColor } from './avatar'
@@ -225,7 +226,7 @@ export function App() {
   /** 점프로 연 세션의 "← 팀장 대화로". 다른 세션을 직접 고르면 사라진다 */
   const [jumpBack, setJumpBack] = useState<JumpBack | null>(null)
   const nextJumpIdRef = useRef(1)
-  /** 상태 표시줄 Shells 창에서 고른 shell. 그 세션 패널의 ShellsBar 가 목록을 열어 출력을 펼친 뒤 비운다 */
+  /** 상태 표시줄 Shells 창에서 고른 shell. 그 세션 대화의 ShellsButton 이 그 shell 을 고른 채 모달을 연 뒤 비운다 */
   const [shellRequest, setShellRequest] = useState<(ShellRequest & { sessionId: string }) | null>(null)
   const nextShellRequestIdRef = useRef(1)
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
@@ -334,11 +335,11 @@ export function App() {
     setJumpBack({ toSessionId: memberSessionId, fromSessionId: selected.id, fromName: displayName(selected), rowKey })
   }
 
-  /** 상태 표시줄 Shells 창의 줄을 눌렀다: 그 세션을 대화 탭으로 열고(Shells 줄은 대화 탭에만 있다) 패널 Shells 목록에서 그 shell 출력을 펼친다 */
-  function openShell(sessionId: string, shellId: string) {
+  /** 상태 표시줄 Shells 창의 줄을 눌렀다: 그 세션을 대화 탭으로 열고(shell 버튼은 대화 탭에만 있다) shell 모달을 그 shell 을 고른 채 연다 */
+  function openShell(sessionId: string, shell: Shell) {
     selectSession(sessionId)
     setTab('chat')
-    setShellRequest({ id: nextShellRequestIdRef.current++, sessionId, shellId })
+    setShellRequest({ id: nextShellRequestIdRef.current++, sessionId, shell })
   }
 
   /** 돌아가기: 팀장 대화를 다시 열고 점프할 때 누른 그 한 줄로 간다 */
@@ -900,10 +901,6 @@ export function App() {
   const presentSessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'present')
   const workingCount = presentSessions.filter((s) => s.status === 'working').length
   const approvalSessions = presentSessions.filter((s) => s.status === 'needs-approval')
-  /** 상태 표시줄 Shells 창: 실행 중인 shell 이 있는 세션만, 목록 순서대로 (서버는 근무 중이 아닌 세션에 [] 를 준다. 옛 서버 응답은 필드가 없다) */
-  const shellGroups: SessionShells[] = snapshot.sessions
-    .filter((s) => (s.shells?.length ?? 0) > 0)
-    .map((s) => ({ sessionId: s.id, name: displayName(s), shells: s.shells ?? [] }))
 
   return (
     <div className="app">
@@ -1133,16 +1130,6 @@ export function App() {
               </button>
             </div>
             {jumpBack?.toSessionId === selected.id && renderJumpBack(jumpBack)}
-            {/* 대화 탭만: 터미널 탭에서 이 줄이 생기고 없어지면 터미널 높이가 바뀌어 pty 가 resize 된다 (Claude Code 화면에도 백그라운드 작업 표시가 있다) */}
-            {shownTab === 'chat' && (
-              <ShellsBar
-                key={selected.id}
-                sessionId={selected.id}
-                shells={selected.shells ?? []}
-                request={shellRequest?.sessionId === selected.id ? shellRequest : null}
-                onRequestHandled={() => setShellRequest(null)}
-              />
-            )}
             {shownTab === 'terminal' ? (
               <Terminal sessionId={selected.id} />
             ) : (
@@ -1162,6 +1149,10 @@ export function App() {
                 jump={jump?.sessionId === selected.id ? jump : null}
                 onJumpHandled={() => setJump(null)}
                 onOpenRelay={openRelay}
+                // 서버는 근무 중이 아닌 세션에 [] 를 준다. 옛 서버 응답은 필드가 없다
+                shells={selected.shells ?? []}
+                shellRequest={shellRequest?.sessionId === selected.id ? shellRequest : null}
+                onShellRequestHandled={() => setShellRequest(null)}
               />
             )}
           </section>
@@ -1176,7 +1167,7 @@ export function App() {
               승인 대기 {approvalSessions.length}
             </button>
           )}
-          <ShellsStatus groups={shellGroups} onOpen={openShell} />
+          <ShellsStatus lines={shellLines(office, snapshot.sessions)} onOpen={openShell} />
           <span>
             작업 중 {workingCount} · 근무 {presentSessions.length}
           </span>

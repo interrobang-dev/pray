@@ -984,73 +984,7 @@ li.group.drop-after::after {
 .jump-back button:hover:not(:disabled) {
   border-color: var(--relay-text);
 }
-/* 패널 헤더 아래 "Shells 2 ▾" 줄 (Shells.tsx ShellsBar, 대화 탭만). 펼친 목록은 대화 위에 떠서 대화 칸 크기가 그대로다.
-   목록은 이 줄 바로 아래부터 패널 폭이고, 길면 목록 안에서 스크롤한다. z-index 는 대화 오른쪽 아래 버튼 묶음보다 위, 상세 창(8)·모달(10)보다 아래 */
-.shells {
-  position: relative;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-.shells-toggle {
-  display: block;
-  width: 100%;
-  padding: 3px 12px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  font-size: 11px;
-  color: var(--muted);
-  text-align: left;
-}
-.shells-toggle:hover,
-.shells-toggle[aria-expanded='true'] {
-  background: var(--bg);
-  color: var(--text);
-}
-.shells-toggle b,
-.shells-status-toggle b {
-  color: var(--text);
-}
-.shells-list {
-  position: absolute;
-  top: calc(100% + 1px);
-  left: 0;
-  right: 0;
-  z-index: 5;
-  max-height: min(60vh, 480px);
-  overflow-y: auto;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-}
-.shell + .shell {
-  border-top: 1px solid var(--line);
-}
-/* shell 한 줄: [▶ 명령 ··· 경과 시간] / [설명]. 명령·설명은 말줄임 (전체는 툴팁) */
-.shell-row {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 2px 6px;
-  width: 100%;
-  padding: 6px 12px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  text-align: left;
-}
-.shell-row:hover {
-  background: var(--bg);
-}
-.shell-row::before {
-  content: '▶';
-  font-size: 9px;
-  color: var(--muted);
-}
-.shell-row[aria-expanded='true']::before {
-  content: '▼';
-}
+/* shell 명령(고정폭, 한 줄 말줄임. 전체는 툴팁)·경과 시간·설명. shell 모달 목록과 상태 표시줄 Shells 창이 같이 쓴다 (Shells.tsx) */
 .shell-command {
   min-width: 0;
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
@@ -1066,54 +1000,13 @@ li.group.drop-after::after {
   white-space: nowrap;
 }
 .shell-description {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   min-width: 0;
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-/* 펼친 shell 의 출력 끝부분: [줄 수 · 크기 ··· ↻] / 고정폭 글자. 긴 줄은 접는다 (가로 스크롤 없이) */
-.shell-output {
-  padding: 0 12px 10px 30px;
-}
-.shell-output-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 18px;
-  margin-bottom: 4px;
-  font-size: 11px;
-  color: var(--muted);
-}
-.shell-output-head button {
-  margin-left: auto;
-  padding: 0 6px;
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--muted);
-}
-.shell-output pre {
-  margin: 0;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--pre-bg);
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-/* 실패는 머리줄의 줄 수 자리에 서버 문구로 */
-.shell-output-error {
-  color: var(--error);
-}
-.shell-output-empty {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
 }
 /* 보냈지만 아직 대화 기록에 안 보인 내 말 (Chat.tsx). 흐리게 "보내는 중", 실패하면 진하게 빨간 테두리 + 닫기 */
 .msg.pending {
@@ -1165,10 +1058,10 @@ li.group.drop-after::after {
   font-size: 11px;
   color: var(--muted);
 }
-/* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 제안 → 작업 파일 폴더(Files.tsx) → 맨 아래가 아닐 때 뜨는 "↓".
-   아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않고, 제안이 뜨고 사라지면 폴더·"↓" 가 한 칸씩 오르내린다.
+/* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 제안 → 작업 파일 폴더(Files.tsx) → 실행 중인 shell(Shells.tsx) → 맨 아래가 아닐 때 뜨는 "↓".
+   아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않는다. 자주 뜨고 숨는 것이 위라 "↓" 는 아래 버튼을 움직이지 않고, 제안이 뜨고 사라지면 그 위 버튼들이 한 칸씩 오르내린다.
    묶음이 대화 폭을 다 덮는 것은 제안 말풍선 최대 폭을 대화 폭 기준으로 정하려고다. 빈 자리는 클릭이 대화로 지나간다.
-   z-index 를 주지 않는다: 폴더 버튼의 모달이 이 안에 렌더돼 묶음의 쌓임 맥락에 갇힌다 */
+   z-index 를 주지 않는다: 폴더·shell 버튼의 모달이 이 안에 렌더돼 묶음의 쌓임 맥락에 갇힌다 */
 .pane-buttons {
   position: absolute;
   left: 16px;
@@ -1180,13 +1073,14 @@ li.group.drop-after::after {
   gap: 8px;
   pointer-events: none;
 }
-/* 버튼들과 폴더 버튼의 모달 */
+/* 버튼들과 폴더·shell 버튼의 모달 */
 .pane-buttons > * {
   pointer-events: auto;
 }
 /* 원 버튼 모양 (제안은 말풍선을 뺀 원 부분) */
 .to-bottom,
 .files-button,
+.shells-button,
 .suggestion-icon {
   position: relative;
   flex-shrink: 0;
@@ -1210,11 +1104,71 @@ li.group.drop-after::after {
   border: 2px solid var(--panel);
   background: var(--green);
 }
-/* 작업 파일 폴더 버튼 (Files.tsx) */
-.files-button {
+/* 작업 파일 폴더 버튼 (Files.tsx)·실행 중인 shell ">_" 버튼 (Shells.tsx) */
+.files-button,
+.shells-button {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+/* shell 개수: 원 오른쪽 위의 작은 숫자. 원 크기는 그대로 */
+.shells-button-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  box-sizing: border-box;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 2px solid var(--panel);
+  border-radius: 9px;
+  background: var(--text);
+  color: var(--panel);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* shell 모달 (Shells.tsx): 작업 파일 모달(.files-modal)의 틀·크기·폰 화면을 그대로 쓰고 여기만 다르다.
+   머리줄은 개수 요약 ··· ×, 목록 줄은 [명령 ··· 경과 시간] / [설명], 오른쪽은 출력 마지막 200줄 */
+.shells-summary {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.files-item.shells-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+.shells-item.ended .shell-command {
+  color: var(--muted);
+}
+.files-preview-title .shell-command {
+  font-size: 13px;
+}
+/* 출력 머리줄의 실패 문구 (.files-item-meta 회색을 이기게 두 클래스) */
+.files-item-meta.shells-output-error {
+  color: var(--error);
+}
+/* 출력: 고정폭, 긴 줄은 접는다 (가로 스크롤 없이). 받을 때마다 맨 아래로 스크롤한다 */
+.files-preview-body.shells-output {
+  padding: 0;
+  background: var(--pre-bg);
+}
+.shells-output pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.shells-output > .hint {
+  margin: 12px;
 }
 /* 작업 파일 모달 (Files.tsx). 데스크톱은 왼쪽 목록 + 오른쪽 미리보기 */
 .modal.files-modal {
@@ -2300,6 +2254,9 @@ li.group.drop-after::after {
 .shells-status-toggle[aria-expanded='true'] {
   background: var(--bg);
 }
+.shells-status-toggle b {
+  color: var(--text);
+}
 /* Shells 창: 상태 표시줄 바로 위 오른쪽. 사용량 상세 창과 같은 이유로 fixed (상태 표시줄이 overflow: hidden) */
 .shells-popover {
   position: fixed;
@@ -2324,17 +2281,34 @@ li.group.drop-after::after {
   font-size: 11px;
   color: var(--muted);
 }
-.shells-group + .shells-group {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--line);
-}
-.shells-group-name {
-  padding: 4px 12px 2px;
+/* 왼쪽 목록처럼 그룹(작은 회색 대문자) → 팀(굵게) → 파트(들여쓰기, 회색) 머리. 그룹 사이에 구분선 */
+.shells-popover-group,
+.shells-popover-team,
+.shells-popover-part {
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.shells-popover-group {
+  padding: 6px 12px 2px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.shells-popover-row + .shells-popover-group {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.shells-popover-team {
+  padding: 4px 12px 2px;
+}
+.shells-popover-part {
+  padding: 3px 12px 1px 24px;
+  font-size: 11px;
+  color: var(--muted);
 }
 .shells-popover-row {
   display: flex;
@@ -2352,6 +2326,13 @@ li.group.drop-after::after {
 }
 .shells-popover-row .shell-command {
   flex: 1;
+}
+/* 줄은 자기 머리보다 한 단 들여쓴다: 로비 = 그룹 머리와 같은 줄, 팀 직속, 파트 */
+.shells-popover-row.team {
+  padding-left: 24px;
+}
+.shells-popover-row.part {
+  padding-left: 36px;
 }
 
 /* 계정 사용량 (상태 표시줄 왼쪽. 남은 비율만, 리셋 시각은 툴팁. 줄을 누르면 위에 상세 창) */
@@ -2823,21 +2804,9 @@ li.group.drop-after::after {
     min-height: 40px;
     text-align: left;
   }
-  /* Shells 줄·목록: 손가락으로 누르기 쉽게 키운다. 주소창이 보여도 목록이 화면을 다 덮지 않게 dvh */
-  .shells-toggle {
-    min-height: 36px;
-    font-size: 12px;
-  }
-  .shells-list {
-    max-height: 60dvh;
-  }
-  .shell-row {
-    min-height: 44px;
+  /* shell 모달은 작업 파일 모달의 폰 규칙(화면 전체, 목록 → 출력 → ←, 줄 44px)을 그대로 탄다. 두 줄(명령 / 설명)을 44px 가운데에 */
+  .files-item.shells-item {
     align-content: center;
-  }
-  .shell-output-head button {
-    min-width: 40px;
-    min-height: 32px;
   }
   /* "Shells 0" 은 숨긴다: 390px 에서 자리를 차지하면 사용량 끝(↻ 포함)이 잘린다. shell 이 있을 때만 보인다 */
   .shells-status:has(> .shells-status-toggle:disabled) {
