@@ -950,7 +950,7 @@ export function App() {
               <NewGroupIcon />
               New Group
             </button>
-            <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable} title="로비에 새 세션">
+            <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable} title="Focus Zone 에 새 세션">
               <NewSessionIcon />
               New Session
             </button>
@@ -981,7 +981,7 @@ export function App() {
             {orphanTeams.length > 0 && <li className="group">{orphanTeams.map((team) => renderTeam(team))}</li>}
             <li className="group">
               <div className="group-label">
-                <span className="name">로비</span>
+                <span className="name">Focus Zone</span>
                 {lobbySessions.length > 0 && <span className="count">{lobbySessions.length}</span>}
               </div>
               {lobbySessions.map((session) => renderSession(session, true))}

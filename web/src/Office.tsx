@@ -68,6 +68,20 @@ const COLOR = {
   gold: 0xd9a63a,
   silver: 0xa9b0bd,
   partLine: 0xc3c7d2,
+  carpet: 0xede3d2,
+  carpetPattern: 0xe2d5bf,
+  carpetHighlight: 0xf6efe3,
+  carpetBorder: 0xc8b598,
+  carpetShadow: 0xb7a284,
+  boothMat: 0xe5d9c5,
+  boothWall: 0xdfd5c5,
+  boothWallTop: 0xc69c68,
+  boothWallShadow: 0xb5a792,
+  woodLight: 0xd8b88c,
+  woodMid: 0xb89466,
+  woodDark: 0x755638,
+  lampShade: 0xd99b38,
+  lampGlow: 0xffe885,
 }
 
 /** 사무실 화면이 이동해 보여 줄 대상. 같은 대상을 다시 눌러도 움직이도록 매번 새 id 를 붙인다 */
@@ -226,25 +240,169 @@ function drawGroup(area: GroupArea, onEdit: () => void): GroupParts {
   return { container, sign }
 }
 
+/** Focus Zone 가장자리 원목 책장. isHorizontal 이면 위쪽 벽면 가로 책장, 아니면 오른쪽 가장자리 3단 세로 책장 */
+function drawBookshelf(x: number, y: number, isHorizontal: boolean): Graphics {
+  const graphics = new Graphics()
+  const bookColors = [0xd96b52, 0x6fae5e, 0x5b8ec9, 0xd9a63a, 0x8c73b8, 0xf1ebe1]
+  if (isHorizontal) {
+    const width = 32
+    const height = 10
+    graphics.rect(x, y, width, height).fill(COLOR.woodMid)
+    graphics.rect(x, y, width, 2).fill(COLOR.woodLight)
+    graphics.rect(x + 2, y + 2, width - 4, height - 4).fill(COLOR.woodDark)
+    graphics.rect(x, y + height - 2, width, 2).fill(COLOR.woodLight)
+    const books: [number, number, number, number][] = [
+      [3, 3, 3, bookColors[0]],
+      [6, 4, 2, bookColors[5]],
+      [8, 3, 3, bookColors[2]],
+      [11, 4, 2, bookColors[3]],
+      [15, 3, 3, bookColors[1]],
+      [18, 4, 3, bookColors[4]],
+      [21, 3, 2, bookColors[5]],
+      [25, 3, 3, bookColors[0]],
+      [28, 4, 2, bookColors[2]],
+    ]
+    for (const [offsetX, offsetY, bookWidth, bookColor] of books) {
+      graphics.rect(x + offsetX, y + offsetY, bookWidth, height - 2 - offsetY).fill(bookColor)
+    }
+    return graphics
+  }
+  const width = 12
+  const height = 32
+  graphics.rect(x, y, width, height).fill(COLOR.woodMid)
+  graphics.rect(x, y, width, 2).fill(COLOR.woodLight)
+  for (let shelfIndex = 0; shelfIndex < 3; shelfIndex++) {
+    const shelfTop = y + 3 + shelfIndex * 9
+    graphics.rect(x + 2, shelfTop, width - 4, 7).fill(COLOR.woodDark)
+    graphics.rect(x + 1, shelfTop + 7, width - 2, 2).fill(COLOR.woodLight)
+    const firstColor = bookColors[(shelfIndex * 2) % bookColors.length]
+    const secondColor = bookColors[(shelfIndex * 2 + 1) % bookColors.length]
+    const thirdColor = bookColors[(shelfIndex * 2 + 3) % bookColors.length]
+    graphics.rect(x + 2, shelfTop + 1, 2, 6).fill(firstColor)
+    graphics.rect(x + 4, shelfTop + 2, 2, 5).fill(secondColor)
+    graphics.rect(x + 6, shelfTop + 1, 3, 6).fill(thirdColor)
+  }
+  return graphics
+}
+
+/**
+ * Focus Zone 자리마다 그리는 1인 칸막이 부스(낮은 파티션 + 우드 사이드 선반)와 스탠드 조명·머그·헤드폰.
+ * 책상(0..32, 20..39)·캐릭터(4..21, 2..23)·모니터(22..32, 10..22)·이름표(-6..38, 39..48)·말풍선(y<0) 바깥에 그려 가리지 않는다
+ */
+function drawFocusBooth(graphics: Graphics, seatX: number, seatY: number, seatIndex: number): void {
+  const mugColors = [0xd96b52, 0x5d9b78, 0x5b8ec9, 0xd9a63a]
+  const mugColor = mugColors[seatIndex % mugColors.length]
+
+  // 부스 안쪽 바닥 매트
+  graphics.rect(seatX - 1, seatY + 2, 41, 34).fill(COLOR.boothMat)
+
+  // ㄷ자형 낮은 파티션 (뒷벽·왼쪽 날개·오른쪽 날개)
+  graphics.rect(seatX - 3, seatY, 46, 2).fill(COLOR.boothWall)
+  graphics.rect(seatX - 3, seatY, 46, 1).fill(COLOR.boothWallTop)
+  graphics.rect(seatX + 22, seatY + 2, 21, 1).fill(COLOR.boothWall).rect(seatX + 22, seatY + 3, 21, 1).fill(COLOR.boothWallShadow)
+
+  graphics.rect(seatX - 3, seatY, 2, 36).fill(COLOR.boothWall)
+  graphics.rect(seatX - 3, seatY, 1, 36).fill(COLOR.boothWallTop)
+  graphics.rect(seatX - 1, seatY + 2, 1, 34).fill(COLOR.boothWallShadow)
+  graphics.rect(seatX - 3, seatY + 35, 4, 2).fill(COLOR.boothWallShadow)
+
+  graphics.rect(seatX + 40, seatY, 2, 36).fill(COLOR.boothWall)
+  graphics.rect(seatX + 41, seatY, 1, 36).fill(COLOR.boothWallTop)
+  graphics.rect(seatX + 42, seatY + 1, 1, 35).fill(COLOR.boothWallShadow)
+  graphics.rect(seatX + 35, seatY + 35, 8, 2).fill(COLOR.boothWallShadow)
+
+  // 책상 오른쪽 보조 사이드 선반과 빈 부스용 기본 상판 (세션이 앉으면 drawDesk 가 0..32 상판을 덮어 그린다)
+  graphics.rect(seatX, seatY + 20, 32, 9).fill(COLOR.woodLight)
+  graphics.rect(seatX, seatY + 29, 32, 6).fill(COLOR.woodMid)
+  graphics.rect(seatX + 32, seatY + 4, 8, 28).fill(COLOR.woodLight)
+  graphics.rect(seatX + 32, seatY + 32, 8, 3).fill(COLOR.woodMid)
+  graphics.rect(seatX + 32, seatY + 4, 1, 28).fill(COLOR.woodMid)
+
+  // 스탠드 조명 (사이드 선반 위쪽)
+  graphics
+    .rect(seatX + 33, seatY + 7, 4, 3)
+    .fill({ color: COLOR.lampGlow, alpha: 0.55 })
+    .rect(seatX + 34, seatY + 7, 2, 2)
+    .fill({ color: 0xfff8cc, alpha: 0.85 })
+  graphics.rect(seatX + 36, seatY + 11, 3, 2).fill(0x5a6070)
+  graphics.rect(seatX + 38, seatY + 6, 1, 5).fill(0x7a8090).rect(seatX + 36, seatY + 5, 2, 1).fill(0x7a8090)
+  graphics.rect(seatX + 34, seatY + 5, 3, 2).fill(COLOR.lampShade).rect(seatX + 34, seatY + 5, 3, 1).fill(0xf0ba59)
+
+  // 머그컵 (사이드 선반 가운데)
+  graphics.rect(seatX + 34, seatY + 20, 4, 1).fill(COLOR.woodMid)
+  graphics.rect(seatX + 34, seatY + 16, 4, 4).fill(mugColor)
+  graphics.rect(seatX + 35, seatY + 16, 2, 1).fill(0x5c3a21)
+  graphics.rect(seatX + 38, seatY + 17, 1, 2).fill(mugColor)
+  graphics.rect(seatX + 35, seatY + 14, 1, 1).fill({ color: 0xffffff, alpha: 0.65 })
+
+  // 헤드폰 (사이드 선반 아래쪽)
+  graphics
+    .rect(seatX + 35, seatY + 24, 3, 1)
+    .fill(0x3a3e4a)
+    .rect(seatX + 34, seatY + 25, 1, 2)
+    .fill(0x3a3e4a)
+    .rect(seatX + 38, seatY + 25, 1, 2)
+    .fill(0x3a3e4a)
+  graphics.rect(seatX + 34, seatY + 27, 2, 3).fill(0x2b2f3a).rect(seatX + 37, seatY + 27, 2, 3).fill(0x2b2f3a)
+  graphics.rect(seatX + 34, seatY + 28, 1, 1).fill(mugColor).rect(seatX + 38, seatY + 28, 1, 1).fill(mugColor)
+}
+
+/** Focus Zone(팀 없는 세션 구역): 따뜻한 색 카펫 바닥(옅은 무늬) + 자리마다 1인 칸막이 부스·조명·소품 + 가장자리 책장·화분 */
 function drawZone(zone: Rect): Container {
   const container = new Container()
   container.position.set(PAD_X + zone.x * TILE, PAD_Y + zone.y * TILE)
-  const w = zone.w * TILE
-  const h = zone.h * TILE
-  const g = new Graphics()
-  g.rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.12 })
-  // 점선 파티션
-  for (let x = 0; x < w; x += 4) {
-    g.rect(x, 0, 2, 2).fill(COLOR.partitionShadow).rect(x, h - 2, 2, 2).fill(COLOR.partitionShadow)
+  const width = zone.w * TILE
+  const height = zone.h * TILE
+  const graphics = new Graphics()
+
+  // 따뜻한 색 카펫 바닥과 테두리
+  graphics.rect(0, 0, width, height).fill(COLOR.carpet)
+  graphics.rect(0, 0, width, 2).fill(COLOR.carpetBorder).rect(0, height - 2, width, 2).fill(COLOR.carpetShadow)
+  graphics.rect(0, 0, 2, height).fill(COLOR.carpetBorder).rect(width - 2, 0, 2, height).fill(COLOR.carpetBorder)
+  graphics.rect(3, 3, width - 6, 1).fill(COLOR.carpetPattern).rect(3, height - 4, width - 6, 1).fill(COLOR.carpetPattern)
+  graphics.rect(3, 3, 1, height - 6).fill(COLOR.carpetPattern).rect(width - 4, 3, 1, height - 6).fill(COLOR.carpetPattern)
+
+  // 카펫 옅은 직조 무늬
+  for (let y = 6; y < height - 6; y += 8) {
+    for (let x = 6; x < width - 6; x += 8) {
+      graphics.rect(x, y, 2, 1).fill(COLOR.carpetPattern).rect(x, y + 1, 1, 1).fill(COLOR.carpetPattern)
+      if (x + 4 < width - 6 && y + 4 < height - 6) {
+        graphics.rect(x + 4, y + 4, 2, 1).fill(COLOR.carpetHighlight)
+      }
+    }
   }
-  for (let y = 0; y < h; y += 4) {
-    g.rect(0, y, 2, 2).fill(COLOR.partitionShadow).rect(w - 2, y, 2, 2).fill(COLOR.partitionShadow)
+
+  // 2열 자리마다 1인 칸막이 부스·스탠드 조명·머그·헤드폰
+  const boothRows = Math.max(1, Math.floor((zone.h - 2) / SEAT_STEP))
+  for (let row = 0; row < boothRows; row++) {
+    for (let column = 0; column < 2; column++) {
+      const seatX = (1 + column * SEAT_STEP) * TILE
+      const seatY = (1 + row * SEAT_STEP) * TILE
+      drawFocusBooth(graphics, seatX, seatY, row * 2 + column)
+    }
   }
-  container.addChild(g)
-  const name = label('로비', 7, 0x7a7f8e)
-  const sign = new Graphics().rect(0, 0, name.width + 8, 11).fill(0xf4f4f7).rect(0, 10, name.width + 8, 1).fill(COLOR.partitionShadow)
-  sign.position.set(6, 5)
-  name.position.set(10, 6)
+
+  container.addChild(graphics)
+
+  // 구역 가장자리 책장·화분 (첫 줄 말풍선 자리 y=2..15 오른쪽은 비워 둔다)
+  container.addChild(drawPlant(4, 24, false))
+  container.addChild(drawBookshelf(width - 16, 18, false))
+  if (height >= 120) container.addChild(drawPlant(width - 14, 58, false))
+  if (height >= 176) container.addChild(drawBookshelf(width - 16, 80, false))
+  if (height >= 220) container.addChild(drawPlant(width - 14, 122, false))
+  container.addChild(drawBookshelf(46, height - 13, true))
+  container.addChild(drawPlant(width - 16, height - 11, true))
+  container.addChild(drawPlant(4, height - 9, false))
+
+  const name = label('Focus Zone', 7, COLOR.text)
+  const sign = new Graphics()
+    .rect(0, 0, name.width + 8, 11)
+    .fill(COLOR.partition)
+    .rect(0, 10, name.width + 8, 1)
+    .fill(COLOR.boothWallTop)
+  sign.position.set(6, 3)
+  name.position.set(10, 4)
+  name.eventMode = 'none'
   container.addChild(sign, name)
   return container
 }
