@@ -4,6 +4,7 @@ import {
   parseInstructionLog,
   parseMessages,
   queuedPrompts,
+  withoutQueued,
   type ChatMessage,
   type InstructionRecord,
 } from './messages.js'
@@ -325,6 +326,26 @@ describe('parseMessages: messages sent while claude is working', () => {
     // 뒤에 같은 글이 없으면(슬래시 명령·글 없는 enqueue) 맨 앞을 뺀다
     const command = [enqueue(undefined), enqueue('대기 중인 말'), dequeue(), user('u1', '<command-name>/ledger</command-name>')].join('\n')
     expect(queuedPrompts(command)).toEqual([{ raw: '대기 중인 말', text: '대기 중인 말' }])
+  })
+
+  it('withoutQueued: drops the queued messages of a session that is not present, keeping the rest in order', () => {
+    // 실제 jsonl 의 꼴 (퇴근 세션): 끝나는 프로세스가 cost-state 를 남긴 뒤 알림을 enqueue 하고 다시 뜨지 않았다
+    const costState = line({ type: 'cost-state', sessionId: 's', totalCostUSD: 1 })
+    const notification = '<task-notification>\n<task-id>b5</task-id>\n<status>killed</status>\n</task-notification>'
+    const jsonl = [user('u1', '일 해 줘'), assistant('a1', '끝남'), costState, costState, enqueue(notification), enqueue('못 받은 말')].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(view(messages)).toEqual([
+      ['user', '일 해 줘', false],
+      ['assistant', '끝남', false],
+      ['system', notification, true],
+      ['user', '못 받은 말', true],
+    ])
+    expect(view(withoutQueued(messages))).toEqual([
+      ['user', '일 해 줘', false],
+      ['assistant', '끝남', false],
+    ])
+    expect(withoutQueued([])).toEqual([])
   })
 
   it('queuedPrompts: the queued user messages in order, raw content and unwrapped text, without content-less or system ones', () => {

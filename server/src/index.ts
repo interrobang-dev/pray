@@ -44,11 +44,11 @@ import { configDir, readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
 import { makeSendCode } from './mail.js'
 import { applyHook, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
-import { findTranscript, listSessions, projectsDir } from './sessions.js'
+import { findTranscript, isLiveSession, listSessions, projectsDir } from './sessions.js'
 import { contentTypeOf, findScratchpad, isSessionId, listScratchpad, resolveScratchpadFile } from './scratchpad.js'
 import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
-import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts } from './messages.js'
+import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts, withoutQueued } from './messages.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
@@ -316,16 +316,25 @@ async function displayNameOf(sessionId: string, names: Record<string, string>): 
   return (jsonl ? summarizeTranscript(jsonl).title : null) ?? sessionId.slice(0, 8)
 }
 
-/** 대화 메시지. 서버가 보낸 팀장·파트장 지시(instructions.jsonl)와 내용이 같은 user 메시지에는 from 이 붙는다 */
+/**
+ * 대화 메시지. 서버가 보낸 팀장·파트장 지시(instructions.jsonl)와 내용이 같은 user 메시지에는 from 이 붙는다.
+ * 근무 중(호스트 목록·pid 기록)이 아닌 세션이면 대기 중 메시지를 뺀다 (대기열은 프로세스와 함께 사라졌다)
+ */
 app.get('/api/sessions/:id/messages', async (req, res) => {
-  const jsonl = await findTranscript(req.params.id)
+  const sessionId = req.params.id
+  const jsonl = await findTranscript(sessionId)
   if (!jsonl) {
     res.json([])
     return
   }
-  const messages = parseMessages(jsonl)
+  let messages = parseMessages(jsonl)
+  // 대기 중 메시지가 있을 때만 근무를 판정한다 (pid 기록 읽기는 호스트 목록에 없을 때만)
+  if (messages.some((m) => m.isQueued)) {
+    const isPresent = host.sessions.some((s) => s.sessionId === sessionId) || (await isLiveSession(sessionId))
+    if (!isPresent) messages = withoutQueued(messages)
+  }
   const log = await readFile(instructionLogPath, 'utf8').catch(() => '')
-  const records = parseInstructionLog(log, req.params.id)
+  const records = parseInstructionLog(log, sessionId)
   if (records.length === 0) {
     res.json(messages)
     return

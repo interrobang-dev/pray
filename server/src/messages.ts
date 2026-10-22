@@ -248,6 +248,14 @@ export function parseMessages(jsonl: string): ChatMessage[] {
   return messages
 }
 
+/**
+ * isQueued 메시지를 뺀다. 근무 중이 아닌(휴식·퇴근) 세션용: 대기열은 claude 프로세스 메모리에만 있어 프로세스와 함께 사라졌다.
+ * cost-state 로 비운 뒤에도 끝나는 프로세스가 알림을 enqueue 하거나, 강제 종료로 cost-state 가 없으면 jsonl 에는 대기 중으로 남는다
+ */
+export function withoutQueued(messages: ChatMessage[]): ChatMessage[] {
+  return messages.filter((message) => !message.isQueued)
+}
+
 /** 아직 대기 중인 사람 쪽 글. raw 는 jsonl content 그대로(↑ 로 꺼내면 입력칸에 들어가는 글), text 는 화면 글(붙여넣기를 푼 것) */
 export interface QueuedPrompt {
   raw: string
