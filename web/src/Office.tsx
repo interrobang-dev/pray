@@ -1131,7 +1131,8 @@ export function Office(props: Props) {
                 // 그려지는 영역이 맵 왼쪽·위 끝을 넘지 않게 (그래서 안의 팀 앵커도 0 이상)
                 minDelta: { x: -area.x, y: -area.y },
                 containers: [parts.container, ...[...teamIds].flatMap((id) => islandViews.get(id) ?? []), ...deskViewsOf(teamIds)],
-                drop: (delta) => latest.current.onMoveGroup(area.group.id, { x: area.group.x + delta.x, y: area.group.y + delta.y }),
+                // 밀려 그려졌으면 그려진 자리에서 옮긴 곳을 저장한다
+                drop: (delta) => latest.current.onMoveGroup(area.group.id, { x: area.origin.x + delta.x, y: area.origin.y + delta.y }),
               })
             })
             world.addChild(parts.container)
@@ -1147,7 +1148,8 @@ export function Office(props: Props) {
                 // 섬 둘레 그룹 벽 여백까지 맵 안에 남게
                 minDelta: { x: Math.min(0, GROUP_MARGIN - island.x), y: Math.min(0, GROUP_MARGIN - island.y) },
                 containers: [parts.container, ...deskViewsOf(new Set([team.id]))],
-                drop: (delta) => latest.current.onMoveTeam(team.id, dropIsland(layout, team, { x: team.x + delta.x, y: team.y + delta.y })),
+                drop: (delta) =>
+                  latest.current.onMoveTeam(team.id, dropIsland(layout, team, { x: island.anchor.x + delta.x, y: island.anchor.y + delta.y })),
               })
             })
             world.addChild(parts.container)

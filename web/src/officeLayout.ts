@@ -39,15 +39,19 @@ export interface PartZone extends Rect {
   part: Part
 }
 
-/** 팀 섬 경계 */
+/** 팀 섬 경계 (그려지는 자리. 밀렸으면 저장된 앵커보다 오른쪽) */
 export interface Island extends Rect {
   team: Team
   zones: PartZone[]
+  /** 그려지는 첫 책상 자리 = 밀린 만큼 옮긴 앵커 (밀리지 않았으면 team.x,y) */
+  anchor: Point
 }
 
-/** 그려지는 그룹 영역: 저장된 위치의 최소 크기 + 안의 섬들 */
+/** 그려지는 그룹 영역: 그려지는 위치의 최소 크기 + 안의 섬들 */
 export interface GroupArea extends Rect {
   group: Group
+  /** 그려지는 그룹 위치 = 밀린 만큼 옮긴 group.x,y */
+  origin: Point
 }
 
 export interface OfficeLayout {
@@ -121,13 +125,44 @@ function placeTeam(team: Team, members: Session[], seats: Map<string, Point>): I
     ...(desks.length ? desks : [{ x: team.x, y: team.y }]).map((p) => ({ ...p, w: DESK_TILES_W, h: DESK_TILES_H })),
     ...zones.map((z) => ({ ...z, y: z.y - 1, h: z.h + 1 })),
   ]
-  return { team, zones, ...inflate(boundingBox(occupied), ISLAND_PADDING) }
+  return { team, zones, anchor: { x: team.x, y: team.y }, ...inflate(boundingBox(occupied), ISLAND_PADDING) }
 }
 
-/** 저장된 위치의 최소 크기 영역에 그 그룹 섬들(+ 벽 여백)을 더한 경계 */
-function groupAreaOf(group: Group, islands: Island[]): GroupArea {
+/** origin 위치의 최소 크기 영역에 그 그룹 섬들(+ 벽 여백)을 더한 경계 */
+function groupAreaOf(group: Group, origin: Point, islands: Island[]): GroupArea {
   const own = islands.filter((i) => i.team.groupId === group.id).map((i) => inflate(i, GROUP_MARGIN))
-  return { group, ...boundingBox([{ x: group.x, y: group.y, ...MIN_GROUP }, ...own]) }
+  return { group, origin, ...boundingBox([{ ...origin, ...MIN_GROUP }, ...own]) }
+}
+
+function shiftIsland(island: Island, dx: number): Island {
+  return {
+    ...island,
+    x: island.x + dx,
+    anchor: { x: island.anchor.x + dx, y: island.anchor.y },
+    zones: island.zones.map((zone) => ({ ...zone, x: zone.x + dx })),
+  }
+}
+
+/**
+ * 그릴 때만 미는 규칙 (저장된 좌표는 그대로). 왼쪽(x 작은 것)부터, 같으면 위(y 작은 것)부터, 그것도 같으면 받은 순서로 자리를 정하고,
+ * 이미 자리를 정한 것과 겹치거나 gap 보다 가까우면 그것의 오른쪽 끝 + gap 으로 옮겨 다시 본다 (연쇄). 오른쪽으로만 민다.
+ * 반환은 받은 순서 그대로이고 각각 오른쪽으로 민 칸 수
+ */
+export function pushRight(rects: Rect[], gap: number): number[] {
+  const order = rects.map((_, index) => index).sort((a, b) => rects[a].x - rects[b].x || rects[a].y - rects[b].y || a - b)
+  const settled: Rect[] = []
+  const shifts = rects.map(() => 0)
+  for (const index of order) {
+    const rect = { ...rects[index] }
+    for (;;) {
+      const blocker = settled.find((s) => overlaps(inflate(s, gap), rect))
+      if (!blocker) break
+      rect.x = blocker.x + blocker.w + gap
+    }
+    shifts[index] = rect.x - rects[index].x
+    settled.push(rect)
+  }
+  return shifts
 }
 
 export function layoutOffice(office: Office, sessions: Session[]): OfficeLayout {
@@ -141,7 +176,39 @@ export function layoutOffice(office: Office, sessions: Session[]): OfficeLayout 
       seats,
     ),
   )
-  const groupAreas = office.groups.map((group) => groupAreaOf(group, islands))
+  // 인원이 늘어 커진 섬이 이웃과 겹치면 그릴 때만 오른쪽으로 민다: 같은 그룹 섬끼리(그룹이 지워진 팀끼리도) → 그 결과 넓어진 그룹끼리
+  const groupIds = new Set(office.groups.map((g) => g.id))
+  for (const groupId of [...groupIds, null]) {
+    const members = islands.flatMap((island, index) =>
+      (groupId === null ? !groupIds.has(island.team.groupId) : island.team.groupId === groupId) ? [index] : [],
+    )
+    const shifts = pushRight(
+      members.map((index) => islands[index]),
+      GAP,
+    )
+    members.forEach((index, i) => {
+      islands[index] = shiftIsland(islands[index], shifts[i])
+    })
+  }
+  const unpushedAreas = office.groups.map((group) => groupAreaOf(group, { x: group.x, y: group.y }, islands))
+  const groupShifts = pushRight(unpushedAreas, GAP)
+  const groupAreas = office.groups.map((group, index) => {
+    const dx = groupShifts[index]
+    if (dx) {
+      islands.forEach((island, i) => {
+        if (island.team.groupId === group.id) islands[i] = shiftIsland(island, dx)
+      })
+    }
+    return { ...unpushedAreas[index], x: unpushedAreas[index].x + dx, origin: { x: group.x + dx, y: group.y } }
+  })
+  for (const island of islands) {
+    const dx = island.anchor.x - island.team.x
+    if (!dx) continue
+    for (const session of seated) {
+      const seat = session.teamId === island.team.id ? seats.get(session.id) : undefined
+      if (seat) seats.set(session.id, { x: seat.x + dx, y: seat.y })
+    }
+  }
   // 그룹이 지워진 팀의 섬도 로비가 가리지 않게 같이 본다
   const placed: Rect[] = [...groupAreas, ...islands]
   const lobbySessions = seated.filter((s) => !s.teamId)
@@ -202,27 +269,31 @@ export function spotForNewTeam(layout: OfficeLayout, groupId: string): Point | n
     ...layout.groupAreas.filter((a) => a !== area).map((a) => inflate(a, GROUP_MARGIN + GAP)),
   ]
   const spot = findFreeSpot(NEW_ISLAND, origin, obstacles, origin)
-  return { x: spot.x + ISLAND_PADDING, y: spot.y + ISLAND_PADDING }
+  // 저장하는 앵커는 그룹이 밀리기 전 좌표 (그릴 때 그룹과 같이 다시 밀린다)
+  return { x: spot.x + ISLAND_PADDING - (area.origin.x - area.group.x), y: spot.y + ISLAND_PADDING }
 }
 
 /**
- * 끌어 놓은 섬의 새 자리. 그룹은 놓은 앵커가 든 그룹(그 섬을 뺀 그룹 영역 기준, 없으면 원래 그룹)이고,
- * 다른 섬과 겹치거나 GAP 보다 가까우면 놓은 자리에서 가장 가까운 빈 자리로 붙인다
+ * 끌어 놓은 섬의 새 자리. anchor 는 화면에 그려진(밀린) 좌표다. 그룹은 놓은 앵커가 든 그룹(그 섬을 뺀 그룹 영역 기준, 없으면 원래 그룹)이고,
+ * 다른 섬(그려진 자리)과 겹치거나 GAP 보다 가까우면 놓은 자리에서 가장 가까운 빈 자리로 붙인다
  */
 export function dropIsland(layout: OfficeLayout, team: Team, anchor: Point): { groupId: string; x: number; y: number } {
   const island = layout.islands.find((i) => i.team.id === team.id)
   const others = layout.islands.filter((i) => i.team.id !== team.id)
   const target = layout.groupAreas
-    .map((a) => groupAreaOf(a.group, others))
+    .map((a) => groupAreaOf(a.group, a.origin, others))
     .find((a) => anchor.x >= a.x && anchor.x < a.x + a.w && anchor.y >= a.y && anchor.y < a.y + a.h)
   const groupId = target?.group.id ?? team.groupId
-  if (!island) return { groupId, ...anchor }
-  const offset = { x: island.x - team.x, y: island.y - team.y }
+  // 저장하는 앵커는 그 그룹이 밀리기 전 좌표 (그릴 때 그룹과 같이 다시 밀린다). 서버는 음수를 받지 않는다
+  const groupArea = layout.groupAreas.find((a) => a.group.id === groupId)
+  const groupShift = groupArea ? groupArea.origin.x - groupArea.group.x : 0
+  if (!island) return { groupId, x: Math.max(0, anchor.x - groupShift), y: anchor.y }
+  const offset = { x: island.x - island.anchor.x, y: island.y - island.anchor.y }
   const spot = findFreeSpot(
     island,
     { x: anchor.x + offset.x, y: anchor.y + offset.y },
     others.map((i) => inflate(i, GAP)),
     { x: GROUP_MARGIN, y: GROUP_MARGIN },
   )
-  return { groupId, x: spot.x - offset.x, y: spot.y - offset.y }
+  return { groupId, x: Math.max(0, spot.x - offset.x - groupShift), y: spot.y - offset.y }
 }
