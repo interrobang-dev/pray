@@ -35,6 +35,18 @@ const EMPTY_OFFICE: OfficeData = { groups: [], teams: [] }
 /** 이 폭 이하는 폰 화면: 한 열(목록 ↔ 패널)이고 사무실을 마운트하지 않는다. style.css 의 @media 와 같은 값 */
 const NARROW_QUERY = '(max-width: 768px)'
 
+/** 사무실 숨기기 여부를 남기는 localStorage 키 (이 브라우저만) */
+const OFFICE_HIDDEN_KEY = 'jk-corp.isOfficeHidden'
+
+/** 저장된 사무실 숨기기 여부. 읽지 못하면(저장소가 막힌 브라우저 등) 보이기 */
+function readIsOfficeHidden(): boolean {
+  try {
+    return localStorage.getItem(OFFICE_HIDDEN_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
 /** 세션 API 가 그 폴더를 ~/.claude.json 에 신뢰로 기록하지 못했을 때 (isTrustFailed) */
 const SESSION_TRUST_FAILED_MESSAGE =
   '신뢰 표시를 남기지 못했습니다. 이 폴더에서 처음 뜨는 세션이면 터미널 탭에서 신뢰를 직접 허용해야 합니다 (기본 선택 "No, exit" 를 그대로 두면 세션이 꺼집니다).'
@@ -193,6 +205,10 @@ export function App() {
   const [reorderDrag, setReorderDrag] = useState<{ scope: ReorderScope; id: string; dropIndex: number | null } | null>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const isNarrow = useMediaQuery(NARROW_QUERY)
+  /** 헤더 버튼으로 사무실을 숨겼는지 (localStorage). 폰 폭은 원래 사무실이 없어 이 값과 무관하다 */
+  const [isOfficeHidden, setIsOfficeHidden] = useState(readIsOfficeHidden)
+  /** 데스크톱에서 사무실을 숨긴 화면: 패널이 목록 오른쪽 폭을 다 쓰고, 세션을 안 골랐으면 그 자리에 안내 */
+  const isOfficeHiddenLayout = !isNarrow && isOfficeHidden
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000)
@@ -322,6 +338,16 @@ export function App() {
     if (!confirm('호스트를 재시작하면 웹 세션이 모두 끊깁니다. 다시 뜰 때 --resume 으로 복구됩니다. 재시작할까요?')) return
     const response = await postJson('/api/host/restart', 'POST', {})
     if (!response.ok) alert((await response.json()).message ?? '호스트 재시작 실패')
+  }
+
+  function toggleOffice() {
+    const isHidden = !isOfficeHidden
+    setIsOfficeHidden(isHidden)
+    try {
+      localStorage.setItem(OFFICE_HIDDEN_KEY, String(isHidden))
+    } catch {
+      // 저장하지 못하면 이 화면에서만 바뀐다
+    }
   }
 
   async function renameSession(event: FormEvent<HTMLFormElement>) {
@@ -718,7 +744,7 @@ export function App() {
   const offDutySessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'off')
 
   return (
-    <main className={selected ? 'layout with-panel' : 'layout'}>
+    <main className={`layout${selected ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}`}>
       <aside>
         <header>
           <h1>jk-corp</h1>
@@ -727,6 +753,17 @@ export function App() {
             className={snapshot.isHostReachable ? 'dot on' : 'dot'}
             title={snapshot.isHostReachable ? '세션 호스트 연결됨' : '세션 호스트 끊김'}
           />
+          {/* 폰 폭에는 원래 사무실이 없다 */}
+          {!isNarrow && (
+            <button
+              className="icon"
+              onClick={toggleOffice}
+              title={isOfficeHidden ? '사무실 보이기' : '사무실 숨기기'}
+              aria-label={isOfficeHidden ? '사무실 보이기' : '사무실 숨기기'}
+            >
+              <OfficeToggleIcon isShown={!isOfficeHidden} />
+            </button>
+          )}
           <button className="icon" onClick={restartHost} disabled={!snapshot.isHostReachable} title="호스트 재시작 (웹 세션 끊김)">
             ↻
           </button>
@@ -877,8 +914,9 @@ export function App() {
           </form>
         </Modal>
       )}
-      {/* 폰 폭에서는 PixiJS 를 돌리지 않도록 마운트하지 않는다 (CSS 로 숨기기만 하면 캔버스가 계속 돈다) */}
-      {!isNarrow && (
+      {/* 폰 폭과 사무실을 숨겼을 때는 PixiJS 를 돌리지 않도록 마운트하지 않는다 (CSS 로 숨기기만 하면 캔버스가 계속 돈다) */}
+      {isOfficeHiddenLayout && !selected && <div className="office-empty">왼쪽에서 세션을 고르면 대화가 열립니다</div>}
+      {!isNarrow && !isOfficeHidden && (
         <Office
           office={office}
           sessions={snapshot.sessions}
@@ -1063,5 +1101,21 @@ function MoreMenu({ items }: { items: { label: string; onClick: () => void }[] }
         </div>
       )}
     </span>
+  )
+}
+
+/** 헤더의 사무실 보이기/숨기기 아이콘. 화면 3열 그림이고 가운데(사무실) 칸이 채워져 있으면 보이는 중, 비어 있으면 숨긴 중 (지금 상태를 보인다) */
+function OfficeToggleIcon({ isShown }: { isShown: boolean }) {
+  return (
+    <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+      <rect x="0.5" y="1.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" />
+      <path d="M4.5 1.5v11" stroke="currentColor" />
+      {isShown && (
+        <>
+          <rect x="5" y="2" width="4" height="10" fill="currentColor" opacity="0.5" />
+          <path d="M9.5 1.5v11" stroke="currentColor" />
+        </>
+      )}
+    </svg>
   )
 }

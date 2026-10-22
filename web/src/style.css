@@ -101,6 +101,11 @@ header button.icon:hover:not(:disabled) {
   border-color: var(--line);
   color: var(--text);
 }
+/* 사무실 보이기/숨기기 아이콘 (App.tsx OfficeToggleIcon). 위아래 2px 로 글자 버튼(↻)과 같은 높이 18px */
+header button.icon svg {
+  display: block;
+  margin: 2px 0;
+}
 .toolbar {
   display: flex;
   gap: 6px;
@@ -1723,6 +1728,41 @@ li.group.drop-after::after {
   padding: 1px 6px;
   font-size: 11px;
   color: var(--muted);
+}
+
+/* 데스크톱에서 사무실을 숨긴 화면 (App.tsx isOfficeHiddenLayout. 폰 폭에는 이 클래스가 붙지 않는다).
+   세션을 골랐으면 패널이 목록 오른쪽 폭을 다 쓰고, 안 골랐으면 그 자리에 안내 한 줄 */
+.layout.office-hidden.with-panel {
+  grid-template-columns: 300px minmax(0, 1fr);
+}
+.office-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--muted);
+}
+/* 넓어진 대화 탭: 말풍선 열·버튼 묶음·승인 막대·질문 카드·입력칸·입력칸 자리 안내를 가운데 960px 열로 모은다 (줄이 너무 길어지지 않게).
+   막대 배경·테두리와 대화 스크롤바는 패널 폭 그대로 두려고 max-width 대신 양옆 여백으로 좁힌다. 좁으면 원래 여백 16px.
+   변수 안의 % 는 쓰는 곳에서 풀린다: 여백은 부모(.chat·.messages-pane·.question-card) 폭, 버튼 묶음 left·right 는 .messages-pane 폭 — 모두 대화 폭이다.
+   말풍선 최대 폭(82%)·제안 말풍선 최대 폭(70%)은 이 열 기준이 된다 */
+.layout.office-hidden .chat {
+  --chat-gutter: max(16px, calc((100% - 960px) / 2));
+}
+.layout.office-hidden .messages,
+.layout.office-hidden .approval,
+.layout.office-hidden .question-tabs,
+.layout.office-hidden .question-body,
+.layout.office-hidden .question-actions,
+.layout.office-hidden .composer,
+.layout.office-hidden .off-duty,
+.layout.office-hidden .chat > .hint {
+  padding-left: var(--chat-gutter);
+  padding-right: var(--chat-gutter);
+}
+.layout.office-hidden .pane-buttons {
+  left: var(--chat-gutter);
+  right: var(--chat-gutter);
 }
 
 /* 터치 기기: hover 가 없으니 관리 버튼("+"·"⋯")을 항상 보이고, 손가락으로 누를 수 있게 키운다 */

@@ -604,6 +604,7 @@ export function Office(props: Props) {
     const working = new Set<string>()
     let frame = 0
     let removeWheel = () => {}
+    let disconnectResize = () => {}
 
     void app
       .init({ resizeTo: host, background: COLOR.floor, antialias: false, roundPixels: true, resolution: 1 })
@@ -670,6 +671,12 @@ export function Office(props: Props) {
         }
         host.addEventListener('wheel', onWheel, { passive: false })
         removeWheel = () => host.removeEventListener('wheel', onWheel)
+
+        // resizeTo 는 창 크기가 바뀔 때만 다시 잰다. 패널을 여닫을 때처럼 사무실 칸만 바뀌어도 캔버스가 따라가게
+        // (안 하면 패널이 열린 채 다시 보인 사무실이 580px 캔버스로 남아, 패널을 닫으면 오른쪽이 빈다)
+        const resizeObserver = new ResizeObserver(() => app.resize())
+        resizeObserver.observe(host)
+        disconnectResize = () => resizeObserver.disconnect()
 
         const redraw = () => {
           const { office, sessions, selectedId, onSelect, onEditGroup } = latest.current
@@ -871,6 +878,7 @@ export function Office(props: Props) {
     return () => {
       isDisposed = true
       removeWheel()
+      disconnectResize()
       host.replaceChildren()
       if (appRef.current) {
         appRef.current.destroy(true, { children: true })
