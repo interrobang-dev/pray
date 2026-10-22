@@ -2,11 +2,11 @@ import type { DotCharacter, DotLook } from './dotCharacter'
 import { parseHex, recolorPixels, type RecolorSlot } from './recolor'
 
 /** 인물 아틀라스와 색 바꾸기 마스크 (tools/sprites/mask.py). Office.tsx 의 DOT_SHEET_URL 과 같은 판 */
-const ATLAS_SHEET_URL = '/office/office-v1.json'
-const ATLAS_IMAGE_URL = '/office/office-v1.png'
+const ATLAS_SHEET_URL = '/office/office-v3.json'
+const ATLAS_IMAGE_URL = '/office/office-v3.png'
 /** 머리 그림: 셀(64×128) 안 정사각형. 목록 아바타(22px)는 그 절반, Off Duty 머리는 1/3 (도트 px → 아트 px) */
 export const HEAD_RECT: Rect = { x: 10, y: 10, w: 44, h: 44 }
-const RECOLOR_URL = '/office/office-v1-recolor.json'
+const RECOLOR_URL = '/office/office-v3-recolor.json'
 
 export interface Rect {
   x: number

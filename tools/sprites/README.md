@@ -31,7 +31,7 @@ SPRITE_GEN=<sprite-gen 실행 파일> bash tools/sprites/gen.sh gen --provider c
 
 ## 레시피
 
-`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이), `characters[].rows[]`(`strip`+`count` 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`), `props[]`(시트·격자 칸·폭), `tiles[]`(반복 타일):
+`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이), `characters[]`(`id`·`pool`·`gender` 는 아틀라스 메타로), `characters[].rows[]`(`strip`+`count` 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`, 그 행만 다른 몸 높이 `bodyHeight` — 웅크리게 그려진 행이 커질 때. 파일 이름은 `--source-dir` 기준이라 `../v1/…` 로 앞 판 원본을 쓸 수 있다), `props[]`(시트·격자 칸·폭), `tiles[]`(반복 타일):
 
 | 키 | 뜻 |
 |---|---|
@@ -48,8 +48,8 @@ SPRITE_GEN=<sprite-gen 실행 파일> bash tools/sprites/gen.sh gen --provider c
 ## 인물 색 바꾸기 마스크
 
 ```bash
-python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v1-recolor.json \
-  --atlas web/public/office/office-v1 --preview <미리보기.png>
+python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v3-recolor.json \
+  --atlas web/public/office/office-v3 --preview <미리보기.png>
 ```
 
 아틀라스 옆에 `<레시피 name>.png`(R = 머리·G = 윗옷 가중치)와 `.json`(인물별 기본색)을 쓴다. 아틀라스는 바꾸지 않는다. 인물 그림을 다시 만들었으면 이것도 다시 돌린다.

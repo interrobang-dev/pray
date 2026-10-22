@@ -1,7 +1,7 @@
 """
 인물 색 바꾸기 마스크: 레시피(JSON)대로 아틀라스의 인물 칸마다 머리·윗옷 픽셀을 골라
 마스크 PNG(아틀라스와 같은 크기. R = 머리 가중치, G = 윗옷 가중치, 알파는 늘 255)와 기본색 JSON 을 만든다.
-아틀라스(office-v1.png·json)는 바꾸지 않는다.
+아틀라스(office-v3.png·json)는 바꾸지 않는다.
 
 픽셀 고르기: 인물의 idle 첫 칸에서 레시피의 표본 상자(`sample`) 색을 모으고,
 그 인물의 모든 칸에서 세로 범위(`y`, 셀 좌표) 안이면서 표본 색 중 가장 가까운 것과의 RGB 거리가
@@ -10,8 +10,8 @@
 따로 떨어진 작은 덩어리(10픽셀 미만. 머리색과 같은 눈동자)는 뺀다.
 
 사용:
-  python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v1-recolor.json \
-      --atlas web/public/office/office-v1 [--preview 미리보기.png]
+  python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v3-recolor.json \
+      --atlas web/public/office/office-v3 [--preview 미리보기.png]
 """
 import argparse
 import json

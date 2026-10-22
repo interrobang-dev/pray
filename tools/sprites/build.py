@@ -47,7 +47,8 @@ def build_characters(recipe: dict, source: Path) -> tuple[dict, dict, dict, list
             else:
                 frames = [main_piece(load_keyed(source / name)) for name in row['frames']]
             frames = [frames[i] for i in row.get('use', range(len(frames)))]
-            cells = normalize_row(frames, cell_w, cell_h, spec['bodyHeight'], spec['baseline'])
+            # 행 bodyHeight: 웅크리게 그린 행은 머리~발이 짧아 규격 몸 높이로 맞추면 다른 상태보다 커진다 — 그 행만 더 작은 값으로
+            cells = normalize_row(frames, cell_w, cell_h, row.get('bodyHeight', spec['bodyHeight']), spec['baseline'])
             base = f"char/{character['id']}/{row['state']}"
             for i, cell in enumerate(cells):
                 name = f'{base}/{i}'
@@ -205,7 +206,10 @@ def main() -> None:
             'scale': 1,
             'jkCorp': {
                 'spec': recipe['spec'],
-                'characters': [{'id': c['id'], 'pool': c.get('pool', 'member')} for c in recipe.get('characters', [])],
+                'characters': [
+                    {'id': c['id'], 'pool': c.get('pool', 'member'), **({'gender': c['gender']} if 'gender' in c else {})}
+                    for c in recipe.get('characters', [])
+                ],
                 'animations': {key: {'fps': value['fps'], 'loop': value['loop']} for key, value in animations.items()},
                 'tiles': tile_files,
                 'props': prop_meta,

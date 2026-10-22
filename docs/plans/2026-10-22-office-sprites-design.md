@@ -10,9 +10,9 @@
 |---|---|
 | 0 | 규격·파이프라인 (이 문서, `tools/sprites/`, 임시 에셋 `web/public/office/office-v0.*`) |
 | 1 | 스프라이트 엔진 교체: Office.tsx 에 도트 모드. 설정으로 클래식/도트 전환, TILE 48·world 1배 |
-| 2 | 인물 프리셋 8~10명 × 4상태 + 색 바꾸기. 목록 아바타·Off Duty 머리도 프리셋에서 (v1 인물 9명 × 4상태·세션별 고르기·색 바꾸기. 목록 아바타·Off Duty 머리는 도트일 때 그 인물 idle 첫 칸의 머리 44×44 — 목록은 사무실 그림 설정을 따른다) |
+| 2 | 인물 프리셋 8~10명 × 4상태 + 색 바꾸기. 목록 아바타·Off Duty 머리도 프리셋에서 (v1 인물 9명 × 4상태·세션별 고르기·색 바꾸기. 목록 아바타·Off Duty 머리는 도트일 때 그 인물 idle 첫 칸의 머리 44×44 — 목록은 사무실 그림 설정을 따른다). v3 에서 9명을 더해 18명(리더 4·팀원 14, 남녀 각 9) |
 | 3 | 환경: 바닥·벽·창 4시간대·섬 바닥·Focus Zone·Off Duty 거리·소품 (v2 로 했다. 아래 "환경 (v2)". 퇴근 머리는 아직 클래식 그림) |
-| 4 | 팀장·파트장 캐릭터 편집 (`hq.json` 의 `characters` = 세션 ID → `{ id, hair, top }`). ✎ 이름 모달에서 인물 9명 중 고르기와 머리(기본 + 8색)·윗옷(기본 + 10색) 색 바꾸기까지 했다. 색 바꾸기는 `tools/sprites/mask.py` 마스크(인물마다 표본 상자·세로 범위를 레시피에 적는다 — 위치만으로는 피부·바지가 섞였다) + 밝기 차이를 지키는 HSL 바꾸기 (`web/src/recolor.ts`) |
+| 4 | 팀장·파트장 캐릭터 편집 (`hq.json` 의 `characters` = 세션 ID → `{ id, hair, top }`). ✎ 이름 모달에서 인물(지금 18명) 중 고르기와 머리(기본 + 8색)·윗옷(기본 + 10색) 색 바꾸기까지 했다. 색 바꾸기는 `tools/sprites/mask.py` 마스크(인물마다 표본 상자·세로 범위를 레시피에 적는다 — 위치만으로는 피부·바지가 섞였다) + 밝기 차이를 지키는 HSL 바꾸기 (`web/src/recolor.ts`) |
 | 5 | 다시 꾸미기 (테마·decor) |
 | 6 | 클래식 제거 |
 | 7 (선택) | 글로 새 인물 생성 |
@@ -94,6 +94,36 @@ web/public/office/  빌드 결과. Vite 가 web/dist/office/ 로 복사하고 �
 | afro | member | 여, 둥근 아프로, 짙은 갈색 피부, 주황 줄무늬 |
 
 생성 46회 = 기준 그림 7 + 상태 행 32(새 인물 7 × 4, v0 둘의 idle·doze) + 다시 생성 7(afro raise-hand·doze, ponytail doze, flannel idle, member typing 2번·doze). raise-hand 4번째 칸이 반대 팔인 인물(lead·member·flannel·cardigan·turtleneck)은 `use` 로 뺐다. 색 바꾸기(recolor)는 하지 않았다 — 다시 생성으로 맞췄다.
+
+## 인물 프리셋 추가 (v3)
+
+화면이 읽는 인물·책상·의자 아틀라스는 `office-v3` 다 (레시피 `tools/sprites/recipes/office-v3.json`, 마스크 `recipes/office-v3-recolor.json`). v1 9명은 v1 원본을 그대로(레시피의 `../v1/…` 경로) 다시 묶어 v1 과 칸 픽셀이 같고, 새 9명 원본은 `~/.claude/jk-corp/sprite-src/v3/` (`<인물>-base.png`·`<인물>-<상태>.png`, 묘사·요청·스크립트는 `prompts/`). 책상·의자는 v1 의 `props-sheet.png` 그대로이고 v1 의 책장·화분·벽·바닥은 넣지 않았다 (화면은 v2 것을 쓴다). 인물 메타에 `gender`(`male`·`female`)가 있다 — 레시피 인물의 `gender` 를 build.py 가 그대로 옮긴다.
+
+| id | 풀 | 성별 | 모습 |
+|---|---|---|---|
+| lead | lead | 남 | (v1) |
+| lead-suit | lead | 여 | (v1) |
+| member · hoodie · flannel · ponytail · cardigan · turtleneck · afro | member | 여·남·남·여·남·여·여 | (v1) |
+| lead-vest | lead | 남 | 40대, 옆가르마 짙은 갈색 머리·짧은 수염, 갈색 피부(남아시아), 와인색 니트 조끼 + 흰 셔츠 |
+| lead-blazer | lead | 여 | 40대, 어깨 길이 웨이브 밤색 머리·옆 앞머리, 밝은 피부, 금 목걸이, 자주색 블레이저 + 검은 상의 |
+| denim | member | 남 | 20대, 회색 비니, 황갈색 피부(라틴계), 하늘색 청재킷 + 흰 티, 빨강·흰 운동화 |
+| professor | member | 남 | 60대, 정수리 대머리·옆머리 흰색, 흰 콧수염, 갈색 코듀로이 재킷(팔꿈치 덧댐) + 크림 터틀넥 |
+| headphones | member | 남 | 20대 동아시아, 뾰족한 검은 머리, 목에 건 검은 헤드폰, 보라 맨투맨, 회색 카고 바지 |
+| polo | member | 남 | 30대, 짧은 트위스트 머리·가는 콧수염, 짙은 갈색 피부, 연노랑 폴로, 회색 조거 |
+| hijab | member | 여 | 분홍빛 히잡(머리 안 보임), 밝은 황갈색 피부, 베이지 긴 튜닉, 짙은 갈색 바지 |
+| overalls | member | 여 | 20대, 분홍 픽시컷, 밝은 피부, 검은 데님 멜빵바지 + 흰 긴팔 |
+| braids | member | 여 | 20대, 긴 박스 브레이드, 갈색 피부, 산호색 맨투맨, 연청 청바지 |
+
+생성 45회 = 기준 그림 9 + 상태 행 36. 다시 생성은 없다. typing·doze 는 v1 에서 옆으로 앉은 것을 바로잡은 "front view" 요청(`req-typing-front`·`req-doze-front`)을 처음부터 썼고 옆으로 앉은 행은 나오지 않았다. 색 바꾸기 마스크는 새 9명 모두 만들었다 (팀장만 고르기를 열지만, 마스크에 없는 인물은 목록 머리 그림이 안 나와서다). lead-vest 는 수염도 머리색을 따라간다 (같은 색이라 일부러 둠).
+
+배운 점:
+
+| 문제 | 대응 |
+|---|---|
+| raise-hand 4번째 칸이 반대 팔 (새 9명 중 7명, denim 은 3번째 칸) | 지금까지처럼 `use` 로 빼고 0·1·2·1 로 돈다. 프롬프트의 "Never switch to the other arm" 은 효과가 없다 |
+| 행 하나를 웅크린 자세(짧은 다리·큰 머리)로 그려, 머리~발을 규격 108 에 맞추면 그 상태만 몸이 커지고 든 손이 셀 위에서 잘린다 (professor raise-hand·doze, polo raise-hand) | 레시피 행에 `bodyHeight` 를 더 작게 (98·100·100) 줘서 다른 상태와 같은 크기로 — 그림을 나란히 놓고 맞췄다. 숫자(다리 폭·머리 폭)로 재 보았지만 자세 차이 때문에 들쭉날쭉했다 |
+| 행마다 머리 모양이 조금씩 다르다 (polo typing·raise-hand 는 짧은 곱슬, idle·doze 는 조금 긴 트위스트) | 같은 사람으로 읽혀 그대로 두었다 |
+| 마스크: 짙은 갈색 피부와 짙은 머리·수염 색이 가깝다 (lead-vest·polo 머리에 얼굴이 섞임), 검은 안쪽 옷이 블레이저와 섞임 | 그 인물만 `tolerance` 를 24~30 으로 낮추고 얼굴·안쪽 옷을 `exclude` |
 
 ## 환경 (v2)
 

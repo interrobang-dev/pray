@@ -47,7 +47,7 @@ const DEFAULT_ZOOM_INDEX = 1
 const DOT_SCALE = 3
 const DOT_TILE = 48
 /** 인물·책상·의자 */
-const DOT_SHEET_URL = '/office/office-v1.json'
+const DOT_SHEET_URL = '/office/office-v3.json'
 /** 환경 (바닥·벽·창밖·그룹·섬·Focus Zone·거리·소품) */
 const DOT_ENV_URL = '/office/office-v2.json'
 /** 휠 delta 를 이만큼 모으면 한 단계 (마우스 휠 한 칸 ≈ 100. 트랙패드의 잔 delta 는 모아서) */
@@ -727,7 +727,7 @@ interface DotSheetMeta {
 }
 
 interface DotArt {
-  /** 인물·책상·의자 (office-v1) */
+  /** 인물·책상·의자 (office-v3) */
   sheet: Spritesheet
   meta: DotSheetMeta
   /** 환경 소품 (office-v2) */
