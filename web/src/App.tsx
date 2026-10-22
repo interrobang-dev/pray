@@ -24,6 +24,7 @@ import {
   type Team,
 } from './types'
 import { avatarOf, cssColor } from './avatar'
+import { setThemeChoice, themeChoice, type ThemeChoice } from './theme'
 
 interface Snapshot {
   isHostReachable: boolean
@@ -46,6 +47,10 @@ function readIsOfficeHidden(): boolean {
     return false
   }
 }
+
+/** 헤더 테마 버튼: 누를 때마다 라이트 → 다크 → 시스템 */
+const NEXT_THEME: Record<ThemeChoice, ThemeChoice> = { light: 'dark', dark: 'system', system: 'light' }
+const THEME_LABELS: Record<ThemeChoice, string> = { light: '라이트', dark: '다크', system: '시스템' }
 
 /** 세션 API 가 그 폴더를 ~/.claude.json 에 신뢰로 기록하지 못했을 때 (isTrustFailed) */
 const SESSION_TRUST_FAILED_MESSAGE =
@@ -238,6 +243,7 @@ export function App() {
   const [isOfficeHidden, setIsOfficeHidden] = useState(readIsOfficeHidden)
   /** 데스크톱에서 사무실을 숨긴 화면: 패널이 목록 오른쪽 폭을 다 쓰고, 세션을 안 골랐으면 그 자리에 안내 */
   const isOfficeHiddenLayout = !isNarrow && isOfficeHidden
+  const [theme, setTheme] = useState<ThemeChoice>(themeChoice)
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000)
@@ -437,6 +443,12 @@ export function App() {
     } catch {
       // 저장하지 못하면 이 화면에서만 바뀐다
     }
+  }
+
+  function cycleTheme() {
+    const next = NEXT_THEME[theme]
+    setThemeChoice(next)
+    setTheme(next)
   }
 
   async function renameSession(event: FormEvent<HTMLFormElement>) {
@@ -869,6 +881,9 @@ export function App() {
         <aside>
           <header>
             <h1>jk-corp</h1>
+            <button className="icon" onClick={cycleTheme} title={`테마: ${THEME_LABELS[theme]}`} aria-label={`테마: ${THEME_LABELS[theme]}`}>
+              <ThemeIcon choice={theme} />
+            </button>
             {/* 폰 폭에는 원래 사무실이 없다 */}
             {!isNarrow && (
               <button
@@ -1268,6 +1283,27 @@ function OfficeToggleIcon({ isShown }: { isShown: boolean }) {
         <>
           <rect x="5" y="2" width="4" height="10" fill="currentColor" opacity="0.5" />
           <path d="M9.5 1.5v11" stroke="currentColor" />
+        </>
+      )}
+    </svg>
+  )
+}
+
+/** 헤더의 테마 아이콘. 지금 고른 것을 보인다: 라이트 = 해, 다크 = 달, 시스템 = 모니터 */
+function ThemeIcon({ choice }: { choice: ThemeChoice }) {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+      {choice === 'light' && (
+        <>
+          <circle cx="8" cy="8" r="2.75" />
+          <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" />
+        </>
+      )}
+      {choice === 'dark' && <path d="M14 8.53A6 6 0 1 1 7.47 2a4.67 4.67 0 0 0 6.53 6.53z" />}
+      {choice === 'system' && (
+        <>
+          <rect x="1.5" y="2.5" width="13" height="8.5" rx="1.25" />
+          <path d="M8 11v2.5M5.5 13.5h5" />
         </>
       )}
     </svg>

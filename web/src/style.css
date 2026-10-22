@@ -1,16 +1,93 @@
+/* 화면 테마 (theme.ts): <html data-theme="light|dark">. 아래는 라이트 값이고 다크는 바로 다음 블록이 덮는다.
+   색은 여기 변수로만 쓴다 — 그대로 두는 것: 사무실 캔버스(Office.tsx 의 COLOR, --floor 는 그 바닥색), 터미널 탭(원래 어두움),
+   HTML 미리보기 iframe 바탕(문서는 흰 바탕을 전제), Claude 별(브랜드색), 아바타 머리·피부(avatar.ts) */
 :root {
   color-scheme: light;
   --bg: #f7f7fa;
   --panel: #ffffff;
   --line: #e2e3ea;
+  /* 진한 선: 대기 상태 점·선택지 번호 테두리 */
+  --line-strong: #c9ccd6;
   --text: #2b2f3a;
   --muted: #7a7f8e;
   --green: #3f9c4b;
+  --green-hover: #388c43;
+  --green-active: #317a3a;
   --green-soft: #e3f3e5;
+  /* 내 말풍선 테두리·대기 중 점선 테두리 */
+  --green-line: #cfe7d2;
+  --green-dash: #9fcca6;
+  /* 옅은 초록 바탕 위 초록 글자 (질문 칩·"질문" 라벨) */
+  --green-text: #2f7a39;
+  /* 초록·빨강 채운 버튼의 글자 */
+  --on-accent: #fff;
+  /* 빨강: 글자·테두리 / 채운 버튼 / 점·강조 글자 */
+  --red: #c84a3f;
+  --red-fill: #c84a3f;
+  --red-dot: #d6453d;
+  --red-soft: #fde3e0;
+  --red-line: #f5c4bf;
+  --red-border: #e8b4ae;
+  --error: #b23b3b;
+  --yellow: #e0a63a;
+  /* 점프로 찾아 간 줄의 테두리 */
+  --highlight: #e8b53a;
+  --blue-dot: #3b82d6;
+  --link: #2f6fd0;
+  /* 팀장·파트장 지시 말풍선·지시/보고 한 줄·돌아가기 */
+  --relay-bg: #eef1fb;
+  --relay-line: #d3daf2;
+  --relay-text: #5a68a6;
+  /* 배지·모델 칩 */
+  --chip-bg: #eceef3;
+  /* 글 안 코드·도구 결과·알림 원문 / 코드 블록·표 머리 */
+  --code-bg: #f1f2f6;
+  --pre-bg: #f6f8fa;
+  --avatar-bg: #dcdde6;
+  /* 목록 아바타의 팀장·파트장 테두리 */
+  --gold: #d9a63a;
+  --silver: #7d8696;
+  --overlay: rgba(43, 47, 58, 0.35);
+  /* 사무실 바닥 (캔버스가 그리기 전 바탕). 캔버스 색과 같아야 해서 다크에서도 그대로 */
   --floor: #dcdde6;
   font-family: system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   font-size: 14px;
   color: var(--text);
+}
+/* 다크. 상태 색은 어두운 바탕(--panel·--bg)에서 글자 명암비 4.5 이상이 되게 밝혔다 (초록은 라이트와 같아도 4.7).
+   채운 버튼(초록·빨강 + 흰 글자)은 라이트와 같은 색 */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #16181d;
+  --panel: #1f2228;
+  --line: #343844;
+  --line-strong: #565c69;
+  --text: #e3e5ea;
+  --muted: #9aa0ad;
+  --green-hover: #47a854;
+  --green-active: #368a41;
+  --green-soft: #1d3322;
+  --green-line: #2c5233;
+  --green-dash: #3f7a4a;
+  --green-text: #7cc987;
+  --red: #ef7b72;
+  --red-dot: #ee6b61;
+  --red-soft: #3b2224;
+  --red-line: #6a3532;
+  --red-border: #7a3f3a;
+  --error: #ef7b72;
+  --yellow: #e3b341;
+  --blue-dot: #4c93e6;
+  --link: #6ea8ff;
+  --relay-bg: #222a40;
+  --relay-line: #38446b;
+  --relay-text: #9fb0f0;
+  --chip-bg: #2c3039;
+  --code-bg: #2a2e37;
+  --pre-bg: #191c22;
+  --avatar-bg: #343844;
+  --silver: #a9b0bd;
+  --overlay: rgba(0, 0, 0, 0.55);
 }
 html,
 body,
@@ -90,7 +167,7 @@ h1 {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #c9ccd6;
+  background: var(--line-strong);
 }
 .dot.on {
   background: var(--green);
@@ -151,13 +228,13 @@ header button.icon svg {
 }
 .create button.primary {
   background: var(--green);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--green);
 }
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(43, 47, 58, 0.35);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -205,7 +282,7 @@ header button.icon svg {
 }
 .segmented button.on {
   background: var(--green);
-  color: #fff;
+  color: var(--on-accent);
 }
 .segmented button:disabled {
   opacity: 0.45;
@@ -451,10 +528,10 @@ li.group.drop-after::after {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #c9ccd6;
+  background: var(--line-strong);
 }
 .status-dot.working {
-  background: #3b82d6;
+  background: var(--blue-dot);
   animation: dot-breathe 1.6s ease-in-out infinite;
 }
 /* 작업 중 점의 숨쉬기. opacity 만 바꿔 줄 높이가 흔들리지 않는다 */
@@ -467,7 +544,7 @@ li.group.drop-after::after {
   background: var(--green);
 }
 .status-dot.needs-approval {
-  background: #d6453d;
+  background: var(--red-dot);
 }
 .session .title {
   grid-column: 3;
@@ -505,7 +582,7 @@ li.group.drop-after::after {
   color: var(--muted);
 }
 .off-duty-reason.error {
-  color: #c84a3f;
+  color: var(--red);
 }
 .session .cwd {
   grid-column: 3 / -1;
@@ -516,7 +593,7 @@ li.group.drop-after::after {
   height: 22px;
   border-radius: 6px;
   image-rendering: pixelated;
-  background: var(--floor);
+  background: var(--avatar-bg);
   position: relative;
   overflow: hidden;
 }
@@ -542,11 +619,11 @@ li.group.drop-after::after {
 }
 /* 팀장 금색·파트장 은색 테두리 (사무실 명패·이름표 밑줄과 같은 계열). 안쪽 그림자라 아바타 크기·줄 높이가 그대로이고 얼굴(안쪽 5px부터)과 겹치지 않는다 */
 .avatar.lead {
-  box-shadow: inset 0 0 0 2px #d9a63a;
+  box-shadow: inset 0 0 0 2px var(--gold);
 }
-/* 은색은 사무실 것(#a9b0bd)보다 진하게: 그대로면 아바타 바탕(--floor)과 거의 같은 밝기라 안 보인다 */
+/* 라이트 은색은 사무실 것(#a9b0bd)보다 진하게: 그대로면 아바타 바탕(--avatar-bg)과 거의 같은 밝기라 안 보인다. 다크는 바탕이 어두워 사무실 은색 그대로 */
 .avatar.part-lead {
-  box-shadow: inset 0 0 0 2px #7d8696;
+  box-shadow: inset 0 0 0 2px var(--silver);
 }
 .kind {
   font-size: 10px;
@@ -573,12 +650,12 @@ li.group.drop-after::after {
   padding: 1px 8px;
   border-radius: 8px;
   font-size: 11px;
-  background: #eceef3;
+  background: var(--chip-bg);
   color: var(--muted);
 }
 .badge.needs-approval {
-  background: #fde3e0;
-  color: #c84a3f;
+  background: var(--red-soft);
+  color: var(--red);
 }
 .office {
   min-width: 0;
@@ -614,7 +691,7 @@ li.group.drop-after::after {
   max-width: 160px;
   padding: 1px 8px;
   border-radius: 8px;
-  background: #eceef3;
+  background: var(--chip-bg);
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
@@ -705,7 +782,7 @@ li.group.drop-after::after {
 .msg.user {
   align-self: flex-end;
   background: var(--green-soft);
-  border-color: #cfe7d2;
+  border-color: var(--green-line);
 }
 .msg.system {
   align-self: center;
@@ -734,12 +811,12 @@ li.group.drop-after::after {
   text-overflow: ellipsis;
 }
 .msg.notice.failed summary {
-  color: #c84a3f;
+  color: var(--red);
 }
 .msg.notice pre {
   max-height: 240px;
   overflow: auto;
-  background: #f1f2f6;
+  background: var(--code-bg);
   padding: 6px;
   margin: 4px 0;
   border-radius: 6px;
@@ -800,14 +877,14 @@ li.group.drop-after::after {
 }
 /* 팀원 대화의 팀장·파트장 지시 (Chat.tsx). 사람 말풍선(초록)·claude 응답(흰색)과 다른 색. 위에 "<팀장> 지시" 라벨 */
 .msg.relay {
-  background: #eef1fb;
-  border-color: #d3daf2;
+  background: var(--relay-bg);
+  border-color: var(--relay-line);
 }
 .relay-label {
   margin-bottom: 4px;
   font-size: 11px;
   font-weight: 600;
-  color: #5a68a6;
+  color: var(--relay-text);
 }
 /* 팀장 대화의 지시·보고 한 줄 (Chat.tsx). 알림 한 줄처럼 가운데 작은 글자인데 지시 말풍선의 파랑. 내용은 툴팁(앞부분)만이고 누르면 그 팀원 대화의 그 메시지로 간다.
    overflow: hidden 인 flex 항목이라 flex-shrink: 0 이 없으면 대화가 길 때 납작하게 줄어든다 */
@@ -816,17 +893,17 @@ li.group.drop-after::after {
   align-self: center;
   max-width: 95%;
   padding: 1px 10px;
-  border-color: #d3daf2;
+  border-color: var(--relay-line);
   border-radius: 10px;
-  background: #eef1fb;
+  background: var(--relay-bg);
   font-size: 11px;
-  color: #5a68a6;
+  color: var(--relay-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .relay-line:hover:not(:disabled) {
-  border-color: #5a68a6;
+  border-color: var(--relay-text);
 }
 /* 점프로 찾아 간 줄 (Chat.tsx). 노란 테두리가 2초(Chat.tsx JUMP_HIGHLIGHT_MS) 동안 옅어진다. 움직임을 줄이면 2초 동안 그대로 있다가 사라진다.
    outline 이라 말풍선 크기·그림자가 그대로다 */
@@ -838,7 +915,7 @@ li.group.drop-after::after {
 @keyframes jump-flash {
   0%,
   40% {
-    outline-color: #e8b53a;
+    outline-color: var(--highlight);
   }
   100% {
     outline-color: transparent;
@@ -847,26 +924,26 @@ li.group.drop-after::after {
 @media (prefers-reduced-motion: reduce) {
   .jump-highlight {
     animation: none;
-    outline-color: #e8b53a;
+    outline-color: var(--highlight);
   }
 }
 /* 점프로 연 세션 패널의 "← <팀장> 대화로" (App.tsx). 헤더 바로 아래 한 줄, 지시 한 줄과 같은 파랑 */
 .jump-back {
   padding: 6px 12px;
   border-bottom: 1px solid var(--line);
-  background: #eef1fb;
+  background: var(--relay-bg);
 }
 .jump-back button {
   max-width: 100%;
-  border-color: #d3daf2;
+  border-color: var(--relay-line);
   font-size: 12px;
-  color: #5a68a6;
+  color: var(--relay-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .jump-back button:hover:not(:disabled) {
-  border-color: #5a68a6;
+  border-color: var(--relay-text);
 }
 /* 보냈지만 아직 대화 기록에 안 보인 내 말 (Chat.tsx). 흐리게 "보내는 중", 실패하면 진하게 빨간 테두리 + 닫기 */
 .msg.pending {
@@ -874,13 +951,13 @@ li.group.drop-after::after {
 }
 .msg.pending.failed {
   opacity: 1;
-  border-color: #e8b4ae;
+  border-color: var(--red-border);
 }
 /* claude 가 작업 중이라 아직 받아들여지지 않은 내 말 (서버 isQueued). "보내는 중" 보다 덜 흐리고 점선 테두리 */
 .msg.queued {
   opacity: 0.75;
   border-style: dashed;
-  border-color: #9fcca6;
+  border-color: var(--green-dash);
 }
 .pending-label,
 .queued-label {
@@ -893,7 +970,7 @@ li.group.drop-after::after {
   color: var(--muted);
 }
 .msg.pending.failed .pending-label {
-  color: #c84a3f;
+  color: var(--red);
 }
 .pending-dismiss {
   padding: 0 4px;
@@ -1123,7 +1200,7 @@ li.group.drop-after::after {
 .files-action.primary {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  color: var(--on-accent);
 }
 .files-preview-body {
   flex: 1;
@@ -1136,7 +1213,7 @@ li.group.drop-after::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: repeating-conic-gradient(#f1f2f6 0 25%, #fff 0 50%) 0 0 / 16px 16px;
+  background: repeating-conic-gradient(var(--code-bg) 0 25%, var(--panel) 0 50%) 0 0 / 16px 16px;
 }
 .files-preview-body img,
 .files-preview-body video {
@@ -1150,6 +1227,7 @@ li.group.drop-after::after {
   padding: 0;
   overflow: hidden;
 }
+/* HTML 문서는 흰 바탕을 전제하므로 다크에서도 흰색 */
 .files-preview-body iframe {
   flex: 1;
   border: 0;
@@ -1219,10 +1297,10 @@ li.group.drop-after::after {
   padding: 4px 10px;
   border-radius: 10px;
   font-size: 12px;
-  color: #c84a3f;
+  color: var(--red);
 }
 .interrupt:hover:not(:disabled) {
-  border-color: #c84a3f;
+  border-color: var(--red);
 }
 @media (prefers-reduced-motion: reduce) {
   .typing-dots span {
@@ -1306,7 +1384,7 @@ li.group.drop-after::after {
   border-top: 1px solid var(--line);
 }
 .markdown a {
-  color: #2f6fd0;
+  color: var(--link);
 }
 .markdown code {
   font-size: 12px;
@@ -1314,7 +1392,7 @@ li.group.drop-after::after {
 .markdown :not(pre) > code {
   padding: 1px 4px;
   border-radius: 4px;
-  background: #f1f2f6;
+  background: var(--code-bg);
 }
 /* 긴 줄은 말풍선 안에서만 가로 스크롤 */
 .markdown pre {
@@ -1322,7 +1400,7 @@ li.group.drop-after::after {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #f6f8fa;
+  background: var(--pre-bg);
   line-height: 1.45;
 }
 /* highlight.js 테마의 pre code 모양(배경·여백·code 자체 스크롤) 대신 위 pre 모양을 쓴다 (언어 없는 블록과 같게).
@@ -1332,6 +1410,77 @@ li.group.drop-after::after {
   overflow-x: visible;
   padding: 0;
   background: transparent;
+}
+/* 다크 코드 강조: Markdown.tsx 가 불러오는 github 테마와 같은 선택자에 github-dark 색(highlight.js 11 styles/github-dark.css 그대로)을 덮는다.
+   두 테마 CSS 를 다 불러오면 나중 것이 늘 이겨서 data-theme 로 가를 수 없다 */
+:root[data-theme='dark'] .hljs {
+  color: #c9d1d9;
+}
+:root[data-theme='dark'] .hljs-doctag,
+:root[data-theme='dark'] .hljs-keyword,
+:root[data-theme='dark'] .hljs-meta .hljs-keyword,
+:root[data-theme='dark'] .hljs-template-tag,
+:root[data-theme='dark'] .hljs-template-variable,
+:root[data-theme='dark'] .hljs-type,
+:root[data-theme='dark'] .hljs-variable.language_ {
+  color: #ff7b72;
+}
+:root[data-theme='dark'] .hljs-title,
+:root[data-theme='dark'] .hljs-title.class_,
+:root[data-theme='dark'] .hljs-title.class_.inherited__,
+:root[data-theme='dark'] .hljs-title.function_ {
+  color: #d2a8ff;
+}
+:root[data-theme='dark'] .hljs-attr,
+:root[data-theme='dark'] .hljs-attribute,
+:root[data-theme='dark'] .hljs-literal,
+:root[data-theme='dark'] .hljs-meta,
+:root[data-theme='dark'] .hljs-number,
+:root[data-theme='dark'] .hljs-operator,
+:root[data-theme='dark'] .hljs-variable,
+:root[data-theme='dark'] .hljs-selector-attr,
+:root[data-theme='dark'] .hljs-selector-class,
+:root[data-theme='dark'] .hljs-selector-id {
+  color: #79c0ff;
+}
+:root[data-theme='dark'] .hljs-regexp,
+:root[data-theme='dark'] .hljs-string,
+:root[data-theme='dark'] .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+:root[data-theme='dark'] .hljs-built_in,
+:root[data-theme='dark'] .hljs-symbol {
+  color: #ffa657;
+}
+:root[data-theme='dark'] .hljs-comment,
+:root[data-theme='dark'] .hljs-code,
+:root[data-theme='dark'] .hljs-formula {
+  color: #8b949e;
+}
+:root[data-theme='dark'] .hljs-name,
+:root[data-theme='dark'] .hljs-quote,
+:root[data-theme='dark'] .hljs-selector-tag,
+:root[data-theme='dark'] .hljs-selector-pseudo {
+  color: #7ee787;
+}
+:root[data-theme='dark'] .hljs-subst,
+:root[data-theme='dark'] .hljs-emphasis,
+:root[data-theme='dark'] .hljs-strong {
+  color: #c9d1d9;
+}
+:root[data-theme='dark'] .hljs-section {
+  color: #1f6feb;
+}
+:root[data-theme='dark'] .hljs-bullet {
+  color: #f2cc60;
+}
+:root[data-theme='dark'] .hljs-addition {
+  color: #aff5b4;
+  background-color: #033a16;
+}
+:root[data-theme='dark'] .hljs-deletion {
+  color: #ffdcd7;
+  background-color: #67060c;
 }
 /* 넓은 표도 말풍선 안에서만 가로 스크롤. 칸 안 단어는 쪼개지 않아(말풍선의 anywhere 를 되돌림) 좁게 찌그러지지 않는다 */
 .markdown table {
@@ -1352,7 +1501,7 @@ li.group.drop-after::after {
   word-break: keep-all;
 }
 .markdown th {
-  background: #f6f8fa;
+  background: var(--pre-bg);
   font-weight: 600;
 }
 .msg,
@@ -1377,7 +1526,7 @@ li.group.drop-after::after {
 .tool pre {
   max-height: 240px;
   overflow: auto;
-  background: #f1f2f6;
+  background: var(--code-bg);
   padding: 6px;
   margin: 4px 0;
   border-radius: 6px;
@@ -1393,17 +1542,17 @@ li.group.drop-after::after {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: #fde3e0;
-  border: 1px solid #f5c4bf;
+  background: var(--red-soft);
+  border: 1px solid var(--red-line);
 }
 .approval .yes {
   background: var(--green);
-  color: #fff;
+  color: var(--on-accent);
   border: 0;
 }
 .approval .no {
-  background: #c84a3f;
-  color: #fff;
+  background: var(--red-fill);
+  color: var(--on-accent);
   border: 0;
 }
 /* claude 의 AskUserQuestion 에 답하는 카드 (Chat.tsx). 승인 막대 자리에 뜬다. 길면 가운데(질문·선택지)만 스크롤하고 탭·버튼은 남는다 */
@@ -1463,7 +1612,7 @@ li.group.drop-after::after {
   padding: 1px 8px;
   border-radius: 8px;
   background: var(--green-soft);
-  color: #2f7a39;
+  color: var(--green-text);
   font-weight: 600;
 }
 .question-text {
@@ -1495,7 +1644,7 @@ li.group.drop-after::after {
   width: 20px;
   height: 20px;
   margin-top: 1px;
-  border: 1px solid #c9ccd6;
+  border: 1px solid var(--line-strong);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1509,7 +1658,7 @@ li.group.drop-after::after {
 .question-option.selected .option-key {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  color: var(--on-accent);
 }
 .option-body {
   display: flex;
@@ -1539,7 +1688,7 @@ li.group.drop-after::after {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #f6f8fa;
+  background: var(--pre-bg);
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   font-size: 12px;
   line-height: 1.35;
@@ -1560,7 +1709,7 @@ li.group.drop-after::after {
 }
 .question-actions .primary {
   background: var(--green);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--green);
 }
 .question-error,
@@ -1569,7 +1718,7 @@ li.group.drop-after::after {
   font-size: 12px;
 }
 .question-error {
-  color: #c84a3f;
+  color: var(--red);
 }
 .question-status {
   color: var(--muted);
@@ -1579,7 +1728,7 @@ li.group.drop-after::after {
   margin-bottom: 4px;
   font-size: 11px;
   font-weight: 600;
-  color: #2f7a39;
+  color: var(--green-text);
 }
 .msg.asked.waiting {
   align-self: flex-start;
@@ -1659,7 +1808,7 @@ li.group.drop-after::after {
   align-items: center;
   justify-content: center;
   background: var(--green);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--green);
 }
 /* 종이비행기는 무게가 꼬리(왼쪽)에 있어 오른쪽으로 조금 옮겨야 가운데로 보인다 */
@@ -1667,12 +1816,12 @@ li.group.drop-after::after {
   transform: translateX(1px);
 }
 .composer .send:hover:not(:disabled) {
-  background: #388c43;
-  border-color: #388c43;
+  background: var(--green-hover);
+  border-color: var(--green-hover);
 }
 .composer .send:active:not(:disabled) {
-  background: #317a3a;
-  border-color: #317a3a;
+  background: var(--green-active);
+  border-color: var(--green-active);
 }
 .composer .send:focus-visible {
   outline: 2px solid var(--green);
@@ -1702,13 +1851,13 @@ li.group.drop-after::after {
 }
 .off-duty .primary {
   background: var(--green);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--green);
 }
 .off-duty-error {
   flex-basis: 100%;
   font-size: 12px;
-  color: #c84a3f;
+  color: var(--red);
 }
 /* Claude Code 의 다음 입력 제안 (Chat.tsx). 오른쪽 아래 버튼 묶음의 원 버튼 ✦ + 바로 왼쪽 말풍선 한 줄 (길면 말줄임, 전체는 툴팁).
    둘이 한 버튼이라 어디를 누르든, 빈 입력칸에서 Tab 이든 = 입력칸에 채우기 (보내지 않는다). 말풍선 최대 폭은 대화 폭의 약 70% (+ 원 버튼·간격 48px) */
@@ -1851,12 +2000,12 @@ li.group.drop-after::after {
   padding: 0 5px;
   line-height: 16px;
   font-weight: 600;
-  color: #d6453d;
+  color: var(--red-dot);
   background: transparent;
   border-color: transparent;
 }
 .status-bar .status-approval:hover {
-  background: #fde3e0;
+  background: var(--red-soft);
   border-color: transparent;
 }
 
@@ -1872,7 +2021,7 @@ li.group.drop-after::after {
   margin-right: 4px;
 }
 .usage .error {
-  color: #b23b3b;
+  color: var(--error);
 }
 .usage-limit b {
   color: var(--text);
@@ -1882,10 +2031,10 @@ li.group.drop-after::after {
   margin-right: 4px;
 }
 .usage-limit.warn b {
-  color: #e0a63a;
+  color: var(--yellow);
 }
 .usage-limit.danger b {
-  color: #d6453d;
+  color: var(--red-dot);
 }
 /* 상태 표시줄 22px 안에 들어가게 작게 */
 .usage-toggle,
@@ -1984,16 +2133,16 @@ li.group.drop-after::after {
   color: var(--muted);
 }
 .usage-row.warn .usage-left {
-  color: #e0a63a;
+  color: var(--yellow);
 }
 .usage-row.warn .usage-bar span {
-  background: #e0a63a;
+  background: var(--yellow);
 }
 .usage-row.danger .usage-left {
-  color: #d6453d;
+  color: var(--red-dot);
 }
 .usage-row.danger .usage-bar span {
-  background: #d6453d;
+  background: var(--red-dot);
 }
 /* 구분선 아래 "Claude Account" 와 이메일 ··· 요금제 */
 .usage-account {
@@ -2103,6 +2252,15 @@ li.group.drop-after::after {
   .toolbar button {
     min-height: 40px;
     padding: 0 14px;
+  }
+  /* 헤더 아이콘 버튼(테마): 손가락으로 누르기 쉽게 40×36. 음수 위아래 여백으로 헤더 높이는 그대로 (헤더 위아래 padding 10px 안에 든다) */
+  header button.icon {
+    min-width: 40px;
+    min-height: 36px;
+    margin: -8px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   /* 상태 표시줄은 목록 화면에서만. 세션 패널에서는 입력칸이 화면 맨 아래에 붙어야 한다.
      390px 에 한 줄로 들어가게 간격을 줄이고 "Remaining"·연결 상태 글자를 뺀다 (연결 상태는 점과 재시작 ↻ 만, 뜻은 title).
