@@ -108,7 +108,7 @@ header button.icon:hover:not(:disabled) {
   border-color: var(--line);
   color: var(--text);
 }
-/* 사무실 보이기/숨기기 아이콘 (App.tsx OfficeToggleIcon). 위아래 2px 로 글자 버튼(↻)과 같은 높이 18px */
+/* 사무실 보이기/숨기기 아이콘 (App.tsx OfficeToggleIcon). 위아래 2px 로 높이 18px (header button.icon 의 line-height) */
 header button.icon svg {
   display: block;
   margin: 2px 0;
@@ -1801,6 +1801,13 @@ li.group.drop-after::after {
   width: 7px;
   height: 7px;
 }
+/* 연결 상태 옆 서버·호스트 재시작 ↻. 사용량 ↻ 와 같은 크기로 22px 안에 들어가게 */
+.status-link button {
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted);
+}
 /* 승인 대기 N: 누르면 그 중 첫 세션을 연다. 목록의 승인 대기 점과 같은 빨강 */
 .status-bar .status-approval {
   padding: 0 5px;
@@ -2020,7 +2027,7 @@ li.group.drop-after::after {
     flex-wrap: wrap;
   }
   /* 상태 표시줄은 목록 화면에서만. 세션 패널에서는 입력칸이 화면 맨 아래에 붙어야 한다.
-     390px 에 한 줄로 들어가게 간격을 줄이고 "Remaining"·연결 상태 글자를 뺀다 (연결 상태는 점만, 뜻은 title).
+     390px 에 한 줄로 들어가게 간격을 줄이고 "Remaining"·연결 상태 글자를 뺀다 (연결 상태는 점과 재시작 ↻ 만, 뜻은 title).
      그래도 넘치면(승인 대기가 뜰 때 등) 오른쪽(승인 대기·집계·연결)은 그대로 두고 사용량 끝이 잘린다 */
   .status-bar,
   .status-right {

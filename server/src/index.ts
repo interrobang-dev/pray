@@ -1100,6 +1100,16 @@ app.post('/api/host/restart', (_req, res) => {
   res.json({})
 })
 
+/** 서버가 스스로 종료한다. 트레이 앱이 새 코드로 다시 띄운다 (작업 스케줄러 방식·npm run dev 에서는 다시 뜨지 않음) */
+app.post('/api/server/restart', (_req, res) => {
+  // 0 은 "의도한 중지" 라 트레이가 다시 띄우지 않는다. 응답을 다 보낸 뒤 나간다
+  res.on('finish', () => {
+    console.log('restart 요청 → 종료 코드 2 로 나감 (트레이 앱이 다시 띄움)')
+    process.exit(2)
+  })
+  res.json({})
+})
+
 app.get('/api/office', (_req, res) => {
   res.json(readOffice())
 })

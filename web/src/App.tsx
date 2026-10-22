@@ -412,6 +412,23 @@ export function App() {
     if (!response.ok) alert((await response.json()).message ?? '호스트 재시작 실패')
   }
 
+  async function restartServer() {
+    if (
+      !confirm(
+        '서버를 재시작하면 몇 초 동안 화면이 끊깁니다. 세션은 그대로이고, 상태 표시는 다음 훅부터, 웹에서 받던 질문은 터미널 탭에서 답합니다. 재시작할까요?',
+      )
+    )
+      return
+    try {
+      const response = await postJson('/api/server/restart', 'POST', {})
+      if (response.ok) return
+      const { message } = (await response.json().catch(() => ({}))) as { message?: string }
+      alert(`서버 재시작 실패: ${message ?? `HTTP ${response.status}`}`)
+    } catch {
+      alert('서버 재시작 실패: 네트워크 오류')
+    }
+  }
+
   function toggleOffice() {
     const isHidden = !isOfficeHidden
     setIsOfficeHidden(isHidden)
@@ -863,9 +880,6 @@ export function App() {
                 <OfficeToggleIcon isShown={!isOfficeHidden} />
               </button>
             )}
-            <button className="icon" onClick={restartHost} disabled={!snapshot.isHostReachable} title="호스트 재시작 (웹 세션 끊김)">
-              ↻
-            </button>
           </header>
           <div className="toolbar">
             <button onClick={() => setIsGroupForm(true)}>+ 그룹</button>
@@ -1089,7 +1103,7 @@ export function App() {
           </section>
         )}
       </main>
-      {/* 화면 아래 상태 표시줄: 왼쪽 사용량, 오른쪽 세션 집계·연결 상태 (폰은 목록 화면에서만. style.css) */}
+      {/* 화면 아래 상태 표시줄: 왼쪽 사용량, 오른쪽 세션 집계·연결 상태와 재시작 ↻ (폰은 목록 화면에서만. style.css) */}
       <footer className="status-bar">
         <UsagePanel />
         <span className="status-right">
@@ -1104,10 +1118,16 @@ export function App() {
           <span className="status-link" title={isConnected ? '서버 연결됨' : '서버 끊김'}>
             <span className="status-link-label">서버</span>
             <span className={isConnected ? 'dot on' : 'dot'} />
+            <button onClick={restartServer} disabled={!isConnected} title="서버 재시작 (몇 초 끊김)">
+              ↻
+            </button>
           </span>
           <span className="status-link" title={snapshot.isHostReachable ? '세션 호스트 연결됨' : '세션 호스트 끊김'}>
             <span className="status-link-label">호스트</span>
             <span className={snapshot.isHostReachable ? 'dot on' : 'dot'} />
+            <button onClick={restartHost} disabled={!snapshot.isHostReachable} title="호스트 재시작 (웹 세션 끊김)">
+              ↻
+            </button>
           </span>
         </span>
       </footer>
