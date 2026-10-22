@@ -1,0 +1,9 @@
+{
+ "_note": "sprite-gen prepare --request 에 넘긴다. 사람 묘사는 prepare --description 에 글로 (기준 그림만 붙이면 인물이 바뀐다). 상태 이름은 sprite-gen 이 밑줄을 써서 raise_hand — 레시피의 state 는 raise-hand",
+ "states": {
+  "typing": { "frames": 4, "fps": 8, "loop": true, "action": "seated upright facing the viewer as if on an office chair behind a desk (do not draw the chair, a desk or a keyboard), both upper arms down and forearms reaching forward toward the viewer at waist height, hands typing on an invisible keyboard; left and right hands alternate up and down between frames, eyes looking down at the hands, legs bent at the knees as when seated" },
+  "raise_hand": { "frames": 4, "fps": 6, "loop": true, "action": "seated upright facing the viewer as if on an office chair behind a desk (do not draw the chair or a desk), the RIGHT arm (on the viewer's left) raised straight up high above the head with an open palm to call for attention in EVERY frame, the left forearm resting forward at waist height; the raised hand waves gently left and right between frames, mouth open as if saying 'excuse me', legs bent at the knees as when seated. Never switch to the other arm" },
+  "idle": { "frames": 4, "fps": 4, "loop": true, "action": "seated upright facing the viewer as if on an office chair behind a desk (do not draw the chair or a desk), both forearms resting forward at waist height, relaxed, subtle breathing and one blink, legs bent at the knees as when seated" },
+  "doze": { "frames": 4, "fps": 3, "loop": true, "action": "seated facing the viewer as if on an office chair behind a desk (do not draw the chair or a desk), dozing off: eyes closed, head slowly nodding down and back up, shoulders relaxed, forearms resting forward at waist height, legs bent at the knees as when seated" }
+ }
+}

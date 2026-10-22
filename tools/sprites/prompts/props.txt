@@ -1,0 +1,10 @@
+A pixel art sprite sheet of four separate modern office furniture props for a top-down 3/4 view office game (camera above and in front, looking down at about 45 degrees, like Stardew Valley interiors: you see the top surface and the front face of each object), drawn in the same pixel art style as the attached reference sheet, arranged in a 2 columns x 2 rows grid with wide empty gaps, one prop centered in each cell, all at the same consistent scale:
+{{ITEMS}}
+Chunky low-resolution pixel art with large square pixels, clean 1px dark outline, flat colours with one shade step, limited palette, no anti-aliasing, no blur, no text, no labels, no floor, no cast shadows.
+Perfectly flat pure magenta #FF00FF background across the whole image; do not use magenta in any prop.
+
+예시 {{ITEMS}} (책상은 사람이 뒤에 앉으므로 모니터 방향을 꼭 적는다):
+(1) top-left: a wooden office desk, wider than deep, seen from the front: its wooden top surface is visible from above and its front modesty panel faces the viewer; on the right end of the desktop a computer monitor is turned AWAY from the viewer so we see the plain dark grey BACK of the monitor and its stand, and a small keyboard lies in the middle of the desktop; the space behind the desk (top of the image) is empty because a seated person will be placed there.
+(2) top-right: a dark grey office swivel chair seen from the front, empty, its backrest tall.
+(3) bottom-left: a tall wooden bookshelf with colourful books, seen from the front with a little of its top visible.
+(4) bottom-right: a potted green leafy plant in a white pot.

@@ -1,0 +1,9 @@
+A pixel art tile sheet for a top-down 3/4 view office game, drawn in the same pixel art style as the attached reference sheet, with two separate parts side by side and a wide empty gap between them:
+(1) left: a section of an office back wall seen straight on, exactly 3 tiles wide and 2 tiles tall (square tiles), {{WALL}}
+(2) right: a square patch of office floor, 3 tiles by 3 tiles, {{FLOOR}}, evenly lit, designed to tile seamlessly in both directions.
+Do NOT draw tile boundaries, grid lines or outlines between tiles; the wall and the floor must be continuous surfaces.
+Chunky low-resolution pixel art with large square pixels, flat colours with one shade step, limited palette, no anti-aliasing, no blur, no text, no furniture, no characters, no shadows.
+Perfectly flat pure magenta #FF00FF background around the two parts; do not use magenta in the tiles.
+
+예시 {{WALL}}: light warm-grey painted wall with a darker baseboard strip along the bottom and a thin trim along the top, and one large window in the middle with a white frame and four panes showing a light blue sky and a few small city buildings outside.
+예시 {{FLOOR}}: light oak wooden floor planks running horizontally with subtle plank seams

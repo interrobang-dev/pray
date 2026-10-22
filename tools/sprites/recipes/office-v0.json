@@ -1,0 +1,31 @@
+{
+ "name": "office-v0",
+ "description": "1단계 임시 에셋: 시안(2026-10-22)의 팀장·팀원 typing·raise-hand, 책상·의자·책장·화분, 벽·바닥. 원본은 ~/.claude/jk-corp/sprite-src/v0",
+ "spec": { "tile": 48, "cell": [64, 128], "baseline": 124, "bodyHeight": 108 },
+ "characters": [
+  {
+   "id": "lead",
+   "rows": [
+    { "state": "typing", "strip": "lead-typing.png", "count": 4, "fps": 8 },
+    { "state": "raise-hand", "strip": "lead-raise-hand.png", "count": 4, "use": [0, 1, 2], "sequence": [0, 1, 2, 1], "fps": 6, "_note": "4번째 칸은 반대 팔이라 뺀다" }
+   ]
+  },
+  {
+   "id": "member",
+   "rows": [
+    { "state": "typing", "strip": "member-typing.png", "count": 4, "fps": 8 },
+    { "state": "raise-hand", "strip": "member-raise-hand.png", "count": 4, "use": [0, 1, 2], "sequence": [0, 1, 2, 1], "fps": 6, "_note": "4번째 칸은 반대 팔이라 뺀다" }
+   ]
+  }
+ ],
+ "props": [
+  { "id": "desk", "sheet": "props-sheet.png", "grid": [2, 2], "cell": [0, 0], "width": 96, "meta": { "screen": { "x": 59, "y": 6, "w": 26, "h": 13, "_note": "모니터 화면 안쪽 (스프라이트 좌표). 켜짐 표시를 덧그릴 자리. 다시 만들면 다시 잰다" } } },
+  { "id": "chair", "sheet": "props-sheet.png", "grid": [2, 2], "cell": [1, 0], "width": 54 },
+  { "id": "bookshelf", "sheet": "props-sheet.png", "grid": [2, 2], "cell": [0, 1], "width": 88 },
+  { "id": "plant", "sheet": "props-sheet.png", "grid": [2, 2], "cell": [1, 1], "width": 40 }
+ ],
+ "tiles": [
+  { "id": "wall", "sheet": "room-sheet.png", "crop": [108, 214, 779, 731], "inset": 4, "fillDarkLines": { "keep": [110, 45, 553, 307] }, "tiles": [3, 2] },
+  { "id": "floor", "sheet": "room-sheet.png", "crop": [1070, 214, 1666, 731], "removeGridLines": true, "tiles": [3, 3] }
+ ]
+}
