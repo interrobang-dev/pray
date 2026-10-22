@@ -1,7 +1,19 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import { flushSync } from 'react-dom'
 import { buildChatRows, type ChatRow, type Work } from './chatRows'
-import { FilesButton } from './Files'
+import { FilesButton, formatSize } from './Files'
 import { MarkdownText } from './Markdown'
 import { NEWLINE_KEYS } from './Terminal'
 import type { AskQuestion, ChatMessage, ToolUse } from './types'
@@ -632,6 +644,57 @@ interface PendingMessage {
 /** 확인되지 않은 임시 말풍선을 조용히 없애기까지. `/help` 같은 슬래시 명령은 user 메시지로 안 남을 수 있다 */
 const PENDING_TIMEOUT_MS = 15_000
 
+/** 첨부 한도. 서버 첨부 API(server/src/index.ts MAX_ATTACHMENT_BYTES)와 같다. 넘으면 올리지 않고 칩에 알린다 */
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+
+/** 입력 상자에 붙인 파일. 고르거나 붙여 넣으면 바로 세션 작업 폴더(scratchpad)에 올리고, 보낼 때 그 경로를 글 끝에 붙인다 */
+interface Attachment {
+  id: number
+  file: File
+  /** × 로 빼면 올리기를 멈춘다 */
+  controller: AbortController
+  /** 올라간 곳 (claude 에게 그대로 넘길 Windows 절대 경로). 올리는 중·실패면 null */
+  path: string | null
+  /** 실패 이유 (서버 message 등). 있으면 실패 */
+  error: string | null
+}
+
+/**
+ * 보낼 글: 입력한 글 + 빈 줄 + "첨부 파일:" + 경로 한 줄씩. 글 없이 첨부만이면 목록만.
+ * claude 는 자기 세션 scratchpad 파일을 확인 창 없이 읽으므로 경로만 주면 Read 한다
+ */
+function withAttachmentPaths(text: string, paths: string[]): string {
+  if (paths.length === 0) return text
+  const list = ['첨부 파일:', ...paths].join('\n')
+  return text ? `${text}\n\n${list}` : list
+}
+
+/** 입력 상자 위쪽의 첨부 칩: (그림이면 작은 미리보기) 파일 이름 · 크기, 올리는 중·실패 이유, × 로 빼기 */
+function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRemove: () => void }) {
+  const { file, path, error } = attachment
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  // 미리보기 URL 은 칩이 사라질 때(× · 보냄 · 세션 바꿈) 놓는다
+  useEffect(() => {
+    if (!file.type.startsWith('image/')) return
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+  const stateClass = error ? ' failed' : path ? '' : ' uploading'
+  return (
+    <div className={`attachment${stateClass}`} title={error ? `${file.name}\n${error}` : (path ?? file.name)}>
+      {previewUrl && <img className="attachment-thumb" src={previewUrl} alt="" />}
+      <span className="attachment-name">{file.name}</span>
+      <span className="attachment-status" role={error ? 'alert' : undefined}>
+        {error ?? (path ? formatSize(file.size) : '올리는 중…')}
+      </span>
+      <button type="button" className="attachment-remove" onClick={onRemove} title="빼기" aria-label={`${file.name} 빼기`}>
+        ×
+      </button>
+    </div>
+  )
+}
+
 /** 대기 메시지 취소 결과 (서버 outcome) → 대화 맨 아래 한 줄 */
 const CANCEL_OUTCOME_LABELS: Record<string, string> = {
   cancelled: '취소됨',
@@ -739,6 +802,12 @@ export function Chat({
   const [lineNotice, setLineNotice] = useState<{ rowKey: string; text: string } | null>(null)
   const [draft, setDraft] = useState('')
   const [pendings, setPendings] = useState<PendingMessage[]>([])
+  /** 입력 상자의 첨부 칩. 세션을 바꾸면 비운다 */
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  /** 올리는 중인 첨부가 있으면 보내지 않는다 (경로가 빠진 채 가지 않게) */
+  const isUploading = attachments.some((attachment) => !attachment.path && !attachment.error)
+  /** 다 올라간 첨부. 보낼 때 경로를 글 끝에 붙인다 (실패한 칩은 붙이지 않고 남겨 둔다) */
+  const uploaded = attachments.flatMap((attachment) => (attachment.path ? [{ id: attachment.id, path: attachment.path }] : []))
   /** 질문 중에는 입력칸을 막는다. 키 입력이 터미널의 질문 화면에 들어가면 Enter 가 1번 선택지로 답해 버린다. 쓰던 글은 남긴다 */
   const isAsking = Boolean(question) || pendingTool === ASK_TOOL
   /**
@@ -772,9 +841,11 @@ export function Chat({
   /** 중지 결과·실패 한 줄. INTERRUPT_NOTICE_MS 뒤 사라진다 */
   const [interruptNotice, setInterruptNotice] = useState<string | null>(null)
   const nextPendingIdRef = useRef(1)
+  const nextAttachmentIdRef = useRef(1)
   const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   /** 사용자가 맨 아래를 보고 있는지. 스크롤 때마다 갱신한다 (내용만 길어질 때는 스크롤 이벤트가 없어 직전 값이 남는다 = "갱신 직전에 맨 아래였는지") */
   const isAtBottomRef = useRef(true)
   /** 같은 값을 "맨 아래로" 버튼을 그리는 데 쓴다 */
@@ -869,6 +940,8 @@ export function Chat({
     setIsInterrupting(false)
     setInterruptNotice(null)
     setPendings([])
+    // 앞 세션으로 올리던 것은 그대로 끝나고(그 세션 scratchpad 에 남는다) 결과는 칩이 없어 버려진다
+    setAttachments([])
     setOpenWorkKeys(new Set())
     setHighlight(null)
     setJumpNotice(null)
@@ -1012,9 +1085,11 @@ export function Chat({
 
   async function submit(event?: FormEvent) {
     event?.preventDefault()
-    const text = draft.trim()
-    if (!text || isAsking) return
+    const text = withAttachmentPaths(draft.trim(), uploaded.map((attachment) => attachment.path))
+    if (!text || isAsking || isUploading) return
     setDraft('')
+    const sentIds = new Set(uploaded.map((attachment) => attachment.id))
+    setAttachments((current) => current.filter((attachment) => !sentIds.has(attachment.id)))
     // jsonl 에 남기까지(transcript 갱신 → 대화 전체 다시 받기) 기다리지 않고 내 말풍선을 바로 띄운다
     const pendingId = nextPendingIdRef.current++
     const knownIds = new Set(messages.map((message) => message.id))
@@ -1041,6 +1116,62 @@ export function Chat({
 
   function dismissPending(pendingId: number) {
     setPendings((current) => current.filter((pending) => pending.id !== pendingId))
+  }
+
+  /** 고르거나 붙여 넣은 파일을 칩으로 붙이고 바로 올린다. 20MB 를 넘으면 올리지 않고 칩에 알린다 */
+  function attachFiles(files: File[]) {
+    if (files.length === 0 || isAsking) return
+    const added = files.map(
+      (file): Attachment => ({
+        id: nextAttachmentIdRef.current++,
+        file,
+        controller: new AbortController(),
+        path: null,
+        error: file.size > MAX_ATTACHMENT_BYTES ? '20MB 를 넘어 올리지 않음' : null,
+      }),
+    )
+    setAttachments((current) => [...current, ...added])
+    for (const attachment of added) if (!attachment.error) void uploadAttachment(attachment)
+  }
+
+  /** 세션 작업 폴더에 올린다. 그 사이 칩이 없어졌으면(× · 세션 바꿈) id 로 못 찾아 결과가 버려진다 */
+  async function uploadAttachment(attachment: Attachment) {
+    const settle = (result: Pick<Attachment, 'path' | 'error'>) =>
+      setAttachments((current) => current.map((item) => (item.id === attachment.id ? { ...item, ...result } : item)))
+    const { file } = attachment
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/attachments?name=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+        signal: attachment.controller.signal,
+      })
+      const body = (await response.json().catch(() => ({}))) as { path?: unknown; message?: unknown }
+      if (response.ok && typeof body.path === 'string') settle({ path: body.path, error: null })
+      else settle({ path: null, error: typeof body.message === 'string' ? body.message : `HTTP ${response.status}` })
+    } catch {
+      settle({ path: null, error: '네트워크 오류' })
+    }
+  }
+
+  function removeAttachment(attachment: Attachment) {
+    attachment.controller.abort()
+    setAttachments((current) => current.filter((item) => item.id !== attachment.id))
+  }
+
+  function onFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    attachFiles(Array.from(event.target.files ?? []))
+    // 같은 파일을 다시 고를 수 있게 비운다
+    event.target.value = ''
+    if (!window.matchMedia(TOUCH_QUERY).matches) composerRef.current?.focus()
+  }
+
+  /** 클립보드에 파일·그림만 있으면 첨부로 받는다. 글자가 함께 있으면(엑셀·워드 복사는 글자와 그림을 같이 싣는다) 지금처럼 글자로 붙인다 */
+  function onComposerPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.clipboardData.files)
+    if (files.length === 0 || event.clipboardData.getData('text/plain')) return
+    event.preventDefault()
+    attachFiles(files)
   }
 
   useEffect(() => {
@@ -1324,17 +1455,52 @@ export function Chat({
       )}
       {isWritable ? (
         <form className="composer" onSubmit={submit}>
+          {attachments.length > 0 && (
+            <div className="attachments" aria-label="첨부 파일">
+              {attachments.map((attachment) => (
+                <AttachmentChip key={attachment.id} attachment={attachment} onRemove={() => removeAttachment(attachment)} />
+              ))}
+              {isUploading && <span className="attachments-note">다 올라가야 보낼 수 있습니다</span>}
+            </div>
+          )}
+          <input ref={fileInputRef} type="file" multiple hidden onChange={onFileInputChange} />
+          <button
+            type="button"
+            className="attach"
+            disabled={isAsking}
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="파일 첨부"
+            title="파일 첨부"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path
+                d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
           <textarea
             ref={composerRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
+            onPaste={onComposerPaste}
             placeholder={isAsking ? '위 질문에 먼저 답해 주세요' : '지시를 입력하고 Enter (줄바꿈은 Shift+Enter)'}
             rows={Math.min(Math.max(draft.split('\n').length, 1), 8)}
             disabled={isAsking}
             autoFocus={!window.matchMedia(TOUCH_QUERY).matches}
           />
-          <button type="submit" className="send" disabled={!draft.trim() || isAsking} aria-label="보내기" title="보내기 (Enter)">
+          <button
+            type="submit"
+            className="send"
+            disabled={(!draft.trim() && uploaded.length === 0) || isAsking || isUploading}
+            aria-label="보내기"
+            title={isUploading ? '첨부 파일을 올리는 중이라 보낼 수 없습니다' : '보내기 (Enter)'}
+          >
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
               <path
                 d="M3 3.5 21.5 12 3 20.5 3 13.6 14 12 3 10.4Z"
