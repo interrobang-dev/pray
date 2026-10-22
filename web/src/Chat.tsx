@@ -13,6 +13,7 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import { buildChatRows, type ChatRow, type Work } from './chatRows'
+import { firstPlainLine, latestTurnText } from './turnText'
 import { FilesButton, formatSize } from './Files'
 import { MarkdownText } from './Markdown'
 import { ShellsButton, type ShellRequest } from './Shells'
@@ -591,17 +592,21 @@ function formatDuration(ms: number): string {
 
 /**
  * 메신저의 "입력 중…" 같은 작업 중 표시기. 1초 타이머가 이 컴포넌트만 다시 그리게 따로 둔다 (대화 전체 마크다운 파싱을 피하려고).
+ * text = 이번 차례에서 claude 가 가장 최근에 쓴 글 (없으면 "작업 중"). 기호를 뺀 첫 줄만 한 줄 말줄임으로, 전체는 툴팁.
  * onInterrupt 가 있으면 옆에 [중지] (누른 뒤 서버 결과가 올 때까지 "중지 중…")
  */
 function WorkingIndicator({
+  text,
   since,
   onInterrupt,
   isInterrupting,
 }: {
+  text: string | null
   since: string | null
   onInterrupt: (() => void) | null
   isInterrupting: boolean
 }) {
+  const line = useMemo(() => (text ? firstPlainLine(text) : null), [text])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!since) return
@@ -617,11 +622,15 @@ function WorkingIndicator({
           <span />
           <span />
         </span>
-        <span>
-          작업 중
-          {/* 매초 바뀌는 글자를 화면 낭독기가 계속 읽지 않게 */}
-          {since && <span aria-hidden="true"> · {formatDuration(now - Date.parse(since))}</span>}
+        <span className={line ? 'typing-text is-claude' : 'typing-text'} title={line ? (text ?? undefined) : undefined}>
+          {line ?? '작업 중'}
         </span>
+        {/* 매초 바뀌는 글자를 화면 낭독기가 계속 읽지 않게 */}
+        {since && (
+          <span className="typing-time" aria-hidden="true">
+            · {formatDuration(now - Date.parse(since))}
+          </span>
+        )}
       </div>
       {onInterrupt && (
         <button type="button" className="interrupt" disabled={isInterrupting} onClick={onInterrupt} title="claude 의 작업을 멈춘다 (터미널의 Esc 와 같다)">
@@ -885,6 +894,8 @@ export function Chat({
    * 차례가 진행 중이면 맨 끝 묶음은 접지 않는다. 승인 대기도 진행 중이다 (승인 창이 뜰 때마다 접혔다 펼쳐지지 않게)
    */
   const isTurnInProgress = isWorking || isApprovalNeeded
+  /** 작업 중 표시기 글. 메시지가 바뀔 때만 다시 찾는다 (표시기의 1초 타이머와 무관) */
+  const turnText = useMemo(() => latestTurnText(messages), [messages])
   const rows = useMemo(
     () =>
       buildChatRows<Special>(
@@ -1404,6 +1415,7 @@ export function Chat({
           {messages.length === 0 && pendings.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
           {isWorking && (
             <WorkingIndicator
+              text={turnText}
               since={workingSince}
               onInterrupt={canInterrupt ? () => void interrupt() : null}
               isInterrupting={isInterrupting}

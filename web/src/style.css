@@ -1378,6 +1378,8 @@ li.group.drop-after::after {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 오른쪽 아래 원 버튼(40px, .pane-buttons) + 간격 8px 을 비운다. 글이 길어 끝까지 늘어나도 맨 아래에서 [중지] 가 폴더·shell 버튼에 가리지 않게 */
+  max-width: calc(100% - 48px);
 }
 .typing {
   display: inline-flex;
@@ -1389,10 +1391,28 @@ li.group.drop-after::after {
   background: var(--panel);
   color: var(--muted);
   font-size: 12px;
+  min-width: 0;
 }
 .typing-dots {
   display: inline-flex;
   gap: 3px;
+  flex-shrink: 0;
+}
+/* claude 의 최근 글 한 줄(없으면 "작업 중"). 좁으면 이것만 말줄임되고 경과 시간·[중지] 는 그대로 */
+.typing-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.typing-text.is-claude {
+  color: var(--text);
+}
+/* " · 1분 12초" (회색). .typing 의 gap 8px 을 글 사이 띄어쓰기만큼 줄인다 */
+.typing-time {
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-left: -4px;
 }
 .typing-dots span {
   width: 6px;
@@ -1420,6 +1440,8 @@ li.group.drop-after::after {
 }
 /* 작업 중 표시기 옆 [중지] (Chat.tsx). 누르면 "중지 중…" */
 .interrupt {
+  flex-shrink: 0;
+  white-space: nowrap;
   padding: 4px 10px;
   border-radius: 10px;
   font-size: 12px;
