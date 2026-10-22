@@ -51,6 +51,16 @@ function readIsOfficeHidden(): boolean {
 const SESSION_TRUST_FAILED_MESSAGE =
   '신뢰 표시를 남기지 못했습니다. 이 폴더에서 처음 뜨는 세션이면 터미널 탭에서 신뢰를 직접 허용해야 합니다 (기본 선택 "No, exit" 를 그대로 두면 세션이 꺼집니다).'
 
+/** 세션 추가 모달이 미리 채우는 이름 "[역할] 성" 의 역할 (사용자 확정) */
+const MEMBER_ROLE_TAG = 'Dev'
+const LEAD_ROLE_TAG = 'Lead'
+const PART_LEAD_ROLE_TAG = 'PL'
+
+/** "[역할] 성" 의 역할 부분만 바꾼다 (성은 그대로) */
+function withRoleTag(name: string, roleTag: string): string {
+  return name.replace(/^\[[^\]]*\]/, `[${roleTag}]`)
+}
+
 /** 미디어 쿼리 일치 여부. 창 폭이 바뀌면 따라간다 */
 function useMediaQuery(query: string): boolean {
   const [isMatched, setIsMatched] = useState(() => window.matchMedia(query).matches)
@@ -184,6 +194,10 @@ export function App() {
   /** 세션 추가 모달. 팀 헤더의 "+" 면 그 팀 직속, 파트 소제목의 "+" 면 그 파트, 툴바의 "+ 세션" 이면 로비(폴더 직접 입력) */
   const [sessionForm, setSessionForm] = useState<{ teamId: string | null; partId: string | null } | null>(null)
   const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
+  /** 팀·파트 세션 추가 모달에 미리 채울 이름. 서버가 성을 고른 "[Dev] 성" 이고, 보일 때는 세그먼트에 맞춰 역할만 바꾼다 */
+  const [suggestedSessionName, setSuggestedSessionName] = useState<string | null>(null)
+  /** 사용자가 이름 칸에 직접 쓴 값. null 이면 아직 안 고쳤다 — 고친 뒤로는 미리 채운 이름·세그먼트로 바꾸지 않는다 */
+  const [typedSessionName, setTypedSessionName] = useState<string | null>(null)
   /** 파트 추가 모달. 팀 "⋯" 의 "파트 추가" 로 열린다 */
   const [partForm, setPartForm] = useState<{ teamId: string } | null>(null)
   const [partLocation, setPartLocation] = useState<'folder' | 'worktree'>('folder')
@@ -232,6 +246,23 @@ export function App() {
     source.onerror = () => setIsConnected(false)
     return () => source.close()
   }, [])
+
+  // 팀·파트 세션 추가 모달이 열리면 서버에 이름을 추천받는다. 실패하면 빈 칸 그대로
+  useEffect(() => {
+    if (!sessionForm?.teamId) return
+    let isCancelled = false
+    const query = new URLSearchParams({ role: MEMBER_ROLE_TAG })
+    if (sessionForm.partId) query.set('partId', sessionForm.partId)
+    fetch(`/api/team/${sessionForm.teamId}/member-name?${query}`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ name: string }>) : null))
+      .then((data) => {
+        if (!isCancelled && data) setSuggestedSessionName(data.name)
+      })
+      .catch(() => {})
+    return () => {
+      isCancelled = true
+    }
+  }, [sessionForm])
 
   // 다시 출근을 기다리던 세션이 근무로 바뀌었거나, 다시 퇴근했거나(퇴근 시각이 바뀜), 목록에서 빠지면 기다림을 끝낸다
   useEffect(() => {
@@ -372,6 +403,8 @@ export function App() {
     setTeamForm(null)
     setPartForm(null)
     setSessionRole('member')
+    setSuggestedSessionName(null)
+    setTypedSessionName(null)
     setSessionForm({ teamId, partId })
   }
 
@@ -564,6 +597,8 @@ export function App() {
     const leadSessionId = part ? part.leadSessionId : team?.leadSessionId
     const hasLiveLead = Boolean(leadSessionId && snapshot.sessions.some((s) => s.id === leadSessionId && s.isAlive))
     const leadLabel = part ? '파트장' : '팀장'
+    const roleTag = sessionRole === 'lead' ? (part ? PART_LEAD_ROLE_TAG : LEAD_ROLE_TAG) : MEMBER_ROLE_TAG
+    const sessionName = typedSessionName ?? (team && suggestedSessionName ? withRoleTag(suggestedSessionName, roleTag) : '')
     return (
       <Modal
         title={
@@ -591,7 +626,13 @@ export function App() {
             />
           )}
           {!team && <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />}
-          <input name="name" placeholder="세션 이름 (선택. 비우면 대화 내용으로 자동 제목)" autoFocus={Boolean(team)} />
+          <input
+            name="name"
+            placeholder="세션 이름 (선택. 비우면 대화 내용으로 자동 제목)"
+            value={sessionName}
+            onChange={(event) => setTypedSessionName(event.target.value)}
+            autoFocus={Boolean(team)}
+          />
           <div className="actions">
             <button type="submit" className="primary">
               시작
