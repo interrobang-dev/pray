@@ -1,10 +1,22 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { buildChatRows, type Work } from './chatRows'
+import { buildChatRows, type ChatRow, type Work } from './chatRows'
 import { FilesButton } from './Files'
 import { MarkdownText } from './Markdown'
 import { NEWLINE_KEYS } from './Terminal'
 import type { AskQuestion, ChatMessage, ToolUse } from './types'
+
+/**
+ * 대화를 불러온 뒤 찾아 갈 곳. 지시·보고 = 팀원 대화에서 글이 같은 메시지 (같은 글이 여럿이면 at 과 시각이 가장 가까운 것),
+ * row = 팀장 대화의 지시·보고 한 줄 (돌아가기)
+ */
+export type JumpTarget = { kind: 'instruction' | 'report'; text: string; at: string } | { kind: 'row'; rowKey: string }
+
+/** App 이 고른 세션의 Chat 에 넘기는 점프. Chat 이 그 세션 대화를 불러온 뒤 한 번 처리하고 onJumpHandled 를 부른다 */
+export interface Jump {
+  id: number
+  target: JumpTarget
+}
 
 interface Props {
   sessionId: string
@@ -23,8 +35,13 @@ interface Props {
   suggestion: string | null
   /** 전역 SSE 의 transcript 이벤트로 올라가는 카운터. 바뀌면 다시 읽는다 */
   version: number
-  /** 세션 ID → 화면 이름 (App 의 세션 목록). 팀원 이름 찾기용 */
+  /** 세션 ID → 화면 이름 (App 의 세션 목록). 팀원 이름 찾기와 지시·보고 한 줄을 눌렀을 때 그 팀원이 목록에 있는지 보는 데 쓴다 */
   sessionNames: Record<string, string>
+  /** 이 세션 대화에서 찾아 갈 곳 (점프·돌아가기). 없으면 null */
+  jump: Jump | null
+  onJumpHandled: () => void
+  /** 지시·보고 한 줄을 누름: 그 팀원 세션을 열고 target 으로 간다. rowKey 는 돌아올 때 찾을 이 줄 */
+  onOpenRelay: (memberSessionId: string, target: JumpTarget, rowKey: string) => void
 }
 
 function summarizeInput(name: string, input: unknown): string {
@@ -115,18 +132,23 @@ function NoticeLine({ title, raw, isFailed = false }: { title: string; raw: stri
   )
 }
 
-/** 팀장↔팀원이 주고받은 글: 팀장 → 팀원 지시, 팀원 → 팀장 보고 */
+/** 팀장↔팀원이 주고받은 글: 팀장 → 팀원 지시, 팀원 → 팀장 보고. 팀장 대화에는 한 줄로 보이고 누르면 그 팀원 대화의 그 메시지로 간다 */
 interface Relay {
-  label: string
+  kind: 'instruction' | 'report'
+  /** 지시를 받은·보고한 팀원. 결과가 아직 없는 jk_spawn_member 면 null (세션이 아직 없다) */
+  memberSessionId: string | null
+  memberName: string
   text: string
+  /** 지시 = 팀장이 도구를 부른 시각, 보고 = 팀원 task 가 끝난 시각. 줄에 보이고, 팀원 대화에 같은 글이 여럿이면 이것과 가장 가까운 것으로 간다 */
+  at: string
 }
 
 /** jk_wait 결과 JSON 에서 팀원 보고. 해석 실패·시간 초과(task null)·결과 없음이면 null */
-function waitReport(json: string): { memberSessionId: string; result: string } | null {
+function waitReport(json: string): { memberSessionId: string; result: string; finishedAt: string | null } | null {
   try {
-    const { task } = JSON.parse(json) as { task?: { memberSessionId?: unknown; result?: unknown } | null }
+    const { task } = JSON.parse(json) as { task?: { memberSessionId?: unknown; result?: unknown; finishedAt?: unknown } | null }
     if (typeof task?.memberSessionId === 'string' && typeof task.result === 'string' && task.result) {
-      return { memberSessionId: task.memberSessionId, result: task.result }
+      return { memberSessionId: task.memberSessionId, result: task.result, finishedAt: typeof task.finishedAt === 'string' ? task.finishedAt : null }
     }
   } catch {
     // 지금처럼 도구 블록으로 둔다
@@ -134,21 +156,92 @@ function waitReport(json: string): { memberSessionId: string; result: string } |
   return null
 }
 
-/** 팀장 대화의 jk 도구 호출을 말풍선으로. 실패한 지시(결과가 JSON 이 아닌 오류 글)·jk_status·jk_dismiss 는 null */
-function relayOf(toolUse: ToolUse, memberNameOf: (sessionId: string) => string): Relay | null {
-  const input = (toolUse.input ?? {}) as { name?: unknown; sessionId?: unknown; instruction?: unknown }
+/** 보고 한 줄. task 가 끝난 시각이 없으면(옛 서버) 결과를 받은 메시지 시각 */
+function reportRelay(report: NonNullable<ReturnType<typeof waitReport>>, receivedAt: string, memberNameOf: (sessionId: string) => string): Relay {
+  return {
+    kind: 'report',
+    memberSessionId: report.memberSessionId,
+    memberName: memberNameOf(report.memberSessionId),
+    text: report.result,
+    at: report.finishedAt ?? receivedAt,
+  }
+}
+
+/** jk_spawn_member 결과의 새 팀원: 첫 sessionId 와 서버가 붙인 이름 member.name (role 로 만들면 입력에 이름이 없다) */
+function spawnedMember(toolUse: ToolUse): { sessionId: string; name: string | null } | null {
+  const sessionId = toolUse.result?.match(SPAWNED_SESSION_ID)?.[1]
+  if (!sessionId) return null
+  try {
+    const { member } = JSON.parse(toolUse.result ?? '') as { member?: { name?: unknown } }
+    return { sessionId, name: typeof member?.name === 'string' ? member.name : null }
+  } catch {
+    return { sessionId, name: null }
+  }
+}
+
+/** 팀장 대화의 jk 도구 호출을 지시·보고 한 줄로. 실패한 지시(결과가 JSON 이 아닌 오류 글)·jk_status·jk_dismiss 는 null */
+function relayOf(toolUse: ToolUse, message: ChatMessage, memberNameOf: (sessionId: string) => string): Relay | null {
+  const input = (toolUse.input ?? {}) as { name?: unknown; role?: unknown; sessionId?: unknown; instruction?: unknown }
   const isDelivered = toolUse.result === null || toolUse.result.startsWith('{')
   if (typeof input.instruction === 'string' && input.instruction && isDelivered) {
-    if (toolUse.name === SPAWN_TOOL && typeof input.name === 'string') return { label: `→ ${input.name}`, text: input.instruction }
+    const instruction = { kind: 'instruction', text: input.instruction, at: message.timestamp } as const
+    if (toolUse.name === SPAWN_TOOL) {
+      const memberSessionId = spawnedMember(toolUse)?.sessionId ?? null
+      if (memberSessionId) return { ...instruction, memberSessionId, memberName: memberNameOf(memberSessionId) }
+      // 결과(새 세션)가 오기 전: 팀장이 준 이름, role 로 만들면 "[역할]"
+      const pendingName = typeof input.name === 'string' ? input.name : typeof input.role === 'string' ? `[${input.role}]` : null
+      if (pendingName) return { ...instruction, memberSessionId: null, memberName: pendingName }
+    }
     if (toolUse.name === ASSIGN_TOOL && typeof input.sessionId === 'string') {
-      return { label: `→ ${memberNameOf(input.sessionId)}`, text: input.instruction }
+      return { ...instruction, memberSessionId: input.sessionId, memberName: memberNameOf(input.sessionId) }
     }
   }
   if (toolUse.name === WAIT_TOOL && toolUse.result) {
     const report = waitReport(toolUse.result)
-    if (report) return { label: `${memberNameOf(report.memberSessionId)} →`, text: report.result }
+    if (report) return reportRelay(report, message.timestamp, memberNameOf)
   }
   return null
+}
+
+/** 한 줄 툴팁에 보이는 내용 앞부분 (빈 줄 뺀 줄 수·줄마다 글자 수) */
+const RELAY_PREVIEW_LINES = 6
+const RELAY_PREVIEW_LINE_CHARS = 100
+
+function relayPreview(text: string): string {
+  const lines = text.split('\n').filter((line) => line.trim())
+  const shown = lines
+    .slice(0, RELAY_PREVIEW_LINES)
+    .map((line) => (line.length > RELAY_PREVIEW_LINE_CHARS ? `${line.slice(0, RELAY_PREVIEW_LINE_CHARS)}…` : line))
+  return lines.length > RELAY_PREVIEW_LINES ? [...shown, '…'].join('\n') : shown.join('\n')
+}
+
+/** 한 줄의 시각 "10:12". 오늘이 아니면 "10/21 10:12" */
+function formatClock(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const time = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return date.toDateString() === new Date().toDateString() ? time : `${date.getMonth() + 1}/${date.getDate()} ${time}`
+}
+
+/**
+ * 팀장 대화의 지시·보고 한 줄 "→ [FE] Park 에게 지시함 · 10:12"·"[FE] Park 에게서 보고받음 · 10:30". 내용은 툴팁(앞부분)만.
+ * 누르면 그 팀원 대화의 그 메시지로 간다. 팀원 세션이 아직 없으면(spawn 결과 전) 누를 수 없다
+ */
+function RelayLine({ relay, jumpKey, isHighlighted, onOpen }: { relay: Relay; jumpKey: string; isHighlighted: boolean; onOpen: () => void }) {
+  const label = relay.kind === 'instruction' ? `→ ${relay.memberName} 에게 지시함` : `${relay.memberName} 에게서 보고받음`
+  const clock = formatClock(relay.at)
+  return (
+    <button
+      type="button"
+      className={`relay-line${isHighlighted ? ' jump-highlight' : ''}`}
+      data-jump-key={jumpKey}
+      title={relay.memberSessionId ? relayPreview(relay.text) : '팀원 세션을 만드는 중'}
+      disabled={!relay.memberSessionId}
+      onClick={onOpen}
+    >
+      {clock ? `${label} · ${clock}` : label}
+    </button>
+  )
 }
 
 function ToolBlock({ toolUse }: { toolUse: ToolUse }) {
@@ -227,8 +320,11 @@ function workTitle(work: Work): string {
   return [`작업 ${work.toolCount}개`, ...counts, ...duration, ...(work.isInProgress ? ['진행 중'] : [])].join(' · ')
 }
 
-/** 답변 전 작업 묶음 한 줄. 누르면 아래에 설명 글(마크다운)·도구 줄이 시간 순서대로 펼쳐진다. 접혀 있으면 안쪽을 그리지 않는다 (마크다운 파싱을 피하려고) */
-function WorkLine({ work, isOpen, onToggle }: { work: Work; isOpen: boolean; onToggle: () => void }) {
+/**
+ * 답변 전 작업 묶음 한 줄. 누르면 아래에 설명 글(마크다운)·도구 줄이 시간 순서대로 펼쳐진다. 접혀 있으면 안쪽을 그리지 않는다 (마크다운 파싱을 피하려고).
+ * 설명 글이 있는 말풍선은 점프로 찾아 갈 수 있다 (data-jump-key = 메시지 ID. 글 없는 것은 답변 말풍선과 ID 가 겹쳐 빼고)
+ */
+function WorkLine({ work, isOpen, onToggle, highlightKey }: { work: Work; isOpen: boolean; onToggle: () => void; highlightKey: string | null }) {
   const title = workTitle(work)
   return (
     <div className="work">
@@ -238,7 +334,11 @@ function WorkLine({ work, isOpen, onToggle }: { work: Work; isOpen: boolean; onT
       {isOpen && (
         <div className="work-items">
           {work.parts.map((part) => (
-            <div key={part.message.id} className="msg assistant">
+            <div
+              key={part.message.id}
+              className={`msg assistant${part.text && highlightKey === part.message.id ? ' jump-highlight' : ''}`}
+              data-jump-key={part.text ? part.message.id : undefined}
+            >
               {part.text && <MarkdownText text={part.text} />}
               {part.toolUses.map((toolUse) => (
                 <ToolBlock key={toolUse.id} toolUse={toolUse} />
@@ -570,8 +670,60 @@ function settlePendings(pendings: PendingMessage[], messages: ChatMessage[]): Pe
   return remaining.map((pending) => ({ ...pending, knownIds: new Set([...pending.knownIds, ...matchedIds]) }))
 }
 
-export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorking, workingSince, pendingTool, question, suggestion, version, sessionNames }: Props) {
+/** 점프로 찾아 간 줄을 강조하는 시간 (style.css 의 jump-flash 와 같은 길이) */
+const JUMP_HIGHLIGHT_MS = 2_000
+/** 점프 실패 한 줄("해당 메시지를 찾지 못함" 등)을 보여 주는 시간 */
+const JUMP_NOTICE_MS = 6_000
+
+/**
+ * 팀원 대화에서 지시·보고와 글이 같은 메시지 (비교는 messageKey). 지시 = 서버가 from 을 붙인 user 메시지, 보고 = claude 글.
+ * 여럿이면 시각이 at 과 가장 가까운 것. key 는 그 말풍선의 data-jump-key, 접힌 작업 묶음 안(설명 글)이면 workKey 가 그 묶음
+ */
+function findMessageTarget(
+  target: { kind: 'instruction' | 'report'; text: string; at: string },
+  messages: ChatMessage[],
+  rows: ChatRow<unknown>[],
+): { key: string; workKey: string | null } | null {
+  const key = messageKey(target.text)
+  if (!key) return null
+  const candidates = messages.filter(
+    (message) =>
+      (target.kind === 'instruction' ? message.role === 'user' && message.from : message.role === 'assistant') && messageKey(message.text) === key,
+  )
+  if (candidates.length === 0) return null
+  const at = Date.parse(target.at)
+  const distance = (message: ChatMessage) => Math.abs(Date.parse(message.timestamp) - at)
+  // 시각을 못 읽으면(NaN) 비교가 늘 거짓이라 처음 것
+  const found = candidates.reduce((best, message) => (distance(message) < distance(best) ? message : best))
+  const work = rows.find((row) => row.kind === 'work' && row.work.parts.some((part) => part.message === found && part.text !== null))
+  return { key: found.id, workKey: work?.kind === 'work' ? work.work.key : null }
+}
+
+export function Chat({
+  sessionId,
+  isWritable,
+  footer,
+  isApprovalNeeded,
+  isWorking,
+  workingSince,
+  pendingTool,
+  question,
+  suggestion,
+  version,
+  sessionNames,
+  jump,
+  onJumpHandled,
+  onOpenRelay,
+}: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  /** messages 가 어느 세션 것인지. 세션을 바꾼 뒤 새 대화가 오기 전까지는 앞 세션 것이 남아 있어 점프는 이것이 맞을 때만 처리한다 */
+  const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
+  /** 점프로 찾아 간 줄의 data-jump-key. JUMP_HIGHLIGHT_MS 동안 강조하고, 바뀔 때마다 그 줄로 스크롤한다 (id 는 같은 줄로 다시 갈 때도 새로 하려고) */
+  const [highlight, setHighlight] = useState<{ key: string; id: number } | null>(null)
+  /** 점프한 곳을 찾지 못함. 대화 맨 아래 한 줄 */
+  const [jumpNotice, setJumpNotice] = useState<string | null>(null)
+  /** 지시·보고 한 줄 바로 아래 알림 (그 팀원이 세션 목록에 없을 때) */
+  const [lineNotice, setLineNotice] = useState<{ rowKey: string; text: string } | null>(null)
   const [draft, setDraft] = useState('')
   const [pendings, setPendings] = useState<PendingMessage[]>([])
   /** 질문 중에는 입력칸을 막는다. 키 입력이 터미널의 질문 화면에 들어가면 Enter 가 1번 선택지로 답해 버린다. 쓰던 글은 남긴다 */
@@ -620,26 +772,28 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
   const isFirstLoadRef = useRef(true)
   const lastMessageIdRef = useRef<string | null>(null)
 
-  /** 팀원 이름: jk_spawn_member 때 붙인 이름 → 세션 목록 이름 → ID 앞 8자리 */
+  /** 팀원 이름: jk_spawn_member 때 붙인 이름(서버가 붙인 member.name, 없으면 팀장이 준 name) → 세션 목록 이름 → ID 앞 8자리 */
   const memberNameOf = useMemo(() => {
     const spawnedNames = new Map<string, string>()
     for (const message of messages) {
       for (const toolUse of message.toolUses) {
-        const name = (toolUse.input as { name?: unknown } | null)?.name
-        const spawnedId = toolUse.result?.match(SPAWNED_SESSION_ID)?.[1]
-        if (toolUse.name === SPAWN_TOOL && typeof name === 'string' && spawnedId) spawnedNames.set(spawnedId, name)
+        if (toolUse.name !== SPAWN_TOOL) continue
+        const inputName = (toolUse.input as { name?: unknown } | null)?.name
+        const spawned = spawnedMember(toolUse)
+        const name = spawned?.name ?? (typeof inputName === 'string' ? inputName : null)
+        if (spawned && name) spawnedNames.set(spawned.sessionId, name)
       }
     }
     return (id: string) => spawnedNames.get(id) ?? sessionNames[id] ?? id.slice(0, 8)
   }, [messages, sessionNames])
 
-  /** 화면 줄: 구간마다 claude 의 중간 설명 글·일반 도구 호출을 작업 묶음으로 접고, relay·질문 카드는 그 자리에 둔다 */
+  /** 화면 줄: 구간마다 claude 의 중간 설명 글·일반 도구 호출을 작업 묶음으로 접고, relay 한 줄·질문 카드는 그 자리에 둔다 */
   const rows = useMemo(
     () =>
       buildChatRows<Special>(
         messages,
-        (toolUse) => {
-          const relay = relayOf(toolUse, memberNameOf)
+        (toolUse, message) => {
+          const relay = relayOf(toolUse, message, memberNameOf)
           if (relay) return { kind: 'relay', relay }
           const asked = askedOf(toolUse)
           return asked ? { kind: 'asked', asked } : null
@@ -656,7 +810,9 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
     fetch(`/api/sessions/${sessionId}/messages`)
       .then((r) => r.json())
       .then((data: ChatMessage[]) => {
-        if (!isCancelled) setMessages(data)
+        if (isCancelled) return
+        setMessages(data)
+        setLoadedSessionId(sessionId)
       })
     return () => {
       isCancelled = true
@@ -694,6 +850,9 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
     setInterruptNotice(null)
     setPendings([])
     setOpenWorkKeys(new Set())
+    setHighlight(null)
+    setJumpNotice(null)
+    setLineNotice(null)
     isFirstLoadRef.current = true
     isAtBottomRef.current = true
     setIsAtBottom(true)
@@ -709,6 +868,87 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
   useEffect(() => {
     if (isSuggestionShown && isAtBottomRef.current) scrollToBottom()
   }, [isSuggestionShown])
+
+  /** 점프한 곳을 못 찾으면 세션만 연 것으로 하고 맨 아래에서 알린다 */
+  function showJumpMissing() {
+    scrollToBottom()
+    setJumpNotice('해당 메시지를 찾지 못함')
+  }
+
+  // 점프: 이 세션 대화를 불러온 뒤 한 번. 첫 로딩의 맨 아래 스크롤(위 효과) 다음에 돈다. 접힌 작업 묶음 안이면 펼치고, 스크롤·강조는 아래 효과가 한다
+  useEffect(() => {
+    if (!jump || loadedSessionId !== sessionId) return
+    onJumpHandled()
+    const { target } = jump
+    const found = target.kind === 'row' ? { key: target.rowKey, workKey: null } : findMessageTarget(target, messages, rows)
+    if (!found) {
+      showJumpMissing()
+      return
+    }
+    const { workKey } = found
+    if (workKey) setOpenWorkKeys((current) => new Set(current).add(workKey))
+    setHighlight({ key: found.key, id: jump.id })
+  }, [jump, loadedSessionId, sessionId, messages, rows, onJumpHandled])
+
+  // 강조할 줄이 정해지면 (펼친 묶음까지 그려진 뒤) 가운데로 스크롤하고, 그 위치를 "맨 아래를 보고 있는지" 에 반영한다 (다음 갱신에 끌려 내려가지 않게)
+  useLayoutEffect(() => {
+    if (!highlight) return
+    const element = messagesRef.current?.querySelector(`[data-jump-key="${CSS.escape(highlight.key)}"]`)
+    if (!element) {
+      setHighlight(null)
+      showJumpMissing()
+      return
+    }
+    element.scrollIntoView({ block: 'center' })
+    onMessagesScroll()
+    const timer = setTimeout(() => setHighlight(null), JUMP_HIGHLIGHT_MS)
+    return () => clearTimeout(timer)
+  }, [highlight])
+
+  // 못 찾음 알림은 맨 아래에 생긴다. 맨 아래로 내려 둔 뒤 생겨 가려지지 않게 한 번 더 내린다
+  useEffect(() => {
+    if (!jumpNotice) return
+    if (isAtBottomRef.current) scrollToBottom()
+    const timer = setTimeout(() => setJumpNotice(null), JUMP_NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [jumpNotice])
+
+  useEffect(() => {
+    if (!lineNotice) return
+    const timer = setTimeout(() => setLineNotice(null), JUMP_NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [lineNotice])
+
+  /** 지시·보고 한 줄을 눌렀다: 그 팀원 세션이 목록에 있으면(퇴근 포함) App 이 연다. 없으면(퇴근 기록까지 지워짐) 열지 않고 줄 아래에 알린다 */
+  function openRelay(relay: Relay, rowKey: string) {
+    const { memberSessionId } = relay
+    if (!memberSessionId) return
+    if (!Object.hasOwn(sessionNames, memberSessionId)) {
+      setLineNotice({ rowKey, text: '세션 기록이 없어 열 수 없음' })
+      return
+    }
+    setLineNotice(null)
+    onOpenRelay(memberSessionId, { kind: relay.kind, text: relay.text, at: relay.at }, rowKey)
+  }
+
+  /** 지시·보고 한 줄과 그 아래 알림 */
+  function renderRelayLine(relay: Relay, rowKey: string) {
+    return (
+      <Fragment key={rowKey}>
+        <RelayLine relay={relay} jumpKey={rowKey} isHighlighted={highlight?.key === rowKey} onOpen={() => openRelay(relay, rowKey)} />
+        {lineNotice?.rowKey === rowKey && (
+          <div className="queue-notice" role="status">
+            {lineNotice.text}
+          </div>
+        )}
+      </Fragment>
+    )
+  }
+
+  /** 점프로 찾아 간 말풍선이면 강조 클래스 */
+  function highlightClass(key: string): string {
+    return highlight?.key === key ? ' jump-highlight' : ''
+  }
 
   function onMessagesScroll() {
     const element = messagesRef.current
@@ -881,34 +1121,38 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
           {rows.map((row) => {
             if (row.kind === 'work') {
               const { work } = row
-              return <WorkLine key={`work:${work.key}`} work={work} isOpen={openWorkKeys.has(work.key)} onToggle={() => toggleWork(work.key)} />
+              return (
+                <WorkLine
+                  key={`work:${work.key}`}
+                  work={work}
+                  isOpen={openWorkKeys.has(work.key)}
+                  onToggle={() => toggleWork(work.key)}
+                  highlightKey={highlight?.key ?? null}
+                />
+              )
             }
             // claude 답변 (구간의 마지막 글. 도구 없는 구간이면 글마다)
             if (row.kind === 'text') {
               return (
-                <div key={row.message.id} className="msg assistant">
+                <div key={row.message.id} className={`msg assistant${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
                   <MarkdownText text={row.message.text} />
                 </div>
               )
             }
-            // 팀장 대화의 지시·보고 도구 호출은 말풍선으로, AskUserQuestion 은 질문 → 답 카드로. 원래 도구 블록은 그 안에 접어 둔다
+            // 팀장 대화의 지시·보고 도구 호출은 한 줄로 (내용은 팀원 대화에서 본다), AskUserQuestion 은 질문 → 답 카드로 (원래 도구 블록은 그 안에 접어 둔다)
             if (row.kind === 'special') {
               const { toolUse, special } = row
               return special.kind === 'relay' ? (
-                <div key={toolUse.id} className="msg relay">
-                  <div className="relay-label">{special.relay.label}</div>
-                  <MarkdownText text={special.relay.text} />
-                  <ToolBlock toolUse={toolUse} />
-                </div>
+                renderRelayLine(special.relay, `relay:${toolUse.id}`)
               ) : (
                 <AskedCard key={toolUse.id} toolUse={toolUse} asked={special.asked} />
               )
             }
             const { message } = row
-            // 팀원 대화: 서버가 보낸 팀장·파트장 지시
+            // 팀원 대화: 서버가 보낸 팀장·파트장 지시 (전문)
             if (message.from) {
               return (
-                <div key={message.id} className="msg user relay">
+                <div key={message.id} className={`msg user relay${highlightClass(message.id)}`} data-jump-key={message.id}>
                   <div className="relay-label">{message.from.name} 지시</div>
                   <MarkdownText text={message.text} />
                 </div>
@@ -918,7 +1162,7 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
             if (message.isCompactSummary) return <NoticeLine key={message.id} title={COMPACT_SUMMARY_TITLE} raw={message.text} />
             // 중지(Esc) 기록: 사람 말이 아니라 한 줄. 원문은 접어 둔다
             if (message.isInterrupt) return <NoticeLine key={message.id} title={INTERRUPT_TITLE} raw={message.text} />
-            // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 말풍선, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
+            // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 보고 한 줄, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
             const parts = message.role === 'system' ? splitNotifications(message.text) : null
             if (parts) {
               return (
@@ -934,18 +1178,7 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
                     }
                     const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
                     if (!report) return <NoticeLine key={key} title={notificationTitle(part)} raw={part.raw} isFailed={part.status === 'failed'} />
-                    return (
-                      <div key={key} className="msg relay">
-                        <div className="relay-label">{memberNameOf(report.memberSessionId)} →</div>
-                        <MarkdownText text={report.result} />
-                        <details className="tool">
-                          <summary>
-                            <code>task-notification</code> jk_wait 결과
-                          </summary>
-                          <pre className="result">{part.raw}</pre>
-                        </details>
-                      </div>
-                    )
+                    return renderRelayLine(reportRelay(report, message.timestamp, memberNameOf), `relay:${key}`)
                   })}
                 </Fragment>
               )
@@ -994,6 +1227,11 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
           {interruptNotice && (
             <div className="queue-notice" role="status">
               {interruptNotice}
+            </div>
+          )}
+          {jumpNotice && (
+            <div className="queue-notice" role="status">
+              {jumpNotice}
             </div>
           )}
           {messages.length === 0 && pendings.length === 0 && <p className="hint">아직 대화가 없습니다</p>}

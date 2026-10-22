@@ -784,7 +784,7 @@ li.group.drop-after::after {
   padding-left: 10px;
   border-left: 2px solid var(--line);
 }
-/* 팀장↔팀원이 주고받은 글 (Chat.tsx). 사람 말풍선(초록)·claude 응답(흰색)과 다른 색. 위에 "→ 팀원"·"팀원 →"·"팀장 지시" 라벨 */
+/* 팀원 대화의 팀장·파트장 지시 (Chat.tsx). 사람 말풍선(초록)·claude 응답(흰색)과 다른 색. 위에 "<팀장> 지시" 라벨 */
 .msg.relay {
   background: #eef1fb;
   border-color: #d3daf2;
@@ -794,6 +794,65 @@ li.group.drop-after::after {
   font-size: 11px;
   font-weight: 600;
   color: #5a68a6;
+}
+/* 팀장 대화의 지시·보고 한 줄 (Chat.tsx). 알림 한 줄처럼 가운데 작은 글자인데 지시 말풍선의 파랑. 내용은 툴팁(앞부분)만이고 누르면 그 팀원 대화의 그 메시지로 간다.
+   overflow: hidden 인 flex 항목이라 flex-shrink: 0 이 없으면 대화가 길 때 납작하게 줄어든다 */
+.relay-line {
+  flex-shrink: 0;
+  align-self: center;
+  max-width: 95%;
+  padding: 1px 10px;
+  border-color: #d3daf2;
+  border-radius: 10px;
+  background: #eef1fb;
+  font-size: 11px;
+  color: #5a68a6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.relay-line:hover:not(:disabled) {
+  border-color: #5a68a6;
+}
+/* 점프로 찾아 간 줄 (Chat.tsx). 노란 테두리가 2초(Chat.tsx JUMP_HIGHLIGHT_MS) 동안 옅어진다. 움직임을 줄이면 2초 동안 그대로 있다가 사라진다.
+   outline 이라 말풍선 크기·그림자가 그대로다 */
+.jump-highlight {
+  outline: 3px solid transparent;
+  outline-offset: 2px;
+  animation: jump-flash 2s ease-out;
+}
+@keyframes jump-flash {
+  0%,
+  40% {
+    outline-color: #e8b53a;
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jump-highlight {
+    animation: none;
+    outline-color: #e8b53a;
+  }
+}
+/* 점프로 연 세션 패널의 "← <팀장> 대화로" (App.tsx). 헤더 바로 아래 한 줄, 지시 한 줄과 같은 파랑 */
+.jump-back {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #eef1fb;
+}
+.jump-back button {
+  max-width: 100%;
+  border-color: #d3daf2;
+  font-size: 12px;
+  color: #5a68a6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jump-back button:hover:not(:disabled) {
+  border-color: #5a68a6;
 }
 /* 보냈지만 아직 대화 기록에 안 보인 내 말 (Chat.tsx). 흐리게 "보내는 중", 실패하면 진하게 빨간 테두리 + 닫기 */
 .msg.pending {
@@ -2147,5 +2206,15 @@ li.group.drop-after::after {
   .work-summary {
     margin: -8px 0;
     padding: 8px;
+  }
+  /* 지시·보고 한 줄과 돌아가기: 손가락으로 누르기 쉽게 키운다. 돌아가기는 한 줄을 다 쓴다 */
+  .relay-line {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  .jump-back button {
+    width: 100%;
+    min-height: 40px;
+    text-align: left;
   }
 }

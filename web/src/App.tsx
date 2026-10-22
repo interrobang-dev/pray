@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Terminal } from './Terminal'
-import { Chat } from './Chat'
+import { Chat, type Jump, type JumpTarget } from './Chat'
 import { Office } from './Office'
 import { UsagePanel } from './UsagePanel'
 import { Modal, Segmented } from './Modal'
@@ -148,6 +148,16 @@ async function postJson(url: string, method: string, body: unknown): Promise<Res
   return fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 }
 
+/** 점프(팀장 대화의 지시·보고 한 줄)로 연 세션에서 돌아갈 곳: 팀장 대화와 그때 누른 한 줄 */
+interface JumpBack {
+  /** 점프로 연 세션. 이 세션 패널에만 돌아가기 버튼이 보인다 */
+  toSessionId: string
+  fromSessionId: string
+  /** 점프할 때의 팀장 이름. 팀장이 아직 목록에 있으면 지금 이름을 쓴다 */
+  fromName: string
+  rowKey: string
+}
+
 /** 목록 끌어 놓기의 범위: 그룹끼리, 또는 한 그룹 안의 팀끼리 (다른 그룹으로 옮기기는 사무실에서 섬을 끌어서) */
 type ReorderScope = { kind: 'group' } | { kind: 'team'; groupId: string }
 
@@ -205,6 +215,11 @@ export function App() {
   /** 이름 변경 모달의 대상 세션 */
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
+  /** 고른 세션의 대화에서 찾아 갈 곳. Chat 이 그 세션 대화를 불러온 뒤 처리하고 비운다 */
+  const [jump, setJump] = useState<(Jump & { sessionId: string }) | null>(null)
+  /** 점프로 연 세션의 "← 팀장 대화로". 다른 세션을 직접 고르면 사라진다 */
+  const [jumpBack, setJumpBack] = useState<JumpBack | null>(null)
+  const nextJumpIdRef = useRef(1)
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
   /** 목록 맨 아래 "퇴근" 구역을 펼쳤는지. 기본 접힘 */
   const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
@@ -284,11 +299,37 @@ export function App() {
 
   /**
    * 세션을 고른다. 다른 세션이면 대화 탭으로 연다 (같은 세션을 다시 누르면 보던 탭 그대로).
-   * 탭과 선택을 한 번에 바꾼다 — 따로 바꾸면 새 세션의 터미널이 잠깐 붙어 그 pty 크기를 바꾼다
+   * 탭과 선택을 한 번에 바꾼다 — 따로 바꾸면 새 세션의 터미널이 잠깐 붙어 그 pty 크기를 바꾼다.
+   * 다른 세션을 직접 고르면 점프·돌아가기는 끝난다
    */
   function selectSession(sessionId: string) {
-    if (sessionId !== selectedId) setTab('chat')
+    if (sessionId !== selectedId) {
+      setTab('chat')
+      setJump(null)
+      setJumpBack(null)
+    }
     setSelectedId(sessionId)
+  }
+
+  /** 세션의 대화 탭을 열고 target 으로 간다 (점프·돌아가기) */
+  function openJump(sessionId: string, target: JumpTarget) {
+    setTab('chat')
+    setSelectedId(sessionId)
+    setJump({ id: nextJumpIdRef.current++, sessionId, target })
+  }
+
+  /** 팀장 대화의 지시·보고 한 줄을 눌렀다: 그 팀원 대화의 그 메시지로 가고, 돌아올 곳으로 지금 세션과 그 줄을 둔다 */
+  function openRelay(memberSessionId: string, target: JumpTarget, rowKey: string) {
+    if (!selected) return
+    openJump(memberSessionId, target)
+    setJumpBack({ toSessionId: memberSessionId, fromSessionId: selected.id, fromName: displayName(selected), rowKey })
+  }
+
+  /** 돌아가기: 팀장 대화를 다시 열고 점프할 때 누른 그 한 줄로 간다 */
+  function returnFromJump() {
+    if (!jumpBack) return
+    openJump(jumpBack.fromSessionId, { kind: 'row', rowKey: jumpBack.rowKey })
+    setJumpBack(null)
   }
 
   async function createSession(event: FormEvent<HTMLFormElement>) {
@@ -782,6 +823,18 @@ export function App() {
     return undefined
   }
 
+  /** 점프로 연 세션 패널의 헤더 아래 "← <팀장 이름> 대화로". 팀장 세션이 목록에서 빠졌으면 누를 수 없다 */
+  function renderJumpBack(back: JumpBack) {
+    const from = snapshot.sessions.find((s) => s.id === back.fromSessionId)
+    return (
+      <div className="jump-back">
+        <button onClick={returnFromJump} disabled={!from} title={from ? '점프할 때 누른 줄로 돌아간다' : '세션 기록이 없어 열 수 없음'}>
+          ← {from ? displayName(from) : back.fromName} 대화로
+        </button>
+      </div>
+    )
+  }
+
   /** 그룹이 지워져 소속 그룹이 없는 팀. 라벨 없이 그대로 보여 준다 */
   const orphanTeams = office.teams.filter((t) => !office.groups.some((g) => g.id === t.groupId))
   /** 팀·로비에는 근무·휴식 세션. 휴식은 호스트가 다시 띄우면 저절로 돌아오므로 자리를 지킨다 */
@@ -1011,6 +1064,7 @@ export function App() {
                 {isNarrow ? '←' : '×'}
               </button>
             </div>
+            {jumpBack?.toSessionId === selected.id && renderJumpBack(jumpBack)}
             {shownTab === 'terminal' ? (
               <Terminal sessionId={selected.id} />
             ) : (
@@ -1027,6 +1081,9 @@ export function App() {
                 suggestion={selected.suggestion ?? null}
                 version={transcriptVersions[selected.id] ?? 0}
                 sessionNames={Object.fromEntries(snapshot.sessions.map((s) => [s.id, displayName(s)]))}
+                jump={jump?.sessionId === selected.id ? jump : null}
+                onJumpHandled={() => setJump(null)}
+                onOpenRelay={openRelay}
               />
             )}
           </section>

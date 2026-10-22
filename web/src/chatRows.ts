@@ -67,7 +67,7 @@ function runRows<S>(run: RunItem[], answer: ChatMessage | undefined): ChatRow<S>
 }
 
 /** 사람 쪽·system 메시지 사이의 claude 메시지들. 마지막으로 글이 있는 메시지의 글만 답변이다 */
-function segmentRows<S>(segment: ChatMessage[], classify: (toolUse: ToolUse) => S | null): ChatRow<S>[] {
+function segmentRows<S>(segment: ChatMessage[], classify: (toolUse: ToolUse, message: ChatMessage) => S | null): ChatRow<S>[] {
   const answer = [...segment].reverse().find((message) => message.text)
   const rows: ChatRow<S>[] = []
   let run: RunItem[] = []
@@ -75,7 +75,7 @@ function segmentRows<S>(segment: ChatMessage[], classify: (toolUse: ToolUse) => 
     const specials: ChatRow<S>[] = []
     const toolUses: ToolUse[] = []
     for (const toolUse of message.toolUses) {
-      const special = classify(toolUse)
+      const special = classify(toolUse, message)
       if (special === null) toolUses.push(toolUse)
       else specials.push({ kind: 'special', toolUse, special })
     }
@@ -92,9 +92,14 @@ function segmentRows<S>(segment: ChatMessage[], classify: (toolUse: ToolUse) => 
 
 /**
  * 대화 메시지 → 화면 줄. 사람 쪽·system 메시지(대기 중 포함)가 구간을 나누고, 구간 안의 claude 중간 설명 글과 일반 도구 호출
- * (classify 가 null 을 준 것)을 작업 묶음 하나로 접는다. 작업 중이면 대화 맨 끝(대기 메시지 제외) 묶음이 진행 중이다
+ * (classify 가 null 을 준 것)을 작업 묶음 하나로 접는다. 작업 중이면 대화 맨 끝(대기 메시지 제외) 묶음이 진행 중이다.
+ * classify 는 도구 호출과 그 호출이 든 메시지를 받는다
  */
-export function buildChatRows<S>(messages: ChatMessage[], classify: (toolUse: ToolUse) => S | null, isWorking: boolean): ChatRow<S>[] {
+export function buildChatRows<S>(
+  messages: ChatMessage[],
+  classify: (toolUse: ToolUse, message: ChatMessage) => S | null,
+  isWorking: boolean,
+): ChatRow<S>[] {
   const rows: ChatRow<S>[] = []
   let segment: ChatMessage[] = []
   for (const message of messages) {
