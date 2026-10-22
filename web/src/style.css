@@ -49,10 +49,17 @@ textarea:focus {
   outline: none;
   border-color: var(--green);
 }
+/* 화면 = 위 layout(목록·사무실·패널) + 아래 상태 표시줄 */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 .layout {
   display: grid;
   grid-template-columns: 300px 1fr;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 .layout.with-panel {
   grid-template-columns: 300px 1fr 520px;
@@ -1692,15 +1699,56 @@ li.group.drop-after::after {
   margin: 0;
 }
 
-/* 계정 사용량 (사이드바 하단 한 줄. 남은 비율만, 리셋 시각은 툴팁) */
-.usage {
-  margin-top: auto;
-  padding: 8px 12px;
+/* 화면 아래 전체 폭 상태 표시줄 (App.tsx). 왼쪽 사용량, 오른쪽 세션 집계·연결 상태. 한 줄로 얇게 */
+.status-bar {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel);
   border-top: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.status-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.status-link {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+}
+.status-bar .dot {
+  width: 7px;
+  height: 7px;
+}
+/* 승인 대기 N: 누르면 그 중 첫 세션을 연다. 목록의 승인 대기 점과 같은 빨강 */
+.status-bar .status-approval {
+  padding: 0 5px;
+  line-height: 16px;
+  font-weight: 600;
+  color: #d6453d;
+  background: transparent;
+  border-color: transparent;
+}
+.status-bar .status-approval:hover {
+  background: #fde3e0;
+  border-color: transparent;
+}
+
+/* 계정 사용량 (상태 표시줄 왼쪽. 남은 비율만, 리셋 시각은 툴팁) */
+.usage {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1723,10 +1771,11 @@ li.group.drop-after::after {
 .usage-limit.danger b {
   color: #d6453d;
 }
+/* 상태 표시줄 22px 안에 들어가게 작게 */
 .usage button {
-  margin-left: auto;
-  padding: 1px 6px;
+  padding: 0 5px;
   font-size: 11px;
+  line-height: 16px;
   color: var(--muted);
 }
 
@@ -1806,9 +1855,27 @@ li.group.drop-after::after {
     font-size: 16px;
   }
   .toolbar,
-  .usage,
   .approval {
     flex-wrap: wrap;
+  }
+  /* 상태 표시줄은 목록 화면에서만. 세션 패널에서는 입력칸이 화면 맨 아래에 붙어야 한다.
+     390px 에 한 줄로 들어가게 간격을 줄이고 "Remaining"·연결 상태 글자를 뺀다 (연결 상태는 점만, 뜻은 title).
+     그래도 넘치면(승인 대기가 뜰 때 등) 오른쪽(승인 대기·집계·연결)은 그대로 두고 사용량 끝이 잘린다 */
+  .status-bar,
+  .status-right {
+    gap: 8px;
+  }
+  .layout.with-panel + .status-bar,
+  .usage-prefix,
+  .status-link-label {
+    display: none;
+  }
+  .usage {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .status-right {
+    flex-shrink: 0;
   }
   /* 16px 이 되면 안내 문구가 두 줄로 넘쳐 한 줄 입력칸에 스크롤바가 생긴다 */
   .composer textarea::placeholder,

@@ -788,251 +788,273 @@ export function App() {
   const lobbySessions = snapshot.sessions.filter((s) => !s.teamId && attendanceOf(s) !== 'off')
   /** 퇴근 세션은 맨 아래 "퇴근" 에 모은다. 서버가 준 순서 그대로 */
   const offDutySessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'off')
+  /** footer 집계는 근무 세션만. 휴식·퇴근 세션은 훅 상태가 남아 있어도 세지 않는다 */
+  const presentSessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'present')
+  const workingCount = presentSessions.filter((s) => s.status === 'working').length
+  const approvalSessions = presentSessions.filter((s) => s.status === 'needs-approval')
 
   return (
-    <main className={`layout${selected ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}`}>
-      <aside>
-        <header>
-          <h1>jk-corp</h1>
-          <span className={isConnected ? 'dot on' : 'dot'} title={isConnected ? '서버 연결됨' : '서버 끊김'} />
-          <span
-            className={snapshot.isHostReachable ? 'dot on' : 'dot'}
-            title={snapshot.isHostReachable ? '세션 호스트 연결됨' : '세션 호스트 끊김'}
-          />
-          {/* 폰 폭에는 원래 사무실이 없다 */}
-          {!isNarrow && (
-            <button
-              className="icon"
-              onClick={toggleOffice}
-              title={isOfficeHidden ? '사무실 보이기' : '사무실 숨기기'}
-              aria-label={isOfficeHidden ? '사무실 보이기' : '사무실 숨기기'}
-            >
-              <OfficeToggleIcon isShown={!isOfficeHidden} />
-            </button>
-          )}
-          <button className="icon" onClick={restartHost} disabled={!snapshot.isHostReachable} title="호스트 재시작 (웹 세션 끊김)">
-            ↻
-          </button>
-        </header>
-        <div className="toolbar">
-          <button onClick={() => setIsGroupForm(true)}>+ 그룹</button>
-          <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable}>
-            + 세션 (로비)
-          </button>
-        </div>
-        <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
-          {office.groups.map((group, groupIndex) => {
-            const teams = office.teams.filter((t) => t.groupId === group.id)
-            return (
-              <li
-                key={group.id}
-                className={['group', reorderClass({ kind: 'group' }, group.id, groupIndex, office.groups.length)].join(' ')}
-                data-group-id={group.id}
-              >
-                <div className="group-label">
-                  <span className="name">{group.name}</span>
-                  <span className="head-actions">
-                    <button onClick={() => openTeamForm(group.id)} title="이 그룹에 팀 추가">
-                      +
-                    </button>
-                    {teams.length === 0 && <MoreMenu items={[{ label: '그룹 삭제', onClick: () => removeGroup(group) }]} />}
-                    {renderDragHandle({ kind: 'group' }, group.id)}
-                  </span>
-                </div>
-                {teams.map((team, teamIndex) => renderTeam(team, { index: teamIndex, count: teams.length }))}
-              </li>
-            )
-          })}
-          {orphanTeams.length > 0 && <li className="group">{orphanTeams.map((team) => renderTeam(team))}</li>}
-          <li className="group">
-            <div className="group-label">
-              <span className="name">로비</span>
-              {lobbySessions.length > 0 && <span className="count">{lobbySessions.length}</span>}
-            </div>
-            {lobbySessions.map((session) => renderSession(session, true))}
-          </li>
-          {offDutySessions.length > 0 && (
-            <li className="group">
-              <div className="group-label toggle" onClick={() => setIsOffDutyOpen(!isOffDutyOpen)}>
-                <span className="name">
-                  {isOffDutyOpen ? '▾' : '▸'} 퇴근
-                </span>
-                <span className="count">{offDutySessions.length}</span>
-              </div>
-              {isOffDutyOpen &&
-                offDutySessions.map((session) => {
-                  const team = office.teams.find((t) => t.id === session.teamId)
-                  return renderSession(session, !team, team?.name)
-                })}
-            </li>
-          )}
-        </ul>
-        <UsagePanel />
-      </aside>
-      {isGroupForm && (
-        <Modal title="그룹 추가" onClose={() => setIsGroupForm(false)}>
-          <form className="create" onSubmit={createGroup}>
-            <input name="name" placeholder="그룹 이름" required autoFocus />
-            <div className="actions">
-              <button type="submit" className="primary">
-                만들기
-              </button>
-              <button type="button" onClick={() => setIsGroupForm(false)}>
-                취소
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-      {teamForm && (
-        <Modal
-          title={`팀 추가 — 그룹 「${office.groups.find((g) => g.id === teamForm.groupId)?.name ?? ''}」`}
-          onClose={() => setTeamForm(null)}
-        >
-          <form className="create" onSubmit={createTeam}>
-            <input name="name" placeholder="팀 이름" required autoFocus />
-            <input name="cwd" placeholder="작업 폴더 (예: D:\workspace\foo). 이 폴더의 세션이 팀이 됨" required />
-            <div className="actions">
-              <button type="submit" className="primary">
-                만들기
-              </button>
-              <button type="button" onClick={() => setTeamForm(null)}>
-                취소
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-      {sessionForm && renderSessionModal(sessionForm.teamId, sessionForm.partId)}
-      {partForm && (
-        <Modal
-          title={`파트 추가 — 팀 「${office.teams.find((t) => t.id === partForm.teamId)?.name ?? ''}」`}
-          subtitle={office.teams.find((t) => t.id === partForm.teamId)?.cwd}
-          onClose={() => setPartForm(null)}
-        >
-          <form className="create" onSubmit={createPart}>
-            <input name="name" placeholder="파트 이름 (예: api)" required autoFocus />
-            <Segmented
-              value={partLocation}
-              onChange={setPartLocation}
-              options={[
-                { value: 'folder', label: '팀 폴더', hint: '팀 폴더를 같이 쓴다. 파일이 겹치지 않는 일에' },
-                { value: 'worktree', label: '새 worktree', hint: '같은 파일을 동시에 고칠 때. 저장소 옆 폴더에서 따로 일한다' },
-              ]}
-            />
-            <div className="form-hint">
-              {partLocation === 'worktree'
-                ? '저장소 옆 <저장소>.worktrees/<이름> 폴더, 브랜치 part/<이름> (현재 HEAD 기준. 이름의 영문·숫자만 씀). 병합은 직접'
-                : '팀 폴더 그대로. 다른 파트·팀 직속과 같은 파일을 고치지 않게 나눈다'}
-            </div>
-            <label className="check">
-              <input type="checkbox" checked={isPartLeadSpawned} onChange={(e) => setIsPartLeadSpawned(e.target.checked)} />
-              파트장 바로 띄우기
-            </label>
-            <div className="actions">
-              <button type="submit" className="primary" disabled={!snapshot.isHostReachable && isPartLeadSpawned}>
-                만들기
-              </button>
-              <button type="button" onClick={() => setPartForm(null)}>
-                취소
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-      {renameTarget && (
-        <Modal title="세션 이름 변경" subtitle={renameTarget.title ?? renameTarget.id} onClose={() => setRenameTarget(null)}>
-          <form className="create" onSubmit={renameSession}>
-            <input
-              name="name"
-              defaultValue={renameTarget.name ?? ''}
-              placeholder="비우면 자동 제목으로 돌아감"
-              autoFocus
-            />
-            <div className="actions">
-              <button type="submit" className="primary">
-                저장
-              </button>
-              <button type="button" onClick={() => setRenameTarget(null)}>
-                취소
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-      {/* 폰 폭과 사무실을 숨겼을 때는 PixiJS 를 돌리지 않도록 마운트하지 않는다 (CSS 로 숨기기만 하면 캔버스가 계속 돈다) */}
-      {isOfficeHiddenLayout && !selected && <div className="office-empty">왼쪽에서 세션을 고르면 대화가 열립니다</div>}
-      {!isNarrow && !isOfficeHidden && (
-        <Office
-          office={office}
-          sessions={snapshot.sessions}
-          selectedId={selectedId}
-          onSelect={selectSession}
-          onMoveDesk={moveDesk}
-          onMoveTeam={moveTeam}
-          onEditTeam={editTeam}
-          onEditGroup={editGroup}
-          onUpdateGroupBounds={updateGroupBounds}
-        />
-      )}
-      {selected && (
-        <section className="panel">
-          <div className="panel-header">
-            <b>{displayName(selected)}</b>
-            <button className="rename" title="이름 변경" onClick={() => setRenameTarget(selected)}>
-              ✎
-            </button>
-            {modelLabel(selected) && (
-              <span className="model-chip" title={selected.model ?? undefined}>
-                {modelLabel(selected)}
-              </span>
-            )}
-            <span className="cwd">{selected.cwd}</span>
-            <nav className="tabs">
-              <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>
-                대화
-              </button>
-              {isSelectedLiveWeb && (
-                <button className={shownTab === 'terminal' ? 'on' : ''} onClick={() => setTab('terminal')}>
-                  터미널
-                </button>
-              )}
-            </nav>
-            {isSelectedLiveWeb && (
+    <div className="app">
+      <main className={`layout${selected ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}`}>
+        <aside>
+          <header>
+            <h1>jk-corp</h1>
+            {/* 폰 폭에는 원래 사무실이 없다 */}
+            {!isNarrow && (
               <button
-                onClick={() => {
-                  if (confirm('세션을 종료할까요?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
-                }}
+                className="icon"
+                onClick={toggleOffice}
+                title={isOfficeHidden ? '사무실 보이기' : '사무실 숨기기'}
+                aria-label={isOfficeHidden ? '사무실 보이기' : '사무실 숨기기'}
               >
-                종료
+                <OfficeToggleIcon isShown={!isOfficeHidden} />
               </button>
             )}
-            {/* 폰에서는 패널이 화면 전체라 "뒤로" 가 목록으로 돌아가는 버튼이다 */}
-            <button className="close" onClick={() => setSelectedId(null)} title={isNarrow ? '목록으로' : '닫기'}>
-              {isNarrow ? '←' : '×'}
+            <button className="icon" onClick={restartHost} disabled={!snapshot.isHostReachable} title="호스트 재시작 (웹 세션 끊김)">
+              ↻
+            </button>
+          </header>
+          <div className="toolbar">
+            <button onClick={() => setIsGroupForm(true)}>+ 그룹</button>
+            <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable}>
+              + 세션 (로비)
             </button>
           </div>
-          {shownTab === 'terminal' ? (
-            <Terminal sessionId={selected.id} />
-          ) : (
-            <Chat
-              sessionId={selected.id}
-              isWritable={isSelectedLiveWeb}
-              footer={renderPanelFooter(selected)}
-              // 휴식·퇴근 세션은 훅 상태가 남아 있어도 작업 중·승인 대기로 보지 않는다
-              isApprovalNeeded={isSelectedPresent && selected.status === 'needs-approval'}
-              isWorking={isSelectedPresent && selected.status === 'working'}
-              workingSince={selected.workingSince ?? null}
-              pendingTool={selected.pendingTool}
-              question={selected.question ?? null}
-              suggestion={selected.suggestion ?? null}
-              version={transcriptVersions[selected.id] ?? 0}
-              sessionNames={Object.fromEntries(snapshot.sessions.map((s) => [s.id, displayName(s)]))}
-            />
+          <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
+            {office.groups.map((group, groupIndex) => {
+              const teams = office.teams.filter((t) => t.groupId === group.id)
+              return (
+                <li
+                  key={group.id}
+                  className={['group', reorderClass({ kind: 'group' }, group.id, groupIndex, office.groups.length)].join(' ')}
+                  data-group-id={group.id}
+                >
+                  <div className="group-label">
+                    <span className="name">{group.name}</span>
+                    <span className="head-actions">
+                      <button onClick={() => openTeamForm(group.id)} title="이 그룹에 팀 추가">
+                        +
+                      </button>
+                      {teams.length === 0 && <MoreMenu items={[{ label: '그룹 삭제', onClick: () => removeGroup(group) }]} />}
+                      {renderDragHandle({ kind: 'group' }, group.id)}
+                    </span>
+                  </div>
+                  {teams.map((team, teamIndex) => renderTeam(team, { index: teamIndex, count: teams.length }))}
+                </li>
+              )
+            })}
+            {orphanTeams.length > 0 && <li className="group">{orphanTeams.map((team) => renderTeam(team))}</li>}
+            <li className="group">
+              <div className="group-label">
+                <span className="name">로비</span>
+                {lobbySessions.length > 0 && <span className="count">{lobbySessions.length}</span>}
+              </div>
+              {lobbySessions.map((session) => renderSession(session, true))}
+            </li>
+            {offDutySessions.length > 0 && (
+              <li className="group">
+                <div className="group-label toggle" onClick={() => setIsOffDutyOpen(!isOffDutyOpen)}>
+                  <span className="name">
+                    {isOffDutyOpen ? '▾' : '▸'} 퇴근
+                  </span>
+                  <span className="count">{offDutySessions.length}</span>
+                </div>
+                {isOffDutyOpen &&
+                  offDutySessions.map((session) => {
+                    const team = office.teams.find((t) => t.id === session.teamId)
+                    return renderSession(session, !team, team?.name)
+                  })}
+              </li>
+            )}
+          </ul>
+        </aside>
+        {isGroupForm && (
+          <Modal title="그룹 추가" onClose={() => setIsGroupForm(false)}>
+            <form className="create" onSubmit={createGroup}>
+              <input name="name" placeholder="그룹 이름" required autoFocus />
+              <div className="actions">
+                <button type="submit" className="primary">
+                  만들기
+                </button>
+                <button type="button" onClick={() => setIsGroupForm(false)}>
+                  취소
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
+        {teamForm && (
+          <Modal
+            title={`팀 추가 — 그룹 「${office.groups.find((g) => g.id === teamForm.groupId)?.name ?? ''}」`}
+            onClose={() => setTeamForm(null)}
+          >
+            <form className="create" onSubmit={createTeam}>
+              <input name="name" placeholder="팀 이름" required autoFocus />
+              <input name="cwd" placeholder="작업 폴더 (예: D:\workspace\foo). 이 폴더의 세션이 팀이 됨" required />
+              <div className="actions">
+                <button type="submit" className="primary">
+                  만들기
+                </button>
+                <button type="button" onClick={() => setTeamForm(null)}>
+                  취소
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
+        {sessionForm && renderSessionModal(sessionForm.teamId, sessionForm.partId)}
+        {partForm && (
+          <Modal
+            title={`파트 추가 — 팀 「${office.teams.find((t) => t.id === partForm.teamId)?.name ?? ''}」`}
+            subtitle={office.teams.find((t) => t.id === partForm.teamId)?.cwd}
+            onClose={() => setPartForm(null)}
+          >
+            <form className="create" onSubmit={createPart}>
+              <input name="name" placeholder="파트 이름 (예: api)" required autoFocus />
+              <Segmented
+                value={partLocation}
+                onChange={setPartLocation}
+                options={[
+                  { value: 'folder', label: '팀 폴더', hint: '팀 폴더를 같이 쓴다. 파일이 겹치지 않는 일에' },
+                  { value: 'worktree', label: '새 worktree', hint: '같은 파일을 동시에 고칠 때. 저장소 옆 폴더에서 따로 일한다' },
+                ]}
+              />
+              <div className="form-hint">
+                {partLocation === 'worktree'
+                  ? '저장소 옆 <저장소>.worktrees/<이름> 폴더, 브랜치 part/<이름> (현재 HEAD 기준. 이름의 영문·숫자만 씀). 병합은 직접'
+                  : '팀 폴더 그대로. 다른 파트·팀 직속과 같은 파일을 고치지 않게 나눈다'}
+              </div>
+              <label className="check">
+                <input type="checkbox" checked={isPartLeadSpawned} onChange={(e) => setIsPartLeadSpawned(e.target.checked)} />
+                파트장 바로 띄우기
+              </label>
+              <div className="actions">
+                <button type="submit" className="primary" disabled={!snapshot.isHostReachable && isPartLeadSpawned}>
+                  만들기
+                </button>
+                <button type="button" onClick={() => setPartForm(null)}>
+                  취소
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
+        {renameTarget && (
+          <Modal title="세션 이름 변경" subtitle={renameTarget.title ?? renameTarget.id} onClose={() => setRenameTarget(null)}>
+            <form className="create" onSubmit={renameSession}>
+              <input
+                name="name"
+                defaultValue={renameTarget.name ?? ''}
+                placeholder="비우면 자동 제목으로 돌아감"
+                autoFocus
+              />
+              <div className="actions">
+                <button type="submit" className="primary">
+                  저장
+                </button>
+                <button type="button" onClick={() => setRenameTarget(null)}>
+                  취소
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
+        {/* 폰 폭과 사무실을 숨겼을 때는 PixiJS 를 돌리지 않도록 마운트하지 않는다 (CSS 로 숨기기만 하면 캔버스가 계속 돈다) */}
+        {isOfficeHiddenLayout && !selected && <div className="office-empty">왼쪽에서 세션을 고르면 대화가 열립니다</div>}
+        {!isNarrow && !isOfficeHidden && (
+          <Office
+            office={office}
+            sessions={snapshot.sessions}
+            selectedId={selectedId}
+            onSelect={selectSession}
+            onMoveDesk={moveDesk}
+            onMoveTeam={moveTeam}
+            onEditTeam={editTeam}
+            onEditGroup={editGroup}
+            onUpdateGroupBounds={updateGroupBounds}
+          />
+        )}
+        {selected && (
+          <section className="panel">
+            <div className="panel-header">
+              <b>{displayName(selected)}</b>
+              <button className="rename" title="이름 변경" onClick={() => setRenameTarget(selected)}>
+                ✎
+              </button>
+              {modelLabel(selected) && (
+                <span className="model-chip" title={selected.model ?? undefined}>
+                  {modelLabel(selected)}
+                </span>
+              )}
+              <span className="cwd">{selected.cwd}</span>
+              <nav className="tabs">
+                <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>
+                  대화
+                </button>
+                {isSelectedLiveWeb && (
+                  <button className={shownTab === 'terminal' ? 'on' : ''} onClick={() => setTab('terminal')}>
+                    터미널
+                  </button>
+                )}
+              </nav>
+              {isSelectedLiveWeb && (
+                <button
+                  onClick={() => {
+                    if (confirm('세션을 종료할까요?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
+                  }}
+                >
+                  종료
+                </button>
+              )}
+              {/* 폰에서는 패널이 화면 전체라 "뒤로" 가 목록으로 돌아가는 버튼이다 */}
+              <button className="close" onClick={() => setSelectedId(null)} title={isNarrow ? '목록으로' : '닫기'}>
+                {isNarrow ? '←' : '×'}
+              </button>
+            </div>
+            {shownTab === 'terminal' ? (
+              <Terminal sessionId={selected.id} />
+            ) : (
+              <Chat
+                sessionId={selected.id}
+                isWritable={isSelectedLiveWeb}
+                footer={renderPanelFooter(selected)}
+                // 휴식·퇴근 세션은 훅 상태가 남아 있어도 작업 중·승인 대기로 보지 않는다
+                isApprovalNeeded={isSelectedPresent && selected.status === 'needs-approval'}
+                isWorking={isSelectedPresent && selected.status === 'working'}
+                workingSince={selected.workingSince ?? null}
+                pendingTool={selected.pendingTool}
+                question={selected.question ?? null}
+                suggestion={selected.suggestion ?? null}
+                version={transcriptVersions[selected.id] ?? 0}
+                sessionNames={Object.fromEntries(snapshot.sessions.map((s) => [s.id, displayName(s)]))}
+              />
+            )}
+          </section>
+        )}
+      </main>
+      {/* 화면 아래 상태 표시줄: 왼쪽 사용량, 오른쪽 세션 집계·연결 상태 (폰은 목록 화면에서만. style.css) */}
+      <footer className="status-bar">
+        <UsagePanel />
+        <span className="status-right">
+          {approvalSessions.length > 0 && (
+            <button className="status-approval" onClick={() => selectSession(approvalSessions[0].id)} title="승인 대기 세션 열기">
+              승인 대기 {approvalSessions.length}
+            </button>
           )}
-        </section>
-      )}
-    </main>
+          <span>
+            작업 중 {workingCount} · 근무 {presentSessions.length}
+          </span>
+          <span className="status-link" title={isConnected ? '서버 연결됨' : '서버 끊김'}>
+            <span className="status-link-label">서버</span>
+            <span className={isConnected ? 'dot on' : 'dot'} />
+          </span>
+          <span className="status-link" title={snapshot.isHostReachable ? '세션 호스트 연결됨' : '세션 호스트 끊김'}>
+            <span className="status-link-label">호스트</span>
+            <span className={snapshot.isHostReachable ? 'dot on' : 'dot'} />
+          </span>
+        </span>
+      </footer>
+    </div>
   )
 }
 
