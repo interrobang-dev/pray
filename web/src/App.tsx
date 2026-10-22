@@ -668,7 +668,7 @@ export function App() {
   }
 
   /**
-   * 세션 한 줄: 상태 점 · 아바타 · 제목 · (팀장 태그 · 승인 대기·휴식 배지 · 시각). 팀 안에서는 폴더를 숨긴다 (팀 = 폴더). teamName 이 있으면 제목 앞에 붙인다 (퇴근).
+   * 세션 한 줄: 상태 점 · 아바타 · 제목 · (승인 대기·휴식 배지 · 시각). 팀장은 아바타 금색, 파트장은 은색 테두리. 팀 안에서는 폴더를 숨긴다 (팀 = 폴더). teamName 이 있으면 제목 앞에 붙인다 (퇴근).
    * 휴식은 회색 점 + "휴식", 퇴근은 시각 대신 퇴근 이유 · 시각 (옛 서버 응답이라 이유가 없으면 시각)
    */
   function renderSession(session: Session, hasCwd: boolean, teamName?: string) {
@@ -678,6 +678,7 @@ export function App() {
     const attendance = attendanceOf(session)
     const isPresent = attendance === 'present'
     const offDuty = attendance === 'off' && session.offDuty ? offDutyLabel(session.offDuty, now) : null
+    const roleLabel = session.role === 'lead' ? (session.partId ? '파트장' : '팀장') : null
     return (
       <div
         key={session.id}
@@ -688,7 +689,13 @@ export function App() {
           className={`status-dot ${isPresent ? session.status : attendance}`}
           title={isPresent ? statusLabel[session.status] : attendance === 'break' ? '휴식' : '퇴근'}
         />
-        <span className="avatar" style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties} />
+        <span
+          className={['avatar', roleLabel === '팀장' ? 'lead' : roleLabel === '파트장' ? 'part-lead' : ''].join(' ')}
+          style={{ '--hair': cssColor(avatar.hair), '--skin': cssColor(avatar.skin) } as CSSProperties}
+          role={roleLabel ? 'img' : undefined}
+          title={roleLabel ?? undefined}
+          aria-label={roleLabel ?? undefined}
+        />
         <div className="title">{teamName ? `${teamName} · ${displayName(session)}` : displayName(session)}</div>
         {model && (
           <span className="model" title={session.model ?? undefined}>
@@ -696,8 +703,6 @@ export function App() {
           </span>
         )}
         <div className="meta">
-          {session.role === 'lead' &&
-            (session.partId ? <span className="badge role-part-lead">파트장</span> : <span className="badge role-lead">팀장</span>)}
           {isPresent && session.status === 'needs-approval' && <span className="badge needs-approval">{statusLabel[session.status]}</span>}
           {attendance === 'break' && <span className="badge">휴식</span>}
           {offDuty ? (
