@@ -161,7 +161,7 @@ type SortOrder = 'recent' | 'name'
 const compareName = (a: string, b: string) => a.localeCompare(b, 'ko', { numeric: true })
 
 /**
- * 대화 오른쪽 아래 버튼 묶음 맨 아래의 동그란 폴더 버튼 (제안·"↓" 는 그 위에 쌓인다). 세션 작업 폴더(scratchpad)에 파일이 있을 때만 보인다.
+ * 대화 오른쪽 아래 버튼 묶음의 동그란 폴더 버튼 (제안이 있으면 그 위, "↓" 는 이 위에 쌓인다). 세션 작업 폴더(scratchpad)에 파일이 있을 때만 보인다.
  * 세션을 열 때와 대화가 갱신될 때 확인하고, 파일이 있는 것을 본 뒤로는 모달을 열 때·새로고침 때만 다시 받는다 (일하는 동안 갱신이 잦아서).
  * 세션이 바뀌면 Chat 이 key 로 새로 만든다
  */

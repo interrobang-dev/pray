@@ -913,7 +913,7 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
           {isSuggestionShown && <div className="suggestion-space" aria-hidden="true" />}
           <div ref={bottomRef} />
         </div>
-        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 폴더 → 제안 → "↓" 로 쌓인다 */}
+        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 제안 → 폴더 → "↓" 로 쌓인다 */}
         <div className="pane-buttons">
           {!isAtBottom && (
             <button
@@ -926,6 +926,7 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
               ↓{hasUnread && <span className="to-bottom-dot" />}
             </button>
           )}
+          <FilesButton key={sessionId} sessionId={sessionId} version={version} />
           {isSuggestionShown && (
             <button type="button" className="suggestion" onClick={fillSuggestion} title={suggestion ?? undefined} aria-label={`제안을 입력칸에 채우기: ${suggestion}`}>
               <span className="suggestion-bubble">
@@ -937,7 +938,6 @@ export function Chat({ sessionId, isWritable, footer, isApprovalNeeded, isWorkin
               </span>
             </button>
           )}
-          <FilesButton key={sessionId} sessionId={sessionId} version={version} />
         </div>
       </div>
       {isWritable && question?.questions.length ? (

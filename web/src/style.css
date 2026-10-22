@@ -845,8 +845,8 @@ li.group.drop-after::after {
   font-size: 11px;
   color: var(--muted);
 }
-/* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 작업 파일 폴더(Files.tsx) → 제안 → 맨 아래가 아닐 때 뜨는 "↓".
-   아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않고, 위 버튼이 뜨고 숨어도 아래 버튼은 움직이지 않는다.
+/* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 제안 → 작업 파일 폴더(Files.tsx) → 맨 아래가 아닐 때 뜨는 "↓".
+   아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않고, 제안이 뜨고 사라지면 폴더·"↓" 가 한 칸씩 오르내린다.
    묶음이 대화 폭을 다 덮는 것은 제안 말풍선 최대 폭을 대화 폭 기준으로 정하려고다. 빈 자리는 클릭이 대화로 지나간다.
    z-index 를 주지 않는다: 폴더 버튼의 모달이 이 안에 렌더돼 묶음의 쌓임 맥락에 갇힌다 */
 .pane-buttons {
@@ -1651,13 +1651,10 @@ li.group.drop-after::after {
   border-color: var(--green);
 }
 /* 제안이 보일 때 대화 끝에 비워 두는 자리 (Chat.tsx). 맨 아래로 내렸을 때 마지막 글 끝이 말풍선 위에 온다.
-   폴더 버튼이 있으면 말풍선이 그 위 칸이라 그만큼 더. 빈 div 라 flex-shrink 를 막지 않으면 대화가 길 때 0 으로 줄어든다 */
+   빈 div 라 flex-shrink 를 막지 않으면 대화가 길 때 0 으로 줄어든다 */
 .suggestion-space {
   flex-shrink: 0;
   height: 40px;
-}
-.messages-pane:has(.files-button) .suggestion-space {
-  height: 88px;
 }
 .suggestion-text {
   min-width: 0;
