@@ -1055,12 +1055,17 @@ export function App() {
               )}
               <span className="cwd">{selected.cwd}</span>
               <nav className="tabs">
-                <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>
-                  대화
+                <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')} title="대화" aria-label="대화">
+                  <ChatTabIcon />
                 </button>
                 {isSelectedLiveWeb && (
-                  <button className={shownTab === 'terminal' ? 'on' : ''} onClick={() => setTab('terminal')}>
-                    터미널
+                  <button
+                    className={shownTab === 'terminal' ? 'on' : ''}
+                    onClick={() => setTab('terminal')}
+                    title="터미널"
+                    aria-label="터미널"
+                  >
+                    <TerminalTabIcon />
                   </button>
                 )}
               </nav>
@@ -1261,6 +1266,38 @@ function OfficeToggleIcon({ isShown }: { isShown: boolean }) {
           <path d="M9.5 1.5v11" stroke="currentColor" />
         </>
       )}
+    </svg>
+  )
+}
+
+/** 패널 헤더 대화 탭 아이콘: 말풍선 */
+function ChatTabIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M4 2.5h8a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5v-2.5H4a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 4 2.5z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** 패널 헤더 터미널 탭 아이콘: 창 안의 `>_` */
+function TerminalTabIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
+      <path
+        d="M4.5 6l2 2-2 2M8 10.5h3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }

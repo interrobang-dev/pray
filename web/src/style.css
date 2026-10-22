@@ -642,6 +642,10 @@ li.group.drop-after::after {
   color: var(--text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
+/* 대화·터미널 아이콘 (App.tsx ChatTabIcon·TerminalTabIcon). block 이라 글자 기준선 여백 없이 버튼 높이 = 16 + 위아래 4px */
+.tabs button svg {
+  display: block;
+}
 .hint {
   padding: 16px;
   color: var(--muted);
@@ -2142,6 +2146,11 @@ li.group.drop-after::after {
   }
   .panel-header .tabs {
     grid-area: 1 / 4;
+  }
+  /* 대화·터미널 아이콘 탭: 손가락으로 누르기 쉽게 44×36 (탭 묶음 높이 40px) */
+  .tabs button {
+    min-height: 36px;
+    padding: 0 14px;
   }
   .panel-header .cwd {
     grid-area: 2 / 1 / 3 / -1;
