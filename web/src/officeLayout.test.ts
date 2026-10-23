@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dropIsland, layoutOffice, pushRight, spotForNewTeam, type Rect } from './officeLayout'
+import { LOUNGE_MIN_H, LOUNGE_W, dropIsland, layoutOffice, pushRight, spotForNewGroup, spotForNewTeam, type Rect } from './officeLayout'
 import type { Group, Office, Session, Team } from './types'
 
 const group = (id: string, x: number, y = 0): Group => ({ id, name: id, x, y, w: 9, h: 7 })
@@ -140,7 +140,8 @@ describe('섬 안 자리 (지휘자 옆자리 + 칸막이 블록 줄)', () => {
   const seat = (x: number, y: number, h: number, dir: string) => ({ x, y, w: 2, h, dir, isBooth: false })
 
   it('섬 크기: 지휘자 열 2 + 짝마다 2 + 화분 열 1 + 테두리, 블록 줄 4타일, 한 줄 최대 4짝이고 넘치면 줄마다 고르게 나눈다', () => {
-    expect(size(0)).toEqual([5, 5])
+    // 팀원이 없어도 빈 짝 하나라 팀원 1~2명과 같다
+    expect(size(0)).toEqual([7, 6])
     expect(size(1)).toEqual([7, 6])
     expect(size(3)).toEqual([9, 6])
     expect(size(6)).toEqual([11, 6])
@@ -178,11 +179,15 @@ describe('섬 안 자리 (지휘자 옆자리 + 칸막이 블록 줄)', () => {
     for (const a of rects) for (const b of rects) if (a !== b) expect(isApart(a, b, 0)).toBe(true)
   })
 
-  it('지휘자만 있으면 짝 없는 3타일 블록 줄 하나(아랫자리 몫 없음)와 옆 화분', () => {
+  it('지휘자만 있으면 지휘자 + 팀원이 앉을 빈 짝 하나(윗자리·아랫자리 빈 책상)와 옆 화분', () => {
     const layout = withLead(0)
     expect(layout.seats.get('lead')).toEqual(seat(2, 3, 2, 'right'))
-    expect(layout.islands[0].rows).toEqual([{ x: 4, y: 2, w: 0, h: 3, pairs: [], leadId: 'lead' }])
-    expect(layout.islands[0].plants).toEqual([{ x: 4, y: 2, w: 1, h: 3 }])
+    expect(layout.islands[0].rows).toEqual([{ x: 4, y: 2, w: 2, h: 4, pairs: [{ top: null, bottom: null }], leadId: 'lead' }])
+    expect(layout.islands[0].plants).toEqual([{ x: 6, y: 2, w: 1, h: 4 }])
+    // 팀원 1명이면 그 빈 짝 윗자리에 앉고 섬 크기는 같다
+    const one = withLead(1)
+    expect(one.islands[0].rows[0].pairs).toEqual([{ top: 'T-0', bottom: null }])
+    expect([one.islands[0].w, one.islands[0].h]).toEqual([layout.islands[0].w, layout.islands[0].h])
   })
 
   it('두 줄이면 둘째 줄은 블록 줄 아래 통로 1타일 뒤에서 시작하고 지휘자·화분은 첫 줄 왼쪽·줄마다 같은 열', () => {
@@ -226,6 +231,61 @@ describe('섬 안 자리 (지휘자 옆자리 + 칸막이 블록 줄)', () => {
     expect(layout.seats.get('pm')).toEqual(seat(4, 8, 2, 'down'))
     expect(island.zones.map(({ x, y, w, h }) => ({ x, y, w, h }))).toEqual([{ x: 2, y: 8, w: 5, h: 4 }])
     expect([island.y, island.h]).toEqual([1, 12])
+  })
+
+  it('파트장만 있는 파트도 빈 짝 하나 (파트 구역은 지휘자 열 + 짝 + 화분 열)', () => {
+    const base = team('T', 'gone', 2)
+    const data: Office = {
+      groups: [],
+      teams: [{ ...base, leadSessionId: 'lead', parts: [{ id: 'p', name: 'P', leadSessionId: 'plead', createdAt: base.createdAt }] }],
+    }
+    const session = (id: string, partId: string | null) => ({ id, teamId: 'T', partId, role: 'lead', attendance: 'present' }) as Session
+    const layout = layoutOffice(data, [session('lead', null), session('plead', 'p')])
+    const [island] = layout.islands
+    expect(island.rows.map((row) => [row.y, row.h, row.pairs, row.leadId])).toEqual([
+      [2, 4, [{ top: null, bottom: null }], 'lead'],
+      [8, 4, [{ top: null, bottom: null }], 'plead'],
+    ])
+    expect(island.zones.map(({ x, y, w, h }) => ({ x, y, w, h }))).toEqual([{ x: 2, y: 8, w: 5, h: 4 }])
+    expect([island.w, island.h]).toEqual([7, 12])
+  })
+})
+
+describe('라운지', () => {
+  it('Focus Zone 오른쪽에 1타일 띄워 붙고 높이가 같다. 오른쪽 끝·아래 끝은 라운지까지', () => {
+    const layout = layoutOffice(office(), small)
+    const { lobby, lounge } = layout
+    expect(lounge).toEqual({ x: lobby.x + lobby.w + 1, y: 0, w: LOUNGE_W, h: lobby.h })
+    expect(layout.right).toBe(lounge.x + lounge.w)
+    expect(layout.bottom).toBe(lounge.y + lounge.h)
+  })
+
+  it('내용이 낮으면 최소 높이, 그룹·섬이 길면 그 아래 끝까지 (Focus Zone 도 같이)', () => {
+    expect(layoutOffice({ groups: [], teams: [] }, []).lounge).toEqual({ x: 9, y: 0, w: LOUNGE_W, h: LOUNGE_MIN_H })
+    const data: Office = { groups: [group('g1', 0), group('g2', 0, 30)], teams: [] }
+    const layout = layoutOffice(data, [])
+    const bottom = Math.max(...layout.groupAreas.map((a) => a.y + a.h))
+    expect(layout.lounge.h).toBe(bottom)
+    expect(layout.lobby.h).toBe(bottom)
+  })
+
+  it('자리·그룹·섬·Focus Zone 과 겹치지 않고 세션은 앉지 않는다', () => {
+    const lobbySessions = Array.from({ length: 5 }, (_, index) => ({ id: `L${index}`, teamId: null, attendance: 'present' }) as Session)
+    const layout = layoutOffice(office(), [...members('A', 14), ...small.filter((s) => s.teamId !== 'A'), ...lobbySessions])
+    const { lounge } = layout
+    for (const rect of [...layout.seats.values(), ...layout.booths, ...layout.groupAreas, ...layout.islands, layout.lobby]) {
+      expect(isApart(rect, lounge, 1)).toBe(true)
+    }
+  })
+
+  it('새 그룹을 빈 자리에 놓아도 라운지는 늘 내용 오른쪽 끝을 따라가 겹치지 않는다', () => {
+    const data = office()
+    const spot = spotForNewGroup(layoutOffice(data, small))
+    const after = layoutOffice({ ...data, groups: [...data.groups, { ...group('new', spot.x, spot.y) }] }, small)
+    for (const area of after.groupAreas) {
+      expect(isApart(area, after.lounge, 1)).toBe(true)
+      expect(area.x + area.w).toBeLessThan(after.lounge.x)
+    }
   })
 })
 

@@ -10,8 +10,6 @@ import { attendanceOf, type Group, type Office, type Part, type Session, type Te
  * 짝 = 마주 보는 두 자리(윗자리는 아래를, 아랫자리는 위를 본다)가 한 모듈, 폭 2타일
  */
 const BLOCK_ROW_H = 4
-/** 짝 없이 지휘자만 있는 블록 줄 높이: 지휘자 책상 아래 끝(블록 줄 위에서 144 도트 px)까지라 아랫자리 몫이 없다 */
-const LEAD_ONLY_ROW_H = 3
 const PAIR_W = 2
 /** 칸막이 블록 한 줄에 놓는 짝 수의 최대. 넘치면 줄을 더 쌓고 줄마다 짝 수를 고르게 나눈다 */
 const MAX_PAIRS_PER_ROW = 4
@@ -49,6 +47,10 @@ const BOOTH_SEAT = { w: 2, h: 3 }
 const LOBBY_W = 1 + LOBBY_COLUMNS * BOOTH_STEP_X + 1
 /** Focus Zone 위쪽 이름표 전용 줄. 자리는 그 아래 + 테두리 1타일부터 */
 const LOBBY_SIGN_H = 1
+/** 라운지(Focus Zone 오른쪽 고정 공간) 폭 */
+export const LOUNGE_W = 10
+/** 라운지 최소 높이: 탕비 줄 + 지그재그 원탁 둘 + 소파 띠 (안의 그림은 officeFixtures.ts) */
+export const LOUNGE_MIN_H = 10
 
 export interface Point {
   x: number
@@ -120,7 +122,9 @@ export interface OfficeLayout {
   lobby: Rect
   /** 로비 안 부스 자리 전부 (앉은 자리 포함, 구역 높이만큼) */
   booths: Seat[]
-  /** 내용 전체의 오른쪽·아래 끝 */
+  /** 라운지: 로비 오른쪽에 붙는 고정 공간 (세션은 앉지 않는다). 로비와 높이가 같다 */
+  lounge: Rect
+  /** 내용 전체(라운지까지)의 오른쪽·아래 끝 */
   right: number
   bottom: number
 }
@@ -146,22 +150,21 @@ interface IslandParts {
 
 /**
  * 지휘 단위 하나 (왼쪽 위 x,y): 지휘자는 첫 블록 줄 왼쪽 자리(right), 팀원은 짝 단위로 윗자리(down) → 아랫자리(up) → 다음 짝 … 받은 순서대로.
- * 짝 수 p, 줄 수 ⌈p/4⌉, 줄마다 ⌈p/줄 수⌉ 짝(지휘자만 있으면 짝 없는 줄 하나). 블록 오른쪽 끝에 화분 열. 지휘자가 없으면 지휘자 열이 없다. 단위 경계를 돌려준다
+ * 짝 수 p(최소 1 — 지휘자만 있거나 세션이 없어도 팀원이 앉을 빈 짝 하나), 줄 수 ⌈p/4⌉, 줄마다 ⌈p/줄 수⌉ 짝. 블록 오른쪽 끝에 화분 열.
+ * 지휘자가 없으면 지휘자 열이 없다. 단위 경계를 돌려준다
  */
 function placeUnit(
   origin: Point,
   lead: Session | undefined,
   members: Session[],
-  minPairs: number,
   seats: Map<string, Seat>,
   parts: IslandParts,
 ): Rect {
-  const pairCount = Math.max(minPairs, Math.ceil(members.length / 2))
+  const pairCount = Math.max(1, Math.ceil(members.length / 2))
   const blockX = origin.x + (lead ? LEAD_W : 0)
   const rows = Math.max(1, Math.ceil(pairCount / MAX_PAIRS_PER_ROW))
   const perRow = Math.ceil(pairCount / rows)
-  const rowH = pairCount ? BLOCK_ROW_H : LEAD_ONLY_ROW_H
-  const rowY = (row: number) => origin.y + row * (rowH + BLOCK_ROW_GAP)
+  const rowY = (row: number) => origin.y + row * (BLOCK_ROW_H + BLOCK_ROW_GAP)
   for (let row = 0; row < rows; row++) {
     const y = rowY(row)
     const pairs: BlockPair[] = []
@@ -175,15 +178,15 @@ function placeUnit(
     }
     const leadId = row === 0 && lead ? lead.id : null
     if (leadId) seats.set(leadId, { x: blockX - LEAD_W, y: y + LEAD_SEAT.dy, w: LEAD_W, h: LEAD_SEAT.h, dir: 'right', isBooth: false })
-    parts.rows.push({ x: blockX, y, w: pairs.length * PAIR_W, h: rowH, pairs, leadId })
-    parts.plants.push({ x: blockX + perRow * PAIR_W, y, w: PLANT_W, h: rowH })
+    parts.rows.push({ x: blockX, y, w: pairs.length * PAIR_W, h: BLOCK_ROW_H, pairs, leadId })
+    parts.plants.push({ x: blockX + perRow * PAIR_W, y, w: PLANT_W, h: BLOCK_ROW_H })
   }
-  return { ...origin, w: blockX - origin.x + perRow * PAIR_W + PLANT_W, h: rows * rowH + (rows - 1) * BLOCK_ROW_GAP }
+  return { ...origin, w: blockX - origin.x + perRow * PAIR_W + PLANT_W, h: rows * BLOCK_ROW_H + (rows - 1) * BLOCK_ROW_GAP }
 }
 
 /**
  * 섬 하나: 팀 직속 → 파트 순으로 아래로 쌓는다 (파트 앞에는 이름표 여백 PART_GAP, 세션 없는 파트는 건너뛴다).
- * 단위마다 placeUnit 규칙을 따로 적용하고, 그 단위의 팀장·파트장이 지휘자 자리에 앉는다. 세션 없는 팀은 빈 짝 하나
+ * 단위마다 placeUnit 규칙을 따로 적용하고, 그 단위의 팀장·파트장이 지휘자 자리에 앉는다 (팀원이 없으면 지휘자 + 빈 짝 하나). 세션 없는 팀은 빈 짝 하나
  */
 function placeTeam(team: Team, members: Session[], seats: Map<string, Seat>): Island {
   const partIds = new Set(team.parts.map((p) => p.id))
@@ -203,7 +206,6 @@ function placeTeam(team: Team, members: Session[], seats: Map<string, Seat>): Is
       { x: team.x, y: top },
       lead,
       unitMembers.filter((s) => s !== lead),
-      0,
       seats,
       parts,
     )
@@ -214,7 +216,7 @@ function placeTeam(team: Team, members: Session[], seats: Map<string, Seat>): Is
     } else occupied.push(unit)
     top += unit.h
   }
-  if (occupied.length === 0) occupied.push(placeUnit({ x: team.x, y: team.y }, undefined, [], 1, seats, parts))
+  if (occupied.length === 0) occupied.push(placeUnit({ x: team.x, y: team.y }, undefined, [], seats, parts))
   return { team, zones, anchor: { x: team.x, y: team.y }, ...parts, ...inflate(boundingBox(occupied), ISLAND_PADDING) }
 }
 
@@ -306,12 +308,14 @@ export function layoutOffice(office: Office, sessions: Session[]): OfficeLayout 
   const placed: Rect[] = [...groupAreas, ...islands]
   const lobbySessions = seated.filter((s) => !s.teamId)
   const rows = Math.max(1, Math.ceil(lobbySessions.length / LOBBY_COLUMNS))
+  // 로비·라운지는 같은 높이 = 내용(그룹·섬) 아래 끝까지, 각자 최소 높이 이상
   const lobby = {
     x: placed.length ? Math.max(...placed.map((r) => r.x + r.w)) + GAP : 0,
     y: 0,
     w: LOBBY_W,
-    h: Math.max(LOBBY_SIGN_H + rows * BOOTH_STEP_Y + 2, ...placed.map((r) => r.y + r.h)),
+    h: Math.max(LOBBY_SIGN_H + rows * BOOTH_STEP_Y + 2, LOUNGE_MIN_H, ...placed.map((r) => r.y + r.h)),
   }
+  const lounge = { x: lobby.x + lobby.w + GAP, y: 0, w: LOUNGE_W, h: lobby.h }
   const boothAt = (index: number): Seat => ({
     x: lobby.x + 1 + (index % LOBBY_COLUMNS) * BOOTH_STEP_X,
     y: lobby.y + LOBBY_SIGN_H + 1 + Math.floor(index / LOBBY_COLUMNS) * BOOTH_STEP_Y,
@@ -323,7 +327,7 @@ export function layoutOffice(office: Office, sessions: Session[]): OfficeLayout 
   // 그룹이 더 높아 구역이 길면 그 높이만큼 빈 부스를 더 둔다
   const boothRows = Math.max(rows, Math.floor((lobby.h - LOBBY_SIGN_H - 2) / BOOTH_STEP_Y))
   const booths = Array.from({ length: boothRows * LOBBY_COLUMNS }, (_, index) => boothAt(index))
-  return { seated, seats, islands, groupAreas, lobby, booths, right: lobby.x + lobby.w, bottom: lobby.y + lobby.h }
+  return { seated, seats, islands, groupAreas, lobby, booths, lounge, right: lounge.x + lounge.w, bottom: lobby.y + lobby.h }
 }
 
 /**
@@ -348,7 +352,7 @@ export function findFreeSpot(size: { w: number; h: number }, preferred: Point, o
   return best
 }
 
-/** 새 그룹 자리 (최소 크기). 그려진 그룹·섬과 GAP 만큼 띄운다. 로비는 늘 그룹들 오른쪽 끝으로 따라가므로 피하지 않는다 */
+/** 새 그룹 자리 (최소 크기). 그려진 그룹·섬과 GAP 만큼 띄운다. 로비·라운지는 늘 그룹들 오른쪽 끝으로 따라가므로 피하지 않는다 */
 export function spotForNewGroup(layout: OfficeLayout): Point {
   const obstacles = [...layout.groupAreas, ...layout.islands].map((r) => inflate(r, GAP))
   return findFreeSpot(MIN_GROUP, { x: 0, y: 0 }, obstacles, { x: 0, y: 0 })
