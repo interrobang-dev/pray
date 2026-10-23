@@ -180,6 +180,36 @@ export const statusLabel: Record<SessionStatus, string> = {
   unknown: '알 수 없음',
 }
 
+/** 퇴근 시각부터 지금까지를 "방금"·"5분 전"·"3시간 전"·"2일 전" 으로 */
+function formatAgo(iso: string, now: number): string {
+  const minutes = Math.floor(Math.max(0, now - new Date(iso).getTime()) / 60_000)
+  if (minutes < 1) return '방금'
+  if (minutes < 60) return `${minutes}분 전`
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}시간 전`
+  return `${Math.floor(minutes / 1440)}일 전`
+}
+
+export interface OffDutyLabel {
+  text: string
+  /** 오류로 퇴근. 빨강 */
+  isError: boolean
+  /** 툴팁: 퇴근 시각 */
+  title: string
+}
+
+/** 퇴근 이유 · 시각 "퇴근 · 방금"·"정리됨 · 3시간 전"·"오류로 퇴근 (코드 1) · 2일 전" (목록 Off Duty 줄·퇴근 막대·사무실 퇴근 거리 카드) */
+export function offDutyLabel(offDuty: OffDuty, now: number): OffDutyLabel {
+  const isError = offDuty.reason === 'error'
+  const reason = isError
+    ? offDuty.exitCode === null
+      ? '오류로 퇴근'
+      : `오류로 퇴근 (코드 ${offDuty.exitCode})`
+    : offDuty.reason === 'dismissed'
+      ? '정리됨'
+      : '퇴근'
+  return { text: `${reason} · ${formatAgo(offDuty.endedAt, now)}`, isError, title: new Date(offDuty.endedAt).toLocaleString('ko-KR') }
+}
+
 export interface UsageLimit {
   label: string
   kind: string

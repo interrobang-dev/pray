@@ -19,11 +19,12 @@ import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, 
 import { dotLookOf } from './dotCharacter'
 import {
   attendanceOf,
+  offDutyLabel,
   statusLabel,
   type FlowStatus,
   type Office as OfficeData,
   type Group,
-  type OffDuty,
+  type OffDutyLabel,
   type Part,
   type Session,
   type SessionStatus,
@@ -118,36 +119,6 @@ function formatElapsed(iso: string | null, now: number): { text: string; classNa
     minutes < 1 ? 'now' : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`
   const className = minutes < 15 ? 'recent' : minutes > 120 ? 'stale' : ''
   return { text, className, title: date.toLocaleString('ko-KR') }
-}
-
-/** 퇴근 시각부터 지금까지를 "방금"·"5분 전"·"3시간 전"·"2일 전" 으로 */
-function formatAgo(iso: string, now: number): string {
-  const minutes = Math.floor(Math.max(0, now - new Date(iso).getTime()) / 60_000)
-  if (minutes < 1) return '방금'
-  if (minutes < 60) return `${minutes}분 전`
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}시간 전`
-  return `${Math.floor(minutes / 1440)}일 전`
-}
-
-interface OffDutyLabel {
-  text: string
-  /** 오류로 퇴근. 빨강 */
-  isError: boolean
-  /** 툴팁: 퇴근 시각 */
-  title: string
-}
-
-/** 퇴근 이유 · 시각 "퇴근 · 방금"·"정리됨 · 3시간 전"·"오류로 퇴근 (코드 1) · 2일 전" */
-function offDutyLabel(offDuty: OffDuty, now: number): OffDutyLabel {
-  const isError = offDuty.reason === 'error'
-  const reason = isError
-    ? offDuty.exitCode === null
-      ? '오류로 퇴근'
-      : `오류로 퇴근 (코드 ${offDuty.exitCode})`
-    : offDuty.reason === 'dismissed'
-      ? '정리됨'
-      : '퇴근'
-  return { text: `${reason} · ${formatAgo(offDuty.endedAt, now)}`, isError, title: new Date(offDuty.endedAt).toLocaleString('ko-KR') }
 }
 
 /** 팀 카드 안 세션 줄의 정렬 순위. 작을수록 위. 승인 대기 → 내 차례 → 작업 중 → 나머지 (팀장도 상태로만 정렬) */
@@ -254,6 +225,9 @@ export function App() {
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
   /** 목록 맨 아래 "Off Duty" 구역을 펼쳤는지. 기본 접힘 */
   const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
+  /** 사무실 퇴근 거리의 "+N" 을 누른 횟수. 바뀌면 펼친 Off Duty 구역으로 목록을 스크롤한다 (펼친 뒤 그려진 다음에) */
+  const [offDutyScrollRequest, setOffDutyScrollRequest] = useState(0)
+  const offDutyRef = useRef<HTMLLIElement>(null)
   /** [다시 출근] 이 받아들여져 근무로 바뀌기를 기다리는 세션 ID → 그때의 퇴근 시각 (다시 퇴근하면 시각이 바뀐다). 기다리는 동안 패널이 "출근 중…" */
   const [returningSessions, setReturningSessions] = useState<Record<string, string>>({})
   /** 목록의 경과 시간을 1분마다 다시 계산하기 위한 현재 시각 */
@@ -288,6 +262,15 @@ export function App() {
     const timer = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(timer)
   }, [])
+
+  // 목록만 스크롤한다 (scrollIntoView 는 overflow hidden 인 조상까지 움직인다)
+  useEffect(() => {
+    const list = listRef.current
+    const section = offDutyRef.current
+    if (!offDutyScrollRequest || !list || !section) return
+    const top = list.scrollTop + section.getBoundingClientRect().top - list.getBoundingClientRect().top
+    list.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  }, [offDutyScrollRequest])
 
   useEffect(() => {
     fetch('/api/office')
@@ -1050,7 +1033,7 @@ export function App() {
               {lobbySessions.map((session) => renderSession(session, true))}
             </li>
             {offDutySessions.length > 0 && (
-              <li className="group">
+              <li ref={offDutyRef} className="group">
                 <div className="group-label toggle" onClick={() => setIsOffDutyOpen(!isOffDutyOpen)}>
                   <span className="name">
                     {isOffDutyOpen ? '▾' : '▸'} Off Duty
@@ -1148,7 +1131,7 @@ export function App() {
               />
               {renameTarget.role === 'lead' && (
                 <>
-                  <span className="form-hint">사무실 인물 (책상·목록 아바타·Off Duty 머리에 같이 보인다)</span>
+                  <span className="form-hint">사무실 인물 (책상·목록 아바타·Off Duty 거리에 같이 보인다)</span>
                   <CharacterPicker
                     sessionId={renameTarget.id}
                     gender={renameTarget.gender ?? null}
@@ -1178,6 +1161,10 @@ export function App() {
             focus={officeFocus}
             hasQuestionCard={Boolean(isSelectedLiveWeb && selected.question?.questions.length)}
             onSelect={(sessionId) => selectSession(sessionId, false)}
+            onShowOffDutyList={() => {
+              setIsOffDutyOpen(true)
+              setOffDutyScrollRequest((count) => count + 1)
+            }}
             onMoveGroup={moveGroup}
             onMoveTeam={moveTeam}
             onEditTeam={editTeam}

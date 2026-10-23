@@ -818,6 +818,10 @@ li.group.drop-after::after {
   color: var(--red);
   font-weight: 600;
 }
+/* 퇴근 거리 카드의 "오류로 퇴근" (목록 .off-duty-reason.error 와 같은 빨강) */
+.office-card-error {
+  color: var(--red);
+}
 .office-card-text {
   display: -webkit-box;
   -webkit-box-orient: vertical;

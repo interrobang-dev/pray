@@ -8,7 +8,7 @@ export type CharacterDirection = 'down' | 'up' | 'right'
 export const CHARACTER_ATLAS: Record<CharacterDirection, string> = { down: 'office-v5-down', up: 'office-v5-up', right: 'office-v5-right' }
 /** 인물 목록·목록 머리·인물 고르기는 정면(down) 아틀라스 */
 const ATLAS_SHEET_URL = `/office/${CHARACTER_ATLAS.down}.json`
-/** 머리 그림: 정면 셀(80×132, 인물은 가운데 64 폭에 위 4 내려 있다) 안 정사각형. 목록 아바타(22px)는 그 절반, Off Duty 머리는 1/3 (도트 px → 아트 px) */
+/** 머리 그림: 정면 셀(80×132, 인물은 가운데 64 폭에 위 4 내려 있다) 안 정사각형. 목록 아바타(22px)는 그 절반 */
 export const HEAD_RECT: Rect = { x: 18, y: 14, w: 44, h: 44 }
 
 export interface Rect {

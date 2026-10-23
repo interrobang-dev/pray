@@ -31,7 +31,7 @@ export function pickDotCharacter(
   return candidates[hashOf(sessionId) % candidates.length].id
 }
 
-/** 세션이 앉을 인물과 색 (책상·목록 머리·Off Duty 머리가 같이 쓴다) */
+/** 세션이 앉을 인물과 색 (책상·목록 머리·Off Duty 거리가 같이 쓴다) */
 export interface DotLook {
   id: string
   hair: string | null
