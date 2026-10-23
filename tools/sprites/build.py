@@ -20,6 +20,7 @@ from spritelib import (  # noqa: E402
     downscale,
     fill_dark_lines,
     fit_width,
+    grid_slots,
     load_keyed,
     load_rgb,
     main_piece,
@@ -40,17 +41,24 @@ def build_characters(recipe: dict, source: Path) -> tuple[dict, dict, dict, list
     spec = recipe['spec']
     cell_w, cell_h = spec['cell']
     sprites, anchors, animations, notes = {}, {}, {}, []
-    anchor = {'x': 0.5, 'y': spec['baseline'] / cell_h}
+    anchor = {'x': spec.get('anchorX', cell_w / 2) / cell_w, 'y': spec['baseline'] / cell_h}
     for character in recipe.get('characters', []):
         for row in character['rows']:
             if 'strip' in row:
                 frames = strip_slots(source / row['strip'], row['count'])
+            elif 'grid' in row:
+                # 한 장에 상태 여러 행을 그린 격자 (v5 뒷모습·옆모습): gridSize [칸, 행], gridRow 몇 번째 행
+                frames = grid_slots(source / row['grid'], row['gridSize'][0], row['gridSize'][1], row['gridRow'])
             else:
                 frames = [main_piece(load_keyed(source / name)) for name in row['frames']]
             frames = [frames[i] for i in row.get('use', range(len(frames)))]
             # 행 bodyHeight: 웅크리게 그린 행은 머리~발이 짧아 규격 몸 높이로 맞추면 다른 상태보다 커진다 — 그 행만 더 작은 값으로
-            cells = normalize_row(frames, cell_w, cell_h, row.get('bodyHeight', spec['bodyHeight']), spec['baseline'])
-            base = f"char/{character['id']}/{row['state']}"
+            # scale: 정해 둔 배율 (인물·방향마다. 없으면 몸 높이로), spec.backX: 옆모습은 등을 그 x 에 맞춘다
+            cells = normalize_row(frames, cell_w, cell_h, row.get('bodyHeight', spec['bodyHeight']), spec['baseline'],
+                                  scale=row.get('scale', character.get('scale')), back_x=spec.get('backX'))
+            # direction: 방향 판(up·right)은 char/<id>/<방향>/<상태>. 없으면 정면(down) 그대로 char/<id>/<상태>
+            direction = recipe.get('direction')
+            base = f"char/{character['id']}/{direction}/{row['state']}" if direction else f"char/{character['id']}/{row['state']}"
             for i, cell in enumerate(cells):
                 name = f'{base}/{i}'
                 sprites[name] = cell
@@ -61,6 +69,30 @@ def build_characters(recipe: dict, source: Path) -> tuple[dict, dict, dict, list
             sequence = row.get('sequence', list(range(len(cells))))
             animations[base] = {'frames': [f'{base}/{i}' for i in sequence], 'fps': row['fps'], 'loop': row.get('loop', True)}
     return sprites, anchors, animations, notes
+
+
+def largest_component(mask: np.ndarray) -> np.ndarray:
+    """4방향으로 이어진 가장 큰 덩어리만 남긴다"""
+    seen = np.zeros_like(mask)
+    best: list[tuple[int, int]] = []
+    for start in zip(*np.nonzero(mask)):
+        if seen[start]:
+            continue
+        stack, members = [start], []
+        seen[start] = True
+        while stack:
+            y, x = stack.pop()
+            members.append((y, x))
+            for ny, nx in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+                if 0 <= ny < mask.shape[0] and 0 <= nx < mask.shape[1] and mask[ny, nx] and not seen[ny, nx]:
+                    seen[ny, nx] = True
+                    stack.append((ny, nx))
+        if len(members) > len(best):
+            best = members
+    result = np.zeros_like(mask)
+    for y, x in best:
+        result[y, x] = True
+    return result
 
 
 def build_props(recipe: dict, source: Path) -> tuple[dict, dict, dict]:
@@ -80,6 +112,19 @@ def build_props(recipe: dict, source: Path) -> tuple[dict, dict, dict]:
         anchors[name] = {'x': prop.get('anchor', [0.5, 1])[0], 'y': prop.get('anchor', [0.5, 1])[1]}
         if 'meta' in prop:
             extras[name] = prop['meta']
+        if prop.get('screenOff'):
+            # 켜진 모니터 화면(파란 픽셀)을 어두운 회색으로 바꾼 꺼짐 그림 prop/<id>-off 와 화면 영역 메타 screen
+            on = sprites[name]
+            rgb = on[..., :3].astype(int)
+            blue = (on[..., 3] > 0) & (rgb[..., 2] > 170) & (rgb[..., 2] > rgb[..., 0] + 60) & (rgb[..., 2] > rgb[..., 1] + 15)  # 밝은 파랑만 (남색 칸막이·부스 벽은 빼려고)
+            blue = largest_component(blue)  # 화면 한 덩어리만 (부스 벽 가장자리의 밝은 파랑 점들은 뺀다)
+            off = on.copy()
+            light = rgb[..., 2][blue] / 255
+            off[..., :3][blue] = np.stack([38 + 34 * light, 44 + 34 * light, 54 + 40 * light], axis=1).round().astype(np.uint8)
+            sprites[f'{name}-off'] = off
+            anchors[f'{name}-off'] = anchors[name]
+            ys, xs = np.nonzero(blue)
+            extras[name] = {**extras.get(name, {}), 'screen': {'x': int(xs.min()), 'y': int(ys.min()), 'w': int(xs.max() - xs.min() + 1), 'h': int(ys.max() - ys.min() + 1)}, 'off': f'{name}-off'}
     return sprites, anchors, extras
 
 
@@ -121,6 +166,12 @@ def build_tiles(recipe: dict, source: Path) -> tuple[dict, dict]:
         small = downscale(a, width, height)
         if not is_keyed:
             small = opaque(small[..., :3])
+        if 'tone' in item:
+            # tone: 평균색을 color 로 옮기고 무늬 대비를 contrast 배로 (생성한 카펫이 너무 거칠고 어두울 때)
+            rgb = small[..., :3].astype(float)
+            mean = rgb.reshape(-1, 3).mean(axis=0)
+            rgb = np.array(item['tone']['color']) + (rgb - mean) * item['tone']['contrast']
+            small[..., :3] = rgb.clip(0, 255).round().astype(np.uint8)
         tiles[item['id']] = small
         meta = {'top': mode_color(small[:2]), 'bottom': mode_color(small[-2:])}
         if is_keyed:
@@ -152,6 +203,23 @@ def pack(sprites: dict[str, np.ndarray], max_width: int = 1024) -> tuple[np.ndar
     return atlas, positions
 
 
+def save_atlas(atlas: np.ndarray, path: Path, palette: int | None) -> None:
+    """
+    palette 가 없으면 RGBA 그대로. 있으면 그 색 수 + 투명 1칸의 팔레트 PNG (median cut, 디더링 없음).
+    도트 축소(최빈색의 중앙값)는 색이 수십만 개라 RGBA 로는 크다 — v3 를 255 색으로 줄이면 2.3MB → 0.6MB, 평균 색 차이 3.6 (눈으로 구분 안 됨)
+    """
+    if not palette:
+        Image.fromarray(atlas).save(path, optimize=True)
+        return
+    solid = atlas[..., 3] > 0
+    quantized = Image.fromarray(atlas[..., :3]).quantize(colors=palette, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    colors = np.array(quantized.getpalette()[:palette * 3]).reshape(-1, 3)
+    index = np.where(solid, np.array(quantized) + 1, 0).astype(np.uint8)
+    image = Image.fromarray(index, 'P')
+    image.putpalette([0, 0, 0] + colors.flatten().tolist())
+    image.save(path, optimize=True, transparency=0)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--recipe', required=True, type=Path)
@@ -179,7 +247,8 @@ def main() -> None:
 
     atlas, positions = pack(sprites)
     args.out.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(atlas).save(args.out / f'{name}.png', optimize=True)
+    # palette: 팔레트 PNG 로 줄일 색 수 (v5). Pixi 는 읽을 때 RGBA 로 풀므로 화면 코드는 같다
+    save_atlas(atlas, args.out / f'{name}.png', recipe.get('palette'))
     frames = {}
     for sprite_name in sorted(sprites):
         h, w = sprites[sprite_name].shape[:2]
@@ -215,6 +284,8 @@ def main() -> None:
                 'animations': {key: {'fps': value['fps'], 'loop': value['loop']} for key, value in animations.items()},
                 'tiles': tile_files,
                 'props': prop_meta,
+                # 레시피 jkCorp: 화면이 쓸 배치 메타(자리 안 좌표·아이콘 등)를 그대로 싣는다
+                **recipe.get('jkCorp', {}),
             },
         },
     }

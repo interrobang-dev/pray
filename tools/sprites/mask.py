@@ -9,9 +9,15 @@
 거의 검은 픽셀(외곽선·눈. 가장 밝은 채널이 26 이하)은 표본에서도 결과에서도 빼고, 표본의 드문 색 묶음도 빼고, 고른 픽셀 중 `exclude` 상자 안과
 따로 떨어진 작은 덩어리(10픽셀 미만. 머리색과 같은 눈동자)는 뺀다.
 
+방향 판(v5 의 up·right 아틀라스)은 idle 첫 칸이 정면 판에만 있다: `--sample-atlas` 로 정면 아틀라스를 주면
+표본 색은 거기서 모으고(표본 상자는 정면 셀 좌표), 세로 범위·exclude 는 이 아틀라스의 셀 좌표다.
+레시피의 `direction` 은 미리보기에서 볼 칸(`char/<id>/<direction>/<상태>/0`)을 정한다.
+
 사용:
   python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v3-recolor.json \
       --atlas web/public/office/office-v3 [--preview 미리보기.png]
+  python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v5-up-recolor.json \
+      --atlas web/public/office/office-v5-up --sample-atlas web/public/office/office-v5-down
 """
 import argparse
 import json
@@ -105,6 +111,7 @@ def main() -> int:
     parser.add_argument('--recipe', required=True)
     parser.add_argument('--atlas', required=True, help='아틀라스 경로 (확장자 없이. .png·.json 을 읽는다)')
     parser.add_argument('--preview', help='마스크를 칠한 미리보기 PNG (인물마다 idle·raise-hand 첫 칸)')
+    parser.add_argument('--sample-atlas', help='표본 색을 모을 정면 아틀라스 (확장자 없이). 없으면 --atlas')
     args = parser.parse_args()
 
     recipe = json.loads(Path(args.recipe).read_text(encoding='utf-8'))
@@ -112,18 +119,24 @@ def main() -> int:
     atlas = np.array(Image.open(atlas_path.with_suffix('.png')).convert('RGBA')).astype(int)
     atlas_data = json.loads(atlas_path.with_suffix('.json').read_text(encoding='utf-8'))
 
+    sample_path = Path(args.sample_atlas) if args.sample_atlas else atlas_path
+    sample_atlas = np.array(Image.open(sample_path.with_suffix('.png')).convert('RGBA')).astype(int)
+    sample_data = json.loads(sample_path.with_suffix('.json').read_text(encoding='utf-8'))
+    prefix = f"{recipe['direction']}/" if recipe.get('direction') else ''
+
     mask = np.zeros(atlas.shape, dtype=np.uint8)
     mask[..., 3] = 255
     bases: dict[str, dict[str, str]] = {}
     previews = []
     for character, slots in recipe['characters'].items():
         rects = frame_rects(atlas_data, character)
+        sample_rects = frame_rects(sample_data, character)
         idle = f'char/{character}/idle/0'
-        if idle not in rects:
-            print(f'{character}: 아틀라스에 {idle} 가 없다', file=sys.stderr)
+        if idle not in sample_rects:
+            print(f'{character}: 표본 아틀라스에 {idle} 가 없다', file=sys.stderr)
             return 1
-        x, y, w, h = rects[idle]
-        idle_cell = atlas[y:y + h, x:x + w]
+        x, y, w, h = sample_rects[idle]
+        idle_cell = sample_atlas[y:y + h, x:x + w]
         bases[character] = {}
         for slot in SLOTS:
             rule = slots[slot]
@@ -135,7 +148,7 @@ def main() -> int:
         print(character, bases[character])
         if args.preview:
             for state in ('idle', 'raise-hand'):
-                x, y, w, h = rects[f'char/{character}/{state}/0']
+                x, y, w, h = rects[f'char/{character}/{prefix}{state}/0']
                 cell = atlas[y:y + h, x:x + w].astype(float)
                 painted = cell.copy()
                 for slot, color in (('hair', (255, 0, 255)), ('top', (0, 220, 255))):

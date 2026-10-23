@@ -89,6 +89,15 @@ def strip_slots(path: Path, count: int) -> list[np.ndarray]:
     return [main_piece(a[:, edges[k]:edges[k + 1]]) for k in range(count)]
 
 
+def grid_slots(path: Path, columns: int, rows: int, row: int) -> list[np.ndarray]:
+    """생성된 격자 그림(rows 행 x columns 칸)의 row 번째 행을 칸마다 인물 덩어리만 잘라 낸다"""
+    a = load_keyed(path)
+    h, w = a.shape[:2]
+    band = a[row * h // rows:(row + 1) * h // rows]
+    edges = np.linspace(0, w, columns + 1).astype(int)
+    return [main_piece(band[:, edges[k]:edges[k + 1]]) for k in range(columns)]
+
+
 def body_metrics(frame: np.ndarray) -> tuple[float, int, int]:
     """
     (발 중심 x, 발 아래 끝 y, 머리 위 끝 y).
@@ -105,13 +114,17 @@ def body_metrics(frame: np.ndarray) -> tuple[float, int, int]:
     return float(center), bottom, top
 
 
-def normalize_row(frames: list[np.ndarray], cell_w: int, cell_h: int, body_h: int, baseline: int) -> list[np.ndarray]:
+def normalize_row(frames: list[np.ndarray], cell_w: int, cell_h: int, body_h: int, baseline: int,
+                  scale: float | None = None, back_x: int | None = None) -> list[np.ndarray]:
     """
     한 상태의 프레임들을 규격 셀에 놓는다: 발 아래 끝 = baseline - 1 행, 발 중심 = 셀 가운데,
-    배율은 그 상태 프레임들의 (body_h / 몸 높이) 중앙값 하나 (팔이 머리 가까이 오면 키를 잘못 재는 프레임이 있어서)
+    배율은 그 상태 프레임들의 (body_h / 몸 높이) 중앙값 하나 (팔이 머리 가까이 오면 키를 잘못 재는 프레임이 있어서).
+    scale 을 주면 그 배율을 그대로 쓴다 (뒷모습·옆모습은 몸 높이로 못 맞춘다 — 머리 폭으로 정해 레시피에 적는다).
+    back_x 를 주면 발 중심 대신 하체(아래 절반)의 왼쪽 끝(옆모습의 등·엉덩이)을 셀 x = back_x 에 놓는다
     """
     metrics = [body_metrics(frame) for frame in frames]
-    scale = float(np.median([body_h / (bottom - top + 1) for _, bottom, top in metrics]))
+    if scale is None:
+        scale = float(np.median([body_h / (bottom - top + 1) for _, bottom, top in metrics]))
     cells = []
     for frame, (center, bottom, _) in zip(frames, metrics):
         frame = frame[:bottom + 1]
@@ -119,7 +132,11 @@ def normalize_row(frames: list[np.ndarray], cell_w: int, cell_h: int, body_h: in
         new_h = max(1, round(frame.shape[0] * scale))
         small = downscale(frame, new_w, new_h)
         cell = np.zeros((cell_h, cell_w, 4), np.uint8)
-        ox = round(cell_w / 2 - center * scale)
+        if back_x is None:
+            ox = round(cell_w / 2 - center * scale)
+        else:
+            lower = small[new_h // 2:, :, 3] > 127
+            ox = back_x - int(np.nonzero(lower.any(axis=0))[0].min())
         oy = baseline - new_h
         sx0, sy0 = max(0, -ox), max(0, -oy)
         dx0, dy0 = max(0, ox), max(0, oy)

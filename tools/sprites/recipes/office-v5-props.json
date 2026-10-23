@@ -1,0 +1,773 @@
+{
+ "name": "office-v5-props",
+ "palette": 255,
+ "description": "v5 가구·공간·라운지·책상 소품·상태 아이콘. 원본 ~/.claude/jk-corp/sprite-src/v5 (v4 소품 7개는 ../v4). 섬 받침은 그림 없이 Graphics (색은 설계 문서)",
+ "spec": {
+  "tile": 48,
+  "cell": [
+   64,
+   128
+  ],
+  "baseline": 124,
+  "bodyHeight": 108
+ },
+ "props": [
+  {
+   "id": "desk-down",
+   "sheet": "v5-desks.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 96
+  },
+  {
+   "id": "desk-up",
+   "sheet": "v5-desks.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 96,
+   "screenOff": true
+  },
+  {
+   "id": "desk-right",
+   "sheet": "v5-desks.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 48,
+   "screenOff": true
+  },
+  {
+   "id": "chair-down",
+   "sheet": "chairs.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 46
+  },
+  {
+   "id": "chair-up",
+   "sheet": "chair-back.png",
+   "grid": [
+    1,
+    1
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 46
+  },
+  {
+   "id": "chair-right",
+   "sheet": "chairs.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 42
+  },
+  {
+   "id": "partition-v",
+   "sheet": "drawn.png",
+   "grid": [
+    6,
+    1
+   ],
+   "cell": [
+    5,
+    0
+   ],
+   "width": 8
+  },
+  {
+   "id": "booth-navy",
+   "sheet": "lounge.png",
+   "grid": [
+    2,
+    1
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 112,
+   "screenOff": true
+  },
+  {
+   "id": "lounge-table-set",
+   "sheet": "lounge.png",
+   "grid": [
+    2,
+    1
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 144
+  },
+  {
+   "id": "counter-left",
+   "sheet": "v5-lounge-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 64
+  },
+  {
+   "id": "counter-mid",
+   "sheet": "v5-lounge-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 64
+  },
+  {
+   "id": "counter-right",
+   "sheet": "v5-lounge-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    0
+   ],
+   "width": 64
+  },
+  {
+   "id": "fridge",
+   "sheet": "v5-lounge-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 48
+  },
+  {
+   "id": "cabinet",
+   "sheet": "v5-lounge-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 62
+  },
+  {
+   "id": "planter",
+   "sheet": "v5-lounge-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    1
+   ],
+   "width": 144
+  },
+  {
+   "id": "sofa",
+   "sheet": "v5-lounge-b.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 144
+  },
+  {
+   "id": "armchair",
+   "sheet": "v5-lounge-b.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 72
+  },
+  {
+   "id": "coffee-table",
+   "sheet": "v5-lounge-b.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    0
+   ],
+   "width": 96
+  },
+  {
+   "id": "rug-navy",
+   "sheet": "v5-lounge-b.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 192
+  },
+  {
+   "id": "plant-large",
+   "sheet": "v5-lounge-b.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 56
+  },
+  {
+   "id": "side-table",
+   "sheet": "v5-lounge-b.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    1
+   ],
+   "width": 44
+  },
+  {
+   "id": "plant",
+   "sheet": "chairs.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 44
+  },
+  {
+   "id": "item-mug",
+   "sheet": "v5-desk-items.png",
+   "grid": [
+    4,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 14
+  },
+  {
+   "id": "item-pen-cup",
+   "sheet": "v5-desk-items.png",
+   "grid": [
+    4,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 13
+  },
+  {
+   "id": "item-papers",
+   "sheet": "v5-desk-items.png",
+   "grid": [
+    4,
+    2
+   ],
+   "cell": [
+    2,
+    0
+   ],
+   "width": 18
+  },
+  {
+   "id": "item-sticky-notes",
+   "sheet": "v5-desk-items.png",
+   "grid": [
+    4,
+    2
+   ],
+   "cell": [
+    3,
+    0
+   ],
+   "width": 14
+  },
+  {
+   "id": "item-mug-navy",
+   "sheet": "v5-desk-items.png",
+   "grid": [
+    4,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 14
+  },
+  {
+   "id": "item-succulent",
+   "sheet": "v5-desk-items.png",
+   "grid": [
+    4,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 13
+  },
+  {
+   "id": "item-notebook",
+   "sheet": "v5-desk-items.png",
+   "grid": [
+    4,
+    2
+   ],
+   "cell": [
+    2,
+    1
+   ],
+   "width": 17
+  },
+  {
+   "id": "item-desk-clock",
+   "sheet": "v5-desk-items.png",
+   "grid": [
+    4,
+    2
+   ],
+   "cell": [
+    3,
+    1
+   ],
+   "width": 14
+  },
+  {
+   "id": "icon-approval",
+   "sheet": "drawn.png",
+   "grid": [
+    6,
+    1
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 18
+  },
+  {
+   "id": "icon-my-turn",
+   "sheet": "drawn.png",
+   "grid": [
+    6,
+    1
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 18
+  },
+  {
+   "id": "icon-working-0",
+   "sheet": "drawn.png",
+   "grid": [
+    6,
+    1
+   ],
+   "cell": [
+    2,
+    0
+   ],
+   "width": 18
+  },
+  {
+   "id": "icon-working-1",
+   "sheet": "drawn.png",
+   "grid": [
+    6,
+    1
+   ],
+   "cell": [
+    3,
+    0
+   ],
+   "width": 18
+  },
+  {
+   "id": "icon-working-2",
+   "sheet": "drawn.png",
+   "grid": [
+    6,
+    1
+   ],
+   "cell": [
+    4,
+    0
+   ],
+   "width": 18
+  },
+  {
+   "id": "water-cooler",
+   "sheet": "../v4/floor-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 30
+  },
+  {
+   "id": "coffee-machine",
+   "sheet": "../v4/floor-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 40
+  },
+  {
+   "id": "trash-bin",
+   "sheet": "../v4/floor-a.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    0
+   ],
+   "width": 20
+  },
+  {
+   "id": "printer",
+   "sheet": "../v4/floor-b.png",
+   "grid": [
+    2,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 44
+  },
+  {
+   "id": "wall-clock",
+   "sheet": "../v4/wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    0
+   ],
+   "width": 34
+  },
+  {
+   "id": "wall-whiteboard",
+   "sheet": "../v4/wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    1
+   ],
+   "width": 100
+  },
+  {
+   "id": "wall-landscape",
+   "sheet": "../v4/wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    0,
+    0
+   ],
+   "width": 84
+  }
+ ],
+ "tiles": [
+  {
+   "id": "corridor",
+   "sheet": "floors.png",
+   "crop": [
+    196,
+    198,
+    515,
+    522
+   ],
+   "size": [
+    96,
+    96
+   ]
+  },
+  {
+   "id": "desk-carpet",
+   "sheet": "floors.png",
+   "crop": [
+    814,
+    86,
+    1114,
+    386
+   ],
+   "seamless": "xy",
+   "size": [
+    96,
+    96
+   ],
+   "tone": {
+    "color": [
+     206,
+     209,
+     214
+    ],
+    "contrast": 0.22
+   }
+  },
+  {
+   "id": "focus-navy",
+   "sheet": "floors.png",
+   "crop": [
+    1536,
+    86,
+    1836,
+    386
+   ],
+   "seamless": "xy",
+   "size": [
+    96,
+    96
+   ],
+   "tone": {
+    "color": [
+     44,
+     58,
+     99
+    ],
+    "contrast": 0.22
+   }
+  }
+ ],
+ "jkCorp": {
+  "seat": {
+   "_note": "자리(2x3 타일 = 96x144 도트 px) 안 좌표. 모두 스프라이트 왼쪽 위(anchor 0). 그리는 순서는 order. 인물 셀은 office-v5-<방향> 의 그 방향 셀. 출발점 값이고 화면을 보고 고친다 (데모로 확인)",
+   "w": 96,
+   "h": 144,
+   "down": {
+    "order": [
+     "chair",
+     "char",
+     "desk",
+     "item",
+     "icon"
+    ],
+    "chair": [
+     25,
+     60
+    ],
+    "char": [
+     16,
+     27
+    ],
+    "desk": [
+     0,
+     87
+    ],
+    "item": [
+     10,
+     92
+    ],
+    "icon": [
+     39,
+     25
+    ]
+   },
+   "up": {
+    "order": [
+     "desk",
+     "item",
+     "char",
+     "chair",
+     "icon"
+    ],
+    "desk": [
+     0,
+     0
+    ],
+    "item": [
+     74,
+     40
+    ],
+    "char": [
+     4,
+     -18
+    ],
+    "chair": [
+     25,
+     77
+    ],
+    "icon": [
+     39,
+     4
+    ]
+   },
+   "right": {
+    "order": [
+     "chair",
+     "desk",
+     "char",
+     "deskFront",
+     "icon"
+    ],
+    "chair": [
+     0,
+     52
+    ],
+    "desk": [
+     48,
+     28
+    ],
+    "deskFrontFrom": 52,
+    "char": [
+     -6,
+     -2
+    ],
+    "icon": [
+     22,
+     12
+    ],
+    "_deskFront": "desk-right 의 y 52 아래를 인물 위에 한 번 더 그린다: 손은 키보드 위에 보이고 무릎·허벅지는 책상 뒤로"
+   },
+   "left": "right 를 좌우 반전 (자리 가운데 x 48 기준으로 뒤집는다)",
+   "booth": {
+    "order": [
+     "booth",
+     "char",
+     "chair",
+     "icon"
+    ],
+    "booth": [
+     0,
+     0
+    ],
+    "char": [
+     12,
+     14
+    ],
+    "chair": [
+     33,
+     109
+    ],
+    "icon": [
+     47,
+     36
+    ],
+    "_size": "booth-navy 112x88. 부스 간격 x 3타일(144)"
+   },
+   "partition": "짝 사이 세로 칸막이 partition-v(8x144) 를 짝 경계 x-4, 윗자리 y 66 에 하나 (윗자리 책상 위 끝 ~ 아랫자리 책상 아래 끝)"
+  },
+  "icons": {
+   "_note": "머리 위 상태 아이콘 18x15 (꼬리 끝이 아래 왼쪽 x 4). 화면에서 도트 px 그대로",
+   "approval": "prop/icon-approval",
+   "myTurn": "prop/icon-my-turn",
+   "working": {
+    "frames": [
+     "prop/icon-working-0",
+     "prop/icon-working-1",
+     "prop/icon-working-2"
+    ],
+    "fps": 4
+   }
+  },
+  "items": [
+   "prop/item-mug",
+   "prop/item-pen-cup",
+   "prop/item-papers",
+   "prop/item-sticky-notes",
+   "prop/item-mug-navy",
+   "prop/item-succulent",
+   "prop/item-notebook",
+   "prop/item-desk-clock"
+  ],
+  "islandBase": {
+   "color": "#c4c8cf",
+   "_note": "섬 받침은 그림 없이 Graphics. 데스크존 카펫(desk-carpet 평균 #ced1d6)보다 한 단 진한 회색"
+  }
+ }
+}

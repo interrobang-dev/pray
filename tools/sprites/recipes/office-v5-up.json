@@ -1,0 +1,882 @@
+{
+ "name": "office-v5-up",
+ "direction": "up",
+ "palette": 255,
+ "description": "뒷모습(위를 봄) 인물 18명 x 4상태. 셀 88x128, 발 중심 x=44",
+ "spec": {
+  "tile": 48,
+  "baseline": 124,
+  "bodyHeight": 108,
+  "cell": [
+   88,
+   128
+  ],
+  "anchorX": 44
+ },
+ "characters": [
+  {
+   "id": "lead",
+   "pool": "lead",
+   "gender": "male",
+   "scale": 0.3033,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/lead-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/lead-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/lead-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/lead-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "lead-suit",
+   "pool": "lead",
+   "gender": "female",
+   "scale": 0.3046,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/lead-suit-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/lead-suit-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/lead-suit-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/lead-suit-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "member",
+   "pool": "member",
+   "gender": "female",
+   "scale": 0.2944,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/member-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/member-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/member-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/member-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "hoodie",
+   "pool": "member",
+   "gender": "male",
+   "scale": 0.3175,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/hoodie-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/hoodie-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/hoodie-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/hoodie-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "flannel",
+   "pool": "member",
+   "gender": "male",
+   "scale": 0.2783,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/flannel-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/flannel-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/flannel-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/flannel-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "ponytail",
+   "pool": "member",
+   "gender": "female",
+   "scale": 0.2964,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/ponytail-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/ponytail-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/ponytail-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/ponytail-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "cardigan",
+   "pool": "member",
+   "gender": "male",
+   "scale": 0.287,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/cardigan-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/cardigan-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/cardigan-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/cardigan-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "turtleneck",
+   "pool": "member",
+   "gender": "female",
+   "scale": 0.313,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/turtleneck-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/turtleneck-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/turtleneck-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/turtleneck-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "afro",
+   "pool": "member",
+   "gender": "female",
+   "scale": 0.3291,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/afro-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/afro-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/afro-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/afro-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "lead-vest",
+   "pool": "lead",
+   "gender": "male",
+   "scale": 0.2937,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/lead-vest-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/lead-vest-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/lead-vest-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/lead-vest-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "lead-blazer",
+   "pool": "lead",
+   "gender": "female",
+   "scale": 0.2798,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/lead-blazer-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/lead-blazer-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/lead-blazer-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/lead-blazer-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "denim",
+   "pool": "member",
+   "gender": "male",
+   "scale": 0.2672,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/denim-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/denim-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/denim-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/denim-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "professor",
+   "pool": "member",
+   "gender": "male",
+   "scale": 0.3422,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/professor-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/professor-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/professor-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/professor-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "headphones",
+   "pool": "member",
+   "gender": "male",
+   "scale": 0.3121,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/headphones-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/headphones-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/headphones-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/headphones-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "polo",
+   "pool": "member",
+   "gender": "male",
+   "scale": 0.2995,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/polo-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/polo-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/polo-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/polo-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "hijab",
+   "pool": "member",
+   "gender": "female",
+   "scale": 0.2743,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/hijab-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/hijab-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/hijab-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/hijab-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "overalls",
+   "pool": "member",
+   "gender": "female",
+   "scale": 0.2851,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/overalls-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/overalls-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/overalls-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/overalls-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  },
+  {
+   "id": "braids",
+   "pool": "member",
+   "gender": "female",
+   "scale": 0.2783,
+   "rows": [
+    {
+     "state": "typing",
+     "grid": "chars/braids-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 0,
+     "fps": 8
+    },
+    {
+     "state": "raise-hand",
+     "grid": "chars/braids-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 1,
+     "fps": 6
+    },
+    {
+     "state": "idle",
+     "grid": "chars/braids-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 2,
+     "fps": 4
+    },
+    {
+     "state": "doze",
+     "grid": "chars/braids-up.png",
+     "gridSize": [
+      4,
+      4
+     ],
+     "gridRow": 3,
+     "fps": 3
+    }
+   ]
+  }
+ ]
+}
