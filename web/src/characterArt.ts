@@ -1,12 +1,15 @@
 import type { DotCharacter, DotLook } from './dotCharacter'
 import { parseHex, recolorPixels, type RecolorSlot } from './recolor'
 
-/** 인물 아틀라스와 색 바꾸기 마스크 (tools/sprites/mask.py). Office.tsx 의 DOT_SHEET_URL 과 같은 판 */
-const ATLAS_SHEET_URL = '/office/office-v3.json'
-const ATLAS_IMAGE_URL = '/office/office-v3.png'
-/** 머리 그림: 셀(64×128) 안 정사각형. 목록 아바타(22px)는 그 절반, Off Duty 머리는 1/3 (도트 px → 아트 px) */
-export const HEAD_RECT: Rect = { x: 10, y: 10, w: 44, h: 44 }
-const RECOLOR_URL = '/office/office-v3-recolor.json'
+/** 인물을 그리는 방향. left 는 right 를 좌우로 뒤집어 그려 아틀라스가 없다 */
+export type CharacterDirection = 'down' | 'up' | 'right'
+
+/** 방향별 인물 아틀라스 판 이름 (office-v5). 색 바꾸기 마스크는 `<판>-recolor` (tools/sprites/mask.py) */
+export const CHARACTER_ATLAS: Record<CharacterDirection, string> = { down: 'office-v5-down', up: 'office-v5-up', right: 'office-v5-right' }
+/** 인물 목록·목록 머리·인물 고르기는 정면(down) 아틀라스 */
+const ATLAS_SHEET_URL = `/office/${CHARACTER_ATLAS.down}.json`
+/** 머리 그림: 정면 셀(80×132, 인물은 가운데 64 폭에 위 4 내려 있다) 안 정사각형. 목록 아바타(22px)는 그 절반, Off Duty 머리는 1/3 (도트 px → 아트 px) */
+export const HEAD_RECT: Rect = { x: 18, y: 14, w: 44, h: 44 }
 
 export interface Rect {
   x: number
@@ -31,7 +34,7 @@ export interface CharacterSheet {
 }
 
 let sheetPromise: Promise<CharacterSheet> | null = null
-let artPromise: Promise<RecolorArt> | null = null
+const artPromises = new Map<CharacterDirection, Promise<RecolorArt>>()
 
 /** 아틀라스 JSON 의 인물 목록·첫 칸을 한 번만 읽는다 (실패하면 다음에 다시) */
 export function loadCharacterSheet(): Promise<CharacterSheet> {
@@ -75,20 +78,23 @@ function pixelsOf(image: CanvasImageSource & { width: number; height: number }):
   return context.getImageData(0, 0, image.width, image.height)
 }
 
-/** 아틀라스·마스크 픽셀과 기본색을 한 번만 읽는다 (실패하면 다음에 다시) */
-export function loadRecolorArt(): Promise<RecolorArt> {
-  artPromise ??= (async () => {
-    const response = await fetch(RECOLOR_URL)
+/** 그 방향 아틀라스·마스크 픽셀과 기본색을 한 번만 읽는다 (실패하면 다음에 다시). 방향마다 아틀라스 크기의 픽셀을 두 벌 들고 있어 쓸 때만 읽는다 */
+export function loadRecolorArt(direction: CharacterDirection = 'down'): Promise<RecolorArt> {
+  const cached = artPromises.get(direction)
+  if (cached) return cached
+  const atlas = CHARACTER_ATLAS[direction]
+  const promise = (async () => {
+    const response = await fetch(`/office/${atlas}-recolor.json`)
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data = (await response.json()) as { mask: string; characters: BaseColors }
-    const base = RECOLOR_URL.slice(0, RECOLOR_URL.lastIndexOf('/') + 1)
-    const [atlas, mask] = await Promise.all([loadImage(ATLAS_IMAGE_URL), loadImage(base + data.mask)])
-    return { atlas: pixelsOf(atlas), mask: pixelsOf(mask), bases: data.characters }
+    const [image, mask] = await Promise.all([loadImage(`/office/${atlas}.png`), loadImage(`/office/${data.mask}`)])
+    return { atlas: pixelsOf(image), mask: pixelsOf(mask), bases: data.characters }
   })().catch((error: unknown) => {
-    artPromise = null
+    artPromises.delete(direction)
     throw error
   })
-  return artPromise
+  artPromises.set(direction, promise)
+  return promise
 }
 
 function cut(source: ImageData, rect: Rect): Uint8ClampedArray<ArrayBuffer> {

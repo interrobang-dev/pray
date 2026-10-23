@@ -11,41 +11,42 @@ import {
   TilingSprite,
   type FederatedPointerEvent,
   Texture,
-  type Spritesheet,
+  Spritesheet,
+  type SpritesheetData,
 } from 'pixi.js'
-import { attendanceOf, type Office as OfficeData, type Group, type Session, type Team } from './types'
-import { dotLookOf, type DotCharacter } from './dotCharacter'
+import { attendanceOf, statusLabel, type Office as OfficeData, type Group, type Session, type Team } from './types'
+import { dotLookOf, type DotCharacter, type DotLook } from './dotCharacter'
 import { dotStateOf, dozingKey, type DotState } from './dotState'
-import { HEAD_RECT, loadRecolorArt, paintCharacter, type RecolorArt } from './characterArt'
+import { CHARACTER_ATLAS, HEAD_RECT, loadRecolorArt, paintCharacter, type CharacterDirection, type RecolorArt } from './characterArt'
 import {
-  DESK_TILES_H,
-  DESK_TILES_W,
   GROUP_MARGIN,
-  LOBBY_SIGN_H,
-  SEAT_STEP,
   dropIsland,
   layoutOffice,
+  type BlockRow,
   type GroupArea,
   type Island,
   type Point,
   type Rect,
+  type Seat,
 } from './officeLayout'
 
 /**
  * 사무실 그림은 생성 도트 스프라이트(타일 48px, docs/plans/2026-10-22-office-sprites-design.md).
  * world 좌표는 "아트 픽셀"(타일 16px) 단위이고 world 를 DOT_SCALE 배 더 키워(타일 48 화면 px = 1배) 보인다.
- * 스프라이트·이름표·말풍선은 1/DOT_SCALE 로 줄인 하위 컨테이너에 도트 px(48px 타일) 좌표로 그린다 — 배치(officeLayout.ts)·끌기·포커스 계산은 아트 px 그대로다
+ * 스프라이트·이름표·아이콘은 1/DOT_SCALE 로 줄인 하위 컨테이너에 도트 px(48px 타일) 좌표로 그린다 — 배치(officeLayout.ts)·끌기·포커스 계산은 아트 px 그대로다
  */
 /** 배율 단계 (타일 48px 기준. 0.5배는 전체 보기용 예외) */
 const ZOOM_STEPS = [0.5, 1, 2, 3]
 /** 마운트할 때 배율 = 단계 목록의 이 번째 (1배) */
 const DEFAULT_ZOOM_INDEX = 1
+/** 이 배율 이상이면 모든 자리의 이름표가 보인다 (그 밖에는 마우스를 올렸거나 고른 자리만) */
+const NAME_TAG_ZOOM = 2
 /** 도트 타일(48px) ÷ 아트 타일(16px) */
 const DOT_SCALE = 3
 const DOT_TILE = 48
-/** 인물·책상·의자 */
-const DOT_SHEET_URL = '/office/office-v3.json'
-/** 환경 (바닥·벽·창밖·그룹·섬·Focus Zone·거리·소품) */
+/** 책상·의자·칸막이·부스·상태 아이콘·화분, 바닥 타일 corridor·desk-carpet·focus-navy, 자리 안 배치 메타 */
+const DOT_PROPS_URL = '/office/office-v5-props.json'
+/** 환경 (벽·창밖·Off Duty 거리·그룹 화분) */
 const DOT_ENV_URL = '/office/office-v2.json'
 /** 휠 delta 를 이만큼 모으면 한 단계 (마우스 휠 한 칸 ≈ 100. 트랙패드의 잔 delta 는 모아서) */
 const WHEEL_STEP = 50
@@ -66,23 +67,22 @@ const COLOR = {
   partitionShadow: 0xc9cbd6,
   green: 0x6fae5e,
   greenDark: 0x4f9a4a,
-  deskLeg: 0xb9bbc6,
-  chairLine: 0xcfd1db,
-  screenOn: 0x4aa3e8,
   text: 0x2b2f3a,
+  mutedText: 0x7a7f8e,
   postit: 0xfde77a,
-  bubble: 0xffffff,
-  bubbleLine: 0xb5b8c5,
   alert: 0xffd3d3,
   alertLine: 0xe05a5a,
-  alertText: 0xc22f2f,
   select: 0x3f9c4b,
   gold: 0xd9a63a,
+  goldLight: 0xf4d77a,
   silver: 0xa9b0bd,
-  partLine: 0xc3c7d2,
-  carpetBorder: 0xc8b598,
-  carpetShadow: 0xb7a284,
-  boothWallTop: 0xc69c68,
+  silverLight: 0xdde1e8,
+  external: 0x8a8f9c,
+  externalLight: 0xb9bbc6,
+  partLine: 0xa7acb7,
+  islandLine: 0xaeb3bc,
+  navy: 0x3b4f8a,
+  navyDark: 0x1d2747,
 }
 
 /** 사무실 화면이 이동해 보여 줄 대상. 같은 대상을 다시 눌러도 움직이도록 매번 새 id 를 붙인다 */
@@ -157,18 +157,22 @@ interface IslandParts {
   sign: Graphics
 }
 
-// ---------- 책상 단위 ----------
+// ---------- 자리 단위 ----------
 
-interface DeskParts {
-  container: Container
-  /** 캐릭터. 휴식 세션은 null. ticker 가 직접 update 한다 (Ticker.shared 에 안 붙인다) */
-  animation: AnimatedSprite | null
-  /** 말풍선이 없으면 null. 책상 컨테이너가 아니라 말풍선 층에 넣는다 */
-  bubble: DeskBubble | null
+interface SeatParts {
+  /** 자리 사각형 = 클릭 영역 (그림은 블록 줄·부스 컨테이너에 있다) */
+  hit: Container
+  /** 모든 자리 위 층에 둔 선택 테두리·이름표·상태 아이콘 (끌 때 같이 옮긴다) */
+  overlay: SeatOverlay
 }
 
-const DESK_W = DESK_TILES_W * TILE
-const DESK_H = DESK_TILES_H * TILE
+interface SeatOverlay {
+  container: Container
+  /** 이름표 (평소 숨김) */
+  tag: Container
+  /** working 아이콘 (4fps) */
+  icon: AnimatedSprite | null
+}
 
 // ---------- 도트 ----------
 
@@ -184,67 +188,183 @@ interface DotTileMeta {
 
 /** 아틀라스 JSON 의 meta.jkCorp (tools/sprites/build.py 가 쓴다) */
 interface DotSheetMeta {
-  /** 인물 프리셋과 풀. v0 처럼 없으면 인물 id lead·member 를 그대로 쓴다 */
+  /** 인물 프리셋과 풀. 인물 아틀라스에만 있다 */
   characters?: DotCharacter[]
   animations: Record<string, { fps: number; loop: boolean }>
   tiles: Record<string, DotTileMeta>
-  props: Record<string, { screen?: Rect }>
+  /** screen = 화면 사각형, off = 화면을 끈 그림 (office-v5-props 의 desk-up·desk-right·booth-navy) */
+  props: Record<string, { screen?: Rect; off?: string }>
+}
+
+/**
+ * Focus Zone 부스 자리(96×144 도트 px) 안 배치 (office-v5-props.json meta.jkCorp.seat.booth). 좌표는 스프라이트 왼쪽 위, order 는 그리는 순서.
+ * 메타의 seat.down·up·right·partition 은 책상을 자리마다 따로 그리던 때의 것이라 화면이 읽지 않는다 (섬은 block)
+ */
+interface SeatLayoutMeta {
+  order: string[]
+  chair?: [number, number]
+  /** 사람이 없는 자리(빈 자리·휴식)의 의자. 책상 쪽으로 밀어 넣은 자리 (없으면 chair) */
+  emptyChair?: [number, number]
+  char?: [number, number]
+  booth?: [number, number]
+  icon: [number, number]
+}
+
+/** 칸막이 블록 안 자리 하나 (블록 원점 기준 도트 px) */
+interface BlockSeatMeta {
+  char: [number, number]
+  chair: [number, number]
+  emptyChair?: [number, number]
+  icon: [number, number]
+}
+
+/**
+ * 칸막이 블록 (office-v5-props.json meta.jkCorp.block, 도트 px, 스프라이트 왼쪽 위). 원점 = 블록 줄 첫 짝 왼쪽 위, 짝 i 는 x 에 pairW·i,
+ * 블록 줄 높이 h(4타일), 모듈은 y moduleY. order = 그리는 단계 (단계마다 모든 짝)
+ */
+interface BlockMeta {
+  h: number
+  pairW: number
+  moduleY: number
+  pair: { module: string; moduleOff: string; top: BlockSeatMeta; bottom: BlockSeatMeta }
+  lead: { module: string; moduleOff: string; moduleAt: [number, number]; char: [number, number]; chair: [number, number]; frontFrom: number; icon: [number, number] }
+  endLeft: { sprite: string; at: [number, number] }
+  /** at[0] 은 "pairs*pairW" (짝 수 × 짝 폭) */
+  endRight: { sprite: string; at: [unknown, number] }
+  order: string[]
+}
+
+interface PropsSheetMeta extends DotSheetMeta {
+  seat: { booth: SeatLayoutMeta }
+  block: BlockMeta
+  /** 머리 위 상태 아이콘 (18×15, 꼬리 끝 아래 왼쪽 x 4) */
+  icons: { approval: string; myTurn: string; working: { frames: string[]; fps: number } }
+  /** 섬 받침 색 (그림 없이 Graphics) */
+  islandBase: { color: string }
 }
 
 interface DotArt {
-  /** 인물·책상·의자 (office-v3) */
-  sheet: Spritesheet
-  meta: DotSheetMeta
-  /** 환경 소품 (office-v2) */
+  /** 방향별 인물 (office-v5-down·up·right). left 는 right 를 뒤집어 그린다 */
+  people: Record<CharacterDirection, Spritesheet>
+  /** 인물 프리셋 (정면 아틀라스의 목록. 세 방향 모두 같은 인물) */
+  characters: DotCharacter[]
+  /** 책상·의자·칸막이·부스·아이콘·화분 (office-v5-props) */
+  props: Spritesheet
+  propsMeta: PropsSheetMeta
+  /** 환경 소품 (office-v2: 집·가로등·그룹 화분) */
   env: Spritesheet
-  /** office-v2 반복 타일 (벽·창밖 4시간대·바닥·그룹 바닥·섬 러그·Focus Zone 카펫·거리) */
+  /** 반복 타일: office-v2 (벽·창밖 4시간대·거리) + office-v5-props (통로·데스크존 카펫·Focus Zone 남색 카펫) */
   tiles: Record<string, { texture: Texture; meta: DotTileMeta }>
-  /** 인물 머리·윗옷 색 바꾸기 (못 읽으면 null 이고 고른 색 없이 그린다) */
-  recolor: RecolorArt | null
-  /** 색을 바꾼 인물 프레임: `인물|머리|윗옷` → 프레임 이름 → 텍스처. 처음 그릴 때 만들고 계속 쓴다 */
+  /** 방향별 인물 머리·윗옷 색 바꾸기. 정면은 처음에 읽고, 뒷모습·옆모습은 고른 색이 있는 자리가 생길 때 읽는다 (읽는 중·실패면 기본색) */
+  recolor: Map<CharacterDirection, RecolorArt | 'loading' | 'failed'>
+  /** 뒷모습·옆모습 색 바꾸기를 다 읽으면 부른다 (다시 그리기) */
+  onRecolorLoaded: () => void
+  /** 색을 바꾼 인물 프레임: `방향|인물|머리|윗옷` → 프레임 이름 → 텍스처. 처음 그릴 때 만들고 계속 쓴다 */
   recolored: Map<string, Record<string, Texture>>
   /** Off Duty 머리: `인물|머리|윗옷` → 텍스처 */
   heads: Map<string, Texture>
 }
 
+const DIRECTIONS: CharacterDirection[] = ['down', 'up', 'right']
+/** office-v2 에서 쓰는 반복 타일: 벽·창밖 4시간대·Off Duty 보도 */
+const ENV_TILES = /^(wall|street|view-.+)$/
+
+/**
+ * 아틀라스를 Assets 캐시에 프레임 이름을 올리지 않고 읽는다. office-v2 와 office-v5-props 에 같은 프레임 이름(prop/plant-large)이 있어
+ * 둘 다 Assets.load 하면 캐시 키가 겹친다는 경고가 난다 (그림은 아틀라스마다 따로 찾으므로 맞게 나온다)
+ */
+async function loadSheetUncached(url: string): Promise<Spritesheet> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`)
+  const data = (await response.json()) as SpritesheetData
+  const texture = await Assets.load<Texture>(url.slice(0, url.lastIndexOf('/') + 1) + data.meta.image)
+  const sheet = new Spritesheet(texture, data)
+  await sheet.parse()
+  return sheet
+}
+
 /** 아틀라스들과 반복 타일을 읽고 확대를 nearest 로 (전역 기본값을 바꾸면 글자까지 바뀌어 텍스처마다) */
 async function loadDotArt(): Promise<DotArt> {
-  const [sheet, env, recolor] = await Promise.all([
-    Assets.load<Spritesheet>(DOT_SHEET_URL),
+  const [[down, up, right], props, env, recolor] = await Promise.all([
+    Promise.all(DIRECTIONS.map((direction) => Assets.load<Spritesheet>(`/office/${CHARACTER_ATLAS[direction]}.json`))),
+    loadSheetUncached(DOT_PROPS_URL),
     Assets.load<Spritesheet>(DOT_ENV_URL),
-    loadRecolorArt().catch((error: unknown) => {
+    loadRecolorArt('down').catch((error: unknown) => {
       console.error('도트 인물 색 바꾸기를 읽지 못해 기본색으로 그린다', error)
       return null
     }),
   ])
-  const meta = (sheet.data.meta as unknown as { jkCorp: DotSheetMeta }).jkCorp
-  const envMeta = (env.data.meta as unknown as { jkCorp: DotSheetMeta }).jkCorp
-  const base = DOT_ENV_URL.slice(0, DOT_ENV_URL.lastIndexOf('/') + 1)
-  const entries = await Promise.all(
-    Object.entries(envMeta.tiles).map(async ([id, tile]) => [id, { texture: await Assets.load<Texture>(base + tile.image), meta: tile }] as const),
+  const metaOf = <T = DotSheetMeta,>(sheet: Spritesheet) => (sheet.data.meta as unknown as { jkCorp: T }).jkCorp
+  // office-v2 의 바닥·그룹·섬·Focus Zone 타일은 office-v5-props 타일로 바뀌어 읽지 않는다
+  const tileEntries = await Promise.all(
+    [...Object.entries(metaOf(env).tiles).filter(([id]) => ENV_TILES.test(id)), ...Object.entries(metaOf(props).tiles)].map(
+      async ([id, tile]) => [id, { texture: await Assets.load<Texture>(`/office/${tile.image}`), meta: tile }] as const,
+    ),
   )
-  const tiles = Object.fromEntries(entries)
-  for (const source of [sheet.textureSource, env.textureSource, ...entries.map(([, tile]) => tile.texture.source)]) source.scaleMode = 'nearest'
-  return { sheet, meta, env, tiles, recolor, recolored: new Map(), heads: new Map() }
+  const people = { down, up, right }
+  for (const source of [...[down, up, right, props, env].map((sheet) => sheet.textureSource), ...tileEntries.map(([, tile]) => tile.texture.source)]) {
+    source.scaleMode = 'nearest'
+  }
+  return {
+    people,
+    characters: metaOf(down).characters ?? [],
+    props,
+    propsMeta: metaOf<PropsSheetMeta>(props),
+    env,
+    tiles: Object.fromEntries(tileEntries),
+    recolor: new Map([['down', recolor ?? 'failed']]),
+    onRecolorLoaded: () => {},
+    recolored: new Map(),
+    heads: new Map(),
+  }
 }
 
-/** 그 인물의 프레임 텍스처들. 고른 색이 있으면 색을 바꾼 것 (조합마다 한 번 만든다) */
-function characterTextures(art: DotArt, character: string, hair: string | null, top: string | null): Record<string, Texture> {
-  if ((!hair && !top) || !art.recolor) return art.sheet.textures
-  const key = `${character}|${hair}|${top}`
+/** 그 방향 색 바꾸기. 아직 안 읽었으면 읽기 시작하고 null (다 읽으면 onRecolorLoaded) */
+function recolorOf(art: DotArt, direction: CharacterDirection): RecolorArt | null {
+  const state = art.recolor.get(direction)
+  if (state === undefined) {
+    art.recolor.set(direction, 'loading')
+    loadRecolorArt(direction).then(
+      (loaded) => {
+        art.recolor.set(direction, loaded)
+        art.onRecolorLoaded()
+      },
+      (error: unknown) => {
+        console.error(`도트 인물 색 바꾸기(${direction})를 읽지 못해 기본색으로 그린다`, error)
+        art.recolor.set(direction, 'failed')
+      },
+    )
+    return null
+  }
+  return state === 'loading' || state === 'failed' ? null : state
+}
+
+/** 그 방향 인물 애니메이션 이름. 정면은 v3 때 그대로 `char/<id>/<상태>`, 뒷모습·옆모습은 `char/<id>/<방향>/<상태>` */
+function animationKey(direction: CharacterDirection, character: string, state: DotState): string {
+  return direction === 'down' ? `char/${character}/${state}` : `char/${character}/${direction}/${state}`
+}
+
+/** 그 방향·인물의 프레임 텍스처들. 고른 색이 있으면 색을 바꾼 것 (조합마다 한 번 만든다) */
+function characterTextures(art: DotArt, direction: CharacterDirection, look: DotLook): Record<string, Texture> {
+  const sheet = art.people[direction]
+  const { id: character, hair, top } = look
+  if (!hair && !top) return sheet.textures
+  const recolor = recolorOf(art, direction)
+  if (!recolor) return sheet.textures
+  const key = `${direction}|${character}|${hair}|${top}`
   const cached = art.recolored.get(key)
   if (cached) return cached
-  const prefix = `char/${character}/`
-  const names = Object.keys(art.sheet.textures).filter((name) => name.startsWith(prefix))
-  const originals = names.map((name) => art.sheet.textures[name])
-  const canvas = paintCharacter(art.recolor, character, originals.map(({ frame }) => ({ x: frame.x, y: frame.y, w: frame.width, h: frame.height })), hair, top)
+  const prefix = direction === 'down' ? `char/${character}/` : `char/${character}/${direction}/`
+  const names = Object.keys(sheet.textures).filter((name) => name.startsWith(prefix))
+  const originals = names.map((name) => sheet.textures[name])
+  const canvas = paintCharacter(recolor, character, originals.map(({ frame }) => ({ x: frame.x, y: frame.y, w: frame.width, h: frame.height })), hair, top)
   if (!canvas) {
-    art.recolored.set(key, art.sheet.textures)
-    return art.sheet.textures
+    art.recolored.set(key, sheet.textures)
+    return sheet.textures
   }
   const source = Texture.from(canvas).source
   source.scaleMode = 'nearest'
-  const textures: Record<string, Texture> = { ...art.sheet.textures }
+  const textures: Record<string, Texture> = { ...sheet.textures }
   let x = 0
   names.forEach((name, index) => {
     const original = originals[index]
@@ -255,14 +375,14 @@ function characterTextures(art: DotArt, character: string, hair: string | null, 
   return textures
 }
 
-/** Off Duty 머리 (도트): 그 인물·색 idle 첫 칸의 머리 부분 (목록 아바타와 같은 자리). 인물이 없으면 null */
+/** Off Duty 머리 (도트): 그 인물·색 정면 idle 첫 칸의 머리 부분 (목록 아바타와 같은 자리). 인물이 없으면 null */
 function dotHead(art: DotArt, session: Session): Sprite | null {
-  const look = dotLookOf(session, art.meta.characters ?? [])
+  const look = dotLookOf(session, art.characters)
   if (!look) return null
   const key = `${look.id}|${look.hair}|${look.top}`
   let texture = art.heads.get(key)
   if (!texture) {
-    const base = characterTextures(art, look.id, look.hair, look.top)[`char/${look.id}/idle/0`]
+    const base = characterTextures(art, 'down', look)[`char/${look.id}/idle/0`]
     if (!base) return null
     texture = new Texture({ source: base.source, frame: new Rectangle(base.frame.x + HEAD_RECT.x, base.frame.y + HEAD_RECT.y, HEAD_RECT.w, HEAD_RECT.h) })
     art.heads.set(key, texture)
@@ -283,10 +403,18 @@ function dotTiling(art: DotArt, id: string, width: number, height: number): Tili
   return new TilingSprite({ texture: art.tiles[id].texture, width, height })
 }
 
-/** 소품 스프라이트. 앵커는 아래 가운데 (build.py) */
+/** 환경(office-v2) 소품 스프라이트. 앵커는 아래 가운데 (build.py) */
 function dotProp(art: DotArt, id: string, x: number, bottom: number): Sprite {
   const sprite = new Sprite(art.env.textures[`prop/${id}`])
   sprite.position.set(x, bottom)
+  return sprite
+}
+
+/** office-v5-props 스프라이트를 왼쪽 위(x, y)에 (자리 안 배치 메타가 왼쪽 위 좌표라서) */
+function v5Prop(art: DotArt, texture: Texture | string, x: number, y: number): Sprite {
+  const sprite = new Sprite(typeof texture === 'string' ? art.props.textures[`prop/${texture}`] : texture)
+  sprite.anchor.set(0)
+  sprite.position.set(x, y)
   return sprite
 }
 
@@ -300,13 +428,14 @@ const DOT_OUTLINE = 0x2b2a33
 
 /**
  * 도트 바닥·벽·창밖. 벽 타일(144×120 = 벽 높이 WALL_H × DOT_SCALE)은 창 유리가 투명이라 그 뒤에 그 시간대 창밖을 깐다.
- * 창밖 타일 폭(432)은 창틀 기둥 간격(144)의 배수라 반복 경계가 늘 기둥 뒤에 숨는다. 창밖은 아래(지평선)를 유리 아래 끝에 맞춘다
+ * 창밖 타일 폭(432)은 창틀 기둥 간격(144)의 배수라 반복 경계가 늘 기둥 뒤에 숨는다. 창밖은 아래(지평선)를 유리 아래 끝에 맞춘다.
+ * 열린 바닥(통로)은 밝은 타일 (48 격자라 바닥 격자와 맞는다)
  */
 function drawDotBackground(widthPx: number, heightPx: number, art: DotArt, phase: DayPhase): Container {
   const container = dotLayer()
   const width = widthPx * DOT_SCALE
   const wallBottom = WALL_H * DOT_SCALE
-  const floor = dotTiling(art, 'floor', width, heightPx * DOT_SCALE - wallBottom)
+  const floor = dotTiling(art, 'corridor', width, heightPx * DOT_SCALE - wallBottom)
   floor.y = wallBottom
   const wall = art.tiles.wall
   const glass = wall.meta.glass ?? { y: 0, h: wall.meta.h }
@@ -332,14 +461,17 @@ function dotSign(text: Text, underline: number, padding = 8): Graphics {
     .stroke({ width: 2, color: DOT_OUTLINE, alignment: 1 })
 }
 
-/** 그룹 이름표·팀 이름표·파트 이름표·메모 글자 (도트 px). 책상 이름표(14)를 기준으로 계층 순 */
-const DOT_FONT = { group: 16, team: 14, part: 12, note: 12 }
+/** 그룹 이름표·팀 이름표·파트 이름표·메모 글자 (도트 px). 자리 이름표(14)를 기준으로 계층 순 */
+const DOT_FONT = { group: 16, team: 14, part: 12, note: 12, seat: 14 }
 
 function dotLabel(text: string, size: number, color = COLOR.text, wrapWidth?: number): Text {
   return label(text, size, color, wrapWidth, dotTextResolution)
 }
 
-/** 도트 그룹: 그룹 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽) + 초록 걸레받이(아래) + 이름표·화분·메모. 크기는 저장된 w·h 가 아니라 그려지는 영역(안의 섬들을 다 담는다) */
+/**
+ * 도트 그룹(데스크존): 밝은 회색 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽, 아래는 회색 걸레받이) + 이름표·화분·메모.
+ * 크기는 저장된 w·h 가 아니라 그려지는 영역(안의 섬들을 다 담는다)
+ */
 function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupParts {
   const { group } = area
   const container = new Container()
@@ -348,8 +480,7 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupPa
   container.addChild(dot)
   const w = area.w * TILE * DOT_SCALE
   const h = area.h * TILE * DOT_SCALE
-  // 카펫 무늬가 책상보다 눈에 띄지 않게 옅게 덮는다
-  dot.addChild(dotTiling(art, 'group-floor', w, h), new Graphics().rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.45 }))
+  dot.addChild(dotTiling(art, 'desk-carpet', w, h))
   const wall = 9
   dot.addChild(
     new Graphics()
@@ -365,9 +496,9 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupPa
       .rect(w - wall, 0, wall, h)
       .fill(COLOR.partition)
       .rect(0, h - 9, w, 9)
-      .fill(COLOR.green)
+      .fill(0xe9eaef)
       .rect(0, h - 9, w, 2)
-      .fill(COLOR.greenDark)
+      .fill(COLOR.partitionShadow)
       .rect(0, 0, w, h)
       .stroke({ width: 2, color: DOT_OUTLINE, alignment: 1 }),
   )
@@ -409,7 +540,10 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupPa
   return { container, sign }
 }
 
-/** 도트 팀 섬: 연한 러그 + 테두리, 파트 구역(옅은 바탕 + 은색 테두리 + 이름표). 파트 구역은 섬 컨테이너에 있어 섬을 끌면 같이 움직인다 */
+/**
+ * 도트 팀 섬: 테두리 안쪽에 데스크존 카펫보다 한 단 진한 회색 받침(참고 그림의 블록 받침) + 블록 줄마다 오른쪽 화분 +
+ * 파트 구역(옅은 바탕 + 회색 테두리 + 이름표) + 팀 이름표. 칸막이 블록(책상·사람)은 drawBlockRow 가 섬 위에 따로 그린다
+ */
 function drawDotIsland(island: Island, onEdit: () => void, art: DotArt): IslandParts {
   const container = new Container()
   container.position.set(PAD_X + island.x * TILE, PAD_Y + island.y * TILE)
@@ -417,29 +551,36 @@ function drawDotIsland(island: Island, onEdit: () => void, art: DotArt): IslandP
   container.addChild(dot)
   const w = island.w * TILE * DOT_SCALE
   const h = island.h * TILE * DOT_SCALE
+  /** 섬 안 타일 좌표 → 이 섬 도트 px */
+  const local = (point: Point) => ({ x: (point.x - island.x) * DOT_TILE, y: (point.y - island.y) * DOT_TILE })
+  // 받침: 단위들(테두리 1타일 안쪽)에서 왼쪽 24(지휘자 없는 블록의 왼쪽 끝 판 12 바깥)·오른쪽 12·위 12·아래 24(아랫자리 의자가 블록 줄 아래로 23 나온다) 넓게
   dot.addChild(
-    dotTiling(art, 'island-rug', w, h),
     new Graphics()
-      .rect(0, 0, w, h)
-      .stroke({ width: 3, color: COLOR.greenDark, alignment: 1 })
-      .rect(3, 3, w - 6, h - 6)
-      .stroke({ width: 1, color: 0xe7ecd9, alignment: 1 }),
+      .rect(DOT_TILE - 24, DOT_TILE - 12, w - 2 * DOT_TILE + 36, h - 2 * DOT_TILE + 36)
+      .fill(hexColor(art.propsMeta.islandBase.color))
+      .stroke({ width: 2, color: COLOR.islandLine, alignment: 1 }),
   )
   for (const zone of island.zones) {
-    // 책상 경계에서 좌우 12, 위로 이름표 자리 36, 아래 3
-    const zx = ((zone.x - island.x) * TILE - 4) * DOT_SCALE
-    const zy = ((zone.y - island.y) * TILE - 12) * DOT_SCALE
-    const zw = (zone.w * TILE + 8) * DOT_SCALE
-    const zh = (zone.h * TILE + 13) * DOT_SCALE
+    // 단위 경계에서 왼쪽 18·오른쪽 12, 위로 이름표 자리 60(파트 앞 여백 2타일 안), 아래 24(아랫자리 의자 밖. 섬 받침 아래 끝과 같은 선)
+    const { x, y } = local(zone)
+    const zx = x - 18
+    const zy = y - 60
+    const zw = zone.w * DOT_TILE + 30
+    const zh = zone.h * DOT_TILE + 84
     const partName = dotLabel(zone.part.name, DOT_FONT.part, 0x4d5563)
     const partSign = dotSign(partName, COLOR.silver, 6)
     partSign.position.set(zx + 8, zy + 8)
     partName.position.set(zx + 14, zy + 10)
     dot.addChild(
-      new Graphics().rect(zx, zy, zw, zh).fill({ color: 0xffffff, alpha: 0.35 }).stroke({ width: 2, color: COLOR.partLine, alignment: 1 }),
+      new Graphics().rect(zx, zy, zw, zh).fill({ color: 0xffffff, alpha: 0.25 }).stroke({ width: 2, color: COLOR.partLine, alignment: 1 }),
       partSign,
       partName,
     )
+  }
+  // 화분 열: 블록 줄마다 오른쪽 끝 칸막이(6) 옆에 큰 화분 (블록 모듈 높이 가운데쯤)
+  for (const plant of island.plants) {
+    const { x, y } = local(plant)
+    dot.addChild(v5Prop(art, 'plant-large', x + 6, y + 40))
   }
   const name = dotLabel(island.team.name, DOT_FONT.team)
   const sign = dotSign(name, COLOR.greenDark, 7)
@@ -459,62 +600,37 @@ function drawDotIsland(island: Island, onEdit: () => void, art: DotArt): IslandP
 }
 
 /**
- * 도트 Focus Zone: 카펫 + 테두리, 자리마다 1인 부스(뒤·양옆 패널, 오른쪽 안 선반) + 선반 위 스탠드 조명·머그 또는 헤드폰,
- * 빈 자리에는 책상까지 (앉은 세션은 책상 컨테이너가 같은 자리에 책상을 다시 그린다), 오른쪽 가장자리 책장·화분.
- * 자리는 officeLayout.ts 의 로비 자리 (맨 위 LOBBY_SIGN_H 줄은 이름표, 2열·SEAT_STEP 간격). occupied = 앉은 자리의 구역 안 타일 좌표 "x,y"
+ * 도트 Focus Zone(집중공간): 남색 카펫 + 테두리, 빈 부스(화면 꺼짐 + 빈 의자. 앉은 자리는 drawBoothSeat 가 부스째 그린다) + 화분·이름표.
+ * 부스 자리는 officeLayout.ts 의 layout.booths, occupied = 앉은 부스의 "x,y" (절대 타일)
  */
-function drawDotZone(zone: Rect, art: DotArt, occupied: Set<string>): Container {
+function drawDotZone(zone: Rect, booths: Seat[], art: DotArt, occupied: Set<string>): Container {
   const container = new Container()
   container.position.set(PAD_X + zone.x * TILE, PAD_Y + zone.y * TILE)
   const dot = dotLayer()
   container.addChild(dot)
-  const step = TILE * DOT_SCALE
-  const width = zone.w * step
-  const height = zone.h * step
+  const width = zone.w * DOT_TILE
+  const height = zone.h * DOT_TILE
   dot.addChild(
-    dotTiling(art, 'focus-carpet', width, height),
+    dotTiling(art, 'focus-navy', width, height),
     new Graphics()
       .rect(0, 0, width, height)
-      .stroke({ width: 4, color: COLOR.carpetBorder, alignment: 1 })
-      .rect(0, height - 4, width, 4)
-      .fill(COLOR.carpetShadow)
+      .stroke({ width: 4, color: COLOR.navyDark, alignment: 1 })
       .rect(0, 0, width, height)
       .stroke({ width: 2, color: DOT_OUTLINE, alignment: 1 }),
   )
-
-  const boothRows = Math.max(1, Math.floor((zone.h - LOBBY_SIGN_H - 2) / SEAT_STEP))
-  const deskW = DESK_TILES_W * DOT_TILE
-  for (let row = 0; row < boothRows; row++) {
-    for (let column = 0; column < 2; column++) {
-      const seatX = (1 + column * SEAT_STEP) * step
-      const seatY = (LOBBY_SIGN_H + 1 + row * SEAT_STEP) * step
-      // 부스(138×107)는 자리 왼쪽 9 밖에서 오른쪽 선반까지, 아래 끝은 책상 앞판 뒤
-      dot.addChild(dotProp(art, 'booth', seatX + 60, seatY + 111))
-      // 선반 위 (부스 그림의 선반 윗면 ≈ 부스 아래에서 50)
-      dot.addChild(dotProp(art, 'desk-lamp', seatX + 112, seatY + 62))
-      dot.addChild(dotProp(art, (row * 2 + column) % 2 ? 'headphones' : 'mug', seatX + 102, seatY + 86))
-      if (!occupied.has(`${1 + column * SEAT_STEP},${LOBBY_SIGN_H + 1 + row * SEAT_STEP}`)) {
-        const desk = new Sprite(art.sheet.textures['prop/desk'])
-        desk.position.set(seatX + deskW / 2, seatY + DOT_DESK.deskBottom)
-        dot.addChild(desk)
-      }
-    }
+  for (const booth of booths) {
+    if (occupied.has(`${booth.x},${booth.y}`)) continue
+    const boothArt = drawBoothArt(art, null, false, null)
+    boothArt.position.set((booth.x - zone.x) * DOT_TILE, (booth.y - zone.y) * DOT_TILE)
+    dot.addChild(boothArt)
   }
-
-  // 오른쪽 가장자리 (부스 오른쪽 끝 321 ~ 구역 끝 384)
-  const signRowH = LOBBY_SIGN_H * step
-  dot.addChild(dotProp(art, 'bookshelf-tall', width - 32, signRowH + 132))
-  for (let y = signRowH + 300; y + 60 < height; y += 300) dot.addChild(dotProp(art, 'bookshelf-tall', width - 32, y))
-  for (let y = signRowH + 210; y + 40 < height; y += 300) dot.addChild(dotProp(art, 'plant-small', width - 32, y))
-  const seatsBottom = (LOBBY_SIGN_H + 1 + boothRows * SEAT_STEP) * step
-  // 자리 아래가 3타일 넘게 남으면 (그룹이 더 높아 구역이 길 때) 낮은 책장
-  if (height - seatsBottom >= 3 * step) dot.addChild(dotProp(art, 'bookshelf-low', 120, height - 24))
-  dot.addChild(dotProp(art, 'plant-large', width - 30, height - 12))
-  dot.addChild(dotProp(art, 'plant-small', 24, height - 12))
+  // 오른쪽 가장자리 (부스 오른쪽 끝 ~ 구역 끝)
+  const plant = art.props.textures['prop/plant']
+  for (let y = 2 * DOT_TILE; y + plant.height < height - 12; y += 4 * DOT_TILE) dot.addChild(v5Prop(art, plant, width - plant.width - 14, y))
 
   const name = dotLabel('Focus Zone', DOT_FONT.group)
-  const sign = dotSign(name, COLOR.boothWallTop)
-  // 이름표 줄(맨 위 1타일) 안. 첫 줄 말풍선(자리 위) 에 닿지 않게 테두리 위에 붙인다
+  const sign = dotSign(name, COLOR.navy)
+  // 이름표 줄(맨 위 1타일) 안
   sign.position.set(18, 6)
   name.position.set(26, 8)
   name.eventMode = 'none'
@@ -523,139 +639,204 @@ function drawDotZone(zone: Rect, art: DotArt, occupied: Set<string>): Container 
 }
 
 /**
- * 그 인물·상태의 프레임과 fps. 아틀라스에 없는 상태(v0 의 idle·doze)는 typing 0번에 멈춘 한 장이고, doze 대역은 흐리게(isDim) 한다
+ * 그 인물·방향·상태의 프레임과 fps. 그 방향에 그 상태가 없으면(단계 사이) 그 방향 idle(없으면 typing) 0번에 멈춘 한 장이고
+ * doze 대역은 흐리게(isDim) 한다. 그 방향 그림이 아예 없으면 정면으로
  */
-function dotFrames(art: DotArt, character: string, state: DotState, frames: Record<string, Texture>): { textures: Texture[]; fps: number; isDim: boolean } {
-  const key = `char/${character}/${state}`
-  const names = art.sheet.data.animations?.[key]
-  if (names) return { textures: names.map((name) => frames[name]), fps: art.meta.animations[key]?.fps ?? 6, isDim: false }
-  return { textures: [frames[`char/${character}/typing/0`]], fps: 0, isDim: state === 'doze' }
+function dotFrames(art: DotArt, direction: CharacterDirection, look: DotLook, state: DotState): { textures: Texture[]; fps: number; isDim: boolean } {
+  const sheet = art.people[direction]
+  const key = animationKey(direction, look.id, state)
+  const frames = characterTextures(art, direction, look)
+  const names = sheet.data.animations?.[key]
+  if (names) {
+    const meta = (sheet.data.meta as unknown as { jkCorp: DotSheetMeta }).jkCorp
+    return { textures: names.map((name) => frames[name]), fps: meta.animations[key]?.fps ?? 6, isDim: false }
+  }
+  const still = frames[`${animationKey(direction, look.id, 'idle')}/0`] ?? frames[`${animationKey(direction, look.id, 'typing')}/0`]
+  if (still) return { textures: [still], fps: 0, isDim: state === 'doze' }
+  if (direction !== 'down') return dotFrames(art, 'down', look, state)
+  return { textures: [frames[`char/${look.id}/typing/0`]], fps: 0, isDim: state === 'doze' }
 }
 
-/** 자리(96×144, 도트 px) 안 배치. 사람은 키보드 앞(가운데보다 조금 왼쪽), 모니터는 책상 오른쪽 */
-const DOT_DESK = {
-  personX: 42,
-  /** 캐릭터 발 기준선. 셀을 y=-20 에 둔 것 (손이 책상 윗면 위로 보이게. 든 손은 윗줄 이름표에 걸친다) */
-  baseline: 104,
-  /** 의자 아래 끝 (사람 뒤, 책상에 가려진다) */
-  chairBottom: 100,
-  /** 책상 아래 끝 = 이름표 위 끝 */
-  deskBottom: 124,
-  tagH: 20,
-  fontSize: 14,
-}
 /**
  * 도트 하위 컨테이너(1/DOT_SCALE) 글자 해상도 = 지금 배율 (0.5·1·2·3). redraw 가 배율을 바꾼 뒤 정한다.
  * 최대 배율(3)로 고정하면 1배에서 3배 축소돼 12px 한글의 가는 획이 빠진다
  */
 let dotTextResolution = 1
 
-/** 도트 책상. 그리는 순서: 의자 → 캐릭터 → 책상 → 모니터 켜짐 → 외부 측판·명패 → 이름표. 선택 테두리는 아트 px, 말풍선은 별도 층 */
-function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: DotArt, now: number): DeskParts {
-  const container = new Container()
-  container.position.set(PAD_X + seat.x * TILE, PAD_Y + seat.y * TILE)
-  const dot = new Container()
-  dot.scale.set(1 / DOT_SCALE)
-  container.addChild(dot)
-  const isOnBreak = attendanceOf(session) === 'break'
-  const isWorking = session.status === 'working' && !isOnBreak
-  const isExternal = session.kind === 'external'
-  const isLead = session.role === 'lead'
-  const deskW = DESK_TILES_W * DOT_TILE
+const TAG_H = 20
+/** 이름표 최대 폭 = 짝(자리 열) 폭 96 - 6 */
+const TAG_MAX_W = 90
 
-  const chair = new Sprite(art.sheet.textures['prop/chair'])
-  chair.position.set(DOT_DESK.personX, DOT_DESK.chairBottom)
-  dot.addChild(chair)
-
-  let animation: AnimatedSprite | null = null
-  if (!isOnBreak) {
-    // 사용자가 고른 인물(아틀라스에 있을 때만)과 색 → 세션 ID 해시로 고른 프리셋 (지시자는 리더 풀)
-    const look = dotLookOf(session, art.meta.characters ?? [])
-    const character = look?.id ?? (isLead ? 'lead' : 'member')
-    const frames = look ? characterTextures(art, character, look.hair, look.top) : art.sheet.textures
-    const { textures, fps, isDim } = dotFrames(art, character, dotStateOf(session, now), frames)
-    animation = new AnimatedSprite({ textures, autoUpdate: false })
-    animation.position.set(DOT_DESK.personX, DOT_DESK.baseline)
-    // 반투명은 뒤 의자가 비쳐 보여 색만 어둡게
-    if (isDim) animation.tint = 0xb4b8c4
-    if (textures.length > 1) {
-      animation.animationSpeed = fps / 60
-      // 모두 같은 박자로 치지 않게 세션마다 시작 프레임을 다르게
-      animation.gotoAndPlay(parseInt(session.id.slice(0, 2), 16) % textures.length || 0)
-    }
-    dot.addChild(animation)
-  }
-
-  const desk = new Sprite(art.sheet.textures['prop/desk'])
-  desk.position.set(deskW / 2, DOT_DESK.deskBottom)
-  dot.addChild(desk)
-  const deskLeft = desk.x - desk.width / 2
-  const deskTop = desk.y - desk.height
-  const screen = art.meta.props['prop/desk']?.screen
-  if (isWorking && screen) {
-    const sx = deskLeft + screen.x
-    const sy = deskTop + screen.y
-    dot.addChild(
-      new Graphics()
-        .rect(sx, sy, screen.w, screen.h)
-        .fill(COLOR.screenOn)
-        .rect(sx + 3, sy + 3, 9, 6)
-        .fill(0xdff0ff)
-        .rect(sx + 15, sy + 3, 6, 3)
-        .fill(0xdff0ff)
-        .rect(sx + 15, sy + 9, 9, 2)
-        .fill(0xdff0ff),
-    )
-  }
-  // 외부 세션: 책상 왼쪽 측판을 회색으로
-  if (isExternal) dot.addChild(new Graphics().rect(deskLeft + 4, deskTop + 42, 6, 24).fill(COLOR.deskLeg))
-  // 팀장·파트장: 책상 앞판에 금색 명패 (둘은 이름표 밑줄로 구분)
-  if (isLead) dot.addChild(new Graphics().rect(30, deskTop + 46, 36, 9).fill(COLOR.gold).rect(33, deskTop + 49, 30, 3).fill(0xf4d77a))
-
-  const isPartLead = isLead && session.partId !== null
-  const name = label(session.name ?? session.title ?? session.id.slice(0, 8), DOT_DESK.fontSize, isExternal ? 0x7a7f8e : COLOR.text, undefined, dotTextResolution)
-  const tagW = Math.min(Math.ceil(name.width) + 12, SEAT_STEP * DOT_TILE - 12)
-  const underline = isExternal ? COLOR.chairLine : isPartLead ? COLOR.silver : isLead ? COLOR.gold : COLOR.green
-  const tagY = DOT_DESK.deskBottom
-  const tag = new Graphics().rect(0, 0, tagW, DOT_DESK.tagH).fill(0xffffff).rect(0, DOT_DESK.tagH - 3, tagW, 3).fill(underline)
-  tag.position.set(Math.floor((deskW - tagW) / 2), tagY)
-  name.position.set(tag.x + 6, tagY + 1)
-  const mask = new Graphics().rect(tag.x, tagY, tagW, DOT_DESK.tagH).fill(0xffffff)
-  name.mask = mask
-  if (isOnBreak) {
-    tag.alpha = 0.5
-    name.alpha = 0.5
-  }
-  dot.addChild(tag, mask, name)
-
-  if (isSelected) {
-    container.addChild(new Graphics().rect(-2, 1, DESK_W + 4, DESK_H - 2).stroke({ width: 1, color: COLOR.select }))
-  }
-  container.eventMode = 'static'
-  container.cursor = 'pointer'
-  // 든 손·의자처럼 자리 밖으로 나온 부분이 아니라 자리(2×3 타일)만 누르는 곳으로
-  container.hitArea = new Rectangle(0, 0, DESK_W, DESK_H)
-  return { container, animation, bubble: drawBubble(session, container.x, container.y) }
-}
-
-// ---------- 말풍선 ----------
+/** 도트 px 위치 [x, y] (스프라이트 왼쪽 위) */
+type At = [number, number]
 
 /**
- * 말풍선 크기. 도트 px (책상 이름표 글자 14 보다 조금 작게) 이고 1/DOT_SCALE 층에 그린다.
- * maxW = 접힌 말풍선 최대 폭 (책상 폭 + 조금. 자리 간격 안이라 옆 자리 말풍선과 안 겹친다), expandedW = 펼친 말풍선 줄바꿈 폭.
- * boxBottom = 상자 아래 끝 (책상 기준). 자리 간격이 책상 높이와 같아 위아래 책상 사이에 빈 줄이 없으므로,
- * 상자는 윗줄 책상 이름표(-20..0) 위에 두고 가는 꼬리를 자기 머리(tailEnd)까지 내려 누구 것인지 보인다
+ * 블록 안 명패 (도트 px, 블록 원점 기준. 짝 자리는 그 짝 왼쪽 위 기준): 지휘자 금·은은 block-lead 앞면(79~95줄, x 1~34),
+ * 외부 세션 회색은 윗자리 = 윗책상 상판 오른쪽(모니터 뒷면 옆. 윗책상 앞판은 가운데 칸막이가 가린다), 아랫자리 = 아랫책상 앞판 오른쪽 끝(사람 옆)
  */
-/** 꼬리 끝은 도트 머리 위 끝(셀 16 - 20 = 자리 -4)까지 */
-const BUBBLE_SIZE = { font: 12, maxW: 132, expandedW: 330, boxBottom: -24, tailEnd: -6, line: 2, padX: 5, padY: 2, x: 6 }
-type BubbleSize = typeof BUBBLE_SIZE
-const BUBBLE_EXPANDED_MAX_CHARS = 300
+const BLOCK_PLATE: Record<'lead' | 'top' | 'bottom', Rect> = {
+  lead: { x: -44, y: 131, w: 28, h: 9 },
+  top: { x: 74, y: 66, w: 18, h: 7 },
+  bottom: { x: 68, y: 131, w: 22, h: 9 },
+}
+/**
+ * 블록 안 이름표 위 끝 y (블록 원점 기준): 윗자리는 윗책상 상판(모니터 뒷면 앞), 아랫자리는 의자 아래쪽(다음 블록 줄 윗사람 아이콘 위 끝 −17 보다 위),
+ * 지휘자는 옆 책상 아래 끝(144) 바로 밑 — 지휘자 열 아래쪽은 늘 빈 받침이고 앞면 명패를 가리지 않는다
+ */
+const BLOCK_TAG_Y = { top: 58, bottom: 196, lead: 146 }
+/** 부스 명패 (부스 그림 왼쪽 위 기준, 책상 앞 가장자리 오른쪽 끝)·이름표 위 끝 */
+const BOOTH_PLATE: Rect = { x: 80, y: 52, w: 22, h: 9 }
+const BOOTH_TAG_Y = 124
 
-interface DeskBubble {
-  /** 책상과 같은 자리에 둔다 (말풍선 층은 모든 책상 위. 끌 때 책상과 같이 옮긴다) */
-  container: Container
-  compact: Container
-  expanded: Container
+/** 사람이 앉아 있는 세션 (휴식은 빈 의자) */
+function isSeatedPerson(session: Session | undefined): session is Session {
+  return session !== undefined && attendanceOf(session) !== 'break'
+}
+
+function isScreenOn(session: Session | undefined): boolean {
+  return isSeatedPerson(session) && session.status === 'working'
+}
+
+/** 책상 앞면 명패 색: 팀장 금·파트장 은·외부 세션 회색. 팀원은 없다 */
+function plateOf(session: Session): { color: number; light: number } | null {
+  const isLead = session.role === 'lead'
+  if (isLead && session.partId !== null) return { color: COLOR.silver, light: COLOR.silverLight }
+  if (isLead) return { color: COLOR.gold, light: COLOR.goldLight }
+  if (session.kind === 'external') return { color: COLOR.external, light: COLOR.externalLight }
+  return null
+}
+
+function drawPlate(plate: { color: number; light: number }, at: Rect): Graphics {
+  return new Graphics()
+    .rect(at.x, at.y, at.w, at.h)
+    .fill(plate.color)
+    .rect(at.x + 3, at.y + 3, at.w - 6, 3)
+    .fill(plate.light)
+    .rect(at.x, at.y, at.w, at.h)
+    .stroke({ width: 1, color: DOT_OUTLINE, alignment: 1 })
+}
+
+/** 앉은 사람 (anchor 0). 휴식이면 null. 사용자가 고른 인물(아틀라스에 있을 때만)과 색 → 세션 ID 해시로 고른 프리셋 (지시자는 리더 풀) */
+function personSprite(session: Session, direction: CharacterDirection, art: DotArt, now: number): AnimatedSprite | null {
+  if (!isSeatedPerson(session)) return null
+  const look = dotLookOf(session, art.characters) ?? { id: session.role === 'lead' ? 'lead' : 'member', hair: null, top: null }
+  const { textures, fps, isDim } = dotFrames(art, direction, look, dotStateOf(session, now))
+  const animation = new AnimatedSprite({ textures, autoUpdate: false })
+  animation.anchor.set(0)
+  // 반투명은 뒤 의자가 비쳐 보여 색만 어둡게
+  if (isDim) animation.tint = 0xb4b8c4
+  if (textures.length > 1) {
+    animation.animationSpeed = fps / 60
+    // 모두 같은 박자로 치지 않게 세션마다 시작 프레임을 다르게
+    animation.gotoAndPlay(parseInt(session.id.slice(0, 2), 16) % textures.length || 0)
+  }
+  return animation
+}
+
+/**
+ * 칸막이 블록 줄 하나 (office-v5-props 메타 block, 도트 px, 원점 = 첫 짝 왼쪽 위): 메타 order 의 단계마다 모든 짝을 그린 뒤 다음 단계 —
+ * 윗자리 의자 → 윗자리 사람 → 지휘자 의자 → 짝 모듈(화면은 아랫자리 것) → 지휘자 책상(block-lead) → 끝 마감 → 지휘자 사람 → block-lead 앞쪽 →
+ * 아랫자리 사람 → 아랫자리 의자. 윗사람은 모듈 뒤(손만 상판 위), 아랫사람·의자는 모듈 앞. 사람 없는 자리(빈 자리·휴식)는 의자만
+ * (아랫자리는 책상 쪽으로 밀어 넣은 emptyChair). 명패는 그 위. 클릭은 자리 사각형(hit)이 받고 아이콘·이름표는 자리 위 층(drawSeatOverlay)
+ */
+function drawBlockRow(art: DotArt, row: BlockRow, sessionById: Map<string, Session>, now: number): { container: Container; animations: AnimatedSprite[] } {
+  const block = art.propsMeta.block
+  const container = new Container()
+  container.position.set(PAD_X + row.x * TILE, PAD_Y + row.y * TILE)
+  container.eventMode = 'none'
+  const dot = dotLayer()
+  container.addChild(dot)
+  const animations: AnimatedSprite[] = []
+  const sessionOf = (id: string | null) => (id ? sessionById.get(id) : undefined)
+  const add = (texture: string, at: At, dx = 0) => dot.addChild(v5Prop(art, art.props.textures[texture], at[0] + dx, at[1]))
+  const addPerson = (session: Session | undefined, direction: CharacterDirection, at: At, dx = 0) => {
+    const sprite = session ? personSprite(session, direction, art, now) : null
+    if (!sprite) return
+    sprite.position.set(at[0] + dx, at[1])
+    dot.addChild(sprite)
+    animations.push(sprite)
+  }
+  const eachPair = (draw: (pair: BlockRow['pairs'][number], dx: number) => void) => row.pairs.forEach((pair, index) => draw(pair, index * block.pairW))
+  const lead = sessionOf(row.leadId)
+  const leadModule = row.leadId ? (isScreenOn(lead) ? block.lead.module : block.lead.moduleOff) : null
+  const steps: Record<string, () => void> = {
+    'top.chair': () => eachPair((_, dx) => add('prop/chair-down', block.pair.top.chair, dx)),
+    'top.char': () => eachPair((pair, dx) => addPerson(sessionOf(pair.top), 'down', block.pair.top.char, dx)),
+    'lead.chair': () => {
+      if (row.leadId) add('prop/chair-right', block.lead.chair)
+    },
+    module: () => eachPair((pair, dx) => add(isScreenOn(sessionOf(pair.bottom)) ? block.pair.module : block.pair.moduleOff, [0, block.moduleY], dx)),
+    'lead.module': () => {
+      if (leadModule) add(leadModule, block.lead.moduleAt)
+    },
+    endLeft: () => {
+      if (!row.leadId) add(block.endLeft.sprite, block.endLeft.at)
+    },
+    endRight: () => {
+      if (row.pairs.length) add(block.endRight.sprite, [row.pairs.length * block.pairW, block.endRight.at[1]])
+    },
+    'lead.char': () => addPerson(lead, 'right', block.lead.char),
+    'lead.front': () => {
+      // 지휘자 책상의 frontFrom 아래(타자 치는 손 아래 끝 + 1)를 사람 위에 한 번 더: 손은 키보드 위, 허벅지·무릎은 책상 윗면 뒤
+      if (!leadModule || !isSeatedPerson(lead)) return
+      const texture = art.props.textures[leadModule]
+      const { frame } = texture
+      const from = block.lead.frontFrom
+      const front = new Texture({ source: texture.source, frame: new Rectangle(frame.x, frame.y + from, frame.width, frame.height - from) })
+      dot.addChild(v5Prop(art, front, block.lead.moduleAt[0], block.lead.moduleAt[1] + from))
+    },
+    'bottom.char': () => eachPair((pair, dx) => addPerson(sessionOf(pair.bottom), 'up', block.pair.bottom.char, dx)),
+    'bottom.chair': () =>
+      eachPair((pair, dx) => {
+        const seat = block.pair.bottom
+        add('prop/chair-up', isSeatedPerson(sessionOf(pair.bottom)) ? seat.chair : (seat.emptyChair ?? seat.chair), dx)
+      }),
+  }
+  // icon 단계는 자리 위 층(drawSeatOverlay)이 그린다
+  for (const step of block.order) steps[step]?.()
+  const leadPlate = lead ? plateOf(lead) : null
+  if (leadPlate) dot.addChild(drawPlate(leadPlate, BLOCK_PLATE.lead))
+  eachPair((pair, dx) => {
+    for (const side of ['top', 'bottom'] as const) {
+      const session = sessionOf(pair[side])
+      const plate = session ? plateOf(session) : null
+      if (plate) dot.addChild(drawPlate(plate, { ...BLOCK_PLATE[side], x: BLOCK_PLATE[side].x + dx }))
+    }
+  })
+  return { container, animations }
+}
+
+/**
+ * Focus Zone 부스 그림 (도트 px, 부스 왼쪽 위 기준): office-v5-props 메타 seat.booth 의 순서대로 부스(켜짐·꺼짐) → 사람(뒷모습) → 의자.
+ * person 이 null 이면 빈 의자 (책상 쪽으로 밀어 넣은 emptyChair)
+ */
+function drawBoothArt(art: DotArt, person: AnimatedSprite | null, isOn: boolean, plate: { color: number; light: number } | null): Container {
+  const layout = art.propsMeta.seat.booth
+  const container = new Container()
+  const off = art.propsMeta.props['prop/booth-navy']?.off
+  const booth = art.props.textures[isOn || !off ? 'prop/booth-navy' : off]
+  const chairAt = person ? layout.chair : (layout.emptyChair ?? layout.chair)
+  for (const part of layout.order) {
+    if (part === 'booth') container.addChild(v5Prop(art, booth, ...(layout.booth ?? [0, 0])))
+    else if (part === 'char' && person && layout.char) {
+      person.position.set(...layout.char)
+      container.addChild(person)
+    } else if (part === 'chair' && chairAt) container.addChild(v5Prop(art, 'chair-up', ...chairAt))
+  }
+  if (plate) container.addChild(drawPlate(plate, BOOTH_PLATE))
+  return container
+}
+
+/** 앉은 부스 하나 (부스·사람·의자·명패). 클릭은 자리 사각형(hit), 아이콘·이름표는 자리 위 층 */
+function drawBoothSeat(session: Session, seat: Seat, art: DotArt, now: number): { container: Container; animation: AnimatedSprite | null } {
+  const container = new Container()
+  container.position.set(PAD_X + seat.x * TILE, PAD_Y + seat.y * TILE)
+  container.eventMode = 'none'
+  const dot = dotLayer()
+  container.addChild(dot)
+  const animation = personSprite(session, 'up', art, now)
+  dot.addChild(drawBoothArt(art, animation, isScreenOn(session), plateOf(session)))
+  return { container, animation }
 }
 
 /** 한 줄로 maxWidth 안에 들어가게 끝을 … 로 자른다 */
@@ -674,68 +855,136 @@ function fitOneLine(text: Text, content: string, maxWidth: number): void {
   text.text = `${characters.slice(0, low).join('').trimEnd()}…`
 }
 
-/** 말풍선 상자(아래 끝 size.boxBottom) + 자기 머리까지 내려오는 꼬리 */
-function bubbleBox(text: Text, isAlert: boolean, size: BubbleSize): Container {
-  const box = new Container()
-  const bw = Math.ceil(text.width) + size.padX * 2
-  const bh = Math.ceil(text.height) + size.padY * 2
-  const fill = isAlert ? COLOR.alert : COLOR.bubble
-  const line = isAlert ? COLOR.alertLine : COLOR.bubbleLine
-  const g = new Graphics()
-  g.rect(0, 0, bw, bh).fill(fill)
-  g.rect(0, 0, bw, bh).stroke({ width: size.line, color: line })
-  // 윗줄 이름표를 지나므로 이름 글자를 덜 가리게 왼쪽 끝 (이름표는 가운데 정렬이라 여기는 대개 "[" 자리)
-  g.rect(size.line, bh, size.line, size.tailEnd - size.boxBottom).fill(line)
-  text.position.set(size.padX, size.padY)
-  box.addChild(g, text)
-  box.position.set(size.x, size.boxBottom - bh)
-  return box
+/** 자리 위 층에 놓는 자리 (origin 기준): 아이콘 왼쪽 위·이름표 가운데 x 와 위 끝 y (도트 px), 선택 테두리 = 자리 사각형 (아트 px) */
+interface OverlayPlace {
+  /** 아트 px 절대 위치 (블록 줄 원점 또는 부스 자리 왼쪽 위) */
+  origin: Point
+  icon: At
+  tag: Point
+  rect: Rect
 }
 
 /**
- * my-turn 은 마지막 말, 승인 대기는 빨간 "! 도구". 접힌 것은 한 줄 말줄임으로 책상 폭 안,
- * 펼친 것(마우스를 올렸거나 선택한 세션)은 전체 글. 휴식 세션은 훅 상태가 남아 있어도 없다
+ * 자리 위 층의 선택 테두리·이름표·상태 아이콘 (이벤트 없음). 아이콘은 배율과 관계없이 화면 18×15 px (iconScale = 1 / 지금 배율 → 화면에 원본 픽셀 1:1).
+ * 선택 테두리도 여기 둔다 — 자리 그림은 블록 줄 단위라 자리 사각형이 따로 없다
  */
-function drawBubble(session: Session, x: number, y: number): DeskBubble | null {
-  if (attendanceOf(session) === 'break') return null
-  const isAlert = session.status === 'needs-approval'
-  const tool = session.pendingTool ?? '?'
-  const lastText = session.lastAssistantText ?? '끝났어요'
-  const compactText = isAlert ? `! ${tool}` : session.status === 'my-turn' ? (lastText.split('\n')[0] ?? '') : ''
-  if (!compactText) return null
-  const fullText = isAlert
-    ? `승인 필요: ${tool}`
-    : lastText.length > BUBBLE_EXPANDED_MAX_CHARS
-      ? `${lastText.slice(0, BUBBLE_EXPANDED_MAX_CHARS).trimEnd()}…`
-      : lastText
-  const size = BUBBLE_SIZE
-  const resolution = dotTextResolution
-  const textColor = isAlert ? COLOR.alertText : COLOR.text
-  const compactLabel = label('', size.font, textColor, undefined, resolution)
-  fitOneLine(compactLabel, compactText, size.maxW - size.padX * 2)
-  const expandedLabel = new Text({
-    text: fullText,
-    style: {
-      fontFamily: 'system-ui, sans-serif',
-      fontSize: size.font,
-      fill: textColor,
-      wordWrap: true,
-      wordWrapWidth: size.expandedW,
-      breakWords: true,
-    },
-    resolution,
-  })
-  const compact = bubbleBox(compactLabel, isAlert, size)
-  const expanded = bubbleBox(expandedLabel, isAlert, size)
-  expanded.visible = false
+function drawSeatOverlay(session: Session, place: OverlayPlace, isSelected: boolean, art: DotArt, iconScale: number): SeatOverlay {
   const container = new Container()
-  container.position.set(x, y)
-  const layer = dotLayer()
-  layer.addChild(compact, expanded)
-  container.addChild(layer)
-  // 보이기만 한다. 아래에 깔린 윗줄 책상·팀/파트 이름표(끌기)를 누르는 것을 가로채지 않게
+  container.position.set(place.origin.x, place.origin.y)
   container.eventMode = 'none'
-  return { container, compact, expanded }
+  const dot = dotLayer()
+  container.addChild(dot)
+  const isOnBreak = attendanceOf(session) === 'break'
+  const isExternal = session.kind === 'external'
+  const isLead = session.role === 'lead'
+  const isPartLead = isLead && session.partId !== null
+  const { rect } = place
+  if (isSelected) container.addChild(new Graphics().rect(rect.x - 2, rect.y + 1, rect.w + 4, rect.h - 2).stroke({ width: 1, color: COLOR.select }))
+
+  const tag = new Container()
+  const name = label('', DOT_FONT.seat, isExternal ? COLOR.mutedText : COLOR.text, undefined, dotTextResolution)
+  fitOneLine(name, session.name ?? session.title ?? session.id.slice(0, 8), TAG_MAX_W - 12)
+  const tagW = Math.ceil(name.width) + 12
+  const underline = isExternal ? COLOR.externalLight : isPartLead ? COLOR.silver : isLead ? COLOR.gold : COLOR.green
+  const tagX = Math.floor(place.tag.x - tagW / 2)
+  const tagY = place.tag.y
+  const background = new Graphics()
+    .rect(tagX, tagY, tagW, TAG_H)
+    .fill(0xffffff)
+    .rect(tagX, tagY + TAG_H - 3, tagW, 3)
+    .fill(underline)
+    .rect(tagX, tagY, tagW, TAG_H)
+    .stroke({ width: 1, color: DOT_OUTLINE, alignment: 1 })
+  name.position.set(tagX + 6, tagY + 1)
+  tag.addChild(background, name)
+  if (isOnBreak) tag.alpha = 0.6
+  tag.visible = false
+  dot.addChild(tag)
+
+  // 상태 아이콘: 승인 대기 빨간 "!", 내 차례 말풍선, 작업 중 점 셋 (휴식은 없다)
+  const icons = art.propsMeta.icons
+  let icon: AnimatedSprite | null = null
+  const iconTextures = isOnBreak
+    ? null
+    : session.status === 'needs-approval'
+      ? [art.props.textures[icons.approval]]
+      : session.status === 'my-turn'
+        ? [art.props.textures[icons.myTurn]]
+        : session.status === 'working'
+          ? icons.working.frames.map((frame) => art.props.textures[frame])
+          : null
+  if (iconTextures) {
+    icon = new AnimatedSprite({ textures: iconTextures, autoUpdate: false })
+    // 꼬리 끝(아래 왼쪽 x 4)을 메타 자리에 두고 배율만큼 줄인다
+    icon.anchor.set(4 / 18, 1)
+    icon.position.set(place.icon[0] + 4, place.icon[1] + 15)
+    icon.scale.set(iconScale)
+    if (iconTextures.length > 1) {
+      icon.animationSpeed = icons.working.fps / 60
+      icon.play()
+    }
+    dot.addChild(icon)
+  }
+  return { container, tag, icon: iconTextures && iconTextures.length > 1 ? icon : null }
+}
+
+/**
+ * 자리 위 층에 놓을 자리. 블록 자리는 블록 줄 원점 기준(메타 block 의 아이콘 자리, 짝 i 는 x + 96·i), 부스는 그 자리 왼쪽 위 기준(메타 seat.booth)
+ */
+function overlayPlaceOf(seat: Seat, row: BlockRow | null, art: DotArt): OverlayPlace {
+  const seatOrigin = { x: PAD_X + seat.x * TILE, y: PAD_Y + seat.y * TILE }
+  if (!row) {
+    return { origin: seatOrigin, icon: art.propsMeta.seat.booth.icon, tag: { x: 48, y: BOOTH_TAG_Y }, rect: { x: 0, y: 0, w: seat.w * TILE, h: seat.h * TILE } }
+  }
+  const block = art.propsMeta.block
+  const origin = { x: PAD_X + row.x * TILE, y: PAD_Y + row.y * TILE }
+  const rect = { x: seatOrigin.x - origin.x, y: seatOrigin.y - origin.y, w: seat.w * TILE, h: seat.h * TILE }
+  if (seat.dir === 'right') return { origin, icon: block.lead.icon, tag: { x: -block.pairW / 2, y: BLOCK_TAG_Y.lead }, rect }
+  const dx = (seat.x - row.x) * DOT_TILE
+  const side = seat.dir === 'down' ? block.pair.top : block.pair.bottom
+  return {
+    origin,
+    icon: [side.icon[0] + dx, side.icon[1]],
+    tag: { x: dx + block.pairW / 2, y: seat.dir === 'down' ? BLOCK_TAG_Y.top : BLOCK_TAG_Y.bottom },
+    rect,
+  }
+}
+
+/** 자리 사각형 = 클릭 영역 (투명). 자리 그림은 블록 줄·부스 컨테이너에 있다 */
+function drawSeatHit(seat: Seat): Container {
+  const container = new Container()
+  container.position.set(PAD_X + seat.x * TILE, PAD_Y + seat.y * TILE)
+  container.eventMode = 'static'
+  container.cursor = 'pointer'
+  container.hitArea = new Rectangle(0, 0, seat.w * TILE, seat.h * TILE)
+  return container
+}
+
+// ---------- 자리 카드 ----------
+
+/** 마우스를 올렸거나 고른 자리 근처에 띄우는 HTML 카드 (캔버스 위). 자리와 화면 끝 사이 여백 */
+const CARD_GAP = 6
+const CARD_MARGIN = 4
+const CARD_TEXT_MAX_CHARS = 300
+
+function SeatCard({ session }: { session: Session }) {
+  const isOnBreak = attendanceOf(session) === 'break'
+  const role = session.role === 'lead' ? (session.partId !== null ? '파트장' : '팀장') : null
+  const facts = [isOnBreak ? '휴식' : statusLabel[session.status], role, session.kind === 'external' ? '외부 세션' : null].filter(Boolean)
+  const text = session.lastAssistantText ?? ''
+  return (
+    <>
+      <div className="office-card-head">
+        <span className={`status-dot ${isOnBreak ? '' : session.status}`} />
+        <b>{session.name ?? session.title ?? session.id.slice(0, 8)}</b>
+      </div>
+      <div className="office-card-facts">{facts.join(' · ')}</div>
+      {!isOnBreak && session.status === 'needs-approval' && <div className="office-card-tool">도구: {session.pendingTool ?? '?'}</div>}
+      {!isOnBreak && session.status === 'my-turn' && text && (
+        <p className="office-card-text">{text.length > CARD_TEXT_MAX_CHARS ? `${text.slice(0, CARD_TEXT_MAX_CHARS).trimEnd()}…` : text}</p>
+      )}
+    </>
+  )
 }
 
 // ---------- 건물 밖 ----------
@@ -801,7 +1050,7 @@ function arrowShape(direction: ApprovalDirection): string[] {
   return rows
 }
 
-/** 승인 말풍선과 같은 빨강에 흰 테두리 (어느 바탕 위에서도 보이게) */
+/** 승인 대기 아이콘과 같은 쪽의 빨강에 흰 테두리 (어느 바탕 위에서도 보이게) */
 function drawApprovalArrow(direction: ApprovalDirection): Graphics {
   const rows = arrowShape(direction)
   const isFilled = (r: number, c: number) => rows[r]?.[c] === '#'
@@ -827,7 +1076,10 @@ export function Office(props: Props) {
   const { office, sessions, selectedId, focus } = props
   /** 아틀라스를 못 읽어 캔버스를 만들지 않았다 */
   const [isArtFailed, setIsArtFailed] = useState(false)
+  /** 마우스를 올린 자리의 세션. 카드는 이것, 없으면 고른 세션 */
+  const [hoveredSeatId, setHoveredSeatId] = useState<string | null>(null)
   const hostRef = useRef<HTMLDivElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<Application | null>(null)
   const latest = useRef(props)
   latest.current = props
@@ -840,7 +1092,7 @@ export function Office(props: Props) {
     if (!host) return
     let isDisposed = false
     const app = new Application()
-    const desks = new Map<string, DeskParts>()
+    const desks = new Map<string, SeatParts>()
     let frame = 0
     let removeListeners = () => {}
     let disconnectResize = () => {}
@@ -905,8 +1157,18 @@ export function Office(props: Props) {
         let drawnPhase = dayPhaseOf(new Date())
         /** 지금 그려진 조는 세션들 (dozingKey). 시간이 흘러 졸기 시작하는 것도 1분마다 보고 바뀌었으면 다시 그린다 */
         let drawnDozing = ''
-        /** 마우스를 올린 책상(또는 그 말풍선)의 세션. 다시 그려도 펼친 채 남게 여기 둔다 */
+        /** 마우스를 올린 자리의 세션. 다시 그려도 이름표가 보인 채 남게 여기 둔다 (카드는 React 상태 hoveredSeatId) */
         let hoveredDeskId: string | null = null
+        /** 자리가 있는 세션의 자리 사각형 (타일). 카드가 매 프레임 이 자리 옆으로 따라간다 */
+        let seatRects = new Map<string, Rect>()
+        const setHovered = (id: string | null) => {
+          hoveredDeskId = id
+          setHoveredSeatId(id)
+          updateOverlays()
+        }
+        art.onRecolorLoaded = () => {
+          if (!isDisposed) redraw()
+        }
 
         /** 화면 좌표 → world 아트 픽셀 */
         const toWorld = (event: FederatedPointerEvent) => ({
@@ -978,7 +1240,7 @@ export function Office(props: Props) {
           }
           const layout = layoutOffice(latest.current.office, latest.current.sessions)
           const seat = layout.seats.get(target.sessionId)
-          if (seat) moveToRect({ ...seat, w: DESK_TILES_W, h: DESK_TILES_H }, true)
+          if (seat) moveToRect(seat, true)
           else {
             const head = offDutyHeads.get(target.sessionId)
             if (head) moveToRect(head, true)
@@ -1021,6 +1283,8 @@ export function Office(props: Props) {
         }
         const onMouseLeave = () => {
           isPointerInside = false
+          // 다시 그린 사이 사라진 자리는 pointerout 이 안 올 수 있어 사무실을 떠나면 비운다
+          if (hoveredDeskId) setHovered(null)
         }
         // 마우스가 사무실 위에 있을 때 숫자 키 1~9 = 왼쪽 목록 순서의 n번째 팀 섬으로 이동 (질문 카드 숫자 키가 우선)
         const onKeyDown = (event: KeyboardEvent) => {
@@ -1094,6 +1358,12 @@ export function Office(props: Props) {
           approvalDesks = []
           islandViews.clear()
           const layout = layoutOffice(office, sessions)
+          seatRects = new Map(
+            layout.seated.map((session) => {
+              const { x, y, w, h } = layout.seats.get(session.id)!
+              return [session.id, { x, y, w, h }]
+            }),
+          )
           map.w = PAD_X + layout.right * TILE + Math.ceil(app.screen.width / zoom)
           // 띠는 늘 내용(그룹·섬·Focus Zone) 아래 끝 + 1타일. 바닥 격자에 맞는다
           const streetY = PAD_Y + (layout.bottom + 1) * TILE
@@ -1108,12 +1378,17 @@ export function Office(props: Props) {
           street.y = streetY
           world.addChild(street)
           clampPan()
-          /** 그 팀들의 책상 그림 (끌 때 같이 옮긴다) */
-          const deskViewsOf = (teamIds: Set<string>) =>
-            layout.seated.flatMap((s) => {
+          /** 팀마다 섬 컨테이너 밖에 그린 것 (칸막이 블록 줄). 끌 때 같이 옮긴다 */
+          const teamViews = new Map<string, Container[]>()
+          const addTeamView = (teamId: string, container: Container) => teamViews.set(teamId, [...(teamViews.get(teamId) ?? []), container])
+          /** 그 팀들의 자리 그림·클릭 영역·자리 위 층 (끌 때 같이 옮긴다) */
+          const deskViewsOf = (teamIds: Set<string>) => [
+            ...[...teamIds].flatMap((id) => teamViews.get(id) ?? []),
+            ...layout.seated.flatMap((s) => {
               const parts = s.teamId && teamIds.has(s.teamId) ? desks.get(s.id) : undefined
-              return parts ? [parts.container, ...(parts.bubble ? [parts.bubble.container] : [])] : []
-            })
+              return parts ? [parts.hit, parts.overlay.container] : []
+            }),
+          ]
           for (const area of layout.groupAreas) {
             const onEdit = () => {
               if (!isDragged) latest.current.onEditGroup(area.group)
@@ -1134,10 +1409,10 @@ export function Office(props: Props) {
           const occupied = new Set(
             layout.seated.flatMap((session) => {
               const seat = session.teamId ? undefined : layout.seats.get(session.id)
-              return seat ? [`${seat.x - layout.lobby.x},${seat.y - layout.lobby.y}`] : []
+              return seat ? [`${seat.x},${seat.y}`] : []
             }),
           )
-          world.addChild(drawDotZone(layout.lobby, art, occupied))
+          world.addChild(drawDotZone(layout.lobby, layout.booths, art, occupied))
           for (const island of layout.islands) {
             const { team } = island
             const onEdit = () => {
@@ -1205,52 +1480,110 @@ export function Office(props: Props) {
             street.addChild(overflow)
           }
           street.addChild(tooltip)
-          // 아래쪽 책상이 위쪽을 가리도록 y 순 정렬. 말풍선은 모든 책상 위 층
-          const ordered = [...layout.seated].sort((a, b) => layout.seats.get(a.id)!.y - layout.seats.get(b.id)!.y)
-          const bubbleLayer = new Container()
-          for (const session of ordered) {
-            const seat = layout.seats.get(session.id)!
-            const parts = drawDotDesk(session, seat, session.id === selectedId, art, now)
-            if (parts.animation) animations.add(parts.animation)
-            parts.container.on('pointertap', () => {
-              if (!isDragged) latest.current.onSelect(session.id)
-            })
-            parts.container.on('pointerover', () => {
-              if (pan?.isMoved || signDrag) return
-              hoveredDeskId = session.id
-              updateBubbles()
-            })
-            parts.container.on('pointerout', () => {
-              if (hoveredDeskId !== session.id) return
-              hoveredDeskId = null
-              updateBubbles()
-            })
-            world.addChild(parts.container)
-            if (parts.bubble) bubbleLayer.addChild(parts.bubble.container)
-            desks.set(session.id, parts)
-            if (session.status === 'needs-approval' && attendanceOf(session) === 'present') {
-              approvalDesks.push({ session, rect: { ...layout.seats.get(session.id)!, w: DESK_TILES_W, h: DESK_TILES_H } })
+          // 칸막이 블록 줄: 섬마다 위 줄부터 (섬끼리는 겹치지 않는다). 부스는 자리마다
+          const sessionById = new Map(layout.seated.map((session) => [session.id, session]))
+          /** 자리 위 층을 블록 줄 기준으로 놓으려고 세션 → 그 자리가 있는 블록 줄 */
+          const rowOf = new Map<string, BlockRow>()
+          for (const island of layout.islands) {
+            for (const row of island.rows) {
+              const drawn = drawBlockRow(art, row, sessionById, now)
+              for (const animation of drawn.animations) animations.add(animation)
+              world.addChild(drawn.container)
+              addTeamView(island.team.id, drawn.container)
+              for (const id of [row.leadId, ...row.pairs.flatMap((pair) => [pair.top, pair.bottom])]) if (id) rowOf.set(id, row)
             }
           }
-          world.addChild(bubbleLayer)
-          updateBubbles()
+          // 클릭 영역(자리 사각형)은 그림 위, 선택 테두리·이름표·상태 아이콘은 그 위 층
+          const hitLayer = new Container()
+          const overlayLayer = new Container()
+          const iconScale = 1 / ZOOM_STEPS[zoomIndex]
+          for (const session of layout.seated) {
+            const seat = layout.seats.get(session.id)!
+            const row = rowOf.get(session.id) ?? null
+            if (!row) {
+              const booth = drawBoothSeat(session, seat, art, now)
+              if (booth.animation) animations.add(booth.animation)
+              world.addChild(booth.container)
+            }
+            const hit = drawSeatHit(seat)
+            const overlay = drawSeatOverlay(session, overlayPlaceOf(seat, row, art), session.id === selectedId, art, iconScale)
+            if (overlay.icon) animations.add(overlay.icon)
+            hit.on('pointertap', () => {
+              if (!isDragged) latest.current.onSelect(session.id)
+            })
+            hit.on('pointerover', () => {
+              if (pan?.isMoved || signDrag) return
+              setHovered(session.id)
+            })
+            hit.on('pointerout', () => {
+              if (hoveredDeskId === session.id) setHovered(null)
+            })
+            hitLayer.addChild(hit)
+            overlayLayer.addChild(overlay.container)
+            desks.set(session.id, { hit, overlay })
+            if (session.status === 'needs-approval' && attendanceOf(session) === 'present') {
+              approvalDesks.push({ session, rect: seatRects.get(session.id)! })
+            }
+          }
+          world.addChild(hitLayer, overlayLayer)
+          updateOverlays()
         }
         redrawRef.current = redraw
 
-        /** 마우스를 올린 책상과 선택한 세션의 말풍선만 전체 글로 펼치고 맨 위로 (마우스를 올린 것이 가장 위) */
-        const updateBubbles = () => {
+        /** 이름표: 배율이 NAME_TAG_ZOOM 이상이면 모든 자리, 아니면 마우스를 올린 자리와 고른 자리만. 그 둘은 맨 위로 (마우스를 올린 것이 가장 위) */
+        const updateOverlays = () => {
           const { selectedId } = latest.current
-          for (const [id, parts] of desks) {
-            if (!parts.bubble) continue
-            const isExpanded = id === selectedId || id === hoveredDeskId
-            parts.bubble.compact.visible = !isExpanded
-            parts.bubble.expanded.visible = isExpanded
-          }
+          const isAllShown = ZOOM_STEPS[zoomIndex] >= NAME_TAG_ZOOM
+          for (const [id, parts] of desks) parts.overlay.tag.visible = isAllShown || id === selectedId || id === hoveredDeskId
           for (const id of [selectedId, hoveredDeskId]) {
-            const bubble = id ? desks.get(id)?.bubble : undefined
-            const layer = bubble?.container.parent
-            if (bubble && layer) layer.setChildIndex(bubble.container, layer.children.length - 1)
+            const container = id ? desks.get(id)?.overlay.container : undefined
+            const layer = container?.parent
+            if (container && layer) layer.setChildIndex(container, layer.children.length - 1)
           }
+        }
+
+        /** 자리 카드: React 가 내용을 그리고 여기서 자리 위(넘치면 아래)에 붙인다. 자리가 화면 밖이면 숨긴다. 값이 바뀔 때만 쓴다 */
+        let placedCard = ''
+        let placedCardElement: HTMLDivElement | null = null
+        const placeCard = () => {
+          const card = cardRef.current
+          if (!card) return
+          // 같은 세션 카드가 다시 마운트되면 새 요소라 처음부터 놓는다
+          if (card !== placedCardElement) {
+            placedCardElement = card
+            placedCard = ''
+          }
+          const sessionId = card.dataset.sessionId ?? ''
+          const rect = seatRects.get(sessionId)
+          const width = app.screen.width
+          const height = app.screen.height
+          let position: Point | null = null
+          if (rect) {
+            const left = world.x + (PAD_X + rect.x * TILE) * zoom
+            const top = world.y + (PAD_Y + rect.y * TILE) * zoom
+            const right = left + rect.w * TILE * zoom
+            const bottom = top + rect.h * TILE * zoom
+            if (right > 0 && left < width && bottom > 0 && top < height) {
+              const cardW = card.offsetWidth
+              const cardH = card.offsetHeight
+              const clamp = (value: number, size: number) => Math.round(Math.max(CARD_MARGIN, Math.min(size - CARD_MARGIN, value)))
+              const above = top - CARD_GAP - cardH
+              const below = bottom + CARD_GAP
+              position = {
+                x: clamp((left + right) / 2 - cardW / 2, width - cardW),
+                y: clamp(above >= CARD_MARGIN ? above : below + cardH <= height - CARD_MARGIN ? below : above, height - cardH),
+              }
+            }
+          }
+          const key = `${sessionId}|${position ? `${position.x},${position.y}` : 'hidden'}`
+          if (key === placedCard) return
+          placedCard = key
+          if (!position) {
+            card.style.visibility = 'hidden'
+            return
+          }
+          card.style.transform = `translate(${position.x}px, ${position.y}px)`
+          card.style.visibility = 'visible'
         }
         // 시간대가 바뀌면 창밖·Off Duty 띠를, 조는 세션이 바뀌면 책상을 다시 그린다 (매 프레임이 아니라 1분마다 확인)
         const phaseTimer = setInterval(() => {
@@ -1461,6 +1794,7 @@ export function Office(props: Props) {
           }
           // 확대·이동·데이터 갱신을 따라가게 매 프레임 (승인 대기 책상은 몇 개뿐이라 가볍다)
           updateApprovalArrows()
+          placeCard()
           for (const animation of animations) animation.update(ticker)
           elapsed += ticker.deltaMS
           if (elapsed < 350) return
@@ -1507,5 +1841,17 @@ export function Office(props: Props) {
       </div>
     )
   }
-  return <div ref={hostRef} className="office" />
+  const cardSessionId = hoveredSeatId ?? selectedId
+  const cardSession = cardSessionId ? sessions.find((session) => session.id === cardSessionId) : undefined
+  return (
+    <div className="office">
+      <div ref={hostRef} className="office-canvas" />
+      {cardSession && attendanceOf(cardSession) !== 'off' && (
+        // 자리 옆 위치·보이기는 ticker 가 정한다 (처음엔 숨김). 마우스를 가로채지 않는다
+        <div key={cardSession.id} ref={cardRef} className="office-card" data-session-id={cardSession.id} style={{ visibility: 'hidden' }}>
+          <SeatCard session={cardSession} />
+        </div>
+      )}
+    </div>
+  )
 }

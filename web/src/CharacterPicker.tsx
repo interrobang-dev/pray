@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadCharacterSheet, loadRecolorArt, paintCharacter, type CharacterSheet, type Rect, type RecolorArt } from './characterArt'
+import { CHARACTER_ATLAS, loadCharacterSheet, loadRecolorArt, paintCharacter, type CharacterSheet, type Rect, type RecolorArt } from './characterArt'
 import { pickDotCharacter, type DotCharacter } from './dotCharacter'
 import { HAIR_COLORS, TOP_COLORS } from './recolor'
 
-/** 도트 사무실이 읽는 인물 아틀라스 그림 (Office.tsx 의 DOT_SHEET_URL 과 같은 판) */
-const IMAGE_URL = '/office/office-v3.png'
-/** 썸네일은 셀(64×128) 위쪽만: 앉은 몸 위 끝(≈16)부터 무릎 근처까지 */
-const THUMB_TOP = 12
+/** 도트 사무실이 읽는 정면 인물 아틀라스 그림 */
+const IMAGE_URL = `/office/${CHARACTER_ATLAS.down}.png`
+/**
+ * 썸네일은 정면 셀(80×132) 가운데 64 폭의 위쪽만: 앉은 몸 위 끝(≈20)부터 무릎 근처까지. 셀이 든 손까지 담느라 양옆 8·위 4 넓어 그만큼 안쪽을 자른다
+ */
+const THUMB_LEFT = 8
+const THUMB_W = 64
+const THUMB_TOP = 16
 const THUMB_H = 80
 /** 큰 미리보기: 셀 위쪽 96px 를 2배로 */
 const PREVIEW_H = 96
@@ -23,13 +27,13 @@ function Preview({ art, character, frame, hair, top }: { art: RecolorArt; charac
   const canvasRef = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const canvas = canvasRef.current
-    const painted = paintCharacter(art, character, [{ x: frame.x, y: frame.y + THUMB_TOP, w: frame.w, h: PREVIEW_H }], hair, top)
+    const painted = paintCharacter(art, character, [{ x: frame.x + THUMB_LEFT, y: frame.y + THUMB_TOP, w: THUMB_W, h: PREVIEW_H }], hair, top)
     const context = canvas?.getContext('2d')
     if (!canvas || !context || !painted) return
     context.clearRect(0, 0, canvas.width, canvas.height)
     context.drawImage(painted, 0, 0)
   }, [art, character, frame, hair, top])
-  return <canvas ref={canvasRef} className="character-preview" width={frame.w} height={PREVIEW_H} style={{ width: frame.w * PREVIEW_SCALE, height: PREVIEW_H * PREVIEW_SCALE }} />
+  return <canvas ref={canvasRef} className="character-preview" width={THUMB_W} height={PREVIEW_H} style={{ width: THUMB_W * PREVIEW_SCALE, height: PREVIEW_H * PREVIEW_SCALE }} />
 }
 
 function Swatches({ label, base, colors, value, onChange }: { label: string; base: string; colors: string[]; value: string | null; onChange: (color: string | null) => void }) {
@@ -58,7 +62,7 @@ function Thumb({ frame }: { frame: Rect | undefined }) {
   return (
     <span
       className="character-thumb"
-      style={{ backgroundImage: `url(${IMAGE_URL})`, backgroundPosition: `-${frame.x}px -${frame.y + THUMB_TOP}px`, width: frame.w, height: THUMB_H }}
+      style={{ backgroundImage: `url(${IMAGE_URL})`, backgroundPosition: `-${frame.x + THUMB_LEFT}px -${frame.y + THUMB_TOP}px`, width: THUMB_W, height: THUMB_H }}
     />
   )
 }

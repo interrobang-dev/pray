@@ -62,8 +62,8 @@ describe('layoutOffice 섬 밀기', () => {
     const data = office()
     const layout = layoutOffice(data, [...members('A', 14), ...small.filter((s) => s.teamId !== 'A')])
     const [a, b, c, d] = layout.islands
-    // A 는 4열이라 1..14, B 는 A 오른쪽 + 1, C 는 B 오른쪽 + 1
-    expect([a.x, a.w]).toEqual([1, 13])
+    // A 는 짝 7개라 2줄 × 4짝(+ 화분 열)이라 1..12, B 는 A 오른쪽 + 1, C 는 B 오른쪽 + 1
+    expect([a.x, a.w]).toEqual([1, 11])
     expect(b.x).toBe(a.x + a.w + 1)
     expect(c.x).toBe(b.x + b.w + 1)
     expect([b.y, c.y]).toEqual([1, 1])
@@ -71,8 +71,8 @@ describe('layoutOffice 섬 밀기', () => {
     const [g1, g2] = layout.groupAreas
     expect(g2.x).toBe(g1.x + g1.w + 1)
     expect(g2.origin.x - 26).toBe(d.anchor.x - 28)
-    expect(layout.seats.get('D-0')).toEqual(d.anchor)
-    expect(layout.seats.get('B-0')).toEqual(b.anchor)
+    expect(layout.seats.get('D-0')).toMatchObject(d.anchor)
+    expect(layout.seats.get('B-0')).toMatchObject(b.anchor)
     expect(layout.lobby.x).toBe(g2.x + g2.w + 1)
     // 저장된 좌표는 그대로
     expect(data.teams.map((t) => t.x)).toEqual([2, 10, 18, 28])
@@ -121,7 +121,121 @@ describe('밀린 자리에서 끌기·새 팀', () => {
     const area = layout.groupAreas[1]
     const shift = area.origin.x - area.group.x
     const spot = spotForNewTeam(layout, 'g2')!
-    const drawn = { x: spot.x + shift - 1, y: spot.y - 1, w: 7, h: 5 }
+    const drawn = { x: spot.x + shift - 1, y: spot.y - 1, w: 7, h: 6 }
     for (const island of layout.islands) expect(isApart(drawn, island, 1)).toBe(true)
+  })
+})
+
+describe('섬 안 자리 (지휘자 옆자리 + 칸막이 블록 줄)', () => {
+  /** 팀 T(앵커 2,2)에 지휘자 lead + 팀원 count 명 */
+  const withLead = (count: number) => {
+    const lead = { id: 'lead', teamId: 'T', role: 'lead', attendance: 'present' } as Session
+    const data: Office = { groups: [], teams: [{ ...team('T', 'gone', 2), leadSessionId: 'lead' }] }
+    return layoutOffice(data, [lead, ...members('T', count)])
+  }
+  const size = (count: number) => {
+    const [island] = withLead(count).islands
+    return [island.w, island.h]
+  }
+  const seat = (x: number, y: number, h: number, dir: string) => ({ x, y, w: 2, h, dir, isBooth: false })
+
+  it('섬 크기: 지휘자 열 2 + 짝마다 2 + 화분 열 1 + 테두리, 블록 줄 4타일, 한 줄 최대 4짝이고 넘치면 줄마다 고르게 나눈다', () => {
+    expect(size(0)).toEqual([5, 5])
+    expect(size(1)).toEqual([7, 6])
+    expect(size(3)).toEqual([9, 6])
+    expect(size(6)).toEqual([11, 6])
+    expect(size(8)).toEqual([13, 6])
+    // 짝 5개 = 3 + 2, 블록 줄 사이 통로 1
+    expect(size(9)).toEqual([11, 11])
+  })
+
+  it('자리 사각형: 윗자리 위 2타일, 아랫자리 그 아래 3타일(의자까지), 지휘자는 블록 왼쪽 열 가운데 2타일', () => {
+    const layout = withLead(3)
+    expect(layout.seats.get('lead')).toEqual(seat(2, 3, 2, 'right'))
+    expect(layout.seats.get('T-0')).toEqual(seat(4, 2, 2, 'down'))
+    expect(layout.seats.get('T-1')).toEqual(seat(4, 4, 3, 'up'))
+    expect(layout.seats.get('T-2')).toEqual(seat(6, 2, 2, 'down'))
+    const [island] = layout.islands
+    // 홀수면 마지막 짝의 아랫자리가 빈 자리 (빈 의자만)
+    expect(island.rows).toEqual([
+      {
+        x: 4,
+        y: 2,
+        w: 4,
+        h: 4,
+        pairs: [
+          { top: 'T-0', bottom: 'T-1' },
+          { top: 'T-2', bottom: null },
+        ],
+        leadId: 'lead',
+      },
+    ])
+    expect(island.plants).toEqual([{ x: 8, y: 2, w: 1, h: 4 }])
+  })
+
+  it('자리 사각형끼리 겹치지 않는다', () => {
+    const rects = [...withLead(9).seats.values()]
+    for (const a of rects) for (const b of rects) if (a !== b) expect(isApart(a, b, 0)).toBe(true)
+  })
+
+  it('지휘자만 있으면 짝 없는 3타일 블록 줄 하나(아랫자리 몫 없음)와 옆 화분', () => {
+    const layout = withLead(0)
+    expect(layout.seats.get('lead')).toEqual(seat(2, 3, 2, 'right'))
+    expect(layout.islands[0].rows).toEqual([{ x: 4, y: 2, w: 0, h: 3, pairs: [], leadId: 'lead' }])
+    expect(layout.islands[0].plants).toEqual([{ x: 4, y: 2, w: 1, h: 3 }])
+  })
+
+  it('두 줄이면 둘째 줄은 블록 줄 아래 통로 1타일 뒤에서 시작하고 지휘자·화분은 첫 줄 왼쪽·줄마다 같은 열', () => {
+    const layout = withLead(9)
+    expect(layout.seats.get('T-6')).toEqual(seat(4, 7, 2, 'down'))
+    const [first, second] = layout.islands[0].rows
+    expect([first.x, first.y, first.w, first.leadId]).toEqual([4, 2, 6, 'lead'])
+    expect([second.x, second.y, second.w, second.leadId]).toEqual([4, 7, 4, null])
+    expect(second.pairs).toEqual([
+      { top: 'T-6', bottom: 'T-7' },
+      { top: 'T-8', bottom: null },
+    ])
+    expect(layout.islands[0].plants.map((p) => [p.x, p.y])).toEqual([
+      [10, 2],
+      [10, 7],
+    ])
+  })
+
+  it('지휘자가 없으면 지휘자 열이 없고, 세션 없는 팀은 빈 짝 하나', () => {
+    const data: Office = { groups: [], teams: [team('T', 'gone', 2), team('E', 'gone', 20)] }
+    const layout = layoutOffice(data, members('T', 2))
+    const [t, e] = layout.islands
+    expect([t.w, t.h]).toEqual([5, 6])
+    expect(layout.seats.get('T-0')).toEqual(seat(2, 2, 2, 'down'))
+    expect([...layout.seats.values()].some((s) => s.dir === 'right')).toBe(false)
+    expect([e.w, e.h]).toEqual([5, 6])
+    expect(e.rows).toEqual([{ x: 20, y: 2, w: 2, h: 4, pairs: [{ top: null, bottom: null }], leadId: null }])
+  })
+
+  it('파트는 팀 직속 아래로 이름표 여백 2타일 뒤에 같은 규칙으로 쌓는다', () => {
+    const base = team('T', 'gone', 2)
+    const data: Office = {
+      groups: [],
+      teams: [{ ...base, leadSessionId: 'lead', parts: [{ id: 'p', name: 'P', leadSessionId: 'plead', createdAt: base.createdAt }] }],
+    }
+    const session = (id: string, partId: string | null, role: 'lead' | 'member') =>
+      ({ id, teamId: 'T', partId, role, attendance: 'present' }) as Session
+    const layout = layoutOffice(data, [session('lead', null, 'lead'), session('m', null, 'member'), session('plead', 'p', 'lead'), session('pm', 'p', 'member')])
+    const [island] = layout.islands
+    expect(layout.seats.get('plead')).toEqual(seat(2, 9, 2, 'right'))
+    expect(layout.seats.get('pm')).toEqual(seat(4, 8, 2, 'down'))
+    expect(island.zones.map(({ x, y, w, h }) => ({ x, y, w, h }))).toEqual([{ x: 2, y: 8, w: 5, h: 4 }])
+    expect([island.y, island.h]).toEqual([1, 12])
+  })
+})
+
+describe('Focus Zone 부스', () => {
+  it('팀 없는 세션은 2열 부스에 위를 보고 앉고, 구역 높이만큼 빈 부스가 있다', () => {
+    const lobby = Array.from({ length: 3 }, (_, index) => ({ id: `L${index}`, teamId: null, attendance: 'present' }) as Session)
+    const layout = layoutOffice({ groups: [], teams: [] }, lobby)
+    expect(layout.lobby).toEqual({ x: 0, y: 0, w: 8, h: 11 })
+    const booth = (x: number, y: number) => ({ x, y, w: 2, h: 3, dir: 'up', isBooth: true })
+    expect(lobby.map((s) => layout.seats.get(s.id))).toEqual([booth(1, 2), booth(4, 2), booth(1, 6)])
+    expect(layout.booths).toHaveLength(4)
   })
 })

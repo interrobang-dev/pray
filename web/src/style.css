@@ -759,14 +759,69 @@ li.group.drop-after::after {
   color: var(--red);
 }
 .office {
+  position: relative;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--floor);
 }
+/* PixiJS 캔버스 칸. 자리 카드는 그 위 형제라 캔버스 크기에 안 들어간다 */
+.office-canvas {
+  position: absolute;
+  inset: 0;
+}
 .office canvas {
   display: block;
   image-rendering: pixelated;
+}
+/* 마우스를 올렸거나 고른 자리 옆 카드. 위치·보이기는 Office.tsx 의 ticker 가 transform·visibility 로 정한다 */
+.office-card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  width: max-content;
+  max-width: 260px;
+  padding: 7px 10px 8px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+.office-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.office-card-head b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.office-card-head .status-dot {
+  flex: none;
+}
+.office-card-facts {
+  color: var(--muted);
+}
+.office-card-tool {
+  margin-top: 4px;
+  color: var(--red);
+  font-weight: 600;
+}
+.office-card-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 /* 사무실 그림(아틀라스)을 못 읽었을 때: 캔버스 대신 안내 한 줄 */
 .office.office-failed {
