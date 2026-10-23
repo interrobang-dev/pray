@@ -17,7 +17,6 @@ import { attendanceOf, type Office as OfficeData, type Group, type Session, type
 import { dotLookOf, type DotCharacter } from './dotCharacter'
 import { dotStateOf, dozingKey, type DotState } from './dotState'
 import { HEAD_RECT, loadRecolorArt, paintCharacter, type RecolorArt } from './characterArt'
-import { DEFAULT_DECOR, planDecor, themeOf, WALL_BAY_TILES, type DecorTheme, type FloorDecor, type PropSizes, type WallDecor } from './officeDecor'
 import {
   DESK_TILES_H,
   DESK_TILES_W,
@@ -48,8 +47,6 @@ const DOT_TILE = 48
 const DOT_SHEET_URL = '/office/office-v3.json'
 /** 환경 (바닥·벽·창밖·그룹·섬·Focus Zone·거리·소품) */
 const DOT_ENV_URL = '/office/office-v2.json'
-/** 꾸미기 소품 (바닥·벽 장식, officeDecor.ts 의 테마 풀) */
-const DOT_DECOR_URL = '/office/office-v4.json'
 /** 휠 delta 를 이만큼 모으면 한 단계 (마우스 휠 한 칸 ≈ 100. 트랙패드의 잔 delta 는 모아서) */
 const WHEEL_STEP = 50
 /** 누른 뒤 이만큼(화면 px) 움직이기 전에는 클릭 */
@@ -200,10 +197,6 @@ interface DotArt {
   meta: DotSheetMeta
   /** 환경 소품 (office-v2) */
   env: Spritesheet
-  /** 꾸미기 소품 (office-v4). 못 읽으면 null 이고 꾸미기 소품 없이 그린다 (v2 소품은 그대로 쓴다) */
-  decor: Spritesheet | null
-  /** 꾸미기에 쓰는 소품(v4·v2)이 차지하는 타일 크기 */
-  decorSizes: PropSizes
   /** office-v2 반복 타일 (벽·창밖 4시간대·바닥·그룹 바닥·섬 러그·Focus Zone 카펫·거리) */
   tiles: Record<string, { texture: Texture; meta: DotTileMeta }>
   /** 인물 머리·윗옷 색 바꾸기 (못 읽으면 null 이고 고른 색 없이 그린다) */
@@ -216,15 +209,11 @@ interface DotArt {
 
 /** 아틀라스들과 반복 타일을 읽고 확대를 nearest 로 (전역 기본값을 바꾸면 글자까지 바뀌어 텍스처마다) */
 async function loadDotArt(): Promise<DotArt> {
-  const [sheet, env, recolor, decor] = await Promise.all([
+  const [sheet, env, recolor] = await Promise.all([
     Assets.load<Spritesheet>(DOT_SHEET_URL),
     Assets.load<Spritesheet>(DOT_ENV_URL),
     loadRecolorArt().catch((error: unknown) => {
       console.error('도트 인물 색 바꾸기를 읽지 못해 기본색으로 그린다', error)
-      return null
-    }),
-    Assets.load<Spritesheet>(DOT_DECOR_URL).catch((error: unknown) => {
-      console.error('꾸미기 소품을 읽지 못해 소품 없이 그린다', error)
       return null
     }),
   ])
@@ -235,17 +224,8 @@ async function loadDotArt(): Promise<DotArt> {
     Object.entries(envMeta.tiles).map(async ([id, tile]) => [id, { texture: await Assets.load<Texture>(base + tile.image), meta: tile }] as const),
   )
   const tiles = Object.fromEntries(entries)
-  for (const source of [sheet.textureSource, env.textureSource, ...(decor ? [decor.textureSource] : []), ...entries.map(([, tile]) => tile.texture.source)]) {
-    source.scaleMode = 'nearest'
-  }
-  // 소품 그림 크기 → 차지하는 타일 (꾸미기 배치는 타일 단위)
-  const decorSizes: PropSizes = {}
-  for (const textures of [env.textures, ...(decor ? [decor.textures] : [])]) {
-    for (const [name, texture] of Object.entries(textures)) {
-      if (name.startsWith('prop/')) decorSizes[name.slice(5)] = { w: Math.ceil(texture.width / DOT_TILE), h: Math.ceil(texture.height / DOT_TILE) }
-    }
-  }
-  return { sheet, meta, env, decor, decorSizes, tiles, recolor, recolored: new Map(), heads: new Map() }
+  for (const source of [sheet.textureSource, env.textureSource, ...entries.map(([, tile]) => tile.texture.source)]) source.scaleMode = 'nearest'
+  return { sheet, meta, env, tiles, recolor, recolored: new Map(), heads: new Map() }
 }
 
 /** 그 인물의 프레임 텍스처들. 고른 색이 있으면 색을 바꾼 것 (조합마다 한 번 만든다) */
@@ -303,29 +283,12 @@ function dotTiling(art: DotArt, id: string, width: number, height: number): Tili
   return new TilingSprite({ texture: art.tiles[id].texture, width, height })
 }
 
-/** 소품 스프라이트 (꾸미기 소품 office-v4 → 환경 소품 office-v2 순으로 찾는다). 앵커는 아래 가운데 (build.py) */
+/** 소품 스프라이트. 앵커는 아래 가운데 (build.py) */
 function dotProp(art: DotArt, id: string, x: number, bottom: number): Sprite {
-  const sprite = new Sprite(art.decor?.textures[`prop/${id}`] ?? art.env.textures[`prop/${id}`])
+  const sprite = new Sprite(art.env.textures[`prop/${id}`])
   sprite.position.set(x, bottom)
   return sprite
 }
-
-/** 꾸미기 바닥 소품 (도트 px, origin = 그 컨테이너 왼쪽 위의 배치 타일 좌표). 차지하는 칸 아래 가운데에서 4 위 (칸 경계에 붙지 않게) */
-function dotDecorProps(art: DotArt, items: FloorDecor[], origin: Point): Sprite[] {
-  return items.map((item) => dotProp(art, item.prop, (item.x - origin.x + item.w / 2) * DOT_TILE, (item.y - origin.y + item.h) * DOT_TILE - 4))
-}
-
-/** 테마 색을 곱한다 (null 이면 그대로) */
-function tinted<T extends TilingSprite>(sprite: T, color: number | null): T {
-  if (color !== null) sprite.tint = color
-  return sprite
-}
-
-/** 벽 장식을 거는 창 칸: 유리 자리(벽 타일 x 8..136, 행은 build.py 메타의 glass)를 벽색으로 메운다 */
-const WALL_GLASS_X = 8
-const WALL_GLASS_W = 129
-const WALL_PANEL = 0xefeae0
-const WALL_PANEL_SHADE = 0xd9d3c6
 
 /** '#rrggbb' → 0xrrggbb */
 function hexColor(value: string): number {
@@ -339,11 +302,11 @@ const DOT_OUTLINE = 0x2b2a33
  * 도트 바닥·벽·창밖. 벽 타일(144×120 = 벽 높이 WALL_H × DOT_SCALE)은 창 유리가 투명이라 그 뒤에 그 시간대 창밖을 깐다.
  * 창밖 타일 폭(432)은 창틀 기둥 간격(144)의 배수라 반복 경계가 늘 기둥 뒤에 숨는다. 창밖은 아래(지평선)를 유리 아래 끝에 맞춘다
  */
-function drawDotBackground(widthPx: number, heightPx: number, art: DotArt, phase: DayPhase, theme: DecorTheme, wallDecor: WallDecor[]): Container {
+function drawDotBackground(widthPx: number, heightPx: number, art: DotArt, phase: DayPhase): Container {
   const container = dotLayer()
   const width = widthPx * DOT_SCALE
   const wallBottom = WALL_H * DOT_SCALE
-  const floor = tinted(dotTiling(art, 'floor', width, heightPx * DOT_SCALE - wallBottom), theme.tint.floor)
+  const floor = dotTiling(art, 'floor', width, heightPx * DOT_SCALE - wallBottom)
   floor.y = wallBottom
   const wall = art.tiles.wall
   const glass = wall.meta.glass ?? { y: 0, h: wall.meta.h }
@@ -353,18 +316,6 @@ function drawDotBackground(widthPx: number, heightPx: number, art: DotArt, phase
   const wallSprite = dotTiling(art, 'wall', width, wall.meta.h)
   wallSprite.y = wallBottom - wall.meta.h
   container.addChild(viewSprite, wallSprite, floor)
-  // 벽 장식: 그 창 칸 유리를 벽으로 메우고 유리 자리 가운데에 건다
-  const bayWidth = WALL_BAY_TILES * DOT_TILE
-  for (const item of wallDecor) {
-    const x0 = item.bay * bayWidth
-    const top = wallSprite.y + glass.y
-    container.addChild(
-      new Graphics().rect(x0 + WALL_GLASS_X, top, WALL_GLASS_W, glass.h).fill(WALL_PANEL).rect(x0 + WALL_GLASS_X, top, WALL_GLASS_W, 3).fill(WALL_PANEL_SHADE),
-    )
-    const sprite = dotProp(art, item.prop, x0 + bayWidth / 2, 0)
-    sprite.y = Math.round(top + glass.h / 2 + sprite.height / 2)
-    container.addChild(sprite)
-  }
   return container
 }
 
@@ -389,7 +340,7 @@ function dotLabel(text: string, size: number, color = COLOR.text, wrapWidth?: nu
 }
 
 /** 도트 그룹: 그룹 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽) + 초록 걸레받이(아래) + 이름표·화분·메모. 크기는 저장된 w·h 가 아니라 그려지는 영역(안의 섬들을 다 담는다) */
-function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt, theme: DecorTheme, decor: FloorDecor[]): GroupParts {
+function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupParts {
   const { group } = area
   const container = new Container()
   container.position.set(PAD_X + area.x * TILE, PAD_Y + area.y * TILE)
@@ -398,7 +349,7 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt, theme: D
   const w = area.w * TILE * DOT_SCALE
   const h = area.h * TILE * DOT_SCALE
   // 카펫 무늬가 책상보다 눈에 띄지 않게 옅게 덮는다
-  dot.addChild(tinted(dotTiling(art, 'group-floor', w, h), theme.tint.groupFloor), new Graphics().rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.45 }))
+  dot.addChild(dotTiling(art, 'group-floor', w, h), new Graphics().rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.45 }))
   const wall = 9
   dot.addChild(
     new Graphics()
@@ -422,8 +373,6 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt, theme: D
   )
   dot.addChild(dotProp(art, 'plant-large', w - 36, 66))
   dot.addChild(dotProp(art, 'plant-small', 30, h - 12))
-  // 꾸미기 소품 (그룹 안쪽 빈 자리. 그룹을 끌 때 같이 움직인다)
-  if (decor.length) dot.addChild(...dotDecorProps(art, decor, area))
 
   const name = dotLabel(group.name, DOT_FONT.group)
   const sign = dotSign(name, COLOR.green)
@@ -461,7 +410,7 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt, theme: D
 }
 
 /** 도트 팀 섬: 연한 러그 + 테두리, 파트 구역(옅은 바탕 + 은색 테두리 + 이름표). 파트 구역은 섬 컨테이너에 있어 섬을 끌면 같이 움직인다 */
-function drawDotIsland(island: Island, onEdit: () => void, art: DotArt, theme: DecorTheme): IslandParts {
+function drawDotIsland(island: Island, onEdit: () => void, art: DotArt): IslandParts {
   const container = new Container()
   container.position.set(PAD_X + island.x * TILE, PAD_Y + island.y * TILE)
   const dot = dotLayer()
@@ -469,7 +418,7 @@ function drawDotIsland(island: Island, onEdit: () => void, art: DotArt, theme: D
   const w = island.w * TILE * DOT_SCALE
   const h = island.h * TILE * DOT_SCALE
   dot.addChild(
-    tinted(dotTiling(art, 'island-rug', w, h), theme.tint.rug),
+    dotTiling(art, 'island-rug', w, h),
     new Graphics()
       .rect(0, 0, w, h)
       .stroke({ width: 3, color: COLOR.greenDark, alignment: 1 })
@@ -514,7 +463,7 @@ function drawDotIsland(island: Island, onEdit: () => void, art: DotArt, theme: D
  * 빈 자리에는 책상까지 (앉은 세션은 책상 컨테이너가 같은 자리에 책상을 다시 그린다), 오른쪽 가장자리 책장·화분.
  * 자리는 officeLayout.ts 의 로비 자리 (맨 위 LOBBY_SIGN_H 줄은 이름표, 2열·SEAT_STEP 간격). occupied = 앉은 자리의 구역 안 타일 좌표 "x,y"
  */
-function drawDotZone(zone: Rect, art: DotArt, occupied: Set<string>, theme: DecorTheme): Container {
+function drawDotZone(zone: Rect, art: DotArt, occupied: Set<string>): Container {
   const container = new Container()
   container.position.set(PAD_X + zone.x * TILE, PAD_Y + zone.y * TILE)
   const dot = dotLayer()
@@ -523,7 +472,7 @@ function drawDotZone(zone: Rect, art: DotArt, occupied: Set<string>, theme: Deco
   const width = zone.w * step
   const height = zone.h * step
   dot.addChild(
-    tinted(dotTiling(art, 'focus-carpet', width, height), theme.tint.focusCarpet),
+    dotTiling(art, 'focus-carpet', width, height),
     new Graphics()
       .rect(0, 0, width, height)
       .stroke({ width: 4, color: COLOR.carpetBorder, alignment: 1 })
@@ -1145,9 +1094,6 @@ export function Office(props: Props) {
           approvalDesks = []
           islandViews.clear()
           const layout = layoutOffice(office, sessions)
-          // 꾸미기: 테마(바닥·카펫 색과 소품 풀)와 시드로 놓은 소품. 벽 칸은 내용 오른쪽 끝(PAD_X 포함)까지
-          const decorTheme = themeOf(office.decor?.theme)
-          const decorPlan = planDecor(layout, office.decor ?? DEFAULT_DECOR, art.decorSizes, Math.ceil((PAD_X / TILE + layout.right) / WALL_BAY_TILES))
           map.w = PAD_X + layout.right * TILE + Math.ceil(app.screen.width / zoom)
           // 띠는 늘 내용(그룹·섬·Focus Zone) 아래 끝 + 1타일. 바닥 격자에 맞는다
           const streetY = PAD_Y + (layout.bottom + 1) * TILE
@@ -1156,20 +1102,11 @@ export function Office(props: Props) {
           drawnPhase = dayPhaseOf(new Date(now))
           drawnDozing = dozingKey(sessions, now)
           dotTextResolution = zoom / DOT_SCALE
-          world.addChild(drawDotBackground(map.w, map.h, art, drawnPhase, decorTheme, decorPlan.wall))
+          world.addChild(drawDotBackground(map.w, map.h, art, drawnPhase))
           // 끄는 그룹·섬이 띠를 지날 때 가려지지 않게 바닥 바로 위에 둔다
           const street = drawDotOffDuty(map.w, drawnPhase, art)
           street.y = streetY
           world.addChild(street)
-          // 그룹 밖 꾸미기 소품 (열린 바닥·벽 앞 줄). 그룹·섬과 겹치지 않는 자리라 그 아래 층이어도 가려지지 않는다
-          const openDecor = decorPlan.floor.filter((item) => item.groupId === null)
-          if (openDecor.length) {
-            const decorLayer = dotLayer()
-            decorLayer.position.set(PAD_X, PAD_Y)
-            decorLayer.eventMode = 'none'
-            decorLayer.addChild(...dotDecorProps(art, openDecor, { x: 0, y: 0 }))
-            world.addChild(decorLayer)
-          }
           clampPan()
           /** 그 팀들의 책상 그림 (끌 때 같이 옮긴다) */
           const deskViewsOf = (teamIds: Set<string>) =>
@@ -1181,7 +1118,7 @@ export function Office(props: Props) {
             const onEdit = () => {
               if (!isDragged) latest.current.onEditGroup(area.group)
             }
-            const parts = drawDotGroup(area, onEdit, art, decorTheme, decorPlan.floor.filter((item) => item.groupId === area.group.id))
+            const parts = drawDotGroup(area, onEdit, art)
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               const teamIds = new Set(layout.islands.filter((i) => i.team.groupId === area.group.id).map((i) => i.team.id))
               beginSignDrag(event, {
@@ -1200,13 +1137,13 @@ export function Office(props: Props) {
               return seat ? [`${seat.x - layout.lobby.x},${seat.y - layout.lobby.y}`] : []
             }),
           )
-          world.addChild(drawDotZone(layout.lobby, art, occupied, decorTheme))
+          world.addChild(drawDotZone(layout.lobby, art, occupied))
           for (const island of layout.islands) {
             const { team } = island
             const onEdit = () => {
               if (!isDragged) latest.current.onEditTeam(team)
             }
-            const parts = drawDotIsland(island, onEdit, art, decorTheme)
+            const parts = drawDotIsland(island, onEdit, art)
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               beginSignDrag(event, {
                 // 섬 둘레 그룹 벽 여백까지 맵 안에 남게

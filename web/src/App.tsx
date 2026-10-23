@@ -10,7 +10,6 @@ import { Terminal } from './Terminal'
 import { Chat, type Jump, type JumpTarget } from './Chat'
 import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
-import { DECOR_THEMES, DEFAULT_DECOR, type DecorThemeId, type OfficeDecor } from './officeDecor'
 import { UsagePanel } from './UsagePanel'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { FlowPanel } from './FlowPanel'
@@ -213,7 +212,6 @@ function moveTo(ids: string[], id: string, dropIndex: number): string[] {
 export function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>({ isHostReachable: false, sessions: [] })
   const [office, setOffice] = useState<OfficeData>(EMPTY_OFFICE)
-  const [isDecorSaving, setIsDecorSaving] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** 오른쪽 패널 자리에 플로우 알림 패널을 열었는지. 세션 패널과 같은 자리라 세션을 고르면 닫힌다 */
@@ -649,25 +647,6 @@ export function App() {
     void postJson(`/api/groups/${groupId}`, 'PATCH', position)
   }
 
-  /** 도트 꾸밈(시드·테마) 바꾸기. 화면을 먼저 바꾸고 저장한다. 실패하면 되돌리고 알린다 (성공하면 서버가 office 이벤트로 같은 값을 다시 보낸다) */
-  async function changeDecor(patch: Partial<OfficeDecor>) {
-    const previous = office.decor
-    setOffice((prev) => ({ ...prev, decor: { ...(prev.decor ?? DEFAULT_DECOR), ...patch } }))
-    setIsDecorSaving(true)
-    try {
-      const response = await postJson('/api/office/decor', 'PUT', patch)
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { message?: string } | null
-        throw new Error(body?.message ?? `HTTP ${response.status}`)
-      }
-    } catch (error) {
-      setOffice((prev) => ({ ...prev, decor: previous }))
-      alert(`꾸밈을 저장하지 못했습니다: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setIsDecorSaving(false)
-    }
-  }
-
   function patchTeam(teamId: string, patch: Partial<Team>) {
     setOffice((prev) => ({ ...prev, teams: prev.teams.map((t) => (t.id === teamId ? { ...t, ...patch } : t)) }))
   }
@@ -1026,35 +1005,6 @@ export function App() {
               >
                 <OfficeToggleIcon isShown={!isOfficeHidden} />
               </button>
-            )}
-            {/* 꾸미기: 다시 꾸미기(새 시드) + 꾸밈 테마. 사무실이 보일 때만. 사무실 위에 띄우면 승인 대기 화살표(캔버스 가장자리·모서리)를 가려서 헤더에 둔다 */}
-            {!isNarrow && !isOfficeHidden && (
-              <>
-                <button
-                  className="icon"
-                  disabled={isDecorSaving}
-                  // 지금 시드와 다른 값만 (같으면 아무것도 안 바뀐다)
-                  onClick={() => void changeDecor({ seed: ((office.decor ?? DEFAULT_DECOR).seed + 1 + Math.floor(Math.random() * 0x7ffffffe)) % 0x7fffffff })}
-                  title="다시 꾸미기 (사무실 소품을 새로 놓는다)"
-                  aria-label="다시 꾸미기"
-                >
-                  <ReshuffleIcon />
-                </button>
-                <select
-                  className="decor-theme"
-                  value={(office.decor ?? DEFAULT_DECOR).theme}
-                  disabled={isDecorSaving}
-                  onChange={(event) => void changeDecor({ theme: event.target.value as DecorThemeId })}
-                  title="꾸밈 테마"
-                  aria-label="꾸밈 테마"
-                >
-                  {DECOR_THEMES.map((theme) => (
-                    <option key={theme.id} value={theme.id}>
-                      {theme.label}
-                    </option>
-                  ))}
-                </select>
-              </>
             )}
           </header>
           <div className="toolbar">
@@ -1519,20 +1469,6 @@ function OfficeToggleIcon({ isShown }: { isShown: boolean }) {
           <path d="M9.5 1.5v11" stroke="currentColor" />
         </>
       )}
-    </svg>
-  )
-}
-
-/** 다시 꾸미기 아이콘: 주사위 */
-function ReshuffleIcon() {
-  return (
-    <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeLinejoin="round">
-      <rect x="0.5" y="0.5" width="13" height="13" rx="2.5" />
-      <circle cx="4" cy="4" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="10" cy="4" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="7" cy="7" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="4" cy="10" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="10" cy="10" r="1.1" fill="currentColor" stroke="none" />
     </svg>
   )
 }

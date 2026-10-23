@@ -18,7 +18,6 @@ import {
   OrderMismatchError,
   pruneOffDuty,
   readOffice,
-  setDecor,
   removeOffDuty,
   removeWebSession,
   reorderGroups,
@@ -193,19 +192,6 @@ describe('office positions', () => {
     expect(addGroup('다', { x: -1, y: 2 })).toMatchObject({ x: 14, y: 0 })
     expect(addTeam({ name: 't1', cwd: 'C:/a', groupId: g1.id, x: 8, y: 4 })).toMatchObject({ x: 8, y: 4 })
     expect(addTeam({ name: 't2', cwd: 'C:/b', groupId: g1.id, x: '3', y: 4 })).toMatchObject({ x: 2, y: 9 })
-  })
-})
-
-describe('office decor', () => {
-  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
-
-  it('저장된 꾸밈이 없으면 기본값, 바꾼 값만 덮어쓰고 다른 키는 그대로 둔다', () => {
-    addGroup('g')
-    expect(readOffice().decor).toEqual({ seed: 1, theme: 'office' })
-    expect(setDecor({ theme: 'winter' })).toEqual({ seed: 1, theme: 'winter' })
-    expect(setDecor({ seed: 42 })).toEqual({ seed: 42, theme: 'winter' })
-    expect(readOffice()).toMatchObject({ decor: { seed: 42, theme: 'winter' } })
-    expect(readOffice().groups.map((g) => g.name)).toEqual(['g'])
   })
 })
 
