@@ -4,7 +4,7 @@
 - 인물: 아틀라스의 인물 프레임(char/...)마다 셀 네 가장자리 줄에 불투명 픽셀이 있는지.
   발은 기준선(baseline) 위에서 끝나므로 아래 가장자리도 닿으면 안 된다
 - 소품: 레시피의 원본 칸에서 잘라 낸 덩어리가 그 칸 경계에 닿았는지 (아틀라스의 소품 프레임은 덩어리 크기로 잘라 둬서
-  프레임 가장자리로는 알 수 없다). 원본 그림 끝에 닿은 것도 센다
+  프레임 가장자리로는 알 수 없다). 원본 그림 끝에 닿은 것도 센다. 상자(box)로 자르는 소품은 상자 경계·상자 바로 밖·그림 끝
 - 인물 원본 자르기: 칸 경계로 자르는 판은 덩어리가 칸 경계에 닿은 칸을, slice 'figure' 판은 주의 문구(그림 끝에 닿음·이웃과 붙음)를 센다
 
 사용:
@@ -54,6 +54,27 @@ def piece_touches(solid: np.ndarray, is_whole: bool = False) -> list[str]:
     return [side for side, value in (('위', top == 0), ('아래', bottom == h), ('왼쪽', left == 0), ('오른쪽', right == w)) if value]
 
 
+def box_problems(prop: dict, solid: np.ndarray) -> list[str]:
+    """
+    상자(box)로 자르는 소품: 덩어리가 상자 경계에 닿았는지, 상자 바로 밖 1px 고리에 불투명 픽셀이 있는지(상자를 넉넉히 잡았어도
+    이웃 그림과 붙었거나 그림이 상자 밖으로 이어진 것), 상자가 원본 그림 끝에 닿았는지
+    """
+    x0, y0, x1, y1 = prop['box']
+    h, w = solid.shape
+    name, problems = f"prop/{prop['id']}", []
+    touched = piece_touches(solid[y0:y1, x0:x1], prop.get('whole', False))
+    if touched:
+        problems.append(f"{name}: 원본 {prop['sheet']} 상자 {prop['box']} 의 {'·'.join(touched)} 경계에 닿음")
+    ring = np.zeros_like(solid)
+    ring[max(0, y0 - 1):min(h, y1 + 1), max(0, x0 - 1):min(w, x1 + 1)] = True
+    ring[y0:y1, x0:x1] = False
+    if (solid & ring).any():
+        problems.append(f"{name}: 상자 바로 밖에 불투명 픽셀 {int((solid & ring).sum())}개 (이웃 그림과 붙었을 수 있음)")
+    if x0 <= 0 or y0 <= 0 or x1 >= w or y1 >= h:
+        problems.append(f"{name}: 상자가 원본 그림 끝에 닿음")
+    return problems
+
+
 def prop_problems(recipe: dict, source: Path) -> list[str]:
     problems = []
     sheets: dict[str, np.ndarray] = {}
@@ -62,6 +83,9 @@ def prop_problems(recipe: dict, source: Path) -> list[str]:
         if prop['sheet'] not in sheets:
             sheets[prop['sheet']] = load_keyed(source / prop['sheet'])
         sheet = sheets[prop['sheet']]
+        if 'box' in prop:
+            problems += box_problems(prop, sheet[..., 3] > 127)
+            continue
         columns, rows = prop['grid']
         column, row = prop['cell']
         h, w = sheet.shape[:2]

@@ -1,0 +1,1557 @@
+{
+ "frames": {
+  "prop/bike-rack": {
+   "frame": {
+    "x": 2,
+    "y": 490,
+    "w": 110,
+    "h": 57
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 110,
+    "h": 57
+   },
+   "sourceSize": {
+    "w": 110,
+    "h": 57
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/bollard": {
+   "frame": {
+    "x": 888,
+    "y": 490,
+    "w": 18,
+    "h": 35
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 18,
+    "h": 35
+   },
+   "sourceSize": {
+    "w": 18,
+    "h": 35
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/bus-shelter": {
+   "frame": {
+    "x": 284,
+    "y": 172,
+    "w": 400,
+    "h": 153
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 400,
+    "h": 153
+   },
+   "sourceSize": {
+    "w": 400,
+    "h": 153
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/bus-sign": {
+   "frame": {
+    "x": 686,
+    "y": 172,
+    "w": 46,
+    "h": 152
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 46,
+    "h": 152
+   },
+   "sourceSize": {
+    "w": 46,
+    "h": 152
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/bush-flower": {
+   "frame": {
+    "x": 114,
+    "y": 490,
+    "w": 56,
+    "h": 54
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 56,
+    "h": 54
+   },
+   "sourceSize": {
+    "w": 56,
+    "h": 54
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe": {
+   "frame": {
+    "x": 2,
+    "y": 342,
+    "w": 268,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 268,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 268,
+    "h": 146
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-board": {
+   "frame": {
+    "x": 778,
+    "y": 490,
+    "w": 40,
+    "h": 41
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 41
+   },
+   "sourceSize": {
+    "w": 40,
+    "h": 41
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair": {
+   "frame": {
+    "x": 710,
+    "y": 490,
+    "w": 32,
+    "h": 43
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 43
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 43
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair-h40": {
+   "frame": {
+    "x": 854,
+    "y": 490,
+    "w": 32,
+    "h": 40
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 40
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 40
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair-h41": {
+   "frame": {
+    "x": 820,
+    "y": 490,
+    "w": 32,
+    "h": 41
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 41
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 41
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair-h42": {
+   "frame": {
+    "x": 744,
+    "y": 490,
+    "w": 32,
+    "h": 42
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 42
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 42
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair-h44": {
+   "frame": {
+    "x": 676,
+    "y": 490,
+    "w": 32,
+    "h": 44
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 44
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 44
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair-h45": {
+   "frame": {
+    "x": 610,
+    "y": 490,
+    "w": 32,
+    "h": 45
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 45
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 45
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair-h46": {
+   "frame": {
+    "x": 576,
+    "y": 490,
+    "w": 32,
+    "h": 46
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 46
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 46
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair-h47": {
+   "frame": {
+    "x": 430,
+    "y": 490,
+    "w": 32,
+    "h": 47
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 47
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 47
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair-h48": {
+   "frame": {
+    "x": 262,
+    "y": 490,
+    "w": 32,
+    "h": 48
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 48
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 48
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-chair-h49": {
+   "frame": {
+    "x": 228,
+    "y": 490,
+    "w": 32,
+    "h": 49
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 49
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 49
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-glow": {
+   "frame": {
+    "x": 272,
+    "y": 342,
+    "w": 268,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 268,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 268,
+    "h": 146
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/cafe-table": {
+   "frame": {
+    "x": 172,
+    "y": 490,
+    "w": 54,
+    "h": 53
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 54,
+    "h": 53
+   },
+   "sourceSize": {
+    "w": 54,
+    "h": 53
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/hedge": {
+   "frame": {
+    "x": 296,
+    "y": 490,
+    "w": 132,
+    "h": 48
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 132,
+    "h": 48
+   },
+   "sourceSize": {
+    "w": 132,
+    "h": 48
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/house-blue": {
+   "frame": {
+    "x": 2,
+    "y": 2,
+    "w": 280,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 280,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 280,
+    "h": 168
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/house-cream": {
+   "frame": {
+    "x": 284,
+    "y": 2,
+    "w": 280,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 280,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 280,
+    "h": 168
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/house-peach": {
+   "frame": {
+    "x": 566,
+    "y": 2,
+    "w": 280,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 280,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 280,
+    "h": 168
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/house-sage": {
+   "frame": {
+    "x": 2,
+    "y": 172,
+    "w": 280,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 280,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 280,
+    "h": 168
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/hydrant": {
+   "frame": {
+    "x": 908,
+    "y": 490,
+    "w": 26,
+    "h": 35
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 26,
+    "h": 35
+   },
+   "sourceSize": {
+    "w": 26,
+    "h": 35
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/park-bench": {
+   "frame": {
+    "x": 806,
+    "y": 342,
+    "w": 132,
+    "h": 66
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 132,
+    "h": 66
+   },
+   "sourceSize": {
+    "w": 132,
+    "h": 66
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/park-bin": {
+   "frame": {
+    "x": 644,
+    "y": 490,
+    "w": 30,
+    "h": 45
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 30,
+    "h": 45
+   },
+   "sourceSize": {
+    "w": 30,
+    "h": 45
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/park-lamp": {
+   "frame": {
+    "x": 730,
+    "y": 342,
+    "w": 36,
+    "h": 124
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 36,
+    "h": 124
+   },
+   "sourceSize": {
+    "w": 36,
+    "h": 124
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/park-lamp-glow": {
+   "frame": {
+    "x": 768,
+    "y": 342,
+    "w": 36,
+    "h": 124
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 36,
+    "h": 124
+   },
+   "sourceSize": {
+    "w": 36,
+    "h": 124
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/park-tree": {
+   "frame": {
+    "x": 542,
+    "y": 342,
+    "w": 118,
+    "h": 127
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 118,
+    "h": 127
+   },
+   "sourceSize": {
+    "w": 118,
+    "h": 127
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/street-lamp": {
+   "frame": {
+    "x": 734,
+    "y": 172,
+    "w": 84,
+    "h": 152
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 84,
+    "h": 152
+   },
+   "sourceSize": {
+    "w": 84,
+    "h": 152
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/street-lamp-glow": {
+   "frame": {
+    "x": 820,
+    "y": 172,
+    "w": 84,
+    "h": 152
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 84,
+    "h": 152
+   },
+   "sourceSize": {
+    "w": 84,
+    "h": 152
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/street-planter": {
+   "frame": {
+    "x": 464,
+    "y": 490,
+    "w": 110,
+    "h": 47
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 110,
+    "h": 47
+   },
+   "sourceSize": {
+    "w": 110,
+    "h": 47
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/street-tree": {
+   "frame": {
+    "x": 662,
+    "y": 342,
+    "w": 66,
+    "h": 127
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 66,
+    "h": 127
+   },
+   "sourceSize": {
+    "w": 66,
+    "h": 127
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  }
+ },
+ "animations": {},
+ "meta": {
+  "app": "jk-corp tools/sprites/build.py",
+  "image": "office-v6-street.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 940,
+   "h": 549
+  },
+  "scale": 1,
+  "jkCorp": {
+   "spec": {
+    "tile": 48
+   },
+   "characters": [],
+   "animations": {},
+   "tiles": {
+    "sidewalk": {
+     "image": "office-v6-street-tile-sidewalk.png",
+     "w": 657,
+     "h": 20,
+     "top": "#c9c6c2",
+     "bottom": "#989898"
+    },
+    "curb-road": {
+     "image": "office-v6-street-tile-curb-road.png",
+     "w": 507,
+     "h": 30,
+     "top": "#373b42",
+     "bottom": "#212733"
+    },
+    "grass": {
+     "image": "office-v6-street-tile-grass.png",
+     "w": 464,
+     "h": 48,
+     "top": "#5ab232",
+     "bottom": "#5bb232"
+    }
+   },
+   "props": {
+    "prop/cafe": {
+     "glow": "prop/cafe-glow"
+    },
+    "prop/cafe-chair": {
+     "lifts": {
+      "-3": "prop/cafe-chair-h40",
+      "-2": "prop/cafe-chair-h41",
+      "-1": "prop/cafe-chair-h42",
+      "0": "prop/cafe-chair",
+      "1": "prop/cafe-chair-h44",
+      "2": "prop/cafe-chair-h45",
+      "3": "prop/cafe-chair-h46",
+      "4": "prop/cafe-chair-h47",
+      "5": "prop/cafe-chair-h48",
+      "6": "prop/cafe-chair-h49"
+     }
+    },
+    "prop/house-cream": {
+     "windows": [
+      {
+       "x": 43,
+       "y": 94,
+       "w": 46,
+       "h": 36,
+       "frame": 3
+      },
+      {
+       "x": 192,
+       "y": 94,
+       "w": 45,
+       "h": 36,
+       "frame": 3
+      }
+     ]
+    },
+    "prop/house-sage": {
+     "windows": [
+      {
+       "x": 43,
+       "y": 94,
+       "w": 46,
+       "h": 36,
+       "frame": 3
+      },
+      {
+       "x": 191,
+       "y": 94,
+       "w": 46,
+       "h": 36,
+       "frame": 3
+      }
+     ]
+    },
+    "prop/house-blue": {
+     "windows": [
+      {
+       "x": 43,
+       "y": 94,
+       "w": 46,
+       "h": 36,
+       "frame": 3
+      },
+      {
+       "x": 192,
+       "y": 94,
+       "w": 45,
+       "h": 36,
+       "frame": 3
+      }
+     ]
+    },
+    "prop/house-peach": {
+     "windows": [
+      {
+       "x": 43,
+       "y": 94,
+       "w": 46,
+       "h": 36,
+       "frame": 3
+      },
+      {
+       "x": 191,
+       "y": 94,
+       "w": 46,
+       "h": 36,
+       "frame": 3
+      }
+     ]
+    },
+    "prop/park-lamp": {
+     "glow": "prop/park-lamp-glow"
+    },
+    "prop/street-lamp": {
+     "glow": "prop/street-lamp-glow"
+    }
+   },
+   "street": {
+    "_note": "퇴근 거리 배치 (도트 px). y 는 모두 사람 발 선 front 기준 (0 = 발, 음수 = 위). 장소·채우기 조각의 x 는 그 조각 왼쪽 끝 기준. 소품은 아틀라스 anchor(아래 가운데)를, 사람은 그 방향 아틀라스 anchor(정면 = 발 가운데, 옆모습 = 등 backX)를 그 자리에 둔다. 규칙 전문은 docs/plans/2026-10-22-office-sprites-design.md 의 '퇴근 거리 (v6)'",
+    "band": 240,
+    "front": 206,
+    "back": -54,
+    "sidewalkTop": -64,
+    "curbTop": 4,
+    "tiles": {
+     "sidewalk": "sidewalk",
+     "curb": "curb-road",
+     "grass": "grass"
+    },
+    "phases": {
+     "morning": {
+      "skyTop": "#9fd2f2",
+      "skyBottom": "#ffe3c6",
+      "tint": "#fff1e4",
+      "label": "#3a3550",
+      "isLit": false,
+      "hasStars": false
+     },
+     "day": {
+      "skyTop": "#8ccdf6",
+      "skyBottom": "#d8f0fc",
+      "tint": "#ffffff",
+      "label": "#2b3a55",
+      "isLit": false,
+      "hasStars": false
+     },
+     "dusk": {
+      "skyTop": "#5d4f9a",
+      "skyBottom": "#f2a27a",
+      "tint": "#e9b9a2",
+      "label": "#fff1d6",
+      "isLit": true,
+      "hasStars": false
+     },
+     "night": {
+      "skyTop": "#0d1838",
+      "skyBottom": "#26365f",
+      "tint": "#6a76a4",
+      "label": "#f5dfad",
+      "isLit": true,
+      "hasStars": true
+     }
+    },
+    "skySteps": 6,
+    "window": {
+     "day": "#d4e5ec",
+     "lit": "#ffd27a",
+     "dark": "#2e3858"
+    },
+    "places": [
+     {
+      "id": "bus",
+      "label": "버스 정류장",
+      "minutes": [
+       0,
+       60
+      ],
+      "w": 458,
+      "front": [
+       {
+        "prop": "bus-shelter",
+        "x": 200,
+        "y": 2
+       }
+      ],
+      "seats": [
+       {
+        "x": 72,
+        "y": 0,
+        "dir": "down",
+        "state": "idle"
+       },
+       {
+        "x": 136,
+        "y": 0,
+        "dir": "down",
+        "state": "idle"
+       },
+       {
+        "x": 200,
+        "y": 0,
+        "dir": "down",
+        "state": "idle"
+       },
+       {
+        "x": 264,
+        "y": 0,
+        "dir": "down",
+        "state": "idle"
+       },
+       {
+        "x": 328,
+        "y": 0,
+        "dir": "down",
+        "state": "idle"
+       }
+      ],
+      "after": [
+       {
+        "prop": "bus-sign",
+        "x": 432,
+        "y": 4
+       }
+      ],
+      "more": {
+       "x": 432,
+       "y": -92
+      }
+     },
+     {
+      "id": "cafe",
+      "label": "카페",
+      "minutes": [
+       60,
+       360
+      ],
+      "w": 330,
+      "back": [
+       {
+        "prop": "cafe",
+        "x": 155,
+        "y": -54
+       }
+      ],
+      "tables": [
+       {
+        "prop": "cafe-table",
+        "x": 75,
+        "y": 0
+       },
+       {
+        "prop": "cafe-table",
+        "x": 235,
+        "y": 0
+       }
+      ],
+      "chair": {
+       "prop": "cafe-chair",
+       "dx": 7
+      },
+      "seats": [
+       {
+        "x": 14,
+        "y": 0,
+        "dir": "right",
+        "state": "idle",
+        "table": 0
+       },
+       {
+        "x": 136,
+        "y": 0,
+        "dir": "left",
+        "state": "idle",
+        "table": 0
+       },
+       {
+        "x": 174,
+        "y": 0,
+        "dir": "right",
+        "state": "idle",
+        "table": 1
+       },
+       {
+        "x": 296,
+        "y": 0,
+        "dir": "left",
+        "state": "idle",
+        "table": 1
+       }
+      ],
+      "after": [
+       {
+        "prop": "cafe-board",
+        "x": 318,
+        "y": -2
+       }
+      ],
+      "more": {
+       "x": 285,
+       "y": -150
+      }
+     },
+     {
+      "id": "park",
+      "label": "공원",
+      "minutes": [
+       360,
+       1440
+      ],
+      "w": 400,
+      "ground": "grass",
+      "back": [
+       {
+        "prop": "park-tree",
+        "x": 52,
+        "y": -50
+       },
+       {
+        "prop": "hedge",
+        "x": 158,
+        "y": -58
+       },
+       {
+        "prop": "hedge",
+        "x": 270,
+        "y": -58
+       },
+       {
+        "prop": "park-lamp",
+        "x": 207,
+        "y": -40
+       },
+       {
+        "prop": "park-tree",
+        "x": 352,
+        "y": -50
+       }
+      ],
+      "benches": [
+       {
+        "prop": "park-bench",
+        "x": 118,
+        "y": -16
+       },
+       {
+        "prop": "park-bench",
+        "x": 290,
+        "y": -16
+       }
+      ],
+      "seats": [
+       {
+        "x": 92,
+        "y": 0,
+        "dir": "down",
+        "state": "doze",
+        "bench": 0
+       },
+       {
+        "x": 144,
+        "y": 0,
+        "dir": "down",
+        "state": "doze",
+        "bench": 0
+       },
+       {
+        "x": 264,
+        "y": 0,
+        "dir": "down",
+        "state": "doze",
+        "bench": 1
+       },
+       {
+        "x": 316,
+        "y": 0,
+        "dir": "down",
+        "state": "doze",
+        "bench": 1
+       }
+      ],
+      "after": [
+       {
+        "prop": "bush-flower",
+        "x": 16,
+        "y": 2
+       },
+       {
+        "prop": "park-bin",
+        "x": 386,
+        "y": -2
+       }
+      ],
+      "more": {
+       "x": 204,
+       "y": -110
+      }
+     },
+     {
+      "id": "home",
+      "label": "집",
+      "minutes": [
+       1440,
+       null
+      ],
+      "houseCycle": [
+       "house-cream",
+       "house-sage",
+       "house-blue",
+       "house-peach"
+      ],
+      "unit": {
+       "w": 580,
+       "houses": [
+        {
+         "x": 144,
+         "y": -30
+        },
+        {
+         "x": 432,
+         "y": -30
+        }
+       ]
+      },
+      "single": {
+       "w": 292
+      },
+      "gap": {
+       "w": 64,
+       "items": [
+        {
+         "prop": "street-tree",
+         "x": 32,
+         "y": -54
+        }
+       ]
+      },
+      "seatsPerHouse": 2,
+      "face": {
+       "dir": "down",
+       "state": "idle"
+      },
+      "more": {
+       "x": 0,
+       "y": -50
+      }
+     }
+    ],
+    "fillers": {
+     "start": {
+      "w": 40,
+      "items": [
+       {
+        "prop": "bollard",
+        "x": 20,
+        "y": 2
+       }
+      ]
+     },
+     "bus": {
+      "w": 64,
+      "items": [
+       {
+        "prop": "street-tree",
+        "x": 32,
+        "y": -54
+       }
+      ]
+     },
+     "cafe": {
+      "w": 70,
+      "items": [
+       {
+        "prop": "street-lamp",
+        "x": 30,
+        "y": 4
+       },
+       {
+        "prop": "bollard",
+        "x": 56,
+        "y": 2
+       }
+      ]
+     },
+     "park": {
+      "w": 64,
+      "items": [
+       {
+        "prop": "street-tree",
+        "x": 32,
+        "y": -54
+       },
+       {
+        "prop": "hydrant",
+        "x": 50,
+        "y": 0
+       }
+      ]
+     },
+     "street": {
+      "w": 320,
+      "items": [
+       {
+        "prop": "street-tree",
+        "x": 40,
+        "y": -54
+       },
+       {
+        "prop": "bike-rack",
+        "x": 120,
+        "y": 0
+       },
+       {
+        "prop": "street-planter",
+        "x": 196,
+        "y": -40
+       },
+       {
+        "prop": "street-lamp",
+        "x": 262,
+        "y": 4
+       }
+      ]
+     }
+    },
+    "levels": [
+     {
+      "minWidth": 2006,
+      "fillers": true,
+      "houses": 2
+     },
+     {
+      "minWidth": 1768,
+      "fillers": false,
+      "houses": 2
+     },
+     {
+      "minWidth": 1480,
+      "fillers": false,
+      "houses": 1
+     }
+    ],
+    "sideSeatLift": {
+     "typing": {
+      "lead": 2,
+      "lead-suit": 0,
+      "member": 0,
+      "hoodie": 3,
+      "flannel": 5,
+      "ponytail": 1,
+      "cardigan": 0,
+      "turtleneck": 0,
+      "afro": -3,
+      "lead-vest": -1,
+      "lead-blazer": 3,
+      "denim": 0,
+      "professor": 0,
+      "headphones": 0,
+      "polo": 3,
+      "hijab": -2,
+      "overalls": -1,
+      "braids": 2
+     },
+     "raise-hand": {
+      "lead": 2,
+      "lead-suit": 0,
+      "member": 1,
+      "hoodie": 3,
+      "flannel": 5,
+      "ponytail": 3,
+      "cardigan": 1,
+      "turtleneck": -1,
+      "afro": -2,
+      "lead-vest": 0,
+      "lead-blazer": 3,
+      "denim": -1,
+      "professor": 1,
+      "headphones": 0,
+      "polo": 3,
+      "hijab": -1,
+      "overalls": -1,
+      "braids": 2
+     },
+     "idle": {
+      "lead": 2,
+      "lead-suit": 0,
+      "member": 2,
+      "hoodie": 4,
+      "flannel": 5,
+      "ponytail": 1,
+      "cardigan": 0,
+      "turtleneck": 0,
+      "afro": -1,
+      "lead-vest": 0,
+      "lead-blazer": 3,
+      "denim": 0,
+      "professor": 0,
+      "headphones": 0,
+      "polo": 4,
+      "hijab": 0,
+      "overalls": -3,
+      "braids": 3
+     },
+     "doze": {
+      "lead": 3,
+      "lead-suit": 1,
+      "member": 2,
+      "hoodie": 5,
+      "flannel": 6,
+      "ponytail": 2,
+      "cardigan": 0,
+      "turtleneck": 0,
+      "afro": -1,
+      "lead-vest": 0,
+      "lead-blazer": 4,
+      "denim": 0,
+      "professor": 1,
+      "headphones": 0,
+      "polo": 4,
+      "hijab": -1,
+      "overalls": -1,
+      "braids": 4
+     }
+    },
+    "headBox": {
+     "lead": [
+      27,
+      18,
+      54
+     ],
+     "lead-suit": [
+      23,
+      20,
+      54
+     ],
+     "member": [
+      19,
+      18,
+      59
+     ],
+     "hoodie": [
+      26,
+      17,
+      54
+     ],
+     "flannel": [
+      23,
+      20,
+      60
+     ],
+     "ponytail": [
+      24,
+      20,
+      62
+     ],
+     "cardigan": [
+      26,
+      19,
+      54
+     ],
+     "turtleneck": [
+      23,
+      19,
+      57
+     ],
+     "afro": [
+      15,
+      20,
+      66
+     ],
+     "lead-vest": [
+      28,
+      19,
+      53
+     ],
+     "lead-blazer": [
+      24,
+      20,
+      56
+     ],
+     "denim": [
+      22,
+      19,
+      58
+     ],
+     "professor": [
+      20,
+      17,
+      64
+     ],
+     "headphones": [
+      27,
+      17,
+      52
+     ],
+     "polo": [
+      22,
+      20,
+      60
+     ],
+     "hijab": [
+      27,
+      18,
+      53
+     ],
+     "overalls": [
+      19,
+      18,
+      59
+     ],
+     "braids": [
+      22,
+      19,
+      57
+     ]
+    }
+   }
+  }
+ }
+}

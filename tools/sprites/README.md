@@ -19,7 +19,7 @@ python tools/sprites/build.py --recipe tools/sprites/recipes/office-v0.json \
 
 - `--source-dir`: 레시피의 파일 이름이 가리키는 생성 원본 폴더. 원본은 커밋하지 않는다 (장당 1~2MB). v0 원본은 `~/.claude/jk-corp/sprite-src/v0/` (프롬프트 사본 `prompts/` 포함)
 - 알파 문제(전부 투명·전부 불투명·반투명 픽셀)가 있으면 아무것도 쓰지 않고 종료 코드 1. 캐릭터 셀이 위·왼쪽·오른쪽 가장자리에 닿으면 "주의:" 로 알린다 (잘렸을 수 있음)
-- 잘림 검사: `python tools/sprites/check_edges.py --recipe <레시피> --source-dir <원본 폴더> --atlas web/public/office/<판>` — 인물 프레임이 셀 네 가장자리에 닿거나 인물·소품이 원본 칸 경계(덩어리 단위 판이면 원본 그림 끝·이웃 그림)에 닿은 곳을 센다. 0 개가 아니면 종료 코드 1 (v5 넷은 0 개)
+- 잘림 검사: `python tools/sprites/check_edges.py --recipe <레시피> --source-dir <원본 폴더> --atlas web/public/office/<판>` — 인물 프레임이 셀 네 가장자리에 닿거나 인물·소품이 원본 칸 경계(덩어리 단위 판이면 원본 그림 끝·이웃 그림)에 닿은 곳을 센다. 원본 px 상자(`box`)로 자르는 소품은 상자 경계·상자 바로 밖 1px·원본 그림 끝에 닿은 곳을 센다. 0 개가 아니면 종료 코드 1 (v5 넷·v6 거리는 0 개)
 - 다 만든 뒤 `npm run build` 해야 web/dist 에 들어가 화면에 반영된다
 
 ## 생성
@@ -32,7 +32,7 @@ SPRITE_GEN=<sprite-gen 실행 파일> bash tools/sprites/gen.sh gen --provider c
 
 ## 레시피
 
-`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이. `anchorX` = 셀 안 가로 기준(없으면 가운데), `backX` = 발 중심 대신 하체 왼쪽 끝(옆모습의 등)을 이 x 에 맞춘다), `direction`(있으면 프레임 이름이 `char/<id>/<방향>/<상태>`), `palette`(있으면 그 색 수 + 투명 1칸의 팔레트 PNG — v5 는 255), `slice`(`"figure"` 면 인물·소품을 원본 칸 경계가 아니라 덩어리 단위로 자른다 — 칸 경계를 넘은 머리·손·소품 끝이 잘리지 않는다. v5 넷), `jkCorp`(그대로 `meta.jkCorp` 에 싣는 화면용 메타), `characters[]`(`id`·`pool`·`gender` 는 아틀라스 메타로, `scale` = 몸 높이 대신 쓸 고정 배율), `characters[].rows[]`(`strip`+`count`, 격자 한 장의 한 행 `grid`+`gridSize`[칸, 행]+`gridRow`, 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`, 그 행만 다른 몸 높이 `bodyHeight` — 웅크리게 그려진 행이 커질 때. 파일 이름은 `--source-dir` 기준이라 `../v1/…` 로 앞 판 원본을 쓸 수 있다), `props[]`(시트·격자 칸·폭. `whole: true` 면 칸 안 조각을 다 남긴다 — 기본은 가장 긴 덩어리만이라 나란히 건 액자 둘이 하나로 줄어든다. `screenOff: true` 면 파란 화면을 어둡게 바꾼 `prop/<id>-off` 와 메타 `screen`·`off`), `tiles[]`(반복 타일):
+`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이. `anchorX` = 셀 안 가로 기준(없으면 가운데), `backX` = 발 중심 대신 하체 왼쪽 끝(옆모습의 등)을 이 x 에 맞춘다), `direction`(있으면 프레임 이름이 `char/<id>/<방향>/<상태>`), `palette`(있으면 그 색 수 + 투명 1칸의 팔레트 PNG — v5 는 255), `slice`(`"figure"` 면 인물·소품을 원본 칸 경계가 아니라 덩어리 단위로 자른다 — 칸 경계를 넘은 머리·손·소품 끝이 잘리지 않는다. v5 넷), `jkCorp`(그대로 `meta.jkCorp` 에 싣는 화면용 메타), `characters[]`(`id`·`pool`·`gender` 는 아틀라스 메타로, `scale` = 몸 높이 대신 쓸 고정 배율), `characters[].rows[]`(`strip`+`count`, 격자 한 장의 한 행 `grid`+`gridSize`[칸, 행]+`gridRow`, 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`, 그 행만 다른 몸 높이 `bodyHeight` — 웅크리게 그려진 행이 커질 때. 파일 이름은 `--source-dir` 기준이라 `../v1/…` 로 앞 판 원본을 쓸 수 있다), `props[]`(시트·격자 칸·폭. `whole: true` 면 칸 안 조각을 다 남긴다 — 기본은 가장 긴 덩어리만이라 나란히 건 액자 둘이 하나로 줄어든다. `screenOff: true` 면 파란 화면을 어둡게 바꾼 `prop/<id>-off` 와 메타 `screen`·`off`. 격자 칸 대신 `box` [x0, y0, x1, y1] 이면 원본 px 상자 안에서 자른다 — v6 거리처럼 시트마다 그림 크기·배치가 달라 칸에 걸칠 때. 아래 `glow`·`windows`·`lifts`), `tiles[]`(반복 타일):
 
 | 키 | 뜻 |
 |---|---|
@@ -44,6 +44,14 @@ SPRITE_GEN=<sprite-gen 실행 파일> bash tools/sprites/gen.sh gen --provider c
 | `seamlessBands` | 가로 판자 바닥: 줄마다 따로 가로 구간을 고른다 |
 | `inset`·`removeGridLines`·`fillDarkLines` | v0·v1 벽·바닥용 (가장자리 깎기·검은 격자선 지우기·어두운 선 메우기) |
 | `tone` | `{ color: [r,g,b], contrast }`: 평균색을 color 로 옮기고 무늬 대비를 contrast 배로 (생성한 카펫이 거칠고 어두울 때) |
+
+| 키 (`props[]`, v6 거리) | 뜻 |
+|---|---|
+| `glow` | `{ kind: 'glass' }` 밝은 하늘색 유리(150px 이상 덩어리와 그 상자 안 흰 반사 줄) 또는 `{ kind: 'lamp', top }` 위쪽 top 비율 안의 밝고 따뜻한 등 유리만 따뜻한 색으로 칠한 `prop/<id>-glow`(나머지 투명)와 메타 `glow`. 화면이 노을·밤에 색조 없이 그 소품 바로 위에 겹친다 |
+| `windows` | `true` 면 바깥과 이어지지 않은 투명 구멍(키를 뺀 마젠타 유리) = 창을 메타 `windows: [{ x, y, w, h, frame }]` 로. `frame` = 구멍 가장자리에서 바깥으로 외곽선 + 밝은 창틀 두께 (세 쪽 중 가운데 값) |
+| `lifts` | `{ band: [y0, y1], range: [낮음, 높음] }`: 축소한 그림의 band 줄 구간(의자 다리)에서 고르게 줄을 겹치거나 빼 높이만 바꾼 `prop/<id>-h<높이>` 들과 메타 `lifts: { "<변화>": 프레임 이름 }` ("0" 은 원래 그림). 앉은 사람 엉덩이에 상판을 맞추고 다리는 바닥에 둔다 |
+
+인물이 없는 판(`characters` 없음)은 `spec` 에 `tile` 만 있어도 된다.
 
 타일 메타에는 맨 위·아래 줄 최빈색 `top`·`bottom` 이 같이 들어간다 (Off Duty 하늘을 창밖 그림 위로 잇는 색).
 
@@ -57,6 +65,14 @@ python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v3-recolor.js
 아틀라스 옆에 `<레시피 name>.png`(R = 머리·G = 윗옷 가중치)와 `.json`(인물별 기본색)을 쓴다. 아틀라스는 바꾸지 않는다. 인물 그림을 다시 만들었으면 이것도 다시 돌린다.
 
 방향 판(v5 up·right)은 idle 첫 칸이 정면 판에만 있어 `--sample-atlas web/public/office/office-v5-down` 을 준다: 표본 상자는 정면 셀 좌표, `y`·`exclude` 는 그 방향 셀 좌표다. 레시피 `direction` 은 미리보기 칸을 정한다.
+
+## 퇴근 거리 자리 메타
+
+```bash
+python tools/sprites/street_seats.py --recipe tools/sprites/recipes/office-v6-street.json --atlas-dir web/public/office --write
+```
+
+인물 아틀라스(office-v5-down·right)에서 옆모습 앉은 높이(`sideSeatLift[상태][인물]` = 의자 높이 변화)와 정면 idle 머리 상자(`headBox[인물]`)를 재 레시피 `jkCorp.street` 에 고쳐 쓴다 (`--write` 없으면 출력만). 의자 레시피 `lifts.range` 가 잰 범위를 못 덮으면 종료 코드 1. 인물 그림을 다시 만들면 이것 → build.py 순서로 돌린다. 규칙은 설계 문서 "퇴근 거리 (v6)".
 
 ## 코드로 그리는 그림
 

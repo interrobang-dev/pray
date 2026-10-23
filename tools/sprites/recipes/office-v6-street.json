@@ -1,0 +1,927 @@
+{
+ "name": "office-v6-street",
+ "description": "퇴근 거리(Off Duty 띠): 장소 4종(버스 정류장·카페·공원·집)과 거리 소품·바닥 타일. 원본 ~/.claude/jk-corp/sprite-src/v6. 소품은 원본 px 상자(box)로 자른다. 장소 배치·자리 메타는 jkCorp.street (sideSeatLift·headBox 는 tools/sprites/street_seats.py --write 가 잰다)",
+ "palette": 255,
+ "spec": {
+  "tile": 48
+ },
+ "props": [
+  {
+   "id": "bus-shelter",
+   "sheet": "bus-stop.png",
+   "box": [
+    150,
+    150,
+    1290,
+    620
+   ],
+   "width": 400
+  },
+  {
+   "id": "bus-sign",
+   "sheet": "bus-stop.png",
+   "box": [
+    1700,
+    120,
+    1880,
+    620
+   ],
+   "width": 46
+  },
+  {
+   "id": "cafe",
+   "sheet": "cafe.png",
+   "box": [
+    40,
+    50,
+    880,
+    520
+   ],
+   "width": 268,
+   "whole": true,
+   "glow": {
+    "kind": "glass"
+   }
+  },
+  {
+   "id": "cafe-table",
+   "sheet": "cafe.png",
+   "box": [
+    1020,
+    180,
+    1350,
+    515
+   ],
+   "width": 54
+  },
+  {
+   "id": "cafe-chair",
+   "sheet": "cafe.png",
+   "box": [
+    265,
+    570,
+    570,
+    965
+   ],
+   "width": 32,
+   "lifts": {
+    "band": [
+     30,
+     40
+    ],
+    "range": [
+     -3,
+     6
+    ]
+   }
+  },
+  {
+   "id": "cafe-board",
+   "sheet": "cafe.png",
+   "box": [
+    995,
+    605,
+    1340,
+    955
+   ],
+   "width": 40
+  },
+  {
+   "id": "house-cream",
+   "sheet": "houses-big.png",
+   "box": [
+    60,
+    50,
+    710,
+    450
+   ],
+   "width": 280,
+   "windows": true
+  },
+  {
+   "id": "house-sage",
+   "sheet": "houses-big.png",
+   "box": [
+    828,
+    50,
+    1478,
+    450
+   ],
+   "width": 280,
+   "windows": true
+  },
+  {
+   "id": "house-blue",
+   "sheet": "houses-big.png",
+   "box": [
+    60,
+    560,
+    710,
+    960
+   ],
+   "width": 280,
+   "windows": true
+  },
+  {
+   "id": "house-peach",
+   "sheet": "houses-big.png",
+   "box": [
+    828,
+    560,
+    1478,
+    960
+   ],
+   "width": 280,
+   "windows": true
+  },
+  {
+   "id": "park-bench",
+   "sheet": "park.png",
+   "box": [
+    55,
+    195,
+    550,
+    460
+   ],
+   "width": 132
+  },
+  {
+   "id": "park-tree",
+   "sheet": "park.png",
+   "box": [
+    585,
+    75,
+    960,
+    480
+   ],
+   "width": 118
+  },
+  {
+   "id": "hedge",
+   "sheet": "park.png",
+   "box": [
+    1005,
+    260,
+    1490,
+    460
+   ],
+   "width": 132
+  },
+  {
+   "id": "bush-flower",
+   "sheet": "park.png",
+   "box": [
+    160,
+    645,
+    440,
+    915
+   ],
+   "width": 56
+  },
+  {
+   "id": "park-lamp",
+   "sheet": "park.png",
+   "box": [
+    700,
+    530,
+    840,
+    930
+   ],
+   "width": 36,
+   "glow": {
+    "kind": "lamp",
+    "top": 0.3
+   }
+  },
+  {
+   "id": "park-bin",
+   "sheet": "park.png",
+   "box": [
+    1150,
+    660,
+    1335,
+    915
+   ],
+   "width": 30
+  },
+  {
+   "id": "street-tree",
+   "sheet": "street.png",
+   "box": [
+    280,
+    10,
+    500,
+    400
+   ],
+   "width": 66
+  },
+  {
+   "id": "street-lamp",
+   "sheet": "street.png",
+   "box": [
+    995,
+    35,
+    1210,
+    395
+   ],
+   "width": 84,
+   "glow": {
+    "kind": "lamp",
+    "top": 0.3
+   }
+  },
+  {
+   "id": "street-planter",
+   "sheet": "street.png",
+   "box": [
+    1550,
+    150,
+    2020,
+    375
+   ],
+   "width": 110
+  },
+  {
+   "id": "bollard",
+   "sheet": "street.png",
+   "box": [
+    320,
+    430,
+    460,
+    675
+   ],
+   "width": 18
+  },
+  {
+   "id": "bike-rack",
+   "sheet": "street.png",
+   "box": [
+    855,
+    415,
+    1310,
+    675
+   ],
+   "width": 110,
+   "whole": true
+  },
+  {
+   "id": "hydrant",
+   "sheet": "street.png",
+   "box": [
+    1680,
+    420,
+    1880,
+    675
+   ],
+   "width": 26
+  }
+ ],
+ "tiles": [
+  {
+   "id": "sidewalk",
+   "sheet": "ground.png",
+   "crop": [
+    0,
+    130,
+    2172,
+    185
+   ],
+   "seamless": "x",
+   "size": [
+    null,
+    20
+   ]
+  },
+  {
+   "id": "curb-road",
+   "sheet": "ground.png",
+   "crop": [
+    0,
+    238,
+    2172,
+    320
+   ],
+   "seamless": "x",
+   "size": [
+    null,
+    30
+   ]
+  },
+  {
+   "id": "grass",
+   "sheet": "ground.png",
+   "crop": [
+    0,
+    490,
+    2172,
+    646
+   ],
+   "seamless": "xy",
+   "size": [
+    null,
+    48
+   ]
+  }
+ ],
+ "jkCorp": {
+  "street": {
+   "_note": "퇴근 거리 배치 (도트 px). y 는 모두 사람 발 선 front 기준 (0 = 발, 음수 = 위). 장소·채우기 조각의 x 는 그 조각 왼쪽 끝 기준. 소품은 아틀라스 anchor(아래 가운데)를, 사람은 그 방향 아틀라스 anchor(정면 = 발 가운데, 옆모습 = 등 backX)를 그 자리에 둔다. 규칙 전문은 docs/plans/2026-10-22-office-sprites-design.md 의 '퇴근 거리 (v6)'",
+   "band": 240,
+   "front": 206,
+   "back": -54,
+   "sidewalkTop": -64,
+   "curbTop": 4,
+   "tiles": {
+    "sidewalk": "sidewalk",
+    "curb": "curb-road",
+    "grass": "grass"
+   },
+   "phases": {
+    "morning": {
+     "skyTop": "#9fd2f2",
+     "skyBottom": "#ffe3c6",
+     "tint": "#fff1e4",
+     "label": "#3a3550",
+     "isLit": false,
+     "hasStars": false
+    },
+    "day": {
+     "skyTop": "#8ccdf6",
+     "skyBottom": "#d8f0fc",
+     "tint": "#ffffff",
+     "label": "#2b3a55",
+     "isLit": false,
+     "hasStars": false
+    },
+    "dusk": {
+     "skyTop": "#5d4f9a",
+     "skyBottom": "#f2a27a",
+     "tint": "#e9b9a2",
+     "label": "#fff1d6",
+     "isLit": true,
+     "hasStars": false
+    },
+    "night": {
+     "skyTop": "#0d1838",
+     "skyBottom": "#26365f",
+     "tint": "#6a76a4",
+     "label": "#f5dfad",
+     "isLit": true,
+     "hasStars": true
+    }
+   },
+   "skySteps": 6,
+   "window": {
+    "day": "#d4e5ec",
+    "lit": "#ffd27a",
+    "dark": "#2e3858"
+   },
+   "places": [
+    {
+     "id": "bus",
+     "label": "버스 정류장",
+     "minutes": [
+      0,
+      60
+     ],
+     "w": 458,
+     "front": [
+      {
+       "prop": "bus-shelter",
+       "x": 200,
+       "y": 2
+      }
+     ],
+     "seats": [
+      {
+       "x": 72,
+       "y": 0,
+       "dir": "down",
+       "state": "idle"
+      },
+      {
+       "x": 136,
+       "y": 0,
+       "dir": "down",
+       "state": "idle"
+      },
+      {
+       "x": 200,
+       "y": 0,
+       "dir": "down",
+       "state": "idle"
+      },
+      {
+       "x": 264,
+       "y": 0,
+       "dir": "down",
+       "state": "idle"
+      },
+      {
+       "x": 328,
+       "y": 0,
+       "dir": "down",
+       "state": "idle"
+      }
+     ],
+     "after": [
+      {
+       "prop": "bus-sign",
+       "x": 432,
+       "y": 4
+      }
+     ],
+     "more": {
+      "x": 432,
+      "y": -92
+     }
+    },
+    {
+     "id": "cafe",
+     "label": "카페",
+     "minutes": [
+      60,
+      360
+     ],
+     "w": 330,
+     "back": [
+      {
+       "prop": "cafe",
+       "x": 155,
+       "y": -54
+      }
+     ],
+     "tables": [
+      {
+       "prop": "cafe-table",
+       "x": 75,
+       "y": 0
+      },
+      {
+       "prop": "cafe-table",
+       "x": 235,
+       "y": 0
+      }
+     ],
+     "chair": {
+      "prop": "cafe-chair",
+      "dx": 7
+     },
+     "seats": [
+      {
+       "x": 14,
+       "y": 0,
+       "dir": "right",
+       "state": "idle",
+       "table": 0
+      },
+      {
+       "x": 136,
+       "y": 0,
+       "dir": "left",
+       "state": "idle",
+       "table": 0
+      },
+      {
+       "x": 174,
+       "y": 0,
+       "dir": "right",
+       "state": "idle",
+       "table": 1
+      },
+      {
+       "x": 296,
+       "y": 0,
+       "dir": "left",
+       "state": "idle",
+       "table": 1
+      }
+     ],
+     "after": [
+      {
+       "prop": "cafe-board",
+       "x": 318,
+       "y": -2
+      }
+     ],
+     "more": {
+      "x": 285,
+      "y": -150
+     }
+    },
+    {
+     "id": "park",
+     "label": "공원",
+     "minutes": [
+      360,
+      1440
+     ],
+     "w": 400,
+     "ground": "grass",
+     "back": [
+      {
+       "prop": "park-tree",
+       "x": 52,
+       "y": -50
+      },
+      {
+       "prop": "hedge",
+       "x": 158,
+       "y": -58
+      },
+      {
+       "prop": "hedge",
+       "x": 270,
+       "y": -58
+      },
+      {
+       "prop": "park-lamp",
+       "x": 207,
+       "y": -40
+      },
+      {
+       "prop": "park-tree",
+       "x": 352,
+       "y": -50
+      }
+     ],
+     "benches": [
+      {
+       "prop": "park-bench",
+       "x": 118,
+       "y": -16
+      },
+      {
+       "prop": "park-bench",
+       "x": 290,
+       "y": -16
+      }
+     ],
+     "seats": [
+      {
+       "x": 92,
+       "y": 0,
+       "dir": "down",
+       "state": "doze",
+       "bench": 0
+      },
+      {
+       "x": 144,
+       "y": 0,
+       "dir": "down",
+       "state": "doze",
+       "bench": 0
+      },
+      {
+       "x": 264,
+       "y": 0,
+       "dir": "down",
+       "state": "doze",
+       "bench": 1
+      },
+      {
+       "x": 316,
+       "y": 0,
+       "dir": "down",
+       "state": "doze",
+       "bench": 1
+      }
+     ],
+     "after": [
+      {
+       "prop": "bush-flower",
+       "x": 16,
+       "y": 2
+      },
+      {
+       "prop": "park-bin",
+       "x": 386,
+       "y": -2
+      }
+     ],
+     "more": {
+      "x": 204,
+      "y": -110
+     }
+    },
+    {
+     "id": "home",
+     "label": "집",
+     "minutes": [
+      1440,
+      null
+     ],
+     "houseCycle": [
+      "house-cream",
+      "house-sage",
+      "house-blue",
+      "house-peach"
+     ],
+     "unit": {
+      "w": 580,
+      "houses": [
+       {
+        "x": 144,
+        "y": -30
+       },
+       {
+        "x": 432,
+        "y": -30
+       }
+      ]
+     },
+     "single": {
+      "w": 292
+     },
+     "gap": {
+      "w": 64,
+      "items": [
+       {
+        "prop": "street-tree",
+        "x": 32,
+        "y": -54
+       }
+      ]
+     },
+     "seatsPerHouse": 2,
+     "face": {
+      "dir": "down",
+      "state": "idle"
+     },
+     "more": {
+      "x": 0,
+      "y": -50
+     }
+    }
+   ],
+   "fillers": {
+    "start": {
+     "w": 40,
+     "items": [
+      {
+       "prop": "bollard",
+       "x": 20,
+       "y": 2
+      }
+     ]
+    },
+    "bus": {
+     "w": 64,
+     "items": [
+      {
+       "prop": "street-tree",
+       "x": 32,
+       "y": -54
+      }
+     ]
+    },
+    "cafe": {
+     "w": 70,
+     "items": [
+      {
+       "prop": "street-lamp",
+       "x": 30,
+       "y": 4
+      },
+      {
+       "prop": "bollard",
+       "x": 56,
+       "y": 2
+      }
+     ]
+    },
+    "park": {
+     "w": 64,
+     "items": [
+      {
+       "prop": "street-tree",
+       "x": 32,
+       "y": -54
+      },
+      {
+       "prop": "hydrant",
+       "x": 50,
+       "y": 0
+      }
+     ]
+    },
+    "street": {
+     "w": 320,
+     "items": [
+      {
+       "prop": "street-tree",
+       "x": 40,
+       "y": -54
+      },
+      {
+       "prop": "bike-rack",
+       "x": 120,
+       "y": 0
+      },
+      {
+       "prop": "street-planter",
+       "x": 196,
+       "y": -40
+      },
+      {
+       "prop": "street-lamp",
+       "x": 262,
+       "y": 4
+      }
+     ]
+    }
+   },
+   "levels": [
+    {
+     "minWidth": 2006,
+     "fillers": true,
+     "houses": 2
+    },
+    {
+     "minWidth": 1768,
+     "fillers": false,
+     "houses": 2
+    },
+    {
+     "minWidth": 1480,
+     "fillers": false,
+     "houses": 1
+    }
+   ],
+   "sideSeatLift": {
+    "typing": {
+     "lead": 2,
+     "lead-suit": 0,
+     "member": 0,
+     "hoodie": 3,
+     "flannel": 5,
+     "ponytail": 1,
+     "cardigan": 0,
+     "turtleneck": 0,
+     "afro": -3,
+     "lead-vest": -1,
+     "lead-blazer": 3,
+     "denim": 0,
+     "professor": 0,
+     "headphones": 0,
+     "polo": 3,
+     "hijab": -2,
+     "overalls": -1,
+     "braids": 2
+    },
+    "raise-hand": {
+     "lead": 2,
+     "lead-suit": 0,
+     "member": 1,
+     "hoodie": 3,
+     "flannel": 5,
+     "ponytail": 3,
+     "cardigan": 1,
+     "turtleneck": -1,
+     "afro": -2,
+     "lead-vest": 0,
+     "lead-blazer": 3,
+     "denim": -1,
+     "professor": 1,
+     "headphones": 0,
+     "polo": 3,
+     "hijab": -1,
+     "overalls": -1,
+     "braids": 2
+    },
+    "idle": {
+     "lead": 2,
+     "lead-suit": 0,
+     "member": 2,
+     "hoodie": 4,
+     "flannel": 5,
+     "ponytail": 1,
+     "cardigan": 0,
+     "turtleneck": 0,
+     "afro": -1,
+     "lead-vest": 0,
+     "lead-blazer": 3,
+     "denim": 0,
+     "professor": 0,
+     "headphones": 0,
+     "polo": 4,
+     "hijab": 0,
+     "overalls": -3,
+     "braids": 3
+    },
+    "doze": {
+     "lead": 3,
+     "lead-suit": 1,
+     "member": 2,
+     "hoodie": 5,
+     "flannel": 6,
+     "ponytail": 2,
+     "cardigan": 0,
+     "turtleneck": 0,
+     "afro": -1,
+     "lead-vest": 0,
+     "lead-blazer": 4,
+     "denim": 0,
+     "professor": 1,
+     "headphones": 0,
+     "polo": 4,
+     "hijab": -1,
+     "overalls": -1,
+     "braids": 4
+    }
+   },
+   "headBox": {
+    "lead": [
+     27,
+     18,
+     54
+    ],
+    "lead-suit": [
+     23,
+     20,
+     54
+    ],
+    "member": [
+     19,
+     18,
+     59
+    ],
+    "hoodie": [
+     26,
+     17,
+     54
+    ],
+    "flannel": [
+     23,
+     20,
+     60
+    ],
+    "ponytail": [
+     24,
+     20,
+     62
+    ],
+    "cardigan": [
+     26,
+     19,
+     54
+    ],
+    "turtleneck": [
+     23,
+     19,
+     57
+    ],
+    "afro": [
+     15,
+     20,
+     66
+    ],
+    "lead-vest": [
+     28,
+     19,
+     53
+    ],
+    "lead-blazer": [
+     24,
+     20,
+     56
+    ],
+    "denim": [
+     22,
+     19,
+     58
+    ],
+    "professor": [
+     20,
+     17,
+     64
+    ],
+    "headphones": [
+     27,
+     17,
+     52
+    ],
+    "polo": [
+     22,
+     20,
+     60
+    ],
+    "hijab": [
+     27,
+     18,
+     53
+    ],
+    "overalls": [
+     19,
+     18,
+     59
+    ],
+    "braids": [
+     22,
+     19,
+     57
+    ]
+   }
+  }
+ }
+}

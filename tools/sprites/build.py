@@ -23,6 +23,7 @@ from spritelib import (  # noqa: E402
     figure_slots,
     fit_width,
     grid_slots,
+    label_components,
     load_keyed,
     load_rgb,
     main_piece,
@@ -40,6 +41,9 @@ PADDING = 2
 
 
 def build_characters(recipe: dict, source: Path) -> tuple[dict, dict, dict, list[str]]:
+    if not recipe.get('characters'):
+        # 인물 없는 판(v6 거리): spec 에 셀 규격이 없다
+        return {}, {}, {}, []
     spec = recipe['spec']
     cell_w, cell_h = spec['cell']
     sprites, anchors, animations, notes = {}, {}, {}, []
@@ -113,11 +117,15 @@ def build_props(recipe: dict, source: Path, notes: list[str]) -> tuple[dict, dic
         if prop['sheet'] not in sheets:
             sheets[prop['sheet']] = load_keyed(source / prop['sheet'])
         sheet = sheets[prop['sheet']]
-        columns, rows = prop['grid']
-        column, row = prop['cell']
         h, w = sheet.shape[:2]
-        x0, x1 = column * w // columns, (column + 1) * w // columns
-        y0, y1 = row * h // rows, (row + 1) * h // rows
+        if 'box' in prop:
+            # box: 격자 칸 대신 원본 px 상자 [x0, y0, x1, y1] (v6 — 시트마다 그림 크기·배치가 달라 칸으로 나누면 걸친다)
+            x0, y0, x1, y1 = prop['box']
+        else:
+            columns, rows = prop['grid']
+            column, row = prop['cell']
+            x0, x1 = column * w // columns, (column + 1) * w // columns
+            y0, y1 = row * h // rows, (row + 1) * h // rows
         name = f"prop/{prop['id']}"
         # whole: 칸 안 조각을 다 남긴다 (나란히 건 액자 둘처럼 떨어진 조각이 한 소품). 기본은 가장 긴 덩어리만
         if recipe.get('slice') == 'figure':
@@ -146,7 +154,119 @@ def build_props(recipe: dict, source: Path, notes: list[str]) -> tuple[dict, dic
             anchors[f'{name}-off'] = anchors[name]
             ys, xs = np.nonzero(blue)
             extras[name] = {**extras.get(name, {}), 'screen': {'x': int(xs.min()), 'y': int(ys.min()), 'w': int(xs.max() - xs.min() + 1), 'h': int(ys.max() - ys.min() + 1)}, 'off': f'{name}-off'}
+        if 'glow' in prop:
+            # glow: 불 켜진 유리만 따뜻한 색으로 칠한 prop/<id>-glow (나머지 투명). 화면이 노을·밤에 색조 없이 그 위에 겹친다
+            sprites[f'{name}-glow'] = glow_sprite(sprites[name], prop['glow'])
+            anchors[f'{name}-glow'] = anchors[name]
+            extras[name] = {**extras.get(name, {}), 'glow': f'{name}-glow'}
+        if prop.get('windows'):
+            # windows: 키를 뺀 유리(투명 구멍) = 창. 화면이 그 뒤에 창 안 색과 사람을 그린다
+            extras[name] = {**extras.get(name, {}), 'windows': window_holes(sprites[name])}
+        if 'lifts' in prop:
+            # lifts: band 줄 구간을 늘이고 줄여 높이만 다른 prop/<id>-h<높이> (의자 상판을 앉은 사람 엉덩이에 맞춘다. 다리는 바닥 그대로)
+            b0, b1 = prop['lifts']['band']
+            low, high = prop['lifts']['range']
+            variants = {}
+            for lift in range(low, high + 1):
+                variant = name if lift == 0 else f"{name}-h{sprites[name].shape[0] + lift}"
+                if lift:
+                    sprites[variant] = lift_rows(sprites[name], b0, b1, lift)
+                    anchors[variant] = anchors[name]
+                variants[str(lift)] = variant
+            extras[name] = {**extras.get(name, {}), 'lifts': variants}
     return sprites, anchors, extras
+
+
+WARM_DARK = np.array([255, 196, 92])
+WARM_LIGHT = np.array([255, 238, 170])
+
+
+def glow_sprite(sprite: np.ndarray, spec: dict) -> np.ndarray:
+    """
+    kind 'glass': 밝은 하늘색 유리 덩어리(150px 이상·높이 10 이상 — 차양 줄무늬 조각은 빼려고)와 그 상자 안 흰 반사 줄.
+    kind 'lamp': 위쪽 top 비율 안의 밝고 따뜻한 등 유리 (회색 기둥 하이라이트는 r-b 가 작아 빠진다).
+    밝기에 따라 두 따뜻한 색 사이로 칠한다
+    """
+    rgb = sprite[..., :3].astype(int)
+    solid = sprite[..., 3] > 0
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    if spec['kind'] == 'glass':
+        blue = solid & (b > 170) & (b > r + 35)
+        labels = label_components(blue)
+        mask = np.zeros_like(blue)
+        for k in np.unique(labels)[1:]:
+            part = labels == k
+            ys, xs = np.nonzero(part)
+            if part.sum() < 150 or ys.max() - ys.min() < 10:
+                continue
+            box = np.zeros_like(blue)
+            box[ys.min():ys.max() + 1, xs.min():xs.max() + 1] = True
+            mask |= part | (box & solid & (r + g + b > 560))
+    else:
+        top = np.zeros_like(solid)
+        top[:max(1, round(sprite.shape[0] * spec.get('top', 0.3)))] = True
+        mask = top & solid & (r > 225) & (g > 190) & (r - b >= 12)
+    out = np.zeros_like(sprite)
+    light = ((r + g + b)[mask] / 765)[:, None]
+    out[..., :3][mask] = (WARM_DARK + (WARM_LIGHT - WARM_DARK) * light).round().astype(np.uint8)
+    out[..., 3][mask] = 255
+    return out
+
+
+def window_holes(sprite: np.ndarray) -> list[dict]:
+    """
+    바깥과 이어지지 않은 투명 구멍(40px 이상) = 창 {x, y, w, h, frame}. frame = 구멍 위·왼쪽·오른쪽 가장자리에서 바깥으로
+    진한 외곽선(2px 까지) + 이어진 밝은 창틀의 두께 (쪽마다 가운데 절반에서 잰 중앙값, 세 쪽의 가운데 값) — 창 안 사람의 머리는 이만큼 창틀 위로 나와도 된다
+    """
+    hole = sprite[..., 3] == 0
+    solid = sprite[..., 3] > 0
+    total = sprite[..., :3].astype(int).sum(axis=2)
+    labels = label_components(hole)
+    windows = []
+    for k in np.unique(labels)[1:]:
+        ys, xs = np.nonzero(labels == k)
+        y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+        if y0 == 0 or x0 == 0 or y1 == sprite.shape[0] or x1 == sprite.shape[1] or len(ys) < 40:
+            continue
+
+        def thickness(points: list[tuple[int, int]], dy: int, dx: int) -> int:
+            lengths = []
+            for py, px in points:
+                # 구멍 가장자리에서 바깥으로 15px 까지의 밝기 (그림 끝·투명에서 멈춘다)
+                ray = []
+                for step in range(1, 16):
+                    y, x = py + dy * step, px + dx * step
+                    if not (0 <= y < sprite.shape[0] and 0 <= x < sprite.shape[1] and solid[y, x]):
+                        break
+                    ray.append(total[y, x])
+                n = 0
+                while n < min(2, len(ray)) and ray[n] < 200:
+                    n += 1
+                while n < len(ray) and ray[n] > 600:
+                    n += 1
+                lengths.append(n)
+            return int(np.median(lengths))
+
+        xs_mid = range(x0 + (x1 - x0) // 4, x1 - (x1 - x0) // 4)
+        ys_mid = range(y0 + (y1 - y0) // 4, y1 - (y1 - y0) // 4)
+        # 세 쪽 중 가운데 값: 한쪽만 창틀 음영이 어둡거나(파란 집) 창틀과 벽 색이 비슷해도 흔들리지 않게
+        frame = int(np.median([thickness([(y0, x) for x in xs_mid], -1, 0), thickness([(y, x0) for y in ys_mid], 0, -1), thickness([(y, x1 - 1) for y in ys_mid], 0, 1)]))
+        windows.append({'x': int(x0), 'y': int(y0), 'w': int(x1 - x0), 'h': int(y1 - y0), 'frame': frame})
+    return sorted(windows, key=lambda window: window['x'])
+
+
+def lift_rows(a: np.ndarray, b0: int, b1: int, lift: int) -> np.ndarray:
+    """[b0, b1) 줄 구간 안에서 고르게 lift 줄을 겹쳐 넣거나(양수) 빼서(음수) 높이만 바꾼다"""
+    count = abs(lift)
+    picks = {b0 + int((i + 0.5) * (b1 - b0) / count) for i in range(count)}
+    rows = []
+    for y in range(a.shape[0]):
+        if lift < 0 and y in picks:
+            continue
+        rows.append(y)
+        if lift > 0 and y in picks:
+            rows.append(y)
+    return a[rows]
 
 
 def build_tiles(recipe: dict, source: Path) -> tuple[dict, dict]:
