@@ -75,9 +75,18 @@ const COLOR = {
   frame: 0xffffff,
   partition: 0xffffff,
   partitionShadow: 0xc9cbd6,
-  green: 0x6fae5e,
-  greenDark: 0x4f9a4a,
   text: 0x2b2f3a,
+  /** 공간 라벨(그룹·Lounge) 글자: 바닥에 쓴 진회색 */
+  spaceLabel: 0x4a4f5c,
+  /** 남색 Focus Zone 바닥 위 공간 라벨 글자 */
+  spaceLabelOnNavy: 0xd9dff0,
+  /** 팀 명판 테두리 */
+  plateLine: 0xc3c7d1,
+  /** 팀 명판 인원 수·파트 worktree 브랜치 */
+  labelMuted: 0x7a7f8e,
+  partLabel: 0x5f6573,
+  /** 끌 수 있는 라벨에 마우스를 올렸을 때의 테두리 */
+  labelHover: 0x8f97a8,
   postit: 0xfde77a,
   alert: 0xffd3d3,
   alertLine: 0xe05a5a,
@@ -90,10 +99,7 @@ const COLOR = {
   externalLight: 0xb9bbc6,
   partLine: 0xa7acb7,
   islandLine: 0xaeb3bc,
-  navy: 0x3b4f8a,
   navyDark: 0x1d2747,
-  /** 라운지 이름표 밑줄 (커피색) */
-  lounge: 0xc8894a,
 }
 
 /** 사무실 화면이 이동해 보여 줄 대상. 같은 대상을 다시 눌러도 움직이도록 매번 새 id 를 붙인다 */
@@ -156,16 +162,20 @@ const STREET_VIEW: Record<DayPhase, { label: number; hasStars: boolean }> = {
 
 // ---------- 그룹 ----------
 
-interface GroupParts {
-  container: Container
-  /** 끌면 그룹 이동 (안의 섬과 같이) */
-  sign: Graphics
+/** 끌 수 있는 라벨: 그룹 라벨은 그룹(안의 섬과 같이), 팀 명판은 섬을 옮긴다 */
+interface DragLabel {
+  /** 끌기 손잡이 (hitArea = 라벨 영역) */
+  sign: Container
+  /** 마우스를 올렸을 때·끄는 동안 보이는 테두리 (평소 숨김) */
+  hover: Graphics
 }
 
-interface IslandParts {
+interface GroupParts extends DragLabel {
   container: Container
-  /** 끌면 섬(팀) 이동 */
-  sign: Graphics
+}
+
+interface IslandParts extends DragLabel {
+  container: Container
 }
 
 // ---------- 자리 단위 ----------
@@ -530,24 +540,63 @@ function dotPartitions(w: number, h: number): Graphics {
   )
 }
 
-/** 도트 이름표 (도트 px). 흰 바탕 + 외곽선 + 아래 색 줄 */
-function dotSign(text: Text, underline: number, padding = 8): Graphics {
-  const width = Math.ceil(text.width) + padding * 2
-  const height = Math.ceil(text.height) + 4
-  return new Graphics()
-    .rect(0, 0, width, height)
-    .fill(0xffffff)
-    .rect(0, height - 3, width, 3)
-    .fill(underline)
-    .rect(0, 0, width, height)
-    .stroke({ width: 2, color: DOT_OUTLINE, alignment: 1 })
-}
-
-/** 그룹 이름표·팀 이름표·파트 이름표·메모 글자 (도트 px). 계층 순 */
-const DOT_FONT = { group: 16, team: 14, part: 12, note: 12 }
+/** 공간(그룹·Focus Zone·Lounge) 라벨·팀 명판·파트 라벨·메모 글자 (도트 px). 계층 순 */
+const DOT_FONT = { space: 18, team: 14, part: 12, note: 12 }
+/** 그룹·Lounge 라벨 글자 왼쪽 위 (공간 왼쪽 위 기준, 파티션 9 + 그늘 3 안쪽) */
+const SPACE_LABEL = { x: 20, y: 16 }
 
 function dotLabel(text: string, size: number, color = COLOR.text, wrapWidth?: number): Text {
   return label(text, size, color, wrapWidth, dotTextResolution)
+}
+
+/** 라벨 글자 (도트 px). 굵기·자간은 라벨마다. 끌기는 감싼 손잡이가 받는다 — 부모가 interactive 면 Pixi 가 글자도 맞혀 손잡이가 아니라 바닥을 누른 것이 된다 */
+function dotLabelText(content: string, size: number, color: number, fontWeight: 'normal' | 'bold' = 'normal', letterSpacing = 0): Text {
+  const text = dotLabel(content, size, color)
+  text.style.fontWeight = fontWeight
+  text.style.letterSpacing = letterSpacing
+  text.eventMode = 'none'
+  return text
+}
+
+/**
+ * 도트로 둥근 모서리(바깥 2px 를 깎고 안쪽 모서리에 한 칸 계단) 사각형: 테두리 2px + 안쪽 바탕.
+ * 반투명이어도 진해지는 곳이 없게 칸을 겹치지 않게 나눠 칠한다
+ */
+function dotRoundRect(g: Graphics, x: number, y: number, w: number, h: number, line: number, fill: { color: number; alpha: number }): Graphics {
+  return g
+    .rect(x + 2, y, w - 4, 2)
+    .rect(x + 2, y + h - 2, w - 4, 2)
+    .rect(x, y + 2, 2, h - 4)
+    .rect(x + w - 2, y + 2, 2, h - 4)
+    .rect(x + 2, y + 2, 2, 2)
+    .rect(x + w - 4, y + 2, 2, 2)
+    .rect(x + 2, y + h - 4, 2, 2)
+    .rect(x + w - 4, y + h - 4, 2, 2)
+    .fill(line)
+    .rect(x + 2, y + 4, w - 4, h - 8)
+    .rect(x + 4, y + 2, w - 8, 2)
+    .rect(x + 4, y + h - 4, w - 8, 2)
+    .fill(fill)
+}
+
+/**
+ * 끌 수 있는 라벨의 손잡이: (x, y) 에 w×h 영역(hitArea)과 그 둘레 3px 밖의 옅은 테두리(마우스 올림·끄는 중에만). 내용은 부르는 쪽이 손잡이 안 (0, 0) 기준으로 넣는다
+ */
+function dragLabel(x: number, y: number, w: number, h: number): DragLabel {
+  const sign = new Container()
+  sign.position.set(x, y)
+  sign.hitArea = new Rectangle(0, 0, w, h)
+  sign.eventMode = 'static'
+  sign.cursor = 'grab'
+  const hover = dotRoundRect(new Graphics(), -3, -3, w + 6, h + 6, COLOR.labelHover, { color: 0xffffff, alpha: 0.45 })
+  hover.visible = false
+  sign.addChild(hover)
+  return { sign, hover }
+}
+
+/** 공간 라벨 글자: 상자 없이 바닥에 쓴 굵은 글자 (자간 1) */
+function spaceLabelText(content: string, color: number): Text {
+  return dotLabelText(content, DOT_FONT.space, color, 'bold', 1)
 }
 
 /**
@@ -565,15 +614,12 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupPa
   dot.addChild(dotTiling(art, 'desk-carpet', w, h), dotPartitions(w, h))
   for (const item of groupFixtures(area)) dot.addChild(fixtureSprite(art, item))
 
-  const name = dotLabel(group.name, DOT_FONT.group)
-  const sign = dotSign(name, COLOR.green)
-  sign.position.set(18, 15)
-  name.position.set(26, 17)
-  dot.addChild(sign, name)
-  sign.eventMode = 'static'
-  sign.cursor = 'move'
-  // 부모가 interactive 면 Pixi 가 글자도 맞혀 이름표가 아니라 바닥을 누른 것이 되고, 끌기가 맵 이동이 된다
-  name.eventMode = 'none'
+  // 라벨: 바닥에 쓴 글자. 손잡이 영역은 글자 둘레 6·3 (왼쪽 위 파티션 안쪽부터)
+  const name = spaceLabelText(group.name, COLOR.spaceLabel)
+  const { sign, hover } = dragLabel(SPACE_LABEL.x - 6, SPACE_LABEL.y - 3, Math.ceil(name.width) + 12, Math.ceil(name.height) + 6)
+  name.position.set(6, 3)
+  sign.addChild(name)
+  dot.addChild(sign)
 
   if (group.waitingNote) {
     const text = dotLabel(group.waitingNote, DOT_FONT.note, COLOR.text, 200)
@@ -597,14 +643,15 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupPa
   container.on('pointertap', (event: FederatedPointerEvent) => {
     if (event.detail === 2) onEdit()
   })
-  return { container, sign }
+  return { container, sign, hover }
 }
 
 /**
  * 도트 팀 섬: 테두리 안쪽에 데스크존 카펫보다 한 단 진한 회색 받침(참고 그림의 블록 받침) + 블록 줄마다 오른쪽 화분 +
- * 파트 구역(옅은 바탕 + 회색 테두리 + 이름표) + 팀 이름표. 칸막이 블록(책상·사람)은 drawBlockRow 가 섬 위에 따로 그린다
+ * 파트 구역(옅은 바탕 + 회색 테두리 + 회색 글자 라벨) + 팀 명판. 칸막이 블록(책상·사람)은 drawBlockRow 가 섬 위에 따로 그린다.
+ * memberCount = 명판의 인원 수 (목록 팀 카드 배지와 같은 수)
  */
-function drawDotIsland(island: Island, onEdit: () => void, art: DotArt): IslandParts {
+function drawDotIsland(island: Island, memberCount: number, onEdit: () => void, art: DotArt): IslandParts {
   const container = new Container()
   container.position.set(PAD_X + island.x * TILE, PAD_Y + island.y * TILE)
   const dot = dotLayer()
@@ -627,36 +674,37 @@ function drawDotIsland(island: Island, onEdit: () => void, art: DotArt): IslandP
     const zy = y - 60
     const zw = zone.w * DOT_TILE + 30
     const zh = zone.h * DOT_TILE + 84
-    const partName = dotLabel(zone.part.name, DOT_FONT.part, 0x4d5563)
-    const partSign = dotSign(partName, COLOR.silver, 6)
-    partSign.position.set(zx + 8, zy + 8)
-    partName.position.set(zx + 14, zy + 10)
-    dot.addChild(
-      new Graphics().rect(zx, zy, zw, zh).fill({ color: 0xffffff, alpha: 0.25 }).stroke({ width: 2, color: COLOR.partLine, alignment: 1 }),
-      partSign,
-      partName,
-    )
+    // 라벨: 상자 없는 작은 회색 글자. worktree 파트는 목록 파트 소제목처럼 브랜치를 옆에
+    const partName = dotLabelText(zone.part.name, DOT_FONT.part, COLOR.partLabel, 'bold')
+    partName.position.set(zx + 10, zy + 8)
+    dot.addChild(new Graphics().rect(zx, zy, zw, zh).fill({ color: 0xffffff, alpha: 0.25 }).stroke({ width: 2, color: COLOR.partLine, alignment: 1 }), partName)
+    if (zone.part.worktree) {
+      const branch = dotLabelText(`⎇ ${zone.part.worktree.branch}`, DOT_FONT.part, COLOR.labelMuted)
+      branch.position.set(partName.x + Math.ceil(partName.width) + 6, zy + 8)
+      dot.addChild(branch)
+    }
   }
   // 화분 열: 블록 줄마다 오른쪽 끝 칸막이(6) 옆에 큰 화분 (블록 모듈 높이 가운데쯤)
   for (const plant of island.plants) {
     const { x, y } = local(plant)
     dot.addChild(v5Prop(art, 'plant-large', x + 6, y + 40))
   }
-  const name = dotLabel(island.team.name, DOT_FONT.team)
-  const sign = dotSign(name, COLOR.greenDark, 7)
-  sign.position.set(9, 9)
-  name.position.set(16, 11)
-  sign.eventMode = 'static'
-  sign.cursor = 'move'
-  // drawDotGroup 과 같은 이유
-  name.eventMode = 'none'
-  dot.addChild(sign, name)
+  // 명판: 받침 왼쪽 끝에 맞춰 섬 테두리(1타일) 안. 아래 끝이 첫 블록 줄 윗자리 머리·아이콘(섬 y 31~)보다 위
+  const name = dotLabelText(island.team.name, DOT_FONT.team, COLOR.text, 'bold')
+  const count = memberCount > 0 ? dotLabelText(` · ${memberCount}`, DOT_FONT.team, COLOR.labelMuted) : null
+  const plateW = Math.ceil(name.width + (count?.width ?? 0)) + 16
+  const plateH = Math.ceil(name.height) + 4
+  const { sign, hover } = dragLabel(DOT_TILE - 24, 7, plateW, plateH)
+  name.position.set(8, 2)
+  count?.position.set(8 + Math.ceil(name.width), 2)
+  sign.addChild(dotRoundRect(new Graphics(), 0, 0, plateW, plateH, COLOR.plateLine, { color: 0xffffff, alpha: 1 }), name, ...(count ? [count] : []))
+  dot.addChild(sign)
   container.eventMode = 'static'
   container.cursor = 'grab'
   container.on('pointertap', (event: FederatedPointerEvent) => {
     if (event.detail === 2) onEdit()
   })
-  return { container, sign }
+  return { container, sign, hover }
 }
 
 /**
@@ -688,13 +736,10 @@ function drawDotZone(zone: Rect, booths: Seat[], art: DotArt, occupied: Set<stri
   const plant = art.props.textures['prop/plant']
   for (let y = 2 * DOT_TILE; y + plant.height < height - 12; y += 4 * DOT_TILE) dot.addChild(v5Prop(art, plant, width - plant.width - 14, y))
 
-  const name = dotLabel('Focus Zone', DOT_FONT.group)
-  const sign = dotSign(name, COLOR.navy)
-  // 이름표 줄(맨 위 1타일) 안
-  sign.position.set(18, 6)
-  name.position.set(26, 8)
-  name.eventMode = 'none'
-  dot.addChild(sign, name)
+  // 라벨 줄(맨 위 1타일) 안. 남색 바닥이라 밝은 글자
+  const name = spaceLabelText('Focus Zone', COLOR.spaceLabelOnNavy)
+  name.position.set(SPACE_LABEL.x, 12)
+  dot.addChild(name)
   return container
 }
 
@@ -716,12 +761,10 @@ function drawDotLounge(lounge: Rect, art: DotArt): Container {
   floor.tint = LOUNGE_FLOOR_TINT
   dot.addChild(floor, dotPartitions(w, h))
   for (const item of loungeFixtures(lounge, art.propSizes)) dot.addChild(fixtureSprite(art, item))
-  const name = dotLabel('Lounge', DOT_FONT.group)
-  const sign = dotSign(name, COLOR.lounge)
-  // 그룹 이름표와 같은 자리
-  sign.position.set(18, 15)
-  name.position.set(26, 17)
-  dot.addChild(sign, name)
+  // 그룹 라벨과 같은 자리·모양
+  const name = spaceLabelText('Lounge', COLOR.spaceLabel)
+  name.position.set(SPACE_LABEL.x, SPACE_LABEL.y)
+  dot.addChild(name)
   return container
 }
 
@@ -1192,7 +1235,11 @@ export function Office(props: Props) {
           delta: Point
           views: { container: Container; x: number; y: number }[]
           drop: (delta: Point) => void
+          /** 끄는 동안 켜 두는 그 라벨의 테두리 */
+          hover: Graphics
         } | null = null
+        /** 마우스가 올라가 있는 라벨의 테두리. 놓은 뒤에도 마우스가 그 위면 테두리를 남긴다 */
+        let hoveredLabel: Graphics | null = null
         /** 이번 누름이 끌기였는지. 놓은 뒤 오는 pointertap(Pixi 는 pointerup 다음에 보낸다)이 선택·더블클릭 편집이 되지 않게 다음 누름까지 남긴다 */
         let isDragged = false
         /** 이름표를 끄는 동안 미룬 다시 그리기 (그 사이 다시 그리면 끌던 그림이 원래 자리로 돌아간다) */
@@ -1371,6 +1418,7 @@ export function Office(props: Props) {
 
         const beginSignDrag = (
           event: FederatedPointerEvent,
+          label: DragLabel,
           drag: { minDelta: Point; containers: Container[]; drop: (delta: Point) => void },
         ) => {
           // 맵 이동이 시작되지 않게
@@ -1385,7 +1433,24 @@ export function Office(props: Props) {
             delta: { x: 0, y: 0 },
             views: drag.containers.map((container) => ({ container, x: container.x, y: container.y })),
             drop: drag.drop,
+            hover: label.hover,
           }
+          label.hover.visible = true
+          // 끄는 동안 커서 grabbing. 손잡이가 타일 단위로 따라와 마우스가 손잡이 밖일 때도 있어 Pixi 커서(대상마다)가 아니라 캔버스 클래스로
+          host.classList.add('is-label-dragging')
+        }
+
+        /** 라벨 테두리: 마우스를 올리면 켜고, 끄는 동안은 그 라벨 것만 켜 둔다 (맵 이동·다른 라벨 끌기 중에는 켜지 않는다) */
+        const bindDragLabel = (label: DragLabel) => {
+          label.sign.on('pointerover', () => {
+            if (pan?.isMoved || (signDrag && signDrag.hover !== label.hover)) return
+            hoveredLabel = label.hover
+            label.hover.visible = true
+          })
+          label.sign.on('pointerout', () => {
+            if (hoveredLabel === label.hover) hoveredLabel = null
+            if (signDrag?.hover !== label.hover) label.hover.visible = false
+          })
         }
 
         const redraw = () => {
@@ -1437,9 +1502,10 @@ export function Office(props: Props) {
               if (!isDragged) latest.current.onEditGroup(area.group)
             }
             const parts = drawDotGroup(area, onEdit, art)
+            bindDragLabel(parts)
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               const teamIds = new Set(layout.islands.filter((i) => i.team.groupId === area.group.id).map((i) => i.team.id))
-              beginSignDrag(event, {
+              beginSignDrag(event, parts, {
                 // 그려지는 영역이 맵 왼쪽·위 끝을 넘지 않게 (그래서 안의 팀 앵커도 0 이상)
                 minDelta: { x: -area.x, y: -area.y },
                 containers: [parts.container, ...[...teamIds].flatMap((id) => islandViews.get(id) ?? []), ...deskViewsOf(teamIds)],
@@ -1461,9 +1527,12 @@ export function Office(props: Props) {
             const onEdit = () => {
               if (!isDragged) latest.current.onEditTeam(team)
             }
-            const parts = drawDotIsland(island, onEdit, art)
+            // 목록 팀 카드 배지(App.tsx renderTeam)와 같은 수: 그 팀(파트 포함)의 근무·휴식 세션
+            const memberCount = sessions.filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off').length
+            const parts = drawDotIsland(island, memberCount, onEdit, art)
+            bindDragLabel(parts)
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
-              beginSignDrag(event, {
+              beginSignDrag(event, parts, {
                 // 섬 둘레 그룹 벽 여백까지 맵 안에 남게
                 minDelta: { x: Math.min(0, GROUP_MARGIN - island.x), y: Math.min(0, GROUP_MARGIN - island.y) },
                 containers: [parts.container, ...deskViewsOf(new Set([team.id]))],
@@ -1798,8 +1867,10 @@ export function Office(props: Props) {
         const endDrag = () => {
           pan = null
           if (!signDrag) return
-          const { delta, drop } = signDrag
+          const { delta, drop, hover } = signDrag
           signDrag = null
+          host.classList.remove('is-label-dragging')
+          if (hover !== hoveredLabel) hover.visible = false
           if (delta.x !== 0 || delta.y !== 0) {
             // 저장하면 office 가 바뀌어 다시 그려진다 (미룬 다시 그리기도 그때 같이)
             isRedrawPending = false

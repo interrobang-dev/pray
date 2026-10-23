@@ -774,6 +774,10 @@ li.group.drop-after::after {
   display: block;
   image-rendering: pixelated;
 }
+/* 그룹 라벨·팀 명판을 끄는 동안. Pixi 가 마우스 아래 대상마다 canvas 의 인라인 cursor 를 바꾸므로 !important 로 덮는다 */
+.office-canvas.is-label-dragging canvas {
+  cursor: grabbing !important;
+}
 /* 마우스를 올렸거나 고른 자리 옆 카드. 위치·보이기는 Office.tsx 의 ticker 가 transform·visibility 로 정한다 */
 .office-card {
   position: absolute;
