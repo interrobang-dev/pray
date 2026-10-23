@@ -10,6 +10,8 @@ const pool = new PtyPool()
 const clients = new Set<Socket>()
 /** restart 요청 때의 종료 코드. 0 은 "의도한 중지" 라 트레이가 다시 띄우지 않는다 */
 const RESTART_EXIT_CODE = 2
+/** 퇴근 기록 정리 주기. 팀장이 정리한 팀원(released)은 6시간 보관이라 시작·종료 때만 정리하면 오래 남는다 */
+const PRUNE_INTERVAL_MS = 60_000
 
 function send(socket: Socket, message: HostMessage): void {
   if (!socket.destroyed) socket.write(encode(message))
@@ -56,7 +58,7 @@ function handle(socket: Socket, message: ClientMessage): void {
       pool.resize(message.sessionId, message.cols, message.rows)
       return
     case 'kill':
-      pool.kill(message.sessionId)
+      pool.kill(message.sessionId, message.isReleased ? 'released' : 'dismissed')
       return
     case 'resume':
       resumeOffDuty(socket, message.sessionId)
@@ -140,18 +142,30 @@ function resumeWebSessions(): void {
   }
 }
 
-/** 보관 기간이 지난 퇴근 기록을 지운다 (세션이 끝날 때도 ptyPool 이 한다) */
-function pruneOffDutyOnStart(): void {
+/** 정리가 hq.json 오류로 실패하는 중. 1분마다 도므로 실패·복구로 바뀔 때만 로그를 남긴다 */
+let isPruneFailing = false
+
+/** 보관 기간이 지난 퇴근 기록을 지운다 (시작 때·1분마다. 세션이 끝날 때도 ptyPool 이 한다) */
+function pruneExpiredOffDuty(): void {
+  let expired: string[]
   try {
-    const expired = pruneOffDuty()
-    if (expired.length) console.log(`퇴근 기록 보관 기간 지남, 지움: ${expired.join(', ')}`)
+    expired = pruneOffDuty()
   } catch (error) {
-    console.error('hq.json 기록 실패 (퇴근 기록 정리)', error)
+    if (!isPruneFailing) console.error('hq.json 기록 실패 (퇴근 기록 정리)', error)
+    isPruneFailing = true
+    return
   }
+  if (isPruneFailing) console.log('퇴근 기록 정리 복구')
+  isPruneFailing = false
+  if (!expired.length) return
+  console.log(`퇴근 기록 보관 기간 지남, 지움: ${expired.join(', ')}`)
+  // 서버는 sessions 를 받으면 hq.json 을 다시 읽어 목록을 보낸다
+  broadcast({ type: 'sessions', sessions: pool.list() })
 }
 
 server.listen(PIPE_PATH, () => {
   console.log(`jk-corp host listening on ${PIPE_PATH}`)
-  pruneOffDutyOnStart()
+  pruneExpiredOffDuty()
+  setInterval(pruneExpiredOffDuty, PRUNE_INTERVAL_MS)
   resumeWebSessions()
 })

@@ -12,7 +12,8 @@ export type ClientMessage =
   | { type: 'attach'; sessionId: string }
   | { type: 'input'; sessionId: string; data: string }
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
-  | { type: 'kill'; sessionId: string }
+  /** isReleased = 팀장이 정리한 팀원 (jk_dismiss). 퇴근 이유가 dismissed 대신 released 가 된다 */
+  | { type: 'kill'; sessionId: string; isReleased?: boolean }
   /** 퇴근 기록의 cwd·extraArgs 그대로 --resume 하고 기록을 webSessions 로 되돌린다 (다시 출근) */
   | { type: 'resume'; sessionId: string }
   /** 퇴근 기록과 그 세션 이름을 지운다 */

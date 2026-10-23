@@ -16,6 +16,7 @@ import {
   moveToOffDuty,
   OFF_DUTY_RETENTION_MS,
   OrderMismatchError,
+  RELEASED_RETENTION_MS,
   pruneOffDuty,
   readOffice,
   removeOffDuty,
@@ -287,6 +288,46 @@ describe('off duty records', () => {
     const before = readFileSync(hqPath, 'utf8')
     expect(pruneOffDuty(now)).toEqual([])
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
+  })
+
+  it('keeps a member released by the lead for 6 hours and the other reasons for 7 days', () => {
+    expect(RELEASED_RETENTION_MS).toBe(6 * 60 * 60 * 1000)
+    expect(OFF_DUTY_RETENTION_MS).toBe(7 * 24 * 60 * 60 * 1000)
+    const now = Date.parse('2026-10-22T00:00:00.000Z')
+    const ago = (ms: number) => new Date(now - ms).toISOString()
+    const sevenHours = RELEASED_RETENTION_MS + 60 * 60 * 1000
+    const cases = [
+      ['released-old', 'released', ago(RELEASED_RETENTION_MS + 1)],
+      ['released-edge', 'released', ago(RELEASED_RETENTION_MS)],
+      ['dismissed-7h', 'dismissed', ago(sevenHours)],
+      ['exit-7h', 'exit', ago(sevenHours)],
+      ['error-7h', 'error', ago(sevenHours)],
+      ['dismissed-old', 'dismissed', ago(OFF_DUTY_RETENTION_MS + 1)],
+      ['exit-old', 'exit', ago(OFF_DUTY_RETENTION_MS + 1)],
+      ['error-edge', 'error', ago(OFF_DUTY_RETENTION_MS)],
+    ] as const
+    for (const [sessionId, reason, endedAt] of cases) {
+      addWebSession({ ...record, sessionId })
+      setSessionName(sessionId, sessionId)
+      setCharacter(sessionId, { id: 'lead', hair: null, top: null })
+      setGender(sessionId, 'male')
+      moveToOffDuty(sessionId, { endedAt, reason, exitCode: 1 })
+    }
+    const kept = ['released-edge', 'dismissed-7h', 'exit-7h', 'error-7h', 'error-edge']
+    expect(pruneOffDuty(now)).toEqual(['released-old', 'dismissed-old', 'exit-old'])
+    expect(listOffDuty().map((r) => r.sessionId)).toEqual(kept)
+    expect(Object.keys(listSessionNames())).toEqual(kept)
+    expect(Object.keys(listCharacters())).toEqual(kept)
+    expect(Object.keys(listGenders())).toEqual(kept)
+  })
+
+  it('keeps an off duty record with an unknown reason for the default period', () => {
+    const now = Date.parse('2026-10-22T00:00:00.000Z')
+    mkdirSync(hqDir, { recursive: true })
+    const later = { ...record, endedAt: new Date(now - RELEASED_RETENTION_MS - 1).toISOString(), reason: 'later', exitCode: null }
+    writeFileSync(hqPath, JSON.stringify({ offDuty: [later] }))
+    expect(pruneOffDuty(now)).toEqual([])
+    expect(pruneOffDuty(now + OFF_DUTY_RETENTION_MS)).toEqual(['a'])
   })
 
   it('keeps off duty records when other code writes the file', () => {

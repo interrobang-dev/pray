@@ -42,13 +42,16 @@ function transcriptExists(sessionId: string): boolean {
   }
 }
 
+/** kill 요청의 퇴근 이유. released = 팀장이 정리한 팀원(jk_dismiss), dismissed = 그 밖(화면 종료 버튼) */
+export type KillReason = 'dismissed' | 'released'
+
 /**
  * 끝난 웹 세션의 퇴근 이유. null 이면 다시 출근(resume)할 수 없어 기록 없이 지운다.
  * kill 은 종료 코드 1 로 끝나서(실측) 코드가 아니라 kill 요청 여부로 정리됨을 가린다. /exit 는 0
  */
-export function offDutyReason(end: { isDismissed: boolean; exitCode: number | null; hasTranscript: boolean }): OffDutyReason | null {
+export function offDutyReason(end: { killReason: KillReason | null; exitCode: number | null; hasTranscript: boolean }): OffDutyReason | null {
   if (!end.hasTranscript) return null
-  if (end.isDismissed) return 'dismissed'
+  if (end.killReason) return end.killReason
   return end.exitCode === 0 ? 'exit' : 'error'
 }
 
@@ -65,8 +68,8 @@ interface Entry {
   pty: pty.IPty
   ring: RingBuffer
   cwd: string
-  /** kill 요청으로 끝나는 중 (퇴근 이유 dismissed) */
-  isDismissed: boolean
+  /** kill 요청으로 끝나는 중이면 그 퇴근 이유 */
+  killReason: KillReason | null
 }
 
 export interface SpawnOptions {
@@ -111,7 +114,7 @@ export class PtyPool extends EventEmitter {
       env: childEnv(sessionId),
     })
     const ring = new RingBuffer(RING_LIMIT)
-    const entry: Entry = { pty: child, ring, cwd, isDismissed: false }
+    const entry: Entry = { pty: child, ring, cwd, killReason: null }
     this.entries.set(sessionId, entry)
     if (!resume) {
       const record = { sessionId, cwd, createdAt: new Date().toISOString(), extraArgs: extraArgs.length ? extraArgs : undefined }
@@ -126,7 +129,7 @@ export class PtyPool extends EventEmitter {
       this.entries.delete(sessionId)
       // 호스트 자체가 죽을 때는 여기가 돌지 않아 기록이 webSessions 에 남는다 (휴식 → 다음 호스트가 resume)
       const hasTranscript = this.hasTranscript(sessionId)
-      this.recordEnd(sessionId, offDutyReason({ isDismissed: entry.isDismissed, exitCode, hasTranscript }), exitCode)
+      this.recordEnd(sessionId, offDutyReason({ killReason: entry.killReason, exitCode, hasTranscript }), exitCode)
       this.emit('exit', sessionId, exitCode)
       this.emit('change')
     })
@@ -150,15 +153,15 @@ export class PtyPool extends EventEmitter {
     }
   }
 
-  /** 기록은 onExit 가 dismissed 퇴근으로 옮긴다. 프로세스 없이 기록만 남은 세션(휴식)은 바로 옮긴다 */
-  kill(sessionId: string): void {
+  /** 기록은 onExit 가 reason 퇴근으로 옮긴다. 프로세스 없이 기록만 남은 세션(휴식)은 바로 옮긴다 */
+  kill(sessionId: string, reason: KillReason = 'dismissed'): void {
     const entry = this.entries.get(sessionId)
     if (!entry) {
       const hasTranscript = this.hasTranscript(sessionId)
-      this.recordEnd(sessionId, offDutyReason({ isDismissed: true, exitCode: null, hasTranscript }), null)
+      this.recordEnd(sessionId, offDutyReason({ killReason: reason, exitCode: null, hasTranscript }), null)
       return
     }
-    entry.isDismissed = true
+    entry.killReason = reason
     entry.pty.kill()
   }
 

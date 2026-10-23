@@ -1150,9 +1150,9 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   }, MEMBER_FIRST_INPUT_DELAY_MS)
 })
 
-/** 팀원 세션 종료 */
+/** 팀원 세션 종료 (jk_dismiss). 호스트가 기록을 팀장이 정리(released) 퇴근으로 옮긴다 — 보관 기간이 짧다 */
 app.delete('/api/team/:teamId/members/:sessionId', (req, res) => {
-  host.send({ type: 'kill', sessionId: req.params.sessionId })
+  host.send({ type: 'kill', sessionId: req.params.sessionId, isReleased: true })
   tasks.markExited(req.params.sessionId)
   res.json({})
 })

@@ -14,8 +14,8 @@ export interface WebSessionRecord {
   extraArgs?: string[]
 }
 
-/** dismissed = kill 요청으로 끝남(정리됨), exit = 종료 코드 0, error = 그 밖의 종료 코드 */
-export type OffDutyReason = 'exit' | 'dismissed' | 'error'
+/** released = 팀장이 정리한 팀원(jk_dismiss), dismissed = 그 밖의 kill 요청(화면 종료 버튼), exit = 종료 코드 0, error = 그 밖의 종료 코드 */
+export type OffDutyReason = 'exit' | 'dismissed' | 'error' | 'released'
 
 /** 끝난 웹 세션 (퇴근). 다시 출근(resume)하면 webSessions 로 되돌아간다. 호스트만 쓴다 */
 export interface OffDutyRecord extends WebSessionRecord {
@@ -25,8 +25,14 @@ export interface OffDutyRecord extends WebSessionRecord {
   exitCode: number | null
 }
 
-/** 퇴근 기록 보관 기간. 지나면 기록과 세션 이름을 지운다 */
+/** 퇴근 기록 보관 기간. 지나면 기록과 세션 이름을 지운다. 팀장이 정리한 팀원(released)은 많이 쌓여서 짧다 */
 export const OFF_DUTY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+export const RELEASED_RETENTION_MS = 6 * 60 * 60 * 1000
+
+/** 모르는 이유(다른 판의 기록)는 기본 기간 */
+export function retentionOf(reason: OffDutyReason): number {
+  return reason === 'released' ? RELEASED_RETENTION_MS : OFF_DUTY_RETENTION_MS
+}
 
 /** 그룹 = 그래픽 공간. 좌표·크기는 타일 단위. 화면은 w·h 를 쓰지 않는다 (그룹 크기는 안의 팀 섬으로 정한다) */
 export interface Group {
@@ -208,10 +214,10 @@ export function removeOffDuty(sessionId: string): boolean {
   return true
 }
 
-/** 보관 기간이 지난 퇴근 기록과 그 이름·고른 인물·성별을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
+/** 이유별 보관 기간이 지난 퇴근 기록과 그 이름·고른 인물·성별을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
 export function pruneOffDuty(now = Date.now()): string[] {
   const hq = readHq()
-  const expired = hq.offDuty.filter((s) => now - Date.parse(s.endedAt) > OFF_DUTY_RETENTION_MS).map((s) => s.sessionId)
+  const expired = hq.offDuty.filter((s) => now - Date.parse(s.endedAt) > retentionOf(s.reason)).map((s) => s.sessionId)
   if (expired.length === 0) return []
   hq.offDuty = hq.offDuty.filter((s) => !expired.includes(s.sessionId))
   for (const sessionId of expired) {

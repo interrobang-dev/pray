@@ -96,19 +96,22 @@ describe('PtyPool.resize', () => {
 
 describe('offDutyReason', () => {
   it('drops a session without a transcript since it cannot be resumed', () => {
-    expect(offDutyReason({ isDismissed: true, exitCode: 1, hasTranscript: false })).toBeNull()
-    expect(offDutyReason({ isDismissed: false, exitCode: 0, hasTranscript: false })).toBeNull()
+    expect(offDutyReason({ killReason: 'dismissed', exitCode: 1, hasTranscript: false })).toBeNull()
+    expect(offDutyReason({ killReason: 'released', exitCode: 1, hasTranscript: false })).toBeNull()
+    expect(offDutyReason({ killReason: null, exitCode: 0, hasTranscript: false })).toBeNull()
   })
 
-  it('marks a kill request as dismissed whatever the exit code (kill exits with 1)', () => {
-    expect(offDutyReason({ isDismissed: true, exitCode: 1, hasTranscript: true })).toBe('dismissed')
-    expect(offDutyReason({ isDismissed: true, exitCode: null, hasTranscript: true })).toBe('dismissed')
+  it('uses the kill reason whatever the exit code (kill exits with 1)', () => {
+    expect(offDutyReason({ killReason: 'dismissed', exitCode: 1, hasTranscript: true })).toBe('dismissed')
+    expect(offDutyReason({ killReason: 'dismissed', exitCode: null, hasTranscript: true })).toBe('dismissed')
+    expect(offDutyReason({ killReason: 'released', exitCode: 1, hasTranscript: true })).toBe('released')
+    expect(offDutyReason({ killReason: 'released', exitCode: 0, hasTranscript: true })).toBe('released')
   })
 
   it('tells a clean exit (0) from an error', () => {
-    expect(offDutyReason({ isDismissed: false, exitCode: 0, hasTranscript: true })).toBe('exit')
-    expect(offDutyReason({ isDismissed: false, exitCode: 1, hasTranscript: true })).toBe('error')
-    expect(offDutyReason({ isDismissed: false, exitCode: null, hasTranscript: true })).toBe('error')
+    expect(offDutyReason({ killReason: null, exitCode: 0, hasTranscript: true })).toBe('exit')
+    expect(offDutyReason({ killReason: null, exitCode: 1, hasTranscript: true })).toBe('error')
+    expect(offDutyReason({ killReason: null, exitCode: null, hasTranscript: true })).toBe('error')
   })
 })
 
@@ -151,8 +154,21 @@ describe('PtyPool exit records', () => {
     expect(moveToOffDuty).not.toHaveBeenCalled()
   })
 
+  it('records a kill by the lead as released', () => {
+    const pool = new PtyPool(() => true)
+    pool.spawn({ sessionId: SESSION_ID, cwd: 'D:/repo' })
+    pool.kill(SESSION_ID, 'released')
+    exitLast(1)
+    expect(moveToOffDuty).toHaveBeenCalledWith(SESSION_ID, expect.objectContaining({ reason: 'released', exitCode: 1 }))
+  })
+
   it('moves a record without a process straight to dismissed off duty on kill', () => {
     new PtyPool(() => true).kill(SESSION_ID)
     expect(moveToOffDuty).toHaveBeenCalledWith(SESSION_ID, expect.objectContaining({ reason: 'dismissed', exitCode: null }))
+  })
+
+  it('moves a record without a process straight to released off duty on a kill by the lead', () => {
+    new PtyPool(() => true).kill(SESSION_ID, 'released')
+    expect(moveToOffDuty).toHaveBeenCalledWith(SESSION_ID, expect.objectContaining({ reason: 'released', exitCode: null }))
   })
 })
