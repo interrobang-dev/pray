@@ -619,9 +619,11 @@ li.group.drop-after::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.part-head .branch {
-  font-weight: 400;
-  white-space: nowrap;
+/* worktree 파트만 이름 왼쪽에 브랜치 아이콘 (App.tsx WorktreeIcon. 브랜치 이름은 title). 이름이 길어도 줄지 않는다 */
+.part-head .worktree-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--muted);
 }
 .part .session {
   padding-left: 18px;

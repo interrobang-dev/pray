@@ -710,7 +710,7 @@ function drawDotIsland(island: Island, memberCount: number, onEdit: () => void, 
     const zy = y - 60
     const zw = zone.w * DOT_TILE + 30
     const zh = zone.h * DOT_TILE + 84
-    // 라벨: 상자 없는 작은 회색 글자. worktree 파트는 목록 파트 소제목처럼 브랜치를 옆에
+    // 라벨: 상자 없는 작은 회색 글자. worktree 파트는 브랜치를 옆에
     const partName = dotLabelText(zone.part.name, DOT_FONT.part, COLOR.partLabel, 'bold')
     partName.position.set(zx + 10, zy + 8)
     dot.addChild(new Graphics().rect(zx, zy, zw, zh).fill({ color: 0xffffff, alpha: 0.25 }).stroke({ width: 2, color: COLOR.partLine, alignment: 1 }), partName)

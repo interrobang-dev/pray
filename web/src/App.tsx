@@ -844,18 +844,23 @@ export function App() {
     )
   }
 
-  /** 파트 소제목(이름·worktree 브랜치·세션 수·hover 버튼) + 파트 세션 */
+  /** 파트 소제목(worktree 아이콘·이름·세션 수·hover 버튼) + 파트 세션. 브랜치 이름은 아이콘 툴팁 */
   function renderPart(team: Team, part: Part, members: Session[]) {
     const menuItems = [
       { label: '이름 변경', onClick: () => editPart(team, part) },
       ...(part.leadSessionId ? [{ label: '파트장 해제', onClick: () => releasePartLead(team, part) }] : []),
       { label: '파트 삭제', onClick: () => void removePart(team, part) },
     ]
+    const worktreeLabel = part.worktree ? `worktree · ${part.worktree.branch}` : null
     return (
       <div key={part.id} className="part" title={part.worktree?.cwd ?? team.cwd}>
         <div className="part-head">
+          {worktreeLabel && (
+            <span className="worktree-icon" role="img" title={worktreeLabel} aria-label={worktreeLabel}>
+              <WorktreeIcon />
+            </span>
+          )}
           <span className="name">{part.name}</span>
-          {part.worktree && <span className="branch">⎇ {part.worktree.branch}</span>}
           {members.length > 0 && <span className="count">{members.length}</span>}
           <span className="head-actions">
             <button onClick={() => openSessionForm(team.id, part.id)} disabled={!snapshot.isHostReachable} title="이 파트에 세션 추가">
@@ -1536,6 +1541,18 @@ function NewSessionIcon() {
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
       <circle cx="8" cy="5" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
       <path d="M3.5 13.5a4.5 4.5 0 0 1 9 0" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** 파트 소제목의 worktree 아이콘: 줄기에서 갈라지는 git 브랜치 (원 셋 = 커밋) */
+function WorktreeIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      <circle cx="4.5" cy="3.5" r="1.75" fill="none" stroke="currentColor" strokeWidth="1.25" />
+      <circle cx="4.5" cy="12.5" r="1.75" fill="none" stroke="currentColor" strokeWidth="1.25" />
+      <circle cx="11.5" cy="5" r="1.75" fill="none" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M4.5 5.25v5.5M11.5 6.75c0 2.75-7 1.25-7 4" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   )
 }
