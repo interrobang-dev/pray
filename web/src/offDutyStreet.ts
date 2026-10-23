@@ -156,10 +156,12 @@ export interface StreetPlan {
 
 /**
  * 앉은 사람 전신 사각형 (anchor 기준, 도트 px): v5 앉은 그림 18명 idle·doze 모든 칸의 보이는 범위에서 잡았다.
- * 정면(셀 80×132, 발 가운데 40·128)은 몸 폭, 옆모습(셀 88×128, 등 18·124)은 등 뒤 조금 ~ 무릎. left 는 뒤집는다
+ * 정면(셀 80×132, 발 가운데 40·128)·뒷모습(셀 92×128, 발 가운데 46·124)은 몸 폭, 옆모습(셀 88×128, 등 18·124)은 등 뒤 조금 ~ 무릎. left 는 뒤집는다.
+ * 뒷모습은 라운지 자리만 쓴다 (lounge.ts)
  */
-const FIGURE: Record<'down' | 'right', Rect> = {
+const FIGURE: Record<'down' | 'up' | 'right', Rect> = {
   down: { x: -24, y: -112, w: 48, h: 112 },
+  up: { x: -26, y: -98, w: 52, h: 98 },
   right: { x: -8, y: -104, w: 56, h: 104 },
 }
 
@@ -181,9 +183,9 @@ export function streetPlaceKey(places: StreetPlaceMeta[], people: { id: string; 
     .join(',')
 }
 
-/** 전신 사각형 (방향별, left 는 좌우 반전) */
-function figureRect(dir: StreetDirection, x: number, y: number): Rect {
-  const box = FIGURE[dir === 'down' ? 'down' : 'right']
+/** 앉은 사람 (x, y = anchor) 의 전신 사각형 (방향별, left 는 좌우 반전) */
+export function figureRect(dir: StreetDirection | 'up', x: number, y: number): Rect {
+  const box = FIGURE[dir === 'left' ? 'right' : dir]
   return { x: dir === 'left' ? x - box.x - box.w : x + box.x, y: y + box.y, w: box.w, h: box.h }
 }
 

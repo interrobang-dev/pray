@@ -180,8 +180,8 @@ export const statusLabel: Record<SessionStatus, string> = {
   unknown: '알 수 없음',
 }
 
-/** 퇴근 시각부터 지금까지를 "방금"·"5분 전"·"3시간 전"·"2일 전" 으로 */
-function formatAgo(iso: string, now: number): string {
+/** 그 시각(퇴근·마지막 대화)부터 지금까지를 "방금"·"5분 전"·"3시간 전"·"2일 전" 으로 */
+export function formatAgo(iso: string, now: number): string {
   const minutes = Math.floor(Math.max(0, now - new Date(iso).getTime()) / 60_000)
   if (minutes < 1) return '방금'
   if (minutes < 60) return `${minutes}분 전`
