@@ -83,7 +83,7 @@ describe('planStreet 자리', () => {
     const result = plan(2400, people)
     const bus = result.pieces.find((piece) => piece.kind === 'place' && piece.place.id === 'bus')
     expect(bus?.kind === 'place' && bus.seats.map((seat) => seat.sessionId)).toEqual(['s1', 's6', 's0', 's5', 's3'])
-    expect(result.overflows).toEqual([{ place: 'bus', count: 2, x: 40 + 432, y: 206 - 92 }])
+    expect(result.overflows).toEqual([{ place: 'bus', count: 2, x: 40 + 432, y: 206 - 180 }])
     expect(result.placeOf.get('s4')).toBe('bus')
     expect(result.figures.has('s4')).toBe(false)
   })
@@ -135,6 +135,8 @@ describe('planStreet 자리', () => {
       ['cafe', 1],
       ['home', 3],
     ])
+    // "+N" 은 장소마다 오른쪽 위 같은 하늘 줄 (발 선 −180)
+    expect(result.overflows.map((item) => item.y)).toEqual([26, 26, 26])
   })
 })
 
@@ -153,13 +155,13 @@ describe('planStreet 집 묶음', () => {
     ])
     expect(two.pieces.some((piece) => piece.kind === 'filler' && piece.id === 'gap' && piece.x === 2006)).toBe(true)
     expect(two.overflows).toEqual([])
-    // 폭이 모자라면 묶음 1에 +N 은 마지막 집 문
+    // 폭이 모자라면 묶음 1에 +N 은 마지막 집 오른쪽 처마 끝 위
     expect(plan(2006 + 643, home(5)).units).toBe(1)
-    expect(plan(2006 + 643, home(5)).overflows).toEqual([{ place: 'home', count: 1, x: 1858, y: 206 - 30 - 50 }])
+    expect(plan(2006 + 643, home(5)).overflows).toEqual([{ place: 'home', count: 1, x: 1858 + 140, y: 206 - 30 - 150 }])
   })
 
   it('1·2단계는 묶음을 늘리지 않는다', () => {
     expect(plan(1800, home(12)).units).toBe(1)
-    expect(plan(1500, home(12)).overflows).toEqual([{ place: 'home', count: 10, x: 1332, y: 206 - 30 - 50 }])
+    expect(plan(1500, home(12)).overflows).toEqual([{ place: 'home', count: 10, x: 1332 + 140, y: 206 - 30 - 150 }])
   })
 })
