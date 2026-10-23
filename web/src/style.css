@@ -1541,23 +1541,36 @@ li.group.drop-after::after {
 }
 .typing-dots {
   display: inline-flex;
+  align-items: center;
   gap: 3px;
   flex-shrink: 0;
+  /* 글 한 줄 높이. 도구·시간 글자가 없어도 말풍선 높이가 같게 (점만 남을 때 줄어들지 않게) */
+  height: 1lh;
 }
-/* claude 의 최근 글 한 줄(없으면 "작업 중"). 좁으면 이것만 말줄임되고 경과 시간·[중지] 는 그대로 */
+/* 화면 낭독기에만 읽히는 "작업 중". absolute 라 flex 칸·gap 을 차지하지 않는다 */
+.typing-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* 실행 중인 도구 이름 "Read · Grep". 좁으면 이것만 말줄임되고 경과 시간·[중지] 는 그대로 */
 .typing-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.typing-text.is-claude {
   color: var(--text);
 }
-/* " · 1분 12초" (회색). .typing 의 gap 8px 을 글 사이 띄어쓰기만큼 줄인다 */
+/* 경과 시간 "1m 12s" (회색). 도구가 없으면 점 바로 옆 */
 .typing-time {
   flex-shrink: 0;
   white-space: nowrap;
+}
+/* 도구 이름 뒤면 " · 1m 12s". .typing 의 gap 8px 을 글 사이 띄어쓰기만큼 줄인다 */
+.typing-text + .typing-time {
   margin-left: -4px;
 }
 .typing-dots span {

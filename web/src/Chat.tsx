@@ -13,10 +13,10 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import { buildChatRows, type ChatRow, type Work } from './chatRows'
-import { firstPlainLine, latestTurnText } from './turnText'
+import { runningToolNames, shortToolName } from './runningTools'
 import { FilesButton, formatSize } from './Files'
 import { MarkdownText } from './Markdown'
-import { ShellsButton, type ShellRequest } from './Shells'
+import { formatElapsed, ShellsButton, type ShellRequest } from './Shells'
 import { NEWLINE_KEYS } from './Terminal'
 import type { AskQuestion, ChatMessage, Shell, ToolUse } from './types'
 
@@ -326,12 +326,6 @@ type Special = { kind: 'relay'; relay: Relay } | { kind: 'asked'; asked: Asked }
 /** 묶음 줄에 이름별 개수를 보여 주는 도구 수 (많은 순). 나머지는 전체 개수에만 든다 */
 const WORK_TOOL_NAMES_SHOWN = 3
 
-/** 묶음 줄의 도구 이름. MCP 도구 `mcp__<서버>__<도구>` 는 백그라운드 알림 요약과 같은 `<서버>/<도구>` 로 줄인다 */
-function shortToolName(name: string): string {
-  const match = name.match(/^mcp__(.+?)__(.+)$/)
-  return match ? `${match[1]}/${match[2]}` : name
-}
-
 /** "작업 14개 · Bash 6 · Read 5 · Edit 3 · 2분 10초". 시간은 1초 미만이면 뺀다 */
 function workTitle(work: Work): string {
   const counts = work.toolCounts.slice(0, WORK_TOOL_NAMES_SHOWN).map(({ name, count }) => `${shortToolName(name)} ${count}`)
@@ -591,22 +585,21 @@ function formatDuration(ms: number): string {
 }
 
 /**
- * 메신저의 "입력 중…" 같은 작업 중 표시기. 1초 타이머가 이 컴포넌트만 다시 그리게 따로 둔다 (대화 전체 마크다운 파싱을 피하려고).
- * text = 이번 차례에서 claude 가 가장 최근에 쓴 글 (없으면 "작업 중"). 기호를 뺀 첫 줄만 한 줄 말줄임으로, 전체는 툴팁.
+ * 메신저의 "입력 중…" 같은 작업 중 표시기. 1초 타이머가 이 컴포넌트만 다시 그리게 따로 둔다 (대화 전체를 다시 그리지 않게).
+ * tools = 이번 차례에 실행 중인 도구 이름 ("Bash · 1m 12s"). 없으면(생각 중·글 쓰는 중) 점 옆에 경과 시간만, since 가 없으면 시간도 뺀다.
  * onInterrupt 가 있으면 옆에 [중지] (누른 뒤 서버 결과가 올 때까지 "중지 중…")
  */
 function WorkingIndicator({
-  text,
+  tools,
   since,
   onInterrupt,
   isInterrupting,
 }: {
-  text: string | null
+  tools: string[]
   since: string | null
   onInterrupt: (() => void) | null
   isInterrupting: boolean
 }) {
-  const line = useMemo(() => (text ? firstPlainLine(text) : null), [text])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!since) return
@@ -614,6 +607,7 @@ function WorkingIndicator({
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [since])
+  const toolText = tools.join(' · ')
   return (
     <div className="typing-row">
       <div className="typing" role="status">
@@ -622,13 +616,14 @@ function WorkingIndicator({
           <span />
           <span />
         </span>
-        <span className={line ? 'typing-text is-claude' : 'typing-text'} title={line ? (text ?? undefined) : undefined}>
-          {line ?? '작업 중'}
-        </span>
+        {/* 점은 화면 낭독기에 안 보이므로 글로 알린다 */}
+        <span className="typing-label">작업 중</span>
+        {toolText && <span className="typing-text">{toolText}</span>}
         {/* 매초 바뀌는 글자를 화면 낭독기가 계속 읽지 않게 */}
         {since && (
           <span className="typing-time" aria-hidden="true">
-            · {formatDuration(now - Date.parse(since))}
+            {toolText && '· '}
+            {formatElapsed(since, now)}
           </span>
         )}
       </div>
@@ -894,8 +889,8 @@ export function Chat({
    * 차례가 진행 중이면 맨 끝 묶음은 접지 않는다. 승인 대기도 진행 중이다 (승인 창이 뜰 때마다 접혔다 펼쳐지지 않게)
    */
   const isTurnInProgress = isWorking || isApprovalNeeded
-  /** 작업 중 표시기 글. 메시지가 바뀔 때만 다시 찾는다 (표시기의 1초 타이머와 무관) */
-  const turnText = useMemo(() => latestTurnText(messages), [messages])
+  /** 작업 중 표시기의 실행 중인 도구. 메시지가 바뀔 때만 다시 찾는다 (표시기의 1초 타이머와 무관) */
+  const runningTools = useMemo(() => runningToolNames(messages), [messages])
   const rows = useMemo(
     () =>
       buildChatRows<Special>(
@@ -1415,7 +1410,7 @@ export function Chat({
           {messages.length === 0 && pendings.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
           {isWorking && (
             <WorkingIndicator
-              text={turnText}
+              tools={runningTools}
               since={workingSince}
               onInterrupt={canInterrupt ? () => void interrupt() : null}
               isInterrupting={isInterrupting}
