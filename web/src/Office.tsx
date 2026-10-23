@@ -51,8 +51,6 @@ import {
 const ZOOM_STEPS = [0.5, 1, 2, 3]
 /** 마운트할 때 배율 = 단계 목록의 이 번째 (1배) */
 const DEFAULT_ZOOM_INDEX = 1
-/** 이 배율 이상이면 모든 자리의 이름표가 보인다 (그 밖에는 마우스를 올렸거나 고른 자리만) */
-const NAME_TAG_ZOOM = 2
 /** 도트 타일(48px) ÷ 아트 타일(16px) */
 const DOT_SCALE = 3
 const DOT_TILE = 48
@@ -80,7 +78,6 @@ const COLOR = {
   green: 0x6fae5e,
   greenDark: 0x4f9a4a,
   text: 0x2b2f3a,
-  mutedText: 0x7a7f8e,
   postit: 0xfde77a,
   alert: 0xffd3d3,
   alertLine: 0xe05a5a,
@@ -176,14 +173,12 @@ interface IslandParts {
 interface SeatParts {
   /** 자리 사각형 = 클릭 영역 (그림은 블록 줄·부스 컨테이너에 있다) */
   hit: Container
-  /** 모든 자리 위 층에 둔 선택 테두리·이름표·상태 아이콘 (끌 때 같이 옮긴다) */
+  /** 모든 자리 위 층에 둔 선택 테두리·상태 아이콘 (끌 때 같이 옮긴다) */
   overlay: SeatOverlay
 }
 
 interface SeatOverlay {
   container: Container
-  /** 이름표 (평소 숨김) */
-  tag: Container
   /** working 아이콘 (4fps) */
   icon: AnimatedSprite | null
 }
@@ -548,8 +543,8 @@ function dotSign(text: Text, underline: number, padding = 8): Graphics {
     .stroke({ width: 2, color: DOT_OUTLINE, alignment: 1 })
 }
 
-/** 그룹 이름표·팀 이름표·파트 이름표·메모 글자 (도트 px). 자리 이름표(14)를 기준으로 계층 순 */
-const DOT_FONT = { group: 16, team: 14, part: 12, note: 12, seat: 14 }
+/** 그룹 이름표·팀 이름표·파트 이름표·메모 글자 (도트 px). 계층 순 */
+const DOT_FONT = { group: 16, team: 14, part: 12, note: 12 }
 
 function dotLabel(text: string, size: number, color = COLOR.text, wrapWidth?: number): Text {
   return label(text, size, color, wrapWidth, dotTextResolution)
@@ -755,10 +750,6 @@ function dotFrames(art: DotArt, direction: CharacterDirection, look: DotLook, st
  */
 let dotTextResolution = 1
 
-const TAG_H = 20
-/** 이름표 최대 폭 = 짝(자리 열) 폭 96 - 6 */
-const TAG_MAX_W = 90
-
 /** 도트 px 위치 [x, y] (스프라이트 왼쪽 위) */
 type At = [number, number]
 
@@ -771,14 +762,8 @@ const BLOCK_PLATE: Record<'lead' | 'top' | 'bottom', Rect> = {
   top: { x: 74, y: 66, w: 18, h: 7 },
   bottom: { x: 68, y: 131, w: 22, h: 9 },
 }
-/**
- * 블록 안 이름표 위 끝 y (블록 원점 기준): 윗자리는 윗책상 상판(모니터 뒷면 앞), 아랫자리는 의자 아래쪽(다음 블록 줄 윗사람 아이콘 위 끝 −17 보다 위),
- * 지휘자는 옆 책상 아래 끝(144) 바로 밑 — 지휘자 열 아래쪽은 늘 빈 받침이고 앞면 명패를 가리지 않는다
- */
-const BLOCK_TAG_Y = { top: 58, bottom: 196, lead: 146 }
-/** 부스 명패 (부스 그림 왼쪽 위 기준, 책상 앞 가장자리 오른쪽 끝)·이름표 위 끝 */
+/** 부스 명패 (부스 그림 왼쪽 위 기준, 책상 앞 가장자리 오른쪽 끝) */
 const BOOTH_PLATE: Rect = { x: 80, y: 52, w: 22, h: 9 }
-const BOOTH_TAG_Y = 124
 
 /** 사람이 앉아 있는 세션 (휴식은 빈 의자) */
 function isSeatedPerson(session: Session | undefined): session is Session {
@@ -829,7 +814,7 @@ function personSprite(session: Session, direction: CharacterDirection, art: DotA
  * 칸막이 블록 줄 하나 (office-v5-props 메타 block, 도트 px, 원점 = 첫 짝 왼쪽 위): 메타 order 의 단계마다 모든 짝을 그린 뒤 다음 단계 —
  * 윗자리 의자 → 윗자리 사람 → 지휘자 의자 → 짝 모듈(화면은 아랫자리 것) → 지휘자 책상(block-lead) → 끝 마감 → 지휘자 사람 → block-lead 앞쪽 →
  * 아랫자리 사람 → 아랫자리 의자. 윗사람은 모듈 뒤(손만 상판 위), 아랫사람·의자는 모듈 앞. 사람 없는 자리(빈 자리·휴식)는 의자만
- * (아랫자리는 책상 쪽으로 밀어 넣은 emptyChair). 명패는 그 위. 클릭은 자리 사각형(hit)이 받고 아이콘·이름표는 자리 위 층(drawSeatOverlay)
+ * (아랫자리는 책상 쪽으로 밀어 넣은 emptyChair). 명패는 그 위. 클릭은 자리 사각형(hit)이 받고 아이콘은 자리 위 층(drawSeatOverlay)
  */
 function drawBlockRow(art: DotArt, row: BlockRow, sessionById: Map<string, Session>, now: number): { container: Container; animations: AnimatedSprite[] } {
   const block = art.propsMeta.block
@@ -931,7 +916,7 @@ function drawBoothArt(art: DotArt, person: AnimatedSprite | null, isOn: boolean,
   return container
 }
 
-/** 앉은 부스 하나 (부스·사람·의자·명패). 클릭은 자리 사각형(hit), 아이콘·이름표는 자리 위 층 */
+/** 앉은 부스 하나 (부스·사람·의자·명패). 클릭은 자리 사각형(hit), 아이콘은 자리 위 층 */
 function drawBoothSeat(session: Session, seat: Seat, art: DotArt, now: number): { container: Container; animation: AnimatedSprite | null } {
   const container = new Container()
   container.position.set(PAD_X + seat.x * TILE, PAD_Y + seat.y * TILE)
@@ -943,34 +928,17 @@ function drawBoothSeat(session: Session, seat: Seat, art: DotArt, now: number): 
   return { container, animation }
 }
 
-/** 한 줄로 maxWidth 안에 들어가게 끝을 … 로 자른다 */
-function fitOneLine(text: Text, content: string, maxWidth: number): void {
-  text.text = content
-  if (text.width <= maxWidth) return
-  const characters = Array.from(content)
-  let low = 0
-  let high = characters.length
-  while (low < high) {
-    const middle = Math.ceil((low + high) / 2)
-    text.text = `${characters.slice(0, middle).join('').trimEnd()}…`
-    if (text.width <= maxWidth) low = middle
-    else high = middle - 1
-  }
-  text.text = `${characters.slice(0, low).join('').trimEnd()}…`
-}
-
-/** 자리 위 층에 놓는 자리 (origin 기준): 아이콘 왼쪽 위·이름표 가운데 x 와 위 끝 y (도트 px), 선택 테두리 = 자리 사각형 (아트 px) */
+/** 자리 위 층에 놓는 자리 (origin 기준): 아이콘 왼쪽 위 (도트 px), 선택 테두리 = 자리 사각형 (아트 px) */
 interface OverlayPlace {
   /** 아트 px 절대 위치 (블록 줄 원점 또는 부스 자리 왼쪽 위) */
   origin: Point
   icon: At
-  tag: Point
   rect: Rect
 }
 
 /**
- * 자리 위 층의 선택 테두리·이름표·상태 아이콘 (이벤트 없음). 아이콘은 배율과 관계없이 화면 18×15 px (iconScale = 1 / 지금 배율 → 화면에 원본 픽셀 1:1).
- * 선택 테두리도 여기 둔다 — 자리 그림은 블록 줄 단위라 자리 사각형이 따로 없다
+ * 자리 위 층의 선택 테두리·상태 아이콘 (이벤트 없음). 아이콘은 배율과 관계없이 화면 18×15 px (iconScale = 1 / 지금 배율 → 화면에 원본 픽셀 1:1).
+ * 선택 테두리도 여기 둔다 — 자리 그림은 블록 줄 단위라 자리 사각형이 따로 없다. 이름은 자리 카드(SeatCard)로 본다
  */
 function drawSeatOverlay(session: Session, place: OverlayPlace, isSelected: boolean, art: DotArt, iconScale: number): SeatOverlay {
   const container = new Container()
@@ -979,31 +947,8 @@ function drawSeatOverlay(session: Session, place: OverlayPlace, isSelected: bool
   const dot = dotLayer()
   container.addChild(dot)
   const isOnBreak = attendanceOf(session) === 'break'
-  const isExternal = session.kind === 'external'
-  const isLead = session.role === 'lead'
-  const isPartLead = isLead && session.partId !== null
   const { rect } = place
   if (isSelected) container.addChild(new Graphics().rect(rect.x - 2, rect.y + 1, rect.w + 4, rect.h - 2).stroke({ width: 1, color: COLOR.select }))
-
-  const tag = new Container()
-  const name = label('', DOT_FONT.seat, isExternal ? COLOR.mutedText : COLOR.text, undefined, dotTextResolution)
-  fitOneLine(name, session.name ?? session.title ?? session.id.slice(0, 8), TAG_MAX_W - 12)
-  const tagW = Math.ceil(name.width) + 12
-  const underline = isExternal ? COLOR.externalLight : isPartLead ? COLOR.silver : isLead ? COLOR.gold : COLOR.green
-  const tagX = Math.floor(place.tag.x - tagW / 2)
-  const tagY = place.tag.y
-  const background = new Graphics()
-    .rect(tagX, tagY, tagW, TAG_H)
-    .fill(0xffffff)
-    .rect(tagX, tagY + TAG_H - 3, tagW, 3)
-    .fill(underline)
-    .rect(tagX, tagY, tagW, TAG_H)
-    .stroke({ width: 1, color: DOT_OUTLINE, alignment: 1 })
-  name.position.set(tagX + 6, tagY + 1)
-  tag.addChild(background, name)
-  if (isOnBreak) tag.alpha = 0.6
-  tag.visible = false
-  dot.addChild(tag)
 
   // 상태 아이콘: 승인 대기 빨간 "!", 내 차례 말풍선, 작업 중 점 셋 (휴식은 없다)
   const icons = art.propsMeta.icons
@@ -1029,7 +974,7 @@ function drawSeatOverlay(session: Session, place: OverlayPlace, isSelected: bool
     }
     dot.addChild(icon)
   }
-  return { container, tag, icon: iconTextures && iconTextures.length > 1 ? icon : null }
+  return { container, icon: iconTextures && iconTextures.length > 1 ? icon : null }
 }
 
 /**
@@ -1038,20 +983,15 @@ function drawSeatOverlay(session: Session, place: OverlayPlace, isSelected: bool
 function overlayPlaceOf(seat: Seat, row: BlockRow | null, art: DotArt): OverlayPlace {
   const seatOrigin = { x: PAD_X + seat.x * TILE, y: PAD_Y + seat.y * TILE }
   if (!row) {
-    return { origin: seatOrigin, icon: art.propsMeta.seat.booth.icon, tag: { x: 48, y: BOOTH_TAG_Y }, rect: { x: 0, y: 0, w: seat.w * TILE, h: seat.h * TILE } }
+    return { origin: seatOrigin, icon: art.propsMeta.seat.booth.icon, rect: { x: 0, y: 0, w: seat.w * TILE, h: seat.h * TILE } }
   }
   const block = art.propsMeta.block
   const origin = { x: PAD_X + row.x * TILE, y: PAD_Y + row.y * TILE }
   const rect = { x: seatOrigin.x - origin.x, y: seatOrigin.y - origin.y, w: seat.w * TILE, h: seat.h * TILE }
-  if (seat.dir === 'right') return { origin, icon: block.lead.icon, tag: { x: -block.pairW / 2, y: BLOCK_TAG_Y.lead }, rect }
+  if (seat.dir === 'right') return { origin, icon: block.lead.icon, rect }
   const dx = (seat.x - row.x) * DOT_TILE
   const side = seat.dir === 'down' ? block.pair.top : block.pair.bottom
-  return {
-    origin,
-    icon: [side.icon[0] + dx, side.icon[1]],
-    tag: { x: dx + block.pairW / 2, y: seat.dir === 'down' ? BLOCK_TAG_Y.top : BLOCK_TAG_Y.bottom },
-    rect,
-  }
+  return { origin, icon: [side.icon[0] + dx, side.icon[1]], rect }
 }
 
 /** 자리 사각형 = 클릭 영역 (투명). 자리 그림은 블록 줄·부스 컨테이너에 있다 */
@@ -1261,14 +1201,13 @@ export function Office(props: Props) {
         let drawnPhase = dayPhaseOf(new Date())
         /** 지금 그려진 조는 세션들 (dozingKey). 시간이 흘러 졸기 시작하는 것도 1분마다 보고 바뀌었으면 다시 그린다 */
         let drawnDozing = ''
-        /** 마우스를 올린 자리의 세션. 다시 그려도 이름표가 보인 채 남게 여기 둔다 (카드는 React 상태 hoveredSeatId) */
+        /** 마우스를 올린 자리의 세션. 이벤트 처리기가 지금 값을 보도록 여기도 둔다 (카드는 React 상태 hoveredSeatId) */
         let hoveredDeskId: string | null = null
         /** 자리가 있는 세션의 자리 사각형 (타일). 카드가 매 프레임 이 자리 옆으로 따라간다 */
         let seatRects = new Map<string, Rect>()
         const setHovered = (id: string | null) => {
           hoveredDeskId = id
           setHoveredSeatId(id)
-          updateOverlays()
         }
         art.onRecolorLoaded = () => {
           if (!isDisposed) redraw()
@@ -1597,7 +1536,7 @@ export function Office(props: Props) {
               for (const id of [row.leadId, ...row.pairs.flatMap((pair) => [pair.top, pair.bottom])]) if (id) rowOf.set(id, row)
             }
           }
-          // 클릭 영역(자리 사각형)은 그림 위, 선택 테두리·이름표·상태 아이콘은 그 위 층
+          // 클릭 영역(자리 사각형)은 그림 위, 선택 테두리·상태 아이콘은 그 위 층
           const hitLayer = new Container()
           const overlayLayer = new Container()
           const iconScale = 1 / ZOOM_STEPS[zoomIndex]
@@ -1629,22 +1568,12 @@ export function Office(props: Props) {
               approvalDesks.push({ session, rect: seatRects.get(session.id)! })
             }
           }
+          // 고른 자리의 선택 테두리가 이웃 자리 아이콘에 가리지 않게 맨 위로
+          const selectedOverlay = selectedId ? desks.get(selectedId)?.overlay.container : undefined
+          if (selectedOverlay) overlayLayer.setChildIndex(selectedOverlay, overlayLayer.children.length - 1)
           world.addChild(hitLayer, overlayLayer)
-          updateOverlays()
         }
         redrawRef.current = redraw
-
-        /** 이름표: 배율이 NAME_TAG_ZOOM 이상이면 모든 자리, 아니면 마우스를 올린 자리와 고른 자리만. 그 둘은 맨 위로 (마우스를 올린 것이 가장 위) */
-        const updateOverlays = () => {
-          const { selectedId } = latest.current
-          const isAllShown = ZOOM_STEPS[zoomIndex] >= NAME_TAG_ZOOM
-          for (const [id, parts] of desks) parts.overlay.tag.visible = isAllShown || id === selectedId || id === hoveredDeskId
-          for (const id of [selectedId, hoveredDeskId]) {
-            const container = id ? desks.get(id)?.overlay.container : undefined
-            const layer = container?.parent
-            if (container && layer) layer.setChildIndex(container, layer.children.length - 1)
-          }
-        }
 
         /** 자리 카드: React 가 내용을 그리고 여기서 자리 위(넘치면 아래)에 붙인다. 자리가 화면 밖이면 숨긴다. 값이 바뀔 때만 쓴다 */
         let placedCard = ''
