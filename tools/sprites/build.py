@@ -19,6 +19,8 @@ from spritelib import (  # noqa: E402
     crop_bbox,
     downscale,
     fill_dark_lines,
+    Figures,
+    figure_slots,
     fit_width,
     grid_slots,
     load_keyed,
@@ -44,8 +46,16 @@ def build_characters(recipe: dict, source: Path) -> tuple[dict, dict, dict, list
     anchor = {'x': spec.get('anchorX', cell_w / 2) / cell_w, 'y': spec['baseline'] / cell_h}
     for character in recipe.get('characters', []):
         for row in character['rows']:
-            if 'strip' in row:
+            # slice 'figure': 칸 경계가 아니라 인물(이어진 덩어리) 단위로 자른다 — 머리·든 손이 칸 경계를 넘은 원본도 안 잘린다 (v5)
+            is_figure = recipe.get('slice') == 'figure'
+            if 'strip' in row and is_figure:
+                frames, slice_notes = figure_slots(source / row['strip'], row['count'], 1, 0)
+                notes += slice_notes
+            elif 'strip' in row:
                 frames = strip_slots(source / row['strip'], row['count'])
+            elif 'grid' in row and is_figure:
+                frames, slice_notes = figure_slots(source / row['grid'], row['gridSize'][0], row['gridSize'][1], row['gridRow'])
+                notes += slice_notes
             elif 'grid' in row:
                 # 한 장에 상태 여러 행을 그린 격자 (v5 뒷모습·옆모습): gridSize [칸, 행], gridRow 몇 번째 행
                 frames = grid_slots(source / row['grid'], row['gridSize'][0], row['gridSize'][1], row['gridRow'])
@@ -95,9 +105,10 @@ def largest_component(mask: np.ndarray) -> np.ndarray:
     return result
 
 
-def build_props(recipe: dict, source: Path) -> tuple[dict, dict, dict]:
+def build_props(recipe: dict, source: Path, notes: list[str]) -> tuple[dict, dict, dict]:
     sprites, anchors, extras = {}, {}, {}
     sheets: dict[str, np.ndarray] = {}
+    figures: dict[str, Figures] = {}
     for prop in recipe.get('props', []):
         if prop['sheet'] not in sheets:
             sheets[prop['sheet']] = load_keyed(source / prop['sheet'])
@@ -105,10 +116,20 @@ def build_props(recipe: dict, source: Path) -> tuple[dict, dict, dict]:
         columns, rows = prop['grid']
         column, row = prop['cell']
         h, w = sheet.shape[:2]
-        part = sheet[row * h // rows:(row + 1) * h // rows, column * w // columns:(column + 1) * w // columns]
+        x0, x1 = column * w // columns, (column + 1) * w // columns
+        y0, y1 = row * h // rows, (row + 1) * h // rows
         name = f"prop/{prop['id']}"
         # whole: 칸 안 조각을 다 남긴다 (나란히 건 액자 둘처럼 떨어진 조각이 한 소품). 기본은 가장 긴 덩어리만
-        sprites[name] = fit_width(crop_bbox(part) if prop.get('whole') else main_piece(part), prop['width'])
+        if recipe.get('slice') == 'figure':
+            # 칸 경계가 아니라 덩어리 단위로 (소품 끝이 칸 경계를 넘은 원본도 안 잘린다)
+            if prop['sheet'] not in figures:
+                figures[prop['sheet']] = Figures(sheet, prop['sheet'])
+            piece, piece_notes = figures[prop['sheet']].figure_piece(x0, y0, x1, y1, prop.get('whole', False))
+            notes += [f'{name}: {note}' for note in piece_notes]
+        else:
+            part = sheet[y0:y1, x0:x1]
+            piece = crop_bbox(part) if prop.get('whole') else main_piece(part)
+        sprites[name] = fit_width(piece, prop['width'])
         anchors[name] = {'x': prop.get('anchor', [0.5, 1])[0], 'y': prop.get('anchor', [0.5, 1])[1]}
         if 'meta' in prop:
             extras[name] = prop['meta']
@@ -233,7 +254,7 @@ def main() -> None:
     recipe = json.loads(args.recipe.read_text(encoding='utf-8'))
     name = recipe['name']
     sprites, anchors, animations, notes = build_characters(recipe, args.source_dir)
-    prop_sprites, prop_anchors, prop_meta = build_props(recipe, args.source_dir)
+    prop_sprites, prop_anchors, prop_meta = build_props(recipe, args.source_dir, notes)
     sprites.update(prop_sprites)
     anchors.update(prop_anchors)
     tiles, tile_metas = build_tiles(recipe, args.source_dir)

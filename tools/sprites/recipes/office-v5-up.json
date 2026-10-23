@@ -2,16 +2,17 @@
  "name": "office-v5-up",
  "direction": "up",
  "palette": 255,
- "description": "뒷모습(위를 봄) 인물 18명 x 4상태. 셀 88x128, 발 중심 x=44",
+ "slice": "figure",
+ "description": "뒷모습(위를 봄) 인물 18명 x 4상태. 셀 92x128, 발 중심 x=46",
  "spec": {
   "tile": 48,
   "baseline": 124,
   "bodyHeight": 108,
   "cell": [
-   88,
+   92,
    128
   ],
-  "anchorX": 44
+  "anchorX": 46
  },
  "characters": [
   {

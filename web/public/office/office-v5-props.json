@@ -2,7 +2,7 @@
  "frames": {
   "prop/armchair": {
    "frame": {
-    "x": 34,
+    "x": 228,
     "y": 148,
     "w": 72,
     "h": 75
@@ -24,9 +24,153 @@
     "y": 1
    }
   },
+  "prop/block-end-left": {
+   "frame": {
+    "x": 430,
+    "y": 2,
+    "w": 12,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 12,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 12,
+    "h": 96
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/block-end-right": {
+   "frame": {
+    "x": 444,
+    "y": 2,
+    "w": 6,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 6,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 6,
+    "h": 96
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/block-lead": {
+   "frame": {
+    "x": 452,
+    "y": 2,
+    "w": 48,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 48,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 48,
+    "h": 96
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/block-lead-off": {
+   "frame": {
+    "x": 502,
+    "y": 2,
+    "w": 48,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 48,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 48,
+    "h": 96
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/block-pair": {
+   "frame": {
+    "x": 552,
+    "y": 2,
+    "w": 96,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/block-pair-off": {
+   "frame": {
+    "x": 650,
+    "y": 2,
+    "w": 96,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
   "prop/booth-navy": {
    "frame": {
-    "x": 624,
+    "x": 748,
     "y": 2,
     "w": 112,
     "h": 88
@@ -50,7 +194,7 @@
   },
   "prop/booth-navy-off": {
    "frame": {
-    "x": 738,
+    "x": 862,
     "y": 2,
     "w": 112,
     "h": 88
@@ -74,10 +218,10 @@
   },
   "prop/cabinet": {
    "frame": {
-    "x": 510,
+    "x": 158,
     "y": 2,
     "w": 62,
-    "h": 94
+    "h": 102
    },
    "rotated": false,
    "trimmed": false,
@@ -85,11 +229,11 @@
     "x": 0,
     "y": 0,
     "w": 62,
-    "h": 94
+    "h": 102
    },
    "sourceSize": {
     "w": 62,
-    "h": 94
+    "h": 102
    },
    "anchor": {
     "x": 0.5,
@@ -98,8 +242,8 @@
   },
   "prop/chair-down": {
    "frame": {
-    "x": 840,
-    "y": 148,
+    "x": 224,
+    "y": 236,
     "w": 46,
     "h": 60
    },
@@ -122,8 +266,8 @@
   },
   "prop/chair-right": {
    "frame": {
-    "x": 730,
-    "y": 148,
+    "x": 68,
+    "y": 236,
     "w": 42,
     "h": 62
    },
@@ -146,8 +290,8 @@
   },
   "prop/chair-up": {
    "frame": {
-    "x": 284,
-    "y": 228,
+    "x": 556,
+    "y": 236,
     "w": 46,
     "h": 55
    },
@@ -170,8 +314,8 @@
   },
   "prop/coffee-machine": {
    "frame": {
-    "x": 888,
-    "y": 148,
+    "x": 272,
+    "y": 236,
     "w": 40,
     "h": 60
    },
@@ -194,8 +338,8 @@
   },
   "prop/coffee-table": {
    "frame": {
-    "x": 88,
-    "y": 228,
+    "x": 360,
+    "y": 236,
     "w": 96,
     "h": 57
    },
@@ -218,7 +362,7 @@
   },
   "prop/counter-left": {
    "frame": {
-    "x": 598,
+    "x": 938,
     "y": 148,
     "w": 64,
     "h": 63
@@ -242,8 +386,8 @@
   },
   "prop/counter-mid": {
    "frame": {
-    "x": 774,
-    "y": 148,
+    "x": 112,
+    "y": 236,
     "w": 64,
     "h": 62
    },
@@ -266,8 +410,8 @@
   },
   "prop/counter-right": {
    "frame": {
-    "x": 664,
-    "y": 148,
+    "x": 2,
+    "y": 236,
     "w": 64,
     "h": 63
    },
@@ -290,8 +434,8 @@
   },
   "prop/desk-down": {
    "frame": {
-    "x": 186,
-    "y": 228,
+    "x": 458,
+    "y": 236,
     "w": 96,
     "h": 57
    },
@@ -314,10 +458,10 @@
   },
   "prop/desk-right": {
    "frame": {
-    "x": 410,
+    "x": 272,
     "y": 2,
     "w": 48,
-    "h": 96
+    "h": 98
    },
    "rotated": false,
    "trimmed": false,
@@ -325,11 +469,11 @@
     "x": 0,
     "y": 0,
     "w": 48,
-    "h": 96
+    "h": 98
    },
    "sourceSize": {
     "w": 48,
-    "h": 96
+    "h": 98
    },
    "anchor": {
     "x": 0.5,
@@ -338,10 +482,10 @@
   },
   "prop/desk-right-off": {
    "frame": {
-    "x": 460,
+    "x": 322,
     "y": 2,
     "w": 48,
-    "h": 96
+    "h": 98
    },
    "rotated": false,
    "trimmed": false,
@@ -349,11 +493,11 @@
     "x": 0,
     "y": 0,
     "w": 48,
-    "h": 96
+    "h": 98
    },
    "sourceSize": {
     "w": 48,
-    "h": 96
+    "h": 98
    },
    "anchor": {
     "x": 0.5,
@@ -362,7 +506,7 @@
   },
   "prop/desk-up": {
    "frame": {
-    "x": 402,
+    "x": 742,
     "y": 148,
     "w": 96,
     "h": 64
@@ -386,7 +530,7 @@
   },
   "prop/desk-up-off": {
    "frame": {
-    "x": 500,
+    "x": 840,
     "y": 148,
     "w": 96,
     "h": 64
@@ -410,10 +554,10 @@
   },
   "prop/fridge": {
    "frame": {
-    "x": 574,
+    "x": 222,
     "y": 2,
     "w": 48,
-    "h": 93
+    "h": 100
    },
    "rotated": false,
    "trimmed": false,
@@ -421,11 +565,11 @@
     "x": 0,
     "y": 0,
     "w": 48,
-    "h": 93
+    "h": 100
    },
    "sourceSize": {
     "w": 48,
-    "h": 93
+    "h": 100
    },
    "anchor": {
     "x": 0.5,
@@ -434,8 +578,8 @@
   },
   "prop/icon-approval": {
    "frame": {
-    "x": 456,
-    "y": 228,
+    "x": 814,
+    "y": 236,
     "w": 18,
     "h": 15
    },
@@ -458,8 +602,8 @@
   },
   "prop/icon-my-turn": {
    "frame": {
-    "x": 476,
-    "y": 228,
+    "x": 834,
+    "y": 236,
     "w": 18,
     "h": 15
    },
@@ -482,8 +626,8 @@
   },
   "prop/icon-working-0": {
    "frame": {
-    "x": 496,
-    "y": 228,
+    "x": 854,
+    "y": 236,
     "w": 18,
     "h": 15
    },
@@ -506,8 +650,8 @@
   },
   "prop/icon-working-1": {
    "frame": {
-    "x": 516,
-    "y": 228,
+    "x": 874,
+    "y": 236,
     "w": 18,
     "h": 15
    },
@@ -530,8 +674,8 @@
   },
   "prop/icon-working-2": {
    "frame": {
-    "x": 536,
-    "y": 228,
+    "x": 894,
+    "y": 236,
     "w": 18,
     "h": 15
    },
@@ -554,8 +698,8 @@
   },
   "prop/item-desk-clock": {
    "frame": {
-    "x": 440,
-    "y": 228,
+    "x": 798,
+    "y": 236,
     "w": 14,
     "h": 16
    },
@@ -578,8 +722,8 @@
   },
   "prop/item-mug": {
    "frame": {
-    "x": 575,
-    "y": 228,
+    "x": 933,
+    "y": 236,
     "w": 14,
     "h": 14
    },
@@ -602,8 +746,8 @@
   },
   "prop/item-mug-navy": {
    "frame": {
-    "x": 591,
-    "y": 228,
+    "x": 949,
+    "y": 236,
     "w": 14,
     "h": 14
    },
@@ -626,8 +770,8 @@
   },
   "prop/item-notebook": {
    "frame": {
-    "x": 556,
-    "y": 228,
+    "x": 914,
+    "y": 236,
     "w": 17,
     "h": 15
    },
@@ -650,8 +794,8 @@
   },
   "prop/item-papers": {
    "frame": {
-    "x": 420,
-    "y": 228,
+    "x": 778,
+    "y": 236,
     "w": 18,
     "h": 17
    },
@@ -674,8 +818,8 @@
   },
   "prop/item-pen-cup": {
    "frame": {
-    "x": 390,
-    "y": 228,
+    "x": 748,
+    "y": 236,
     "w": 13,
     "h": 22
    },
@@ -698,8 +842,8 @@
   },
   "prop/item-sticky-notes": {
    "frame": {
-    "x": 607,
-    "y": 228,
+    "x": 965,
+    "y": 236,
     "w": 14,
     "h": 12
    },
@@ -722,8 +866,8 @@
   },
   "prop/item-succulent": {
    "frame": {
-    "x": 405,
-    "y": 228,
+    "x": 763,
+    "y": 236,
     "w": 13,
     "h": 19
    },
@@ -794,10 +938,10 @@
   },
   "prop/plant": {
    "frame": {
-    "x": 930,
-    "y": 148,
+    "x": 178,
+    "y": 236,
     "w": 44,
-    "h": 60
+    "h": 61
    },
    "rotated": false,
    "trimmed": false,
@@ -805,11 +949,11 @@
     "x": 0,
     "y": 0,
     "w": 44,
-    "h": 60
+    "h": 61
    },
    "sourceSize": {
     "w": 44,
-    "h": 60
+    "h": 61
    },
    "anchor": {
     "x": 0.5,
@@ -818,7 +962,7 @@
   },
   "prop/plant-large": {
    "frame": {
-    "x": 352,
+    "x": 372,
     "y": 2,
     "w": 56,
     "h": 97
@@ -842,7 +986,7 @@
   },
   "prop/planter": {
    "frame": {
-    "x": 256,
+    "x": 494,
     "y": 148,
     "w": 144,
     "h": 70
@@ -866,8 +1010,8 @@
   },
   "prop/printer": {
    "frame": {
-    "x": 976,
-    "y": 148,
+    "x": 314,
+    "y": 236,
     "w": 44,
     "h": 60
    },
@@ -890,10 +1034,10 @@
   },
   "prop/rug-navy": {
    "frame": {
-    "x": 158,
-    "y": 2,
+    "x": 2,
+    "y": 148,
     "w": 192,
-    "h": 106
+    "h": 86
    },
    "rotated": false,
    "trimmed": false,
@@ -901,11 +1045,11 @@
     "x": 0,
     "y": 0,
     "w": 192,
-    "h": 106
+    "h": 86
    },
    "sourceSize": {
     "w": 192,
-    "h": 106
+    "h": 86
    },
    "anchor": {
     "x": 0.5,
@@ -914,7 +1058,7 @@
   },
   "prop/side-table": {
    "frame": {
-    "x": 108,
+    "x": 448,
     "y": 148,
     "w": 44,
     "h": 72
@@ -938,10 +1082,10 @@
   },
   "prop/sofa": {
    "frame": {
-    "x": 852,
-    "y": 2,
+    "x": 302,
+    "y": 148,
     "w": 144,
-    "h": 88
+    "h": 75
    },
    "rotated": false,
    "trimmed": false,
@@ -949,11 +1093,11 @@
     "x": 0,
     "y": 0,
     "w": 144,
-    "h": 88
+    "h": 75
    },
    "sourceSize": {
     "w": 144,
-    "h": 88
+    "h": 75
    },
    "anchor": {
     "x": 0.5,
@@ -962,8 +1106,8 @@
   },
   "prop/trash-bin": {
    "frame": {
-    "x": 368,
-    "y": 228,
+    "x": 726,
+    "y": 236,
     "w": 20,
     "h": 24
    },
@@ -986,8 +1130,8 @@
   },
   "prop/wall-clock": {
    "frame": {
-    "x": 332,
-    "y": 228,
+    "x": 690,
+    "y": 236,
     "w": 34,
     "h": 35
    },
@@ -1010,10 +1154,10 @@
   },
   "prop/wall-landscape": {
    "frame": {
-    "x": 2,
-    "y": 228,
+    "x": 604,
+    "y": 236,
     "w": 84,
-    "h": 60
+    "h": 55
    },
    "rotated": false,
    "trimmed": false,
@@ -1021,11 +1165,11 @@
     "x": 0,
     "y": 0,
     "w": 84,
-    "h": 60
+    "h": 55
    },
    "sourceSize": {
     "w": 84,
-    "h": 60
+    "h": 55
    },
    "anchor": {
     "x": 0.5,
@@ -1034,10 +1178,10 @@
   },
   "prop/wall-whiteboard": {
    "frame": {
-    "x": 154,
+    "x": 640,
     "y": 148,
     "w": 100,
-    "h": 71
+    "h": 67
    },
    "rotated": false,
    "trimmed": false,
@@ -1045,11 +1189,11 @@
     "x": 0,
     "y": 0,
     "w": 100,
-    "h": 71
+    "h": 67
    },
    "sourceSize": {
     "w": 100,
-    "h": 71
+    "h": 67
    },
    "anchor": {
     "x": 0.5,
@@ -1058,7 +1202,7 @@
   },
   "prop/water-cooler": {
    "frame": {
-    "x": 2,
+    "x": 196,
     "y": 148,
     "w": 30,
     "h": 78
@@ -1087,8 +1231,8 @@
   "image": "office-v5-props.png",
   "format": "RGBA8888",
   "size": {
-   "w": 1022,
-   "h": 290
+   "w": 1004,
+   "h": 301
   },
   "scale": 1,
   "jkCorp": {
@@ -1139,11 +1283,29 @@
     "prop/desk-right": {
      "screen": {
       "x": 31,
-      "y": 12,
+      "y": 14,
       "w": 2,
-      "h": 24
+      "h": 25
      },
      "off": "prop/desk-right-off"
+    },
+    "prop/block-pair": {
+     "screen": {
+      "x": 33,
+      "y": 43,
+      "w": 30,
+      "h": 14
+     },
+     "off": "prop/block-pair-off"
+    },
+    "prop/block-lead": {
+     "screen": {
+      "x": 24,
+      "y": 20,
+      "w": 2,
+      "h": 25
+     },
+     "off": "prop/block-lead-off"
     },
     "prop/booth-navy": {
      "screen": {
@@ -1156,7 +1318,7 @@
     }
    },
    "seat": {
-    "_note": "자리(2x3 타일 = 96x144 도트 px) 안 좌표. 모두 스프라이트 왼쪽 위(anchor 0). 그리는 순서는 order. 인물 셀은 office-v5-<방향> 의 그 방향 셀. 출발점 값이고 화면을 보고 고친다 (데모로 확인)",
+    "_note": "자리(2x3 타일 = 96x144 도트 px) 안 좌표. 모두 스프라이트 왼쪽 위(anchor 0). 그리는 순서는 order. 인물 셀은 office-v5-<방향> 의 그 방향 셀. 데모로 잡은 출발점을 화면을 보고 고친 값: up 자리는 짝 안에서 윗자리보다 2타일 아래(1타일 겹침, officeLayout.ts)이고, desk-up 칸막이 아래 외곽선(desk-up 16줄)이 마주 보는 윗자리 desk-down 상판 아래 선(desk-down 35줄 = 윗자리 y 122)에 겹치게 desk y 10 — 윗책상 앞판은 칸막이·책상에 가려진다. right 는 옆 책상 위 끝이 윗자리 책상 위 끝 근처에 오게 16 아래로 (지휘자 자리는 이미 1타일 내려 앉는다). icon 은 그 방향 모든 인물(idle·typing·doze)의 머리 위 끝보다 2 이상 위, up·booth 는 머리(가로 끝 x 69·77)와 겹치지 않게 머리 오른쪽 위. emptyChair = 사람이 없는 자리(빈 자리·휴식)의 의자: 책상 앞 아래 외곽선에 3 걸치게 밀어 넣는다 (없으면 chair 그대로)",
     "w": 96,
     "h": 144,
     "down": {
@@ -1172,8 +1334,8 @@
       60
      ],
      "char": [
-      16,
-      27
+      8,
+      23
      ],
      "desk": [
       0,
@@ -1185,7 +1347,7 @@
      ],
      "icon": [
       39,
-      25
+      22
      ]
     },
     "up": {
@@ -1198,23 +1360,27 @@
      ],
      "desk": [
       0,
-      0
+      10
      ],
      "item": [
       74,
-      40
+      50
      ],
      "char": [
-      4,
-      -18
+      2,
+      -8
      ],
      "chair": [
       25,
-      77
+      87
      ],
      "icon": [
-      39,
-      4
+      72,
+      16
+     ],
+     "emptyChair": [
+      25,
+      67
      ]
     },
     "right": {
@@ -1227,20 +1393,20 @@
      ],
      "chair": [
       0,
-      52
+      68
      ],
      "desk": [
       48,
-      28
+      44
      ],
      "deskFrontFrom": 52,
      "char": [
       -6,
-      -2
+      14
      ],
      "icon": [
       22,
-      12
+      23
      ],
      "_deskFront": "desk-right 의 y 52 아래를 인물 위에 한 번 더 그린다: 손은 키보드 위에 보이고 무릎·허벅지는 책상 뒤로"
     },
@@ -1257,7 +1423,7 @@
       0
      ],
      "char": [
-      12,
+      10,
       14
      ],
      "chair": [
@@ -1265,12 +1431,17 @@
       109
      ],
      "icon": [
-      47,
-      36
+      80,
+      38
      ],
-     "_size": "booth-navy 112x88. 부스 간격 x 3타일(144)"
+     "_size": "booth-navy 112x88. 부스 간격 x 3타일(144)",
+     "emptyChair": [
+      33,
+      60
+     ]
     },
-    "partition": "짝 사이 세로 칸막이 partition-v(8x144) 를 짝 경계 x-4, 윗자리 y 66 에 하나 (윗자리 책상 위 끝 ~ 아랫자리 책상 아래 끝)"
+    "partition": "짝 사이 세로 칸막이 partition-v 를 짝 경계 x-4, 윗자리 y 66 부터 아랫자리 desk-up 아래 끝 + 2 까지 (짝 위에서 172) 하나. 그림(8x144)보다 짧아 화면이 위쪽을 그 길이 - 1 로 잘라 쓰고 맨 아래 외곽선 줄을 붙인다",
+    "_cells": "인물 셀이 정면 80x132(발 중심 x 40, 기준선 128)·뒷모습 92x128(발 중심 x 46)로 넓어져 down.char·up.char 를 셀이 넓어진 만큼 당겼다 (그림 위치는 그대로). down·up·right·partition 은 따로 그린 책상(desk-*)으로 짓는 예전 자리이고 섬은 block 을 쓴다"
    },
    "icons": {
     "_note": "머리 위 상태 아이콘 18x15 (꼬리 끝이 아래 왼쪽 x 4). 화면에서 도트 px 그대로",
@@ -1298,6 +1469,107 @@
    "islandBase": {
     "color": "#c4c8cf",
     "_note": "섬 받침은 그림 없이 Graphics. 데스크존 카펫(desk-carpet 평균 #ced1d6)보다 한 단 진한 회색"
+   },
+   "block": {
+    "_note": "칸막이 블록 (참고 그림처럼 한 덩어리). 좌표는 도트 px, 스프라이트 왼쪽 위(anchor 0). 원점 = 블록 줄의 첫 짝 왼쪽 위. 블록 줄 높이 h(4타일): 윗자리 몫 1타일 + 모듈 2타일 + 아랫자리 몫 1타일. 짝 i 는 x 에 i*pairW 를 더한다. 사람·의자·아이콘은 블록 줄 위아래로 조금 나온다(윗사람 머리·든 손 위로 ~17, 아랫자리 의자 아래로 ~23)",
+    "h": 192,
+    "pairW": 96,
+    "moduleY": 48,
+    "pair": {
+     "module": "prop/block-pair",
+     "moduleOff": "prop/block-pair-off",
+     "_screen": "block-pair 의 화면은 아랫자리(up) 것 하나. 윗자리는 모니터 뒷면이라 켜짐·꺼짐이 없다",
+     "top": {
+      "dir": "down",
+      "chair": [
+       25,
+       21
+      ],
+      "char": [
+       8,
+       -16
+      ],
+      "icon": [
+       39,
+       -17
+      ]
+     },
+     "bottom": {
+      "dir": "up",
+      "char": [
+       2,
+       65
+      ],
+      "chair": [
+       25,
+       160
+      ],
+      "emptyChair": [
+       25,
+       140
+      ],
+      "icon": [
+       72,
+       89
+      ]
+     }
+    },
+    "lead": {
+     "_note": "지휘자 자리 = 블록 왼쪽 2타일 (x -96..0). block-lead(옆 책상 + 수납 칸막이 판)를 x -48 에 붙이고, 지휘자는 그 왼쪽에서 오른쪽을 본다. 좌표 원점은 블록과 같다(첫 짝 왼쪽 위)",
+     "dir": "right",
+     "module": "prop/block-lead",
+     "moduleOff": "prop/block-lead-off",
+     "moduleAt": [
+      -48,
+      48
+     ],
+     "char": [
+      -98,
+      13
+     ],
+     "chair": [
+      -92,
+      67
+     ],
+     "frontFrom": 50,
+     "icon": [
+      -70,
+      19
+     ],
+     "_frontFrom": "block-lead 의 y 50 아래(옆모습 typing 손 아래 끝 중앙값 49 + 1)를 지휘자 위에 한 번 더 그린다: 손은 키보드(block-lead 33~55줄) 위, 허벅지·무릎은 책상 윗면 뒤. 지휘자 사람·의자는 손 가운데가 키보드 세로 가운데(92)에 오게 처음 값에서 오른쪽 3·위 11 옮겼고, 아이콘은 18명 idle·typing·doze 머리와 겹치지 않는 가장 낮은 자리"
+    },
+    "endLeft": {
+     "sprite": "prop/block-end-left",
+     "at": [
+      -12,
+      48
+     ],
+     "_note": "지휘자 없는 블록의 왼쪽 끝 마감 (지휘자 있으면 block-lead 의 수납 판이 마감)"
+    },
+    "endRight": {
+     "sprite": "prop/block-end-right",
+     "at": [
+      "pairs*pairW",
+      48
+     ],
+     "_note": "오른쪽 끝 세로 칸막이. x = 짝 수 * pairW (마지막 짝 오른쪽 경계)"
+    },
+    "order": [
+     "top.chair",
+     "top.char",
+     "lead.chair",
+     "module",
+     "lead.module",
+     "endLeft",
+     "endRight",
+     "lead.char",
+     "lead.front",
+     "bottom.char",
+     "bottom.chair",
+     "icon"
+    ],
+    "_order": "블록 줄 하나 안에서 모든 짝·지휘자를 이 순서로 (단계마다 모든 짝을 그린 뒤 다음 단계). 윗사람은 모듈 뒤(몸이 윗책상·가운데 칸막이에 가려 손만 상판 위), 아랫사람·의자는 모듈 앞. 아래 블록 줄은 위 블록 줄 뒤에 그린다",
+    "emptyPair": "홀수 팀원의 마지막 짝 아랫자리는 사람 없이 bottom.emptyChair 에 의자만 (모듈은 늘 짝 단위라 빈 책상이 저절로 보인다)"
    }
   }
  }

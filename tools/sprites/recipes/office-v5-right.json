@@ -2,6 +2,7 @@
  "name": "office-v5-right",
  "direction": "right",
  "palette": 255,
+ "slice": "figure",
  "description": "옆모습(오른쪽을 봄) 인물 18명 x 4상태. 셀 88x128, 등(하체 왼쪽 끝) x=18. left 는 좌우 반전",
  "spec": {
   "tile": 48,

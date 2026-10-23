@@ -19,6 +19,7 @@ python tools/sprites/build.py --recipe tools/sprites/recipes/office-v0.json \
 
 - `--source-dir`: 레시피의 파일 이름이 가리키는 생성 원본 폴더. 원본은 커밋하지 않는다 (장당 1~2MB). v0 원본은 `~/.claude/jk-corp/sprite-src/v0/` (프롬프트 사본 `prompts/` 포함)
 - 알파 문제(전부 투명·전부 불투명·반투명 픽셀)가 있으면 아무것도 쓰지 않고 종료 코드 1. 캐릭터 셀이 위·왼쪽·오른쪽 가장자리에 닿으면 "주의:" 로 알린다 (잘렸을 수 있음)
+- 잘림 검사: `python tools/sprites/check_edges.py --recipe <레시피> --source-dir <원본 폴더> --atlas web/public/office/<판>` — 인물 프레임이 셀 네 가장자리에 닿거나 인물·소품이 원본 칸 경계(덩어리 단위 판이면 원본 그림 끝·이웃 그림)에 닿은 곳을 센다. 0 개가 아니면 종료 코드 1 (v5 넷은 0 개)
 - 다 만든 뒤 `npm run build` 해야 web/dist 에 들어가 화면에 반영된다
 
 ## 생성
@@ -31,7 +32,7 @@ SPRITE_GEN=<sprite-gen 실행 파일> bash tools/sprites/gen.sh gen --provider c
 
 ## 레시피
 
-`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이. `anchorX` = 셀 안 가로 기준(없으면 가운데), `backX` = 발 중심 대신 하체 왼쪽 끝(옆모습의 등)을 이 x 에 맞춘다), `direction`(있으면 프레임 이름이 `char/<id>/<방향>/<상태>`), `palette`(있으면 그 색 수 + 투명 1칸의 팔레트 PNG — v5 는 255), `jkCorp`(그대로 `meta.jkCorp` 에 싣는 화면용 메타), `characters[]`(`id`·`pool`·`gender` 는 아틀라스 메타로, `scale` = 몸 높이 대신 쓸 고정 배율), `characters[].rows[]`(`strip`+`count`, 격자 한 장의 한 행 `grid`+`gridSize`[칸, 행]+`gridRow`, 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`, 그 행만 다른 몸 높이 `bodyHeight` — 웅크리게 그려진 행이 커질 때. 파일 이름은 `--source-dir` 기준이라 `../v1/…` 로 앞 판 원본을 쓸 수 있다), `props[]`(시트·격자 칸·폭. `whole: true` 면 칸 안 조각을 다 남긴다 — 기본은 가장 긴 덩어리만이라 나란히 건 액자 둘이 하나로 줄어든다. `screenOff: true` 면 파란 화면을 어둡게 바꾼 `prop/<id>-off` 와 메타 `screen`·`off`), `tiles[]`(반복 타일):
+`recipes/*.json`. `spec`(타일·셀·기준선·몸 높이. `anchorX` = 셀 안 가로 기준(없으면 가운데), `backX` = 발 중심 대신 하체 왼쪽 끝(옆모습의 등)을 이 x 에 맞춘다), `direction`(있으면 프레임 이름이 `char/<id>/<방향>/<상태>`), `palette`(있으면 그 색 수 + 투명 1칸의 팔레트 PNG — v5 는 255), `slice`(`"figure"` 면 인물·소품을 원본 칸 경계가 아니라 덩어리 단위로 자른다 — 칸 경계를 넘은 머리·손·소품 끝이 잘리지 않는다. v5 넷), `jkCorp`(그대로 `meta.jkCorp` 에 싣는 화면용 메타), `characters[]`(`id`·`pool`·`gender` 는 아틀라스 메타로, `scale` = 몸 높이 대신 쓸 고정 배율), `characters[].rows[]`(`strip`+`count`, 격자 한 장의 한 행 `grid`+`gridSize`[칸, 행]+`gridRow`, 또는 `frames` 목록, 쓸 칸 `use`, 재생 순서 `sequence`, `fps`, 그 행만 다른 몸 높이 `bodyHeight` — 웅크리게 그려진 행이 커질 때. 파일 이름은 `--source-dir` 기준이라 `../v1/…` 로 앞 판 원본을 쓸 수 있다), `props[]`(시트·격자 칸·폭. `whole: true` 면 칸 안 조각을 다 남긴다 — 기본은 가장 긴 덩어리만이라 나란히 건 액자 둘이 하나로 줄어든다. `screenOff: true` 면 파란 화면을 어둡게 바꾼 `prop/<id>-off` 와 메타 `screen`·`off`), `tiles[]`(반복 타일):
 
 | 키 | 뜻 |
 |---|---|
@@ -69,3 +70,5 @@ python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v3-recolor.js
 | `exclude` | 고르지 않을 상자들 (얼굴·안경처럼 색이 비슷한 곳) |
 
 `--preview` 는 인물마다 idle·raise-hand 첫 칸 원본과 마스크(머리 자홍·윗옷 하늘색)를 나란히 그린다. 피부·눈·바지에 색이 묻으면 표본 상자를 줄이거나 `exclude` 를 넣는다.
+
+`draw_blocks.py --source-dir <v5 원본 폴더>`: 칸막이 블록 모듈(`block-pair`·`block-end-right`·`block-end-left`·`block-lead`)을 `blocks.png` 로. 생성한 책상(원근으로 옆면이 비스듬해 이어 붙이면 이음매가 보인다)의 빈 세로 줄을 옆으로 반복해 직사각형으로 펴고 모니터·키보드만 원본에서 옮긴다. 레시피 `office-v5-props.json` 의 책상 칸을 읽으므로 그 레시피를 고친 뒤 이것 → build.py 순서로 돌린다.

@@ -1,16 +1,17 @@
 {
  "name": "office-v5-down",
- "description": "정면(아래를 봄) 인물 18명 x typing·raise-hand·idle·doze. v3 와 같은 원본·같은 칸",
+ "description": "정면(아래를 봄) 인물 18명 x typing·raise-hand·idle·doze. v3 와 같은 원본을 인물 단위로 잘라(slice figure) 셀 80x132·기준선 128·발 중심 x 40 에 놓는다 (v3 64x128 칸보다 양옆 8·위 4 넓다: 든 손이 v3 칸 밖으로 나가서)",
  "palette": 255,
+ "slice": "figure",
  "spec": {
   "tile": 48,
   "cell": [
-   64,
-   128
+   80,
+   132
   ],
-  "baseline": 124,
+  "baseline": 128,
   "bodyHeight": 108,
-  "anchorX": 32
+  "anchorX": 40
  },
  "characters": [
   {

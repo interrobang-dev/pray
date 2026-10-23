@@ -98,6 +98,100 @@ def grid_slots(path: Path, columns: int, rows: int, row: int) -> list[np.ndarray
     return [main_piece(band[:, edges[k]:edges[k + 1]]) for k in range(columns)]
 
 
+def label_components(mask: np.ndarray) -> np.ndarray:
+    """8방향으로 이어진 덩어리 번호 (0 = 배경). 줄마다 이어진 구간(run)을 union-find 로 잇는다 (scipy 없이 큰 그림도 빠르게)"""
+    parent: list[int] = [0]
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    runs_by_row: list[list[tuple[int, int, int]]] = []
+    for y in range(mask.shape[0]):
+        row = np.concatenate([[False], mask[y], [False]]).astype(np.int8)
+        change = np.nonzero(np.diff(row))[0]
+        runs = []
+        for x0, x1 in zip(change[::2], change[1::2]):
+            label = len(parent)
+            parent.append(label)
+            if y:
+                for px0, px1, plabel in runs_by_row[-1]:
+                    # 8방향: 윗줄 구간과 대각선으로만 닿아도 잇는다
+                    if px0 <= x1 and x0 <= px1:
+                        a, b = find(label), find(plabel)
+                        if a != b:
+                            parent[max(a, b)] = min(a, b)
+            runs.append((int(x0), int(x1), label))
+        runs_by_row.append(runs)
+    labels = np.zeros(mask.shape, np.int32)
+    for y, runs in enumerate(runs_by_row):
+        for x0, x1, label in runs:
+            labels[y, x0:x1] = find(label)
+    return labels
+
+
+class Figures:
+    """
+    그림 한 장의 덩어리(8방향) 번호와 무게중심. 칸(사각형)마다 무게중심이 그 안에 있는 덩어리를 통째로 꺼낸다 (figure_piece) —
+    머리·든 손이 칸 경계를 넘어도 잘리지 않고, 넘어온 이웃 그림 픽셀은 무게중심이 칸 밖이라 빠진다
+    """
+
+    def __init__(self, a: np.ndarray, name: str):
+        self.a, self.name = a, name
+        self.labels = label_components(a[..., 3] > 127)
+        count = int(self.labels.max()) + 1
+        ys, xs = np.nonzero(self.labels)
+        ids = self.labels[ys, xs]
+        self.size = np.bincount(ids, minlength=count)
+        self.cy = np.bincount(ids, ys, minlength=count) / np.maximum(self.size, 1)
+        self.cx = np.bincount(ids, xs, minlength=count) / np.maximum(self.size, 1)
+
+    def figure_piece(self, x0: int, y0: int, x1: int, y1: int, is_whole: bool = False) -> tuple[np.ndarray, list[str]]:
+        """
+        칸 [x0, x1) x [y0, y1) 의 그림. is_whole 이 아니면 main_piece 처럼 빈 줄·빈 열로 떨어진 조각은 버린다.
+        주의 문구: 덩어리가 그림 끝에 닿음(원본에서 잘림), 덩어리의 1/4 넘게 칸 밖(이웃 그림과 붙었을 수 있음)
+        """
+        h, w = self.labels.shape
+        chosen = np.nonzero((self.size > 0) & (self.cy >= y0) & (self.cy < y1) & (self.cx >= x0) & (self.cx < x1))[0]
+        chosen = chosen[chosen > 0]
+        keep = np.isin(self.labels, chosen)
+        if not keep.any():
+            raise ValueError(f'{self.name} 칸 ({x0},{y0})-({x1},{y1}): 빈 칸')
+        piece = np.where(keep[..., None], self.a, 0).astype(np.uint8)
+        piece = crop_bbox(piece) if is_whole else main_piece(piece)
+        notes = []
+        kept_ys, kept_xs = np.nonzero(keep)
+        if kept_ys.min() == 0 or kept_xs.min() == 0 or kept_ys.max() == h - 1 or kept_xs.max() == w - 1:
+            notes.append(f'{self.name} 칸 ({x0},{y0}): 그림 끝에 닿음 (원본에서 잘림)')
+        for i in chosen:
+            inside = int((self.labels[y0:y1, x0:x1] == i).sum())
+            # 머리·손 몇 줄이 넘는 것은 정상
+            if self.size[i] - inside > self.size[i] * 0.25:
+                notes.append(f'{self.name} 칸 ({x0},{y0}): 덩어리의 {1 - inside / self.size[i]:.0%} 가 칸 밖 (이웃과 붙었는지 확인)')
+        return piece, notes
+
+
+_FIGURES: dict[Path, Figures] = {}  # 격자 한 장을 상태 행마다 다시 세지 않게
+
+
+def figure_slots(path: Path, columns: int, rows: int, row: int) -> tuple[list[np.ndarray], list[str]]:
+    """격자 그림(rows 행 x columns 칸)의 row 번째 행을 칸 경계가 아니라 인물 단위로 잘라 낸다 (Figures). (칸 그림들, 주의 문구들)"""
+    if path not in _FIGURES:
+        _FIGURES[path] = Figures(load_keyed(path), path.name)
+    figures = _FIGURES[path]
+    h, w = figures.labels.shape
+    y0, y1 = row * h // rows, (row + 1) * h // rows
+    edges = np.linspace(0, w, columns + 1).astype(int)
+    pieces, notes = [], []
+    for k in range(columns):
+        piece, piece_notes = figures.figure_piece(edges[k], y0, edges[k + 1], y1)
+        pieces.append(piece)
+        notes += piece_notes
+    return pieces, notes
+
+
 def body_metrics(frame: np.ndarray) -> tuple[float, int, int]:
     """
     (발 중심 x, 발 아래 끝 y, 머리 위 끝 y).
