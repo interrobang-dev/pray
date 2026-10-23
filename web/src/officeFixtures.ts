@@ -12,8 +12,8 @@ const TILE = 48
 export const PARTITION_W = 9
 
 export interface Fixture {
-  /** props = office-v5-props 의 prop/<prop>, env = office-v2 의 prop/<prop> */
-  sheet: 'props' | 'env'
+  /** props = office-v5-props 의 prop/<prop>, env = office-v2 의 prop/<prop>, wall = office-v5-wall 의 prop/<prop> */
+  sheet: 'props' | 'env' | 'wall'
   prop: string
   /** 그림 아래 가운데 (도트 px) */
   x: number
@@ -27,26 +27,67 @@ export type PropSizes = Record<string, { w: number; h: number }>
 
 /** 벽 창 칸 폭 (타일) = 벽 타일 144 도트 px. 칸 i 는 맵 왼쪽 끝에서 3i 타일부터 */
 export const WALL_BAY_TILES = 3
+/** 이 폭(타일) 이상인 데스크존은 가운데 두 칸에 건다 (창 칸 4개) */
+export const WIDE_DESK_ZONE_TILES = 4 * WALL_BAY_TILES
+/** 장식 칸이 이어지는 최대 수 (이은 벽은 두 칸까지) */
+export const MAX_WALL_DECOR_RUN = 2
 
 export interface WallFixture {
+  sheet: Fixture['sheet']
   prop: string
   bay: number
 }
 
+/** 데스크존 벽 장식: 왼쪽 데스크존부터 이 순서로 돌아가며 건다 */
+export const DESK_WALL_DECOR: Pick<WallFixture, 'sheet' | 'prop'>[] = [
+  { sheet: 'props', prop: 'wall-whiteboard' },
+  { sheet: 'wall', prop: 'wall-corkboard' },
+  { sheet: 'wall', prop: 'wall-poster' },
+  { sheet: 'wall', prop: 'wall-photos' },
+]
+
 /**
- * 공간마다 벽 장식 하나: 데스크존(그룹) = 화이트보드, Focus Zone = 시계, 라운지 = 풍경화. 그 공간 가운데가 든 창 칸에 건다.
- * 같은 칸을 둘이 가리키면 왼쪽(같으면 위) 공간 것만이고 나머지 칸은 창 그대로. padTiles = 배치 원점이 맵 왼쪽 끝에서 떨어진 타일 수
+ * 공간마다 벽 장식: Focus Zone = 시계, 라운지 = 풍경화, 데스크존(그룹) = 왼쪽부터(x, 같으면 y) DESK_WALL_DECOR 를 돌아가며.
+ * 그 공간 가운데가 든 창 칸에 하나. 폭이 창 칸 4개 이상인 데스크존은 두 칸 사이 기둥이 공간 가운데에 가장 가까운 연속 두 칸
+ * (늘 공간 안이다)에 순서상 다음 둘을 건다. 같은 칸을 둘이 가리키면 왼쪽(같으면 위) 공간 것만이고, 걸면 장식 칸이
+ * MAX_WALL_DECOR_RUN 보다 길게 이어지는 칸도 건너뛴다 (모든 공간 같은 규칙. 먼저 건 것이 이긴다). 못 건 칸은 순서를 넘기지 않는다.
+ * 이웃 칸(번호 차이 1)에 같은 소품이 이미 있으면 순서상 그다음 것을 건다. 나머지 칸은 창 그대로. padTiles = 배치 원점이 맵 왼쪽 끝에서 떨어진 타일 수
  */
 export function wallFixtures(layout: Pick<OfficeLayout, 'groupAreas' | 'lobby' | 'lounge'>, padTiles: number): WallFixture[] {
-  const spaces: { rect: Rect; prop: string }[] = [
-    ...layout.groupAreas.map((area) => ({ rect: area, prop: 'wall-whiteboard' })),
-    { rect: layout.lobby, prop: 'wall-clock' },
-    { rect: layout.lounge, prop: 'wall-landscape' },
-  ].sort((a, b) => a.rect.x - b.rect.x || a.rect.y - b.rect.y)
+  const spaces: { rect: Rect; decor: Pick<WallFixture, 'sheet' | 'prop'> | null }[] = [
+    ...layout.groupAreas.map((area) => ({ rect: area, decor: null })),
+    { rect: layout.lobby, decor: { sheet: 'props', prop: 'wall-clock' } },
+    { rect: layout.lounge, decor: { sheet: 'props', prop: 'wall-landscape' } },
+  ]
+  spaces.sort((a, b) => a.rect.x - b.rect.x || a.rect.y - b.rect.y)
   const fixtures: WallFixture[] = []
-  for (const { rect, prop } of spaces) {
-    const bay = Math.floor((padTiles + rect.x + rect.w / 2) / WALL_BAY_TILES)
-    if (!fixtures.some((fixture) => fixture.bay === bay)) fixtures.push({ prop, bay })
+  const propAt = (bay: number) => fixtures.find((fixture) => fixture.bay === bay)?.prop
+  // 그 칸에 걸면 이어지는 장식 칸 수 (그 칸 포함)
+  const runWith = (bay: number) => {
+    let left = bay - 1
+    while (propAt(left) !== undefined) left--
+    let right = bay + 1
+    while (propAt(right) !== undefined) right++
+    return right - left - 1
+  }
+  // 데스크존 순서에서 다음에 걸 소품
+  let next = 0
+  for (const { rect, decor } of spaces) {
+    const center = (padTiles + rect.x + rect.w / 2) / WALL_BAY_TILES
+    const pairRight = Math.round(center)
+    const bays = !decor && rect.w >= WIDE_DESK_ZONE_TILES ? [pairRight - 1, pairRight] : [Math.floor(center)]
+    for (const bay of bays) {
+      if (propAt(bay) !== undefined || runWith(bay) > MAX_WALL_DECOR_RUN) continue
+      if (decor) {
+        fixtures.push({ ...decor, bay })
+        continue
+      }
+      const neighbors = [propAt(bay - 1), propAt(bay + 1)]
+      let index = next
+      while (neighbors.includes(DESK_WALL_DECOR[index % DESK_WALL_DECOR.length].prop)) index++
+      fixtures.push({ ...DESK_WALL_DECOR[index % DESK_WALL_DECOR.length], bay })
+      next = (index + 1) % DESK_WALL_DECOR.length
+    }
   }
   return fixtures
 }

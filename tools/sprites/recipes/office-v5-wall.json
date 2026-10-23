@@ -1,0 +1,50 @@
+{
+ "name": "office-v5-wall",
+ "slice": "figure",
+ "description": "데스크존 벽 장식 3종(게시판·포스터·액자 둘). 원본 ~/.claude/jk-corp/sprite-src/v4 의 wall.png (레시피 office-v4 와 같은 칸). office-v5-props 에 넣으면 255색 팔레트가 다시 잡혀 기존 소품 색이 바뀌어 따로 묶는다. 작아서 팔레트 없이 RGBA 그대로",
+ "spec": {
+  "tile": 48
+ },
+ "props": [
+  {
+   "id": "wall-corkboard",
+   "sheet": "wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    1
+   ],
+   "width": 84
+  },
+  {
+   "id": "wall-poster",
+   "sheet": "wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    1,
+    0
+   ],
+   "width": 44
+  },
+  {
+   "id": "wall-photos",
+   "sheet": "wall.png",
+   "grid": [
+    3,
+    2
+   ],
+   "cell": [
+    2,
+    1
+   ],
+   "width": 64,
+   "whole": true
+  }
+ ]
+}

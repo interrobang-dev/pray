@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DESK_WALL_DECOR,
+  MAX_WALL_DECOR_RUN,
   WALL_BAY_TILES,
+  WIDE_DESK_ZONE_TILES,
   cornerFixtures,
   deskItems,
   groupFixtures,
@@ -9,6 +12,7 @@ import {
   wallFixtures,
   type Fixture,
   type PropSizes,
+  type WallFixture,
 } from './officeFixtures'
 import { LOUNGE_MIN_H, layoutOffice, type Rect } from './officeLayout'
 import type { Group, Office, Session, Team } from './types'
@@ -61,31 +65,204 @@ const members = (teamId: string, count: number): Session[] =>
   Array.from({ length: count }, (_, index) => ({ id: `${teamId}-${index}`, teamId, attendance: 'present' }) as Session)
 
 describe('벽 장식', () => {
-  it('공간마다 그 가운데가 든 창 칸에 하나: 데스크존 화이트보드, Focus Zone 시계, 라운지 풍경화', () => {
+  const [WHITEBOARD, CORKBOARD, POSTER, PHOTOS] = DESK_WALL_DECOR
+  const CLOCK = { sheet: 'props', prop: 'wall-clock' }
+  const LANDSCAPE = { sheet: 'props', prop: 'wall-landscape' }
+  /** 데스크존(그룹 영역)만 손으로 놓은 배치. Focus Zone·라운지는 데스크존들 오른쪽 멀리 */
+  const spaces = (areas: Rect[]) => ({
+    groupAreas: areas.map((area) => ({ ...area, group: group('g', area.x, area.y), origin: { x: area.x, y: area.y } })),
+    lobby: { x: 100, y: 0, w: 8, h: 10 },
+    lounge: { x: 109, y: 0, w: 10, h: 10 },
+  })
+  /** 데스크존 장식만 칸 순서대로 (Focus Zone·라운지 것은 뺀다) */
+  const deskDecor = (fixtures: WallFixture[]) =>
+    fixtures
+      .filter((fixture) => fixture.bay < 33)
+      .sort((a, b) => a.bay - b.bay)
+      .map(({ bay, prop }) => [bay, prop])
+  /** 그 칸(3타일)이 공간 안에 든다 (padTiles 1) */
+  const isBayInside = (bay: number, rect: Rect) => bay * WALL_BAY_TILES - 1 >= rect.x && bay * WALL_BAY_TILES - 1 + WALL_BAY_TILES <= rect.x + rect.w
+  /** 가장 길게 이어진 장식 칸 수 */
+  const longestRun = (fixtures: WallFixture[]) => {
+    const bays = new Set(fixtures.map((fixture) => fixture.bay))
+    let longest = 0
+    for (const bay of bays) {
+      if (bays.has(bay - 1)) continue
+      let run = 1
+      while (bays.has(bay + run)) run++
+      longest = Math.max(longest, run)
+    }
+    return longest
+  }
+  /** wallFixtures (padTiles 1) + 어느 배치에서든 장식 칸이 MAX_WALL_DECOR_RUN 보다 길게 이어지지 않는다 */
+  const place = (layout: Parameters<typeof wallFixtures>[0]) => {
+    const fixtures = wallFixtures(layout, 1)
+    expect(longestRun(fixtures)).toBeLessThanOrEqual(MAX_WALL_DECOR_RUN)
+    return fixtures
+  }
+
+  it('공간마다 그 가운데가 든 창 칸: 데스크존은 화이트보드부터 돌아가며, Focus Zone 시계, 라운지 풍경화', () => {
     const office: Office = { groups: [group('g1', 0), group('g2', 12)], teams: [] }
     const layout = layoutOffice(office, [])
-    const fixtures = wallFixtures(layout, 1)
+    const fixtures = place(layout)
     const centerBay = (rect: Rect) => Math.floor((1 + rect.x + rect.w / 2) / WALL_BAY_TILES)
     expect(fixtures).toEqual([
-      { prop: 'wall-whiteboard', bay: centerBay(layout.groupAreas[0]) },
-      { prop: 'wall-whiteboard', bay: centerBay(layout.groupAreas[1]) },
-      { prop: 'wall-clock', bay: centerBay(layout.lobby) },
-      { prop: 'wall-landscape', bay: centerBay(layout.lounge) },
+      { ...WHITEBOARD, bay: centerBay(layout.groupAreas[0]) },
+      { ...CORKBOARD, bay: centerBay(layout.groupAreas[1]) },
+      { ...CLOCK, bay: centerBay(layout.lobby) },
+      { ...LANDSCAPE, bay: centerBay(layout.lounge) },
     ])
-    // 창 칸(3타일)이 그 공간 안에 든다
-    for (const [index, rect] of [...layout.groupAreas, layout.lobby, layout.lounge].entries()) {
-      const bayLeft = fixtures[index].bay * WALL_BAY_TILES - 1
-      expect(bayLeft).toBeGreaterThanOrEqual(rect.x)
-      expect(bayLeft + WALL_BAY_TILES).toBeLessThanOrEqual(rect.x + rect.w)
+    for (const [index, rect] of [...layout.groupAreas, layout.lobby, layout.lounge].entries()) expect(isBayInside(fixtures[index].bay, rect)).toBe(true)
+  })
+
+  it('데스크존은 왼쪽부터 화이트보드 → 게시판 → 포스터 → 액자를 돌아가며 건다 (그룹 목록 순서와 관계없이)', () => {
+    const areas = [40, 10, 30, 0, 20].map((x) => ({ x, y: 0, w: 9, h: 8 }))
+    expect(deskDecor(place(spaces(areas)))).toEqual([
+      [1, WHITEBOARD.prop],
+      [5, CORKBOARD.prop],
+      [8, POSTER.prop],
+      [11, PHOTOS.prop],
+      [15, WHITEBOARD.prop],
+    ])
+  })
+
+  it('폭이 창 칸 4개 이상인 데스크존은 공간 위 가운데 연속 두 칸에 순서상 다음 둘, 그보다 좁으면 한 칸', () => {
+    const areas = [
+      { x: 0, y: 0, w: 9, h: 8 },
+      { x: 10, y: 0, w: WIDE_DESK_ZONE_TILES, h: 8 },
+      { x: 23, y: 0, w: WIDE_DESK_ZONE_TILES - 1, h: 8 },
+    ]
+    expect(deskDecor(place(spaces(areas)))).toEqual([
+      [1, WHITEBOARD.prop],
+      [5, CORKBOARD.prop],
+      [6, POSTER.prop],
+      [9, PHOTOS.prop],
+    ])
+    // 어느 위치·폭이든 두 칸은 이웃하고 공간 안이며, 두 칸 사이 기둥은 공간 가운데에서 1.5타일 안
+    for (let x = 0; x < 6; x++) {
+      for (let w = WIDE_DESK_ZONE_TILES; w <= 30; w++) {
+        const area = { x, y: 0, w, h: 8 }
+        const bays = place(spaces([area]))
+          .filter((fixture) => fixture.bay < 33)
+          .map((fixture) => fixture.bay)
+        expect(bays, `x ${x} w ${w}`).toHaveLength(2)
+        expect(bays[1] - bays[0]).toBe(1)
+        for (const bay of bays) expect(isBayInside(bay, area), `x ${x} w ${w} 칸 ${bay}`).toBe(true)
+        expect(Math.abs(bays[1] * WALL_BAY_TILES - (1 + x + w / 2))).toBeLessThanOrEqual(1.5)
+      }
     }
   })
 
-  it('같은 칸을 둘이 가리키면 왼쪽(같으면 위) 공간 것만', () => {
-    // 위아래로 쌓은 두 그룹은 가운데가 같은 칸이다
-    const office: Office = { groups: [group('low', 0, 20), group('high', 0, 0)], teams: [] }
-    const fixtures = wallFixtures(layoutOffice(office, []), 1)
-    expect(fixtures.filter((f) => f.prop === 'wall-whiteboard')).toHaveLength(1)
+  it('같은 칸을 둘이 가리키면 왼쪽(같으면 위) 공간 것만이고, 못 건 데스크존은 순서를 넘기지 않는다', () => {
+    // 위아래로 쌓은 두 그룹은 가운데가 같은 칸이다 (목록에서는 아래 그룹이 먼저)
+    const office: Office = { groups: [group('low', 0, 20), group('high', 0, 0), group('right', 12)], teams: [] }
+    const layout = layoutOffice(office, [])
+    const fixtures = place(layout)
+    const high = layout.groupAreas[1]
+    expect(fixtures.filter((f) => f.prop === WHITEBOARD.prop)).toEqual([{ ...WHITEBOARD, bay: Math.floor((1 + high.x + high.w / 2) / WALL_BAY_TILES) }])
+    // 오른쪽 그룹은 순서상 다음(게시판)을 받는다
+    expect(fixtures.find((f) => isBayInside(f.bay, layout.groupAreas[2]))?.prop).toBe(CORKBOARD.prop)
     expect(new Set(fixtures.map((f) => f.bay)).size).toBe(fixtures.length)
+  })
+
+  it('넓은 데스크존의 두 칸 중 하나를 위 공간이 이미 가졌으면 남은 한 칸에만', () => {
+    // 둘째 칸이 먼저 걸린 경우: 위 보통 그룹이 2, 아래 넓은 그룹의 두 칸은 1·2
+    expect(
+      deskDecor(
+        place(
+          spaces([
+            { x: 0, y: 0, w: 11, h: 8 },
+            { x: 0, y: 10, w: 12, h: 8 },
+          ]),
+        ),
+      ),
+    ).toEqual([
+      [1, CORKBOARD.prop],
+      [2, WHITEBOARD.prop],
+    ])
+    // 첫째 칸이 먼저 걸린 경우: 위 보통 그룹이 1, 아래 넓은 그룹의 두 칸은 1·2
+    expect(
+      deskDecor(
+        place(
+          spaces([
+            { x: 0, y: 0, w: 9, h: 8 },
+            { x: 0, y: 10, w: 12, h: 8 },
+          ]),
+        ),
+      ),
+    ).toEqual([
+      [1, WHITEBOARD.prop],
+      [2, CORKBOARD.prop],
+    ])
+  })
+
+  it('넓은 그룹 둘을 위아래로 쌓으면 아래 그룹은 남은 칸을 받지 않는다 (장식 칸이 세 칸 이어지므로) — 순서도 넘기지 않는다', () => {
+    // 위 넓은 그룹이 4·5, 아래 넓은 그룹의 두 칸은 3·4: 4 는 걸림, 3 에 걸면 3·4·5 가 이어진다
+    expect(
+      deskDecor(
+        place(
+          spaces([
+            { x: 0, y: 0, w: 27, h: 8 },
+            { x: 0, y: 10, w: 23, h: 8 },
+            { x: 30, y: 0, w: 9, h: 8 },
+          ]),
+        ),
+      ),
+    ).toEqual([
+      [4, WHITEBOARD.prop],
+      [5, CORKBOARD.prop],
+      [11, POSTER.prop],
+    ])
+  })
+
+  it('Focus Zone·라운지도 걸면 장식 칸이 세 칸 이어지는 칸은 받지 않는다', () => {
+    // 넓은 그룹이 1·2, Focus Zone 가운데 칸 3, 라운지 가운데 칸 5
+    const fixtures = place({
+      groupAreas: [{ x: 0, y: 0, w: 12, h: 8, group: group('g', 0), origin: { x: 0, y: 0 } }],
+      lobby: { x: 5, y: 10, w: 8, h: 10 },
+      lounge: { x: 9, y: 20, w: 10, h: 10 },
+    })
+    expect(fixtures.map(({ bay, prop }) => [bay, prop])).toEqual([
+      [1, WHITEBOARD.prop],
+      [2, CORKBOARD.prop],
+      [5, LANDSCAPE.prop],
+    ])
+  })
+
+  it('이웃 칸에 같은 소품이 있으면 순서상 그다음 것을 건다', () => {
+    const fixtures = place(
+      spaces([
+        { x: 0, y: 0, w: 9, h: 8 }, // 1 화이트보드
+        { x: 0, y: 10, w: 30, h: 8 }, // 4·5 게시판·포스터
+        { x: 0, y: 20, w: 42, h: 8 }, // 6·7 중 6 은 4·5·6 이 이어져 건너뛰고 7 액자
+        { x: 1, y: 30, w: 9, h: 8 }, // 2: 순서는 화이트보드지만 왼쪽 1 이 화이트보드 → 게시판
+        { x: 40, y: 0, w: 9, h: 8 }, // 15: 게시판 다음인 포스터
+      ]),
+    )
+    expect(deskDecor(fixtures)).toEqual([
+      [1, WHITEBOARD.prop],
+      [2, CORKBOARD.prop],
+      [4, CORKBOARD.prop],
+      [5, POSTER.prop],
+      [7, PHOTOS.prop],
+      [15, POSTER.prop],
+    ])
+  })
+
+  it('여러 배치에서 칸마다 장식 하나, 이웃 칸(번호 차이 1)에 같은 소품이 없고, 장식 칸은 두 칸까지만 이어진다', () => {
+    // 고정 난수 (LCG)
+    let seed = 7
+    const random = (n: number) => {
+      seed = (seed * 1103515245 + 12345) % 2147483648
+      return seed % n
+    }
+    for (let round = 0; round < 300; round++) {
+      const areas = Array.from({ length: 6 + random(5) }, () => ({ x: random(40), y: random(4) * 10, w: 9 + random(20), h: 8 }))
+      const fixtures = place(spaces(areas))
+      const byBay = new Map(fixtures.map((fixture) => [fixture.bay, fixture.prop]))
+      expect(byBay.size).toBe(fixtures.length)
+      for (const [bay, prop] of byBay) expect(byBay.get(bay + 1), `round ${round} 칸 ${bay}`).not.toBe(prop)
+    }
   })
 })
 

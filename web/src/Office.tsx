@@ -76,6 +76,8 @@ const DOT_TILE = 48
 const DOT_PROPS_URL = '/office/office-v5-props.json'
 /** 환경 (벽·창밖·그룹 화분) */
 const DOT_ENV_URL = '/office/office-v2.json'
+/** 데스크존 벽 장식 중 게시판·포스터·액자 (화이트보드·시계·풍경화는 office-v5-props) */
+const DOT_WALL_URL = '/office/office-v5-wall.json'
 /** 퇴근 거리 (Off Duty 띠의 장소·거리 소품·바닥 타일, 배치 메타 meta.jkCorp.street) */
 const DOT_STREET_URL = '/office/office-v6-street.json'
 /** 휠 delta 를 이만큼 모으면 한 단계 (마우스 휠 한 칸 ≈ 100. 트랙패드의 잔 delta 는 모아서) */
@@ -296,6 +298,8 @@ interface DotArt {
   deskItems: string[]
   /** 환경 소품 (office-v2: 그룹 화분) */
   env: Spritesheet
+  /** 벽 장식 (office-v5-wall: 게시판·포스터·액자) */
+  wall: Spritesheet
   /** 퇴근 거리 소품 (office-v6-street) */
   street: Spritesheet
   /** 퇴근 거리 배치 (meta.jkCorp.street) */
@@ -338,10 +342,11 @@ async function loadSheetUncached(url: string): Promise<Spritesheet> {
 
 /** 아틀라스들과 반복 타일을 읽고 확대를 nearest 로 (전역 기본값을 바꾸면 글자까지 바뀌어 텍스처마다) */
 async function loadDotArt(): Promise<DotArt> {
-  const [[down, up, right], props, env, street, recolor] = await Promise.all([
+  const [[down, up, right], props, env, wall, street, recolor] = await Promise.all([
     Promise.all(DIRECTIONS.map((direction) => Assets.load<Spritesheet>(`/office/${CHARACTER_ATLAS[direction]}.json`))),
     loadSheetUncached(DOT_PROPS_URL),
     Assets.load<Spritesheet>(DOT_ENV_URL),
+    Assets.load<Spritesheet>(DOT_WALL_URL),
     Assets.load<Spritesheet>(DOT_STREET_URL),
     loadRecolorArt('down').catch((error: unknown) => {
       console.error('도트 인물 색 바꾸기를 읽지 못해 기본색으로 그린다', error)
@@ -361,7 +366,7 @@ async function loadDotArt(): Promise<DotArt> {
     ),
   )
   const people = { down, up, right }
-  for (const source of [...[down, up, right, props, env, street].map((sheet) => sheet.textureSource), ...tileEntries.map(([, tile]) => tile.texture.source)]) {
+  for (const source of [...[down, up, right, props, env, wall, street].map((sheet) => sheet.textureSource), ...tileEntries.map(([, tile]) => tile.texture.source)]) {
     source.scaleMode = 'nearest'
   }
   const propsMeta = metaOf<PropsSheetMeta>(props)
@@ -377,6 +382,7 @@ async function loadDotArt(): Promise<DotArt> {
     propSizes,
     deskItems: (propsMeta.items ?? []).map((name) => name.replace(/^prop\//, '')),
     env,
+    wall,
     street,
     streetMeta: streetSheetMeta.street,
     streetProps: streetSheetMeta.props,
@@ -467,7 +473,7 @@ function v5Prop(art: DotArt, texture: Texture | string, x: number, y: number): S
 
 /** 고정 꾸미기 소품 하나 (officeFixtures.ts 의 아래 가운데 좌표, 도트 px) */
 function fixtureSprite(art: DotArt, fixture: Fixture): Sprite {
-  const sheet = fixture.sheet === 'env' ? art.env : art.props
+  const sheet = fixture.sheet === 'env' ? art.env : fixture.sheet === 'wall' ? art.wall : art.props
   const sprite = new Sprite(sheet.textures[`prop/${fixture.prop}`])
   sprite.anchor.set(0.5, 1)
   sprite.position.set(fixture.x, fixture.y)
@@ -487,11 +493,15 @@ const WALL_GLASS_X = 8
 const WALL_GLASS_W = 129
 const WALL_PANEL = 0xefeae0
 const WALL_PANEL_SHADE = 0xd9d3c6
+/** 유리 위·아래 진한 창틀 줄 (벽 타일에서 3줄. 기둥 자리에서는 회색이라 이어 메운 벽에는 이 색으로 잇는다) */
+const WALL_FRAME_H = 3
+const WALL_FRAME = 0x16171a
 
 /**
  * 도트 바닥·벽·창밖. 벽 타일(144×120 = 벽 높이 WALL_H × DOT_SCALE)은 창 유리가 투명이라 그 뒤에 그 시간대 창밖을 깐다.
  * 창밖 타일 폭(432)은 창틀 기둥 간격(144)의 배수라 반복 경계가 늘 기둥 뒤에 숨는다. 창밖은 아래(지평선)를 유리 아래 끝에 맞춘다.
- * 열린 바닥(통로)은 밝은 타일 (48 격자라 바닥 격자와 맞는다). 벽 장식(공간마다 하나)을 거는 창 칸은 유리를 벽색으로 메우고,
+ * 열린 바닥(통로)은 밝은 타일 (48 격자라 바닥 격자와 맞는다). 벽 장식을 거는 창 칸은 유리를 벽색으로 메우고,
+ * 이웃한 두 칸이 모두 장식 칸이면 그 사이 기둥도 메워 한 벽으로 잇는다 (창틀 위·아래 줄도 잇는다).
  * 맵 왼쪽 위 벽 앞에 정수기·복합기 코너 (officeFixtures.ts)
  */
 function drawDotBackground(widthPx: number, heightPx: number, art: DotArt, phase: DayPhase, wallDecor: WallFixture[]): Container {
@@ -510,16 +520,27 @@ function drawDotBackground(widthPx: number, heightPx: number, art: DotArt, phase
   container.addChild(viewSprite, wallSprite, floor)
   const bayWidth = WALL_BAY_TILES * DOT_TILE
   const glassTop = wallSprite.y + glass.y
+  // 벽을 다 메운 뒤 장식을 건다 (이은 벽이 이웃 칸 장식을 덮지 않게)
+  const panels = new Graphics()
   for (const item of wallDecor) {
     const x0 = item.bay * bayWidth
-    container.addChild(
-      new Graphics()
-        .rect(x0 + WALL_GLASS_X, glassTop, WALL_GLASS_W, glass.h)
-        .fill(WALL_PANEL)
-        .rect(x0 + WALL_GLASS_X, glassTop, WALL_GLASS_W, 3)
-        .fill(WALL_PANEL_SHADE),
-    )
-    const sprite = fixtureSprite(art, { sheet: 'props', prop: item.prop, x: x0 + bayWidth / 2, y: 0 })
+    const isJoinedRight = wallDecor.some((other) => other.bay === item.bay + 1)
+    const panelW = isJoinedRight ? bayWidth + WALL_GLASS_W : WALL_GLASS_W
+    panels.rect(x0 + WALL_GLASS_X, glassTop, panelW, glass.h).fill(WALL_PANEL).rect(x0 + WALL_GLASS_X, glassTop, panelW, 3).fill(WALL_PANEL_SHADE)
+    if (isJoinedRight) {
+      const pillarX = x0 + WALL_GLASS_X + WALL_GLASS_W
+      const pillarW = bayWidth - WALL_GLASS_W
+      panels
+        .rect(pillarX, glassTop - WALL_FRAME_H, pillarW, WALL_FRAME_H)
+        .fill(WALL_FRAME)
+        .rect(pillarX, glassTop + glass.h, pillarW, WALL_FRAME_H)
+        .fill(WALL_FRAME)
+    }
+  }
+  container.addChild(panels)
+  for (const item of wallDecor) {
+    const x0 = item.bay * bayWidth
+    const sprite = fixtureSprite(art, { sheet: item.sheet, prop: item.prop, x: x0 + bayWidth / 2, y: 0 })
     // 유리 자리 세로 가운데
     sprite.y = Math.round(glassTop + glass.h / 2 + sprite.height / 2)
     container.addChild(sprite)

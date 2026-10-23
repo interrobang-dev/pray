@@ -1,0 +1,96 @@
+{
+ "frames": {
+  "prop/wall-corkboard": {
+   "frame": {
+    "x": 2,
+    "y": 2,
+    "w": 84,
+    "h": 65
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 84,
+    "h": 65
+   },
+   "sourceSize": {
+    "w": 84,
+    "h": 65
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/wall-photos": {
+   "frame": {
+    "x": 134,
+    "y": 2,
+    "w": 64,
+    "h": 30
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 30
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 30
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "prop/wall-poster": {
+   "frame": {
+    "x": 88,
+    "y": 2,
+    "w": 44,
+    "h": 62
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 44,
+    "h": 62
+   },
+   "sourceSize": {
+    "w": 44,
+    "h": 62
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 1
+   }
+  }
+ },
+ "animations": {},
+ "meta": {
+  "app": "jk-corp tools/sprites/build.py",
+  "image": "office-v5-wall.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 200,
+   "h": 69
+  },
+  "scale": 1,
+  "jkCorp": {
+   "spec": {
+    "tile": 48
+   },
+   "characters": [],
+   "animations": {},
+   "tiles": {},
+   "props": {}
+  }
+ }
+}
