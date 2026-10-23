@@ -200,6 +200,7 @@ export async function listSessions(
         isAlive: attendance === 'present',
         offDuty: off ? { endedAt: off.endedAt, reason: off.reason, exitCode: off.exitCode } : null,
         lastAt: transcript?.lastAt ?? hook?.updatedAt ?? null,
+        turnEndedAt: transcript?.turnEndedAt ?? null,
         lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
         model: transcript?.model ?? null,
         effort: transcript?.effort ?? null,

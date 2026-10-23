@@ -53,8 +53,8 @@ y  ~20..100 의자 (prop/desk 보다 먼저, 사람 뒤)
 |---|---|---|
 | working | **typing** (8fps 반복) | 모니터 켜짐 |
 | needs-approval | **raise-hand** (6fps, 0·1·2·1 반복) | 빨간 말풍선 "! <도구>" (지금 그대로) |
-| my-turn | **idle** (앉아서 기다림, 4fps) | 마지막 말 말풍선 (지금 그대로) |
-| idle · unknown · ended | **doze** (눈 감고 고개 끄덕, 3fps) | 모니터 꺼짐 |
+| my-turn · idle · unknown, 차례가 끝난 지(`Session.turnEndedAt`) 30분 미만 또는 시각 모름 | **idle** (앉아서 기다림, 4fps) | my-turn 이면 마지막 말 말풍선 (지금 그대로) |
+| my-turn · idle · unknown, 차례가 끝난 지 30분 이상 · ended | **doze** (눈 감고 고개 끄덕, 3fps) | 모니터 꺼짐 |
 | 휴식 (attendance break) | 캐릭터 없음 = **빈 의자** | 이름표 흐리게, 모니터 꺼짐, 말풍선 없음 (지금 그대로) |
 | 외부 세션 | 같은 캐릭터 | **책상 측판·이름표 밑줄 회색** (지금 그대로. 책상 변형 스프라이트 또는 측판 자리에 회색 덧그림) |
 

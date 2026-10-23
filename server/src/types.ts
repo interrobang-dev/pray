@@ -26,6 +26,8 @@ export interface Session {
   /** 퇴근일 때만. dismissed = kill 요청(정리됨), exit = 종료 코드 0, error = 그 밖 */
   offDuty: { endedAt: string; reason: 'exit' | 'dismissed' | 'error'; exitCode: number | null } | null
   lastAt: string | null
+  /** 마지막 대화 줄(사람 쪽 user·claude 응답) 시각 (jsonl). 대화가 없으면 null. 화면이 차례가 끝나고 오래된 세션을 졸게 그린다 */
+  turnEndedAt: string | null
   lastAssistantText: string | null
   /** 마지막 claude 응답(jsonl)의 모델 ID. 응답이 아직 없으면 null */
   model: string | null

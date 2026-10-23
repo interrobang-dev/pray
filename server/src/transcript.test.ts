@@ -17,6 +17,7 @@ describe('summarizeTranscript', () => {
     expect(summarizeTranscript(jsonl)).toEqual({
       title: '제목',
       lastAt: '2026-10-20T01:00:05Z',
+      turnEndedAt: '2026-10-20T01:00:05Z',
       lastAssistantText: '답변',
       model: null,
       effort: null,
@@ -24,7 +25,7 @@ describe('summarizeTranscript', () => {
   })
 
   it('returns nulls for empty input', () => {
-    expect(summarizeTranscript('')).toEqual({ title: null, lastAt: null, lastAssistantText: null, model: null, effort: null })
+    expect(summarizeTranscript('')).toEqual({ title: null, lastAt: null, turnEndedAt: null, lastAssistantText: null, model: null, effort: null })
   })
 
   const assistant = (fields: Record<string, unknown>, model = 'claude-opus-5-5') =>
@@ -61,5 +62,39 @@ describe('summarizeTranscript', () => {
       assistant({}, '<synthetic>'),
     ].join('\n')
     expect(summarizeTranscript(jsonl)).toMatchObject({ model: null, effort: null })
+  })
+
+  describe('turnEndedAt', () => {
+    const line = (timestamp: string, fields: Record<string, unknown>) => JSON.stringify({ timestamp, ...fields })
+    const user = (timestamp: string, content: unknown, fields: Record<string, unknown> = {}) =>
+      line(timestamp, { type: 'user', message: { role: 'user', content }, ...fields })
+    const reply = (timestamp: string, model = 'claude-opus-5-5', fields: Record<string, unknown> = {}) =>
+      line(timestamp, { type: 'assistant', message: { model, content: [{ type: 'text', text: '응답' }] }, ...fields })
+
+    it('takes the last human or claude line and skips lines unrelated to the conversation', () => {
+      const jsonl = [
+        user('2026-10-20T01:00:00Z', '지시'),
+        reply('2026-10-20T01:00:05Z'),
+        line('2026-10-20T01:10:00Z', { type: 'ai-title', aiTitle: '제목' }),
+        line('2026-10-20T01:20:00Z', { type: 'cost-state' }),
+        user('2026-10-20T01:30:00Z', '<task-notification><status>completed</status></task-notification>'),
+        user('2026-10-20T01:31:00Z', '<command-name>/help</command-name>'),
+        reply('2026-10-20T01:32:00Z', '<synthetic>'),
+        reply('2026-10-20T01:33:00Z', 'claude-opus-5-5', { isSidechain: true }),
+        user('2026-10-20T01:34:00Z', 'meta', { isMeta: true }),
+        user('2026-10-20T01:35:00Z', '요약', { isCompactSummary: true }),
+        line('2026-10-20T01:36:00Z', { type: 'queue-operation', operation: 'enqueue', content: '대기' }),
+      ].join('\n')
+      expect(summarizeTranscript(jsonl)).toMatchObject({ lastAt: '2026-10-20T01:36:00Z', turnEndedAt: '2026-10-20T01:00:05Z' })
+    })
+
+    it('counts tool results, interrupt lines and pasted prompts', () => {
+      expect(summarizeTranscript(user('2026-10-20T02:00:00Z', [{ type: 'tool_result', content: 'ok' }])).turnEndedAt).toBe('2026-10-20T02:00:00Z')
+      expect(summarizeTranscript(user('2026-10-20T02:01:00Z', [{ type: 'text', text: '[Request interrupted by user]' }])).turnEndedAt).toBe(
+        '2026-10-20T02:01:00Z',
+      )
+      const pasted = '\n\n<pasted_content id="ab12">\n긴 글\n</pasted_content id="ab12">\n\n'
+      expect(summarizeTranscript(user('2026-10-20T02:02:00Z', pasted)).turnEndedAt).toBe('2026-10-20T02:02:00Z')
+    })
   })
 })

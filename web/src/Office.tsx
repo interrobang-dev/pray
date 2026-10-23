@@ -15,6 +15,7 @@ import {
 } from 'pixi.js'
 import { attendanceOf, type Office as OfficeData, type Group, type Session, type Team } from './types'
 import { dotLookOf, type DotCharacter } from './dotCharacter'
+import { dotStateOf, dozingKey, type DotState } from './dotState'
 import { HEAD_RECT, loadRecolorArt, paintCharacter, type RecolorArt } from './characterArt'
 import { DEFAULT_DECOR, planDecor, themeOf, WALL_BAY_TILES, type DecorTheme, type FloorDecor, type PropSizes, type WallDecor } from './officeDecor'
 import {
@@ -572,16 +573,6 @@ function drawDotZone(zone: Rect, art: DotArt, occupied: Set<string>, theme: Deco
   return container
 }
 
-type DotState = 'typing' | 'raise-hand' | 'idle' | 'doze'
-
-/** 상태 매핑 (설계 문서): working 타자, 승인 대기 손 들기, my-turn 앉아 기다림, idle·unknown·ended 졸기 */
-function dotStateOf(status: Session['status']): DotState {
-  if (status === 'working') return 'typing'
-  if (status === 'needs-approval') return 'raise-hand'
-  if (status === 'my-turn') return 'idle'
-  return 'doze'
-}
-
 /**
  * 그 인물·상태의 프레임과 fps. 아틀라스에 없는 상태(v0 의 idle·doze)는 typing 0번에 멈춘 한 장이고, doze 대역은 흐리게(isDim) 한다
  */
@@ -611,7 +602,7 @@ const DOT_DESK = {
 let dotTextResolution = 1
 
 /** 도트 책상. 그리는 순서: 의자 → 캐릭터 → 책상 → 모니터 켜짐 → 외부 측판·명패 → 이름표. 선택 테두리는 아트 px, 말풍선은 별도 층 */
-function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: DotArt): DeskParts {
+function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: DotArt, now: number): DeskParts {
   const container = new Container()
   container.position.set(PAD_X + seat.x * TILE, PAD_Y + seat.y * TILE)
   const dot = new Container()
@@ -633,7 +624,7 @@ function drawDotDesk(session: Session, seat: Point, isSelected: boolean, art: Do
     const look = dotLookOf(session, art.meta.characters ?? [])
     const character = look?.id ?? (isLead ? 'lead' : 'member')
     const frames = look ? characterTextures(art, character, look.hair, look.top) : art.sheet.textures
-    const { textures, fps, isDim } = dotFrames(art, character, dotStateOf(session.status), frames)
+    const { textures, fps, isDim } = dotFrames(art, character, dotStateOf(session, now), frames)
     animation = new AnimatedSprite({ textures, autoUpdate: false })
     animation.position.set(DOT_DESK.personX, DOT_DESK.baseline)
     // 반투명은 뒤 의자가 비쳐 보여 색만 어둡게
@@ -963,6 +954,8 @@ export function Office(props: Props) {
         let isRedrawPending = false
         /** 지금 그려진 시간대. 1분마다 바뀌었는지 보고 바뀌었으면 다시 그린다 */
         let drawnPhase = dayPhaseOf(new Date())
+        /** 지금 그려진 조는 세션들 (dozingKey). 시간이 흘러 졸기 시작하는 것도 1분마다 보고 바뀌었으면 다시 그린다 */
+        let drawnDozing = ''
         /** 마우스를 올린 책상(또는 그 말풍선)의 세션. 다시 그려도 펼친 채 남게 여기 둔다 */
         let hoveredDeskId: string | null = null
 
@@ -1159,7 +1152,9 @@ export function Office(props: Props) {
           // 띠는 늘 내용(그룹·섬·Focus Zone) 아래 끝 + 1타일. 바닥 격자에 맞는다
           const streetY = PAD_Y + (layout.bottom + 1) * TILE
           map.h = streetY + OFF_DUTY_HEIGHT + Math.ceil(app.screen.height / zoom / TILE) * TILE
-          drawnPhase = dayPhaseOf(new Date())
+          const now = Date.now()
+          drawnPhase = dayPhaseOf(new Date(now))
+          drawnDozing = dozingKey(sessions, now)
           dotTextResolution = zoom / DOT_SCALE
           world.addChild(drawDotBackground(map.w, map.h, art, drawnPhase, decorTheme, decorPlan.wall))
           // 끄는 그룹·섬이 띠를 지날 때 가려지지 않게 바닥 바로 위에 둔다
@@ -1278,7 +1273,7 @@ export function Office(props: Props) {
           const bubbleLayer = new Container()
           for (const session of ordered) {
             const seat = layout.seats.get(session.id)!
-            const parts = drawDotDesk(session, seat, session.id === selectedId, art)
+            const parts = drawDotDesk(session, seat, session.id === selectedId, art, now)
             if (parts.animation) animations.add(parts.animation)
             parts.container.on('pointertap', () => {
               if (!isDragged) latest.current.onSelect(session.id)
@@ -1320,9 +1315,10 @@ export function Office(props: Props) {
             if (bubble && layer) layer.setChildIndex(bubble.container, layer.children.length - 1)
           }
         }
-        // 시간대가 바뀌면 창밖·Off Duty 띠를 다시 그린다 (매 프레임이 아니라 1분마다 확인)
+        // 시간대가 바뀌면 창밖·Off Duty 띠를, 조는 세션이 바뀌면 책상을 다시 그린다 (매 프레임이 아니라 1분마다 확인)
         const phaseTimer = setInterval(() => {
-          if (dayPhaseOf(new Date()) !== drawnPhase) redraw()
+          const now = Date.now()
+          if (dayPhaseOf(new Date(now)) !== drawnPhase || dozingKey(latest.current.sessions, now) !== drawnDozing) redraw()
         }, 60_000)
         stopPhaseTimer = () => clearInterval(phaseTimer)
 
