@@ -49,7 +49,8 @@ export function Terminal({ sessionId }: Props) {
     // xterm.js 는 Shift+Enter 도 Enter 와 같은 \r 을 보내 Claude Code 가 제출로 받는다. 줄바꿈 값으로 바꿔 보낸다
     term.attachCustomKeyEventHandler((event) => {
       if (event.key === 'Enter' && event.type === 'keyup') isComposedEnterDown = false
-      const isShiftEnter = event.key === 'Enter' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
+      // 실제 Chrome 은 조합 중 Enter keydown 을 key "Process"·code "Enter"·keyCode 229 로 보낸다
+      const isShiftEnter = (event.key === 'Enter' || event.code === 'Enter') && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
       if (!isShiftEnter) return true
       // textarea 에 \n 이 들어가면 xterm 이 조합 확정 글자와 같이 "녕\n" 으로 보낸다
       if (event.type === 'keypress') event.preventDefault()
