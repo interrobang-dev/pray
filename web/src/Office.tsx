@@ -47,10 +47,13 @@ import {
  * world 좌표는 "아트 픽셀"(타일 16px) 단위이고 world 를 DOT_SCALE 배 더 키워(타일 48 화면 px = 1배) 보인다.
  * 스프라이트·이름표·아이콘은 1/DOT_SCALE 로 줄인 하위 컨테이너에 도트 px(48px 타일) 좌표로 그린다 — 배치(officeLayout.ts)·끌기·포커스 계산은 아트 px 그대로다
  */
-/** 배율 단계 (타일 48px 기준. 0.5배는 전체 보기용 예외) */
-const ZOOM_STEPS = [0.5, 1, 2, 3]
-/** 마운트할 때 배율 = 단계 목록의 이 번째 (1배) */
-const DEFAULT_ZOOM_INDEX = 1
+/**
+ * 배율 단계 (타일 48px 기준). 정수 배율(1·2·3)만 도트가 고르고 그 사이 배율은 nearest 라 도트 굵기가 섞인다.
+ * 단계는 0.25 배수로만 둔다 — 타일 48px × 배율이 정수여야 타일 경계가 화면 px 에 맞는다
+ */
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3]
+/** 마운트할 때 배율 = 1배 */
+const DEFAULT_ZOOM_INDEX = ZOOM_STEPS.indexOf(1)
 /** 도트 타일(48px) ÷ 아트 타일(16px) */
 const DOT_SCALE = 3
 const DOT_TILE = 48
@@ -788,7 +791,7 @@ function dotFrames(art: DotArt, direction: CharacterDirection, look: DotLook, st
 }
 
 /**
- * 도트 하위 컨테이너(1/DOT_SCALE) 글자 해상도 = 지금 배율 (0.5·1·2·3). redraw 가 배율을 바꾼 뒤 정한다.
+ * 도트 하위 컨테이너(1/DOT_SCALE) 글자 해상도 = 지금 배율 (ZOOM_STEPS 의 값). redraw 가 배율을 바꾼 뒤 정한다.
  * 최대 배율(3)로 고정하면 1배에서 3배 축소돼 12px 한글의 가는 획이 빠진다
  */
 let dotTextResolution = 1
@@ -1338,7 +1341,7 @@ export function Office(props: Props) {
         }
         focusRef.current = applyFocus
 
-        // 휠 = 확대·축소. 한 칸에 정수 배율 한 단계, 커서 아래 지점이 그대로 남게
+        // 휠 = 확대·축소. 한 칸에 배율 한 단계, 커서 아래 지점이 그대로 남게
         let wheelDelta = 0
         const onWheel = (event: WheelEvent) => {
           event.preventDefault()
