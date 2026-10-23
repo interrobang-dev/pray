@@ -999,8 +999,8 @@ export function App() {
               <NewSessionIcon />
               New Session
             </button>
+            <FlowRow status={flowStatus} isSelected={isFlowOpen} onOpen={openFlow} />
           </div>
-          <FlowRow status={flowStatus} isSelected={isFlowOpen} onOpen={openFlow} />
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
             {office.groups.map((group, groupIndex) => {
               const teams = office.teams.filter((t) => t.groupId === group.id)
@@ -1354,7 +1354,7 @@ function OffDutyBar({
 }
 
 /**
- * 툴바 아래 플로우 한 줄: 아이콘 · "Flow" · "알림 N · 채팅 N". 누르면 오른쪽 패널이 플로우 알림이 된다.
+ * 툴바 세 번째(New Session 아래) Flow 버튼: 아이콘 · "Flow" · "알림 N · 채팅 N". 누르면 오른쪽 패널이 플로우 알림이 된다.
  * 둘 다 0 이면 회색, 하나라도 있으면 강조. 아직 못 셌으면 "…", 키 없음이면 "키 없음", 확인 실패면 짧게 (전문은 title. 앞 수가 있으면 수 + ⚠)
  */
 function FlowRow({ status, isSelected, onOpen }: { status: FlowStatus | null; isSelected: boolean; onOpen: () => void }) {
@@ -1376,7 +1376,7 @@ function FlowRow({ status, isSelected, onOpen }: { status: FlowStatus | null; is
       title={title}
     >
       <FlowIcon />
-      <span className="flow-row-name">Flow</span>
+      <span>Flow</span>
       <span className={status?.isConfigured && status.error && !hasCounts ? 'flow-row-summary error' : 'flow-row-summary'}>{summary}</span>
       {status?.isConfigured && status.error && hasCounts && <span className="flow-row-warning">⚠</span>}
     </button>
