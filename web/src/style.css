@@ -233,7 +233,7 @@ header button.icon svg {
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
-/* New Group·New Session: 위아래로 쌓여 툴바 폭 전체를 쓰고, 아이콘(App.tsx NewGroupIcon·NewSessionIcon)과 글자는 버튼 안 왼쪽에 한 줄로 */
+/* New Group·New Session·Flow: 위아래로 쌓여 툴바 폭 전체를 쓰고, 아이콘(App.tsx NewGroupIcon·NewSessionIcon·FlowIcon)과 글자는 버튼 안 왼쪽에 한 줄로 */
 .toolbar button {
   display: inline-flex;
   align-items: center;
@@ -2670,42 +2670,20 @@ li.group.drop-after::after {
   color: var(--muted);
 }
 
-/* 툴바 아래 플로우 한 줄 (App.tsx FlowRow): 아이콘 · Flow · "알림 N · 채팅 N". 누르면 오른쪽 패널이 플로우 알림이 된다.
-   안 읽은 것이 없으면 회색, 하나라도 있으면 빨강 글자 */
-.flow-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  padding: 7px 12px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  text-align: left;
-}
-.flow-row:hover {
-  background: var(--bg);
-}
+/* 툴바 세 번째 Flow 버튼 (App.tsx FlowRow): 모양은 .toolbar button 그대로, 아이콘 · Flow · 오른쪽 끝에 "알림 N · 채팅 N".
+   누르면 오른쪽 패널이 플로우 알림이 된다. 요약은 안 읽은 것이 없으면 회색, 하나라도 있으면 빨강 */
 .flow-row.selected {
   background: var(--green-soft);
-}
-.flow-row svg {
-  flex-shrink: 0;
-}
-.flow-row-name {
-  font-weight: 600;
+  border-color: var(--green);
 }
 .flow-row-summary {
   margin-left: auto;
   font-size: 12px;
+  color: var(--muted);
   white-space: nowrap;
 }
-.flow-row.unread {
-  color: var(--red);
-}
 .flow-row.unread .flow-row-summary {
+  color: var(--red);
   font-weight: 600;
 }
 .flow-row-summary.error,
@@ -2913,7 +2891,7 @@ li.group.drop-after::after {
   .approval {
     flex-wrap: wrap;
   }
-  /* New Group·New Session: 손가락으로 누르기 쉽게 40px */
+  /* New Group·New Session·Flow: 손가락으로 누르기 쉽게 40px */
   .toolbar button {
     min-height: 40px;
     padding: 0 14px;
@@ -3161,10 +3139,7 @@ li.group.drop-after::after {
     min-height: 44px;
     align-items: center;
   }
-  /* 플로우 줄·패널: 손가락으로 누르기 쉽게 40px */
-  .flow-row {
-    min-height: 44px;
-  }
+  /* 플로우 패널: 손가락으로 누르기 쉽게 40px */
   .flow-toolbar .segmented button,
   .flow-refresh,
   .flow-more {
