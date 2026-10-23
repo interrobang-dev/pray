@@ -74,6 +74,14 @@ python tools/sprites/street_seats.py --recipe tools/sprites/recipes/office-v6-st
 
 인물 아틀라스(office-v5-down·right)에서 옆모습 앉은 높이(`sideSeatLift[상태][인물]` = 의자 높이 변화)와 정면 idle 머리 상자(`headBox[인물]`)를 재 레시피 `jkCorp.street` 에 고쳐 쓴다 (`--write` 없으면 출력만). 의자 레시피 `lifts.range` 가 잰 범위를 못 덮으면 종료 코드 1. 인물 그림을 다시 만들면 이것 → build.py 순서로 돌린다. 규칙은 설계 문서 "퇴근 거리 (v6)".
 
+## 라운지 자리 메타
+
+```bash
+python tools/sprites/lounge_seats.py --recipe tools/sprites/recipes/office-v5-props.json --atlas-dir web/public/office --write [--preview <폴더>]
+```
+
+옆모습 자리의 사람 y 보정(`sideOffsetY[상태][인물]`, idle·doze. 엉덩이 아래 선을 의자 앉는 면에 맞춘다)을 인물 아틀라스(office-v5-right)에서 재 레시피 `jkCorp.lounge` 에 고쳐 쓴다 (`--write` 없으면 출력만). 자리(`seats`: x·y·dir·front)는 그림을 보고 레시피에 손으로 적는다. `--preview <폴더>` 는 소품마다·상태마다 인물 18명을 모든 자리에 화면과 같은 겹침 순서로 앉힌 그림 `lounge-<소품>-<상태>-f<칸>.png` 를 쓴다 (`--scale` 배율 기본 2, `--frames` 칸 번호 쉼표 목록 기본 0). 인물 그림을 다시 만들거나 자리를 고치면 이것 → build.py 순서로 돌리고 미리보기를 본다. 규칙은 설계 문서 "라운지 자리".
+
 ## 코드로 그리는 그림
 
 `draw_icons.py --out <원본 폴더>/drawn.png`: 머리 위 상태 아이콘(승인 대기 "!"·내 차례 말풍선·작업 중 점 셋 3프레임)과 짝 사이 세로 칸막이. 생성 원본처럼 마젠타 바탕 격자 한 장이라 레시피가 같은 방식으로 자른다 (16~20 도트 px 아이콘은 생성으로 또렷하게 안 나오고, 칸막이는 원근이 틀렸다).
