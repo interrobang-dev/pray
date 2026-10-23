@@ -9,7 +9,10 @@ export interface WorkPart {
 
 /** 답변 전 작업 묶음 = 한 줄로 접는 claude 의 중간 설명 글과 일반 도구 호출 */
 export interface Work {
-  /** 첫 메시지 ID. 펼침 상태를 기억하는 키 (대화를 다시 받아도 그대로다) */
+  /**
+   * 묶음 구간(relay·질문 카드·사람 쪽·system 메시지 사이)의 첫 메시지 ID. 펼침 상태를 기억하는 키 (대화를 다시 받아도 그대로다).
+   * 글·도구가 없는 메시지여도 구간 첫 메시지라 차례가 끝나 답변이 빠져도 바뀌지 않는다
+   */
   key: string
   parts: WorkPart[]
   toolCount: number
@@ -18,8 +21,8 @@ export interface Work {
   /** 첫 메시지부터 묶음 다음 메시지(답변·relay)까지. 다음 메시지가 없으면 마지막 메시지까지 */
   durationMs: number
   /**
-   * 아직 안 끝난 묶음 = 차례가 진행 중이고 대화 맨 끝(대기 메시지 제외)의 묶음. 접지 않고 대화처럼 보인다.
-   * 아직 답변인지 모르는 가장 최근 글도 따로 빼지 않고 parts 의 제자리에 든다
+   * 아직 안 끝난 묶음 = 차례가 진행 중이고 대화 맨 끝(대기 메시지 제외)의 묶음. 접혀 있어도 설명 글은 말풍선으로 보이고(도구 줄만 접힌다)
+   * 줄에 시간이 없다. 아직 답변인지 모르는 가장 최근 글도 따로 빼지 않고 parts 의 제자리에 든다
    */
   isInProgress: boolean
 }
@@ -48,7 +51,7 @@ function workOf(parts: WorkPart[], run: RunItem[], isInProgress: boolean): Work 
   const next = run[run.findIndex((item) => item.message === lastPart.message) + 1]
   const durationMs = Date.parse(next?.message.timestamp ?? lastPart.message.timestamp) - Date.parse(parts[0].message.timestamp)
   return {
-    key: parts[0].message.id,
+    key: run[0].message.id,
     parts,
     toolCount: toolUses.length,
     toolCounts: [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
@@ -59,7 +62,7 @@ function workOf(parts: WorkPart[], run: RunItem[], isInProgress: boolean): Work 
 
 /**
  * relay·질문 카드 사이의 메시지들. 답변이 이 안에 있으면 묶음을 답변 바로 위에 둔다. 도구가 하나도 없으면 묶지 않고 글 말풍선 그대로.
- * 진행 중이면 답변을 빼지 않는다 (Chat 이 parts 를 시간 순서대로 그린다)
+ * 진행 중이면 답변을 빼지 않는다 (Chat 이 parts 의 설명 글을 시간 순서대로 그린다)
  */
 function runRows<S>(run: RunItem[], answer: ChatMessage | undefined, isInProgress: boolean): ChatRow<S>[] {
   const separateAnswer = isInProgress ? undefined : answer
@@ -125,4 +128,16 @@ export function buildChatRows<S>(
   }
   rows.push(...flushSegment())
   return rows
+}
+
+/**
+ * 접혀 있으면 이 메시지의 설명 글을 감추는 작업 묶음의 키 (점프가 찾은 글을 보이게 펼치려고). 끝난 묶음 안 설명 글이면 그 묶음,
+ * 진행 중 묶음은 접혀 있어도 설명 글이 말풍선으로 보이므로 null. 답변·묶음 밖 메시지도 null
+ */
+export function hidingWorkKey<S>(rows: ChatRow<S>[], message: ChatMessage): string | null {
+  for (const row of rows) {
+    if (row.kind !== 'work' || row.work.isInProgress) continue
+    if (row.work.parts.some((part) => part.message === message && part.text !== null)) return row.work.key
+  }
+  return null
 }

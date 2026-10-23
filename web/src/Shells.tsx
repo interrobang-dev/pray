@@ -25,7 +25,7 @@ export type ShellLine =
   | { kind: 'group' | 'team' | 'part'; key: string; name: string }
   | { kind: 'shell'; key: string; sessionId: string; shell: Shell; depth: 'lobby' | 'team' | 'part' }
 
-/** 시작부터 지금까지 "45s"·"3m 12s"·"2h 5m"·"1d 3h". 대화 탭 작업 중 표시기(Chat.tsx)도 쓴다 */
+/** 시작부터 지금까지 "45s"·"3m 12s"·"2h 5m"·"1d 3h". 대화 탭 작업 중 표시기·작업 묶음 줄(Chat.tsx)도 쓴다 */
 export function formatElapsed(startedAt: string, now: number): string {
   const started = Date.parse(startedAt)
   if (Number.isNaN(started)) return '-'

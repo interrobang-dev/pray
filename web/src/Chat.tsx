@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react'
 import { flushSync } from 'react-dom'
-import { buildChatRows, type ChatRow, type Work } from './chatRows'
+import { buildChatRows, hidingWorkKey, type ChatRow, type Work } from './chatRows'
 import { runningToolNames, shortToolName } from './runningTools'
 import { FilesButton, formatSize } from './Files'
 import { MarkdownText } from './Markdown'
@@ -326,10 +326,14 @@ type Special = { kind: 'relay'; relay: Relay } | { kind: 'asked'; asked: Asked }
 /** 묶음 줄에 이름별 개수를 보여 주는 도구 수 (많은 순). 나머지는 전체 개수에만 든다 */
 const WORK_TOOL_NAMES_SHOWN = 3
 
-/** "작업 14개 · Bash 6 · Read 5 · Edit 3 · 2분 10초". 시간은 1초 미만이면 뺀다 */
+/**
+ * "작업 14개 · Bash 6 · Read 5 · Edit 3 · 2m 10s". 시간은 작업 중 표시기와 같은 꼴(formatElapsed)이고,
+ * 1초 미만이면 빼고, 진행 중이면 작업 중 표시기에 있으니 뺀다
+ */
 function workTitle(work: Work): string {
   const counts = work.toolCounts.slice(0, WORK_TOOL_NAMES_SHOWN).map(({ name, count }) => `${shortToolName(name)} ${count}`)
-  const duration = work.durationMs >= 1000 ? [formatDuration(work.durationMs)] : []
+  const startedAt = work.parts[0].message.timestamp
+  const duration = !work.isInProgress && work.durationMs >= 1000 ? [formatElapsed(startedAt, Date.parse(startedAt) + work.durationMs)] : []
   return [`작업 ${work.toolCount}개`, ...counts, ...duration].join(' · ')
 }
 
@@ -357,23 +361,36 @@ function WorkParts({ work, highlightKey }: { work: Work; highlightKey: string | 
 }
 
 /**
- * 답변 전 작업 묶음. 끝난 묶음은 한 줄이고 누르면 아래에 말풍선들이 펼쳐진다. 접혀 있으면 안쪽을 그리지 않는다 (마크다운 파싱을 피하려고).
- * 아직 안 끝난 묶음(진행 중)은 접지 않고 말풍선들을 대화처럼 그대로 둔다 (진행 중 표시는 대화 맨 아래 작업 중 표시기 하나)
+ * 답변 전 작업 묶음. 한 줄이고 누르면 아래에 말풍선들이 펼쳐진다. 접혀 있으면 안쪽을 그리지 않는다 (마크다운 파싱을 피하려고).
+ * 아직 안 끝난 묶음(진행 중)은 접혀 있어도 설명 글만 줄 아래에 말풍선으로 시간 순서대로 보인다 — 도구 줄은 접고, 지금 도는 도구는
+ * 대화 맨 아래 작업 중 표시기에만 보인다. 펼치면 그 말풍선들 대신 펼친 안쪽에 보인다 (같은 글이 두 번 보이지 않게)
  */
 function WorkLine({ work, isOpen, onToggle, highlightKey }: { work: Work; isOpen: boolean; onToggle: () => void; highlightKey: string | null }) {
-  if (work.isInProgress) return <WorkParts work={work} highlightKey={highlightKey} />
   const title = workTitle(work)
   return (
-    <div className="work">
-      <button type="button" className="work-summary" aria-expanded={isOpen} onClick={onToggle} title={title}>
-        {title}
-      </button>
-      {isOpen && (
-        <div className="work-items">
-          <WorkParts work={work} highlightKey={highlightKey} />
-        </div>
-      )}
-    </div>
+    <>
+      <div className="work">
+        <button type="button" className="work-summary" aria-expanded={isOpen} onClick={onToggle} title={title}>
+          {title}
+        </button>
+        {isOpen && (
+          <div className="work-items">
+            <WorkParts work={work} highlightKey={highlightKey} />
+          </div>
+        )}
+      </div>
+      {/* 대화 말풍선과 같은 자리·간격이 되게 .work 밖에 둔다. 차례가 끝나면 마지막 글은 답변 말풍선이 되고 나머지는 줄 안으로 들어간다 */}
+      {work.isInProgress &&
+        !isOpen &&
+        work.parts.map(
+          (part) =>
+            part.text && (
+              <div key={part.message.id} className={`msg assistant${highlightKey === part.message.id ? ' jump-highlight' : ''}`} data-jump-key={part.message.id}>
+                <MarkdownText text={part.text} />
+              </div>
+            ),
+        )}
+    </>
   )
 }
 
@@ -573,17 +590,6 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
 }
 
 
-/** 경과 시간 "12초"·"1분 12초"·"1시간 2분 3초" */
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  if (hours > 0) return `${hours}시간 ${minutes}분 ${seconds}초`
-  if (minutes > 0) return `${minutes}분 ${seconds}초`
-  return `${seconds}초`
-}
-
 /**
  * 메신저의 "입력 중…" 같은 작업 중 표시기. 1초 타이머가 이 컴포넌트만 다시 그리게 따로 둔다 (대화 전체를 다시 그리지 않게).
  * tools = 이번 차례에 실행 중인 도구 이름 ("Bash · 1m 12s"). 없으면(생각 중·글 쓰는 중) 점 옆에 경과 시간만, since 가 없으면 시간도 뺀다.
@@ -763,7 +769,8 @@ const JUMP_NOTICE_MS = 6_000
 
 /**
  * 팀원 대화에서 지시·보고와 글이 같은 메시지 (비교는 messageKey). 지시 = 서버가 from 을 붙인 user 메시지, 보고 = claude 글.
- * 여럿이면 시각이 at 과 가장 가까운 것. key 는 그 말풍선의 data-jump-key, 접힌 작업 묶음 안(설명 글)이면 workKey 가 그 묶음
+ * 여럿이면 시각이 at 과 가장 가까운 것. key 는 그 말풍선의 data-jump-key, 끝난 작업 묶음 안 설명 글이면 workKey 가 그 묶음
+ * (접혀 있으면 안 그려져 펼친다. 진행 중 묶음의 설명 글은 접혀 있어도 보여 펼치지 않는다)
  */
 function findMessageTarget(
   target: { kind: 'instruction' | 'report'; text: string; at: string },
@@ -781,8 +788,7 @@ function findMessageTarget(
   const distance = (message: ChatMessage) => Math.abs(Date.parse(message.timestamp) - at)
   // 시각을 못 읽으면(NaN) 비교가 늘 거짓이라 처음 것
   const found = candidates.reduce((best, message) => (distance(message) < distance(best) ? message : best))
-  const work = rows.find((row) => row.kind === 'work' && row.work.parts.some((part) => part.message === found && part.text !== null))
-  return { key: found.id, workKey: work?.kind === 'work' ? work.work.key : null }
+  return { key: found.id, workKey: hidingWorkKey(rows, found) }
 }
 
 export function Chat({
@@ -886,7 +892,7 @@ export function Chat({
 
   /**
    * 화면 줄: 구간마다 claude 의 중간 설명 글·일반 도구 호출을 작업 묶음으로 접고, relay 한 줄·질문 카드는 그 자리에 둔다.
-   * 차례가 진행 중이면 맨 끝 묶음은 접지 않는다. 승인 대기도 진행 중이다 (승인 창이 뜰 때마다 접혔다 펼쳐지지 않게)
+   * 차례가 진행 중이면 맨 끝 묶음은 진행 중이라 접혀 있어도 설명 글이 보인다. 승인 대기도 진행 중이다 (승인 창이 뜰 때마다 글이 숨었다 보이지 않게)
    */
   const isTurnInProgress = isWorking || isApprovalNeeded
   /** 작업 중 표시기의 실행 중인 도구. 메시지가 바뀔 때만 다시 찾는다 (표시기의 1초 타이머와 무관) */
@@ -905,7 +911,7 @@ export function Chat({
       ),
     [messages, memberNameOf, isTurnInProgress],
   )
-  /** 접지 않고 대화처럼 보이는 진행 중 묶음. 이게 바뀌면(접힘) 대화 길이가 갑자기 줄어든다 */
+  /** 설명 글이 말풍선으로 보이는 진행 중 묶음. 이게 바뀌면(끝남) 중간 설명 글이 줄 안으로 들어가 대화 길이가 갑자기 줄어든다 */
   const liveWorkRow = rows.find((row) => row.kind === 'work' && row.work.isInProgress)
   const liveWorkKey = liveWorkRow?.kind === 'work' ? liveWorkRow.work.key : null
   /** 펼친 작업 묶음 키 (Work.key). 몇 초마다 대화를 다시 받아도 접히지 않게 여기 둔다. 세션을 바꾸면 비운다 */
@@ -972,8 +978,9 @@ export function Chat({
     if (isWorking && isAtBottomRef.current) scrollToBottom()
   }, [isWorking])
 
-  // 진행 중 묶음이 접히면 대화가 갑자기 줄어든다 (스크롤 이벤트가 없을 수 있다). 그리기 전에, 맨 아래를 보고 있었으면 맨 아래에 두고
-  // 위를 읽던 중이면 움직이지 않고 "맨 아래를 보고 있는지" 만 다시 잰다 (줄어든 만큼 맨 아래에 닿았을 수 있다)
+  // 진행 중 묶음이 끝나면(차례 끝·relay 등이 낌) 접힌 채 보이던 중간 설명 글이 줄 안으로 들어가 대화가 갑자기 줄어든다 (스크롤 이벤트가 없을 수 있다).
+  // 그리기 전에, 맨 아래를 보고 있었으면 맨 아래에 두고 위를 읽던 중이면 움직이지 않고 "맨 아래를 보고 있는지" 만 다시 잰다 (줄어든 만큼 맨 아래에 닿았을 수 있다).
+  // 줄은 처음부터 묶음 첫 자리에 있어 줄 위쪽은 움직이지 않는다
   useLayoutEffect(() => {
     if (isAtBottomRef.current) scrollToBottom()
     else onMessagesScroll()
