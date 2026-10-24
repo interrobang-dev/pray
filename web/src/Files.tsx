@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MarkdownText } from './Markdown'
 import { Modal, Segmented } from './Modal'
-import type { ScratchpadFile, ScratchpadListing } from './types'
+import { formatDateTime, type ScratchpadFile, type ScratchpadListing } from './types'
 
 /** 글자 미리보기는 앞부분만 받는다 (Range). 이보다 큰 파일은 "앞부분만" 으로 표시 */
 const TEXT_PREVIEW_BYTES = 256 * 1024
@@ -196,7 +196,7 @@ export function FilesButton({ sessionId, version }: { sessionId: string; version
   if (!hasFiles) return null
   return (
     <>
-      <button type="button" className="files-button" onClick={open} title="작업 파일" aria-label="작업 파일">
+      <button type="button" className="files-button" onClick={open} title="Work files" aria-label="Work files">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
           <path
             d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.2h8.4A1.5 1.5 0 0 1 21 8.7v8.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z"
@@ -244,9 +244,9 @@ function FilesModal({ sessionId, listing, isRefreshing, onRefresh, onClose }: Fi
   const crumbs = folder ? folder.split('/') : []
 
   return (
-    <Modal title="작업 파일" onClose={onClose} className={`files-modal${selected ? ' has-preview' : ''}`}>
+    <Modal title="Work files" onClose={onClose} className={`files-modal${selected ? ' has-preview' : ''}`}>
       <div className="files-toolbar">
-        <nav className="files-crumbs" aria-label="경로">
+        <nav className="files-crumbs" aria-label="Path">
           <button type="button" onClick={() => setFolder('')} className={crumbs.length === 0 ? 'on' : ''}>
             scratchpad
           </button>
@@ -263,14 +263,14 @@ function FilesModal({ sessionId, listing, isRefreshing, onRefresh, onClose }: Fi
           value={sortOrder}
           onChange={setSortOrder}
           options={[
-            { value: 'recent', label: '최근순' },
-            { value: 'name', label: '이름순' },
+            { value: 'recent', label: 'Recent' },
+            { value: 'name', label: 'Name' },
           ]}
         />
-        <button type="button" className="files-icon-button" onClick={onRefresh} disabled={isRefreshing} title="새로고침" aria-label="새로고침">
+        <button type="button" className="files-icon-button" onClick={onRefresh} disabled={isRefreshing} title="Reload" aria-label="Reload">
           ↻
         </button>
-        <button type="button" className="files-icon-button" onClick={onClose} title="닫기 (Esc)" aria-label="닫기">
+        <button type="button" className="files-icon-button" onClick={onClose} title="Close (Esc)" aria-label="Close">
           ×
         </button>
       </div>
@@ -282,8 +282,8 @@ function FilesModal({ sessionId, listing, isRefreshing, onRefresh, onClose }: Fi
                 {KIND_ICONS.folder}
               </span>
               <span className="files-item-name">{item.name}</span>
-              <span className="files-item-meta" title={new Date(item.modifiedAt).toLocaleString('ko-KR')}>
-                {item.fileCount}개 · {formatTime(item.modifiedAt)}
+              <span className="files-item-meta" title={formatDateTime(item.modifiedAt)}>
+                {item.fileCount} {item.fileCount === 1 ? 'file' : 'files'} · {formatTime(item.modifiedAt)}
               </span>
             </button>
           ))}
@@ -298,19 +298,19 @@ function FilesModal({ sessionId, listing, isRefreshing, onRefresh, onClose }: Fi
                 {KIND_ICONS[kindOf(file.path)]}
               </span>
               <span className="files-item-name">{nameOf(file.path)}</span>
-              <span className="files-item-meta" title={new Date(file.modifiedAt).toLocaleString('ko-KR')}>
+              <span className="files-item-meta" title={formatDateTime(file.modifiedAt)}>
                 {formatSize(file.size)} · {formatTime(file.modifiedAt)}
               </span>
             </button>
           ))}
-          {contents.folders.length === 0 && contents.files.length === 0 && <p className="hint">파일이 없습니다</p>}
-          {listing.isTruncated && <p className="files-note">파일이 많아 {listing.files.length}개까지만 보입니다 (얕은 폴더부터)</p>}
+          {contents.folders.length === 0 && contents.files.length === 0 && <p className="hint">No files</p>}
+          {listing.isTruncated && <p className="files-note">Too many files: showing the first {listing.files.length} (shallow folders first)</p>}
         </div>
         <div className="files-preview">
           {selected ? (
             <FilePreview key={`${selected.path}:${selected.modifiedAt}`} sessionId={sessionId} file={selected} onBack={() => setSelectedPath(null)} />
           ) : (
-            <p className="hint">파일을 고르면 여기에 보입니다</p>
+            <p className="hint">Select a file to preview it</p>
           )}
         </div>
       </div>
@@ -325,20 +325,20 @@ function FilePreview({ sessionId, file, onBack }: { sessionId: string; file: Scr
   return (
     <>
       <div className="files-preview-head">
-        <button type="button" className="files-back" onClick={onBack} title="목록으로" aria-label="목록으로">
+        <button type="button" className="files-back" onClick={onBack} title="Back to list" aria-label="Back to list">
           ←
         </button>
         <div className="files-preview-title">
           <b title={file.path}>{name}</b>
           <span className="files-item-meta">
-            {formatSize(file.size)} · {new Date(file.modifiedAt).toLocaleString('ko-KR')}
+            {formatSize(file.size)} · {formatDateTime(file.modifiedAt)}
           </span>
         </div>
         <a className="files-action" href={url} target="_blank" rel="noreferrer">
-          새 탭에서 열기
+          Open in new tab
         </a>
         <a className="files-action" href={rawUrl(sessionId, file.path, true)}>
-          다운로드
+          Download
         </a>
       </div>
       <div className={`files-preview-body ${kind}`}>
@@ -351,9 +351,9 @@ function FilePreview({ sessionId, file, onBack }: { sessionId: string; file: Scr
         {(kind === 'markdown' || kind === 'json' || kind === 'code') && <TextPreview url={url} file={file} kind={kind} />}
         {kind === 'other' && (
           <div className="files-other">
-            <p className="hint">미리보기를 지원하지 않는 파일입니다</p>
+            <p className="hint">No preview for this file type</p>
             <a className="files-action primary" href={rawUrl(sessionId, file.path, true)}>
-              다운로드
+              Download
             </a>
           </div>
         )}
@@ -399,11 +399,11 @@ function TextPreview({ url, file, kind }: { url: string; file: ScratchpadFile; k
     return fenced(text, kind === 'json' ? 'json' : (LANGUAGES[extensionOf(file.path)] ?? ''))
   }, [text, kind, isCut, file.path])
 
-  if (error) return <p className="hint">읽지 못했습니다 ({error})</p>
-  if (markdown === null) return <p className="hint">읽는 중…</p>
+  if (error) return <p className="hint">Couldn't read the file ({error})</p>
+  if (markdown === null) return <p className="hint">Loading…</p>
   return (
     <>
-      {isCut && <p className="files-note">큰 파일이라 앞부분 {formatSize(TEXT_PREVIEW_BYTES)}만 보입니다. 전체는 새 탭이나 다운로드로</p>}
+      {isCut && <p className="files-note">Large file: showing the first {formatSize(TEXT_PREVIEW_BYTES)}. Open in a new tab or download for the rest</p>}
       <MarkdownText text={markdown} />
     </>
   )

@@ -100,7 +100,7 @@ export class PtyPool extends EventEmitter {
   }
 
   spawn({ sessionId, cwd, prompt, resume, extraArgs = [] }: SpawnOptions): void {
-    if (this.entries.has(sessionId)) throw new Error(`이미 실행 중: ${sessionId}`)
+    if (this.entries.has(sessionId)) throw new Error(`Already running: ${sessionId}`)
     const args = resume ? ['--resume', sessionId] : ['--session-id', sessionId]
     // --mcp-config 는 값을 여러 개 받아서 첫 지시를 뒤에 두면 설정 파일 이름으로 읽고 claude 가 종료된다
     if (prompt) args.push(prompt)

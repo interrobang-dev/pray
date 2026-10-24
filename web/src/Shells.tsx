@@ -133,7 +133,7 @@ export function ShellsButton({
     setOpened({ selectedId: window.matchMedia(NARROW_QUERY).matches ? null : (shells[0]?.id ?? null), ended: [] })
   }
 
-  const label = `실행 중인 shell ${shells.length}개`
+  const label = `${shells.length} running shell${shells.length === 1 ? '' : 's'}`
   return (
     <>
       {shells.length > 0 && (
@@ -173,12 +173,12 @@ function ShellsModal({ sessionId, shells, opened, onClose }: { sessionId: string
   const selected = items.find((item) => item.shell.id === selectedId) ?? null
 
   return (
-    <Modal title="실행 중인 shell" onClose={onClose} className={`files-modal shells-modal${selected ? ' has-preview' : ''}`}>
+    <Modal title="Running shells" onClose={onClose} className={`files-modal shells-modal${selected ? ' has-preview' : ''}`}>
       <div className="files-toolbar">
         <span className="shells-summary">
           {shells.length} running{endedShells.length > 0 && ` · ${endedShells.length} ended`}
         </span>
-        <button type="button" className="files-icon-button" onClick={onClose} title="닫기 (Esc)" aria-label="닫기">
+        <button type="button" className="files-icon-button" onClick={onClose} title="Close (Esc)" aria-label="Close">
           ×
         </button>
       </div>
@@ -259,7 +259,7 @@ function ShellOutputView({ sessionId, shell, isEnded, onBack }: { sessionId: str
   return (
     <>
       <div className="files-preview-head">
-        <button type="button" className="files-back" onClick={onBack} title="목록으로" aria-label="목록으로">
+        <button type="button" className="files-back" onClick={onBack} title="Back to list" aria-label="Back to list">
           ←
         </button>
         <div className="files-preview-title">
@@ -302,7 +302,7 @@ function ShellOutputView({ sessionId, shell, isEnded, onBack }: { sessionId: str
 
 /**
  * 상태 표시줄 창의 줄: 실행 중인 shell 을 왼쪽 목록처럼 그룹 → 팀 → 파트로 묶는다 (세션 이름 없이).
- * 순서는 목록과 같은 hq 배열 순(그룹 → 그 그룹의 팀 → 팀 직속 → 파트), 그룹이 지워진 팀은 그룹 머리 없이 그 뒤, 팀 없는 세션은 맨 끝 "로비".
+ * 순서는 목록과 같은 hq 배열 순(그룹 → 그 그룹의 팀 → 팀 직속 → 파트), 그룹이 지워진 팀은 그룹 머리 없이 그 뒤, 팀 없는 세션은 맨 끝 "Focus Zone"(로비).
  * 한 묶음 안의 shell 은 시작 순. 팀을 가리키는데 그 팀이 office 에 없는 세션(목록에도 안 보인다)도 shell 이 숨지 않게 로비에 넣는다
  */
 export function shellLines(office: Office, sessions: Session[]): ShellLine[] {
@@ -335,7 +335,7 @@ export function shellLines(office: Office, sessions: Session[]): ShellLine[] {
     running.filter((session) => !office.teams.some((team) => team.id === session.teamId)),
     'lobby',
   )
-  const lobbyLines: ShellLine[] = lobbyShells.length > 0 ? [{ kind: 'group', key: 'lobby', name: '로비' }, ...lobbyShells] : []
+  const lobbyLines: ShellLine[] = lobbyShells.length > 0 ? [{ kind: 'group', key: 'lobby', name: 'Focus Zone' }, ...lobbyShells] : []
   return [...groupLines, ...orphanLines, ...lobbyLines]
 }
 

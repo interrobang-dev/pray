@@ -115,7 +115,7 @@ export function planLounge(meta: LoungeMeta | null, fixtures: Fixture[], sizes: 
   }
 }
 
-/** "+N" 카드의 이름 목록: 5명까지는 다, 넘으면 5명 + "외 N명" */
+/** "+N" 카드의 이름 목록: 5명까지는 다, 넘으면 5명 + "and N more" */
 export function overflowNames(names: string[], max = 5): string[] {
-  return names.length > max ? [...names.slice(0, max), `외 ${names.length - max}명`] : names
+  return names.length > max ? [...names.slice(0, max), `and ${names.length - max} more`] : names
 }

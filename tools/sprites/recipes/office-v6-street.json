@@ -379,7 +379,7 @@
    "places": [
     {
      "id": "bus",
-     "label": "버스 정류장",
+     "label": "Bus stop",
      "minutes": [
       0,
       60
@@ -438,7 +438,7 @@
     },
     {
      "id": "cafe",
-     "label": "카페",
+     "label": "Cafe",
      "minutes": [
       60,
       360
@@ -511,7 +511,7 @@
     },
     {
      "id": "park",
-     "label": "공원",
+     "label": "Park",
      "minutes": [
       360,
       1440
@@ -606,7 +606,7 @@
     },
     {
      "id": "home",
-     "label": "집",
+     "label": "Home",
      "minutes": [
       1440,
       null

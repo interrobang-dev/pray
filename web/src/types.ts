@@ -172,21 +172,34 @@ export function attendanceOf(session: Session): Attendance {
 }
 
 export const statusLabel: Record<SessionStatus, string> = {
-  working: '작업중',
-  'my-turn': '내 차례',
-  'needs-approval': '승인 필요',
-  idle: '대기',
-  ended: '종료',
-  unknown: '알 수 없음',
+  working: 'Working',
+  'my-turn': 'Your turn',
+  'needs-approval': 'Needs approval',
+  idle: 'Idle',
+  ended: 'Ended',
+  unknown: 'Unknown',
 }
 
-/** 그 시각(퇴근·마지막 대화)부터 지금까지를 "방금"·"5분 전"·"3시간 전"·"2일 전" 으로 */
+/** 그 시각(퇴근·마지막 대화)부터 지금까지를 "just now"·"5m ago"·"3h ago"·"2d ago" 로 */
 export function formatAgo(iso: string, now: number): string {
   const minutes = Math.floor(Math.max(0, now - new Date(iso).getTime()) / 60_000)
-  if (minutes < 1) return '방금'
-  if (minutes < 60) return `${minutes}분 전`
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}시간 전`
-  return `${Math.floor(minutes / 1440)}일 전`
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`
+  return `${Math.floor(minutes / 1440)}d ago`
+}
+
+/** 툴팁의 날짜·시각 "Oct 23, 2026, 21:00:05" (이 PC 시각) */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  })
 }
 
 export interface OffDutyLabel {
@@ -197,19 +210,19 @@ export interface OffDutyLabel {
   title: string
 }
 
-/** 퇴근 이유 · 시각 "퇴근 · 방금"·"정리됨 · 3시간 전"·"팀장이 정리 · 10분 전"·"오류로 퇴근 (코드 1) · 2일 전" (목록 Off Duty 줄·퇴근 막대·사무실 퇴근 거리 카드) */
+/** 퇴근 이유 · 시각 "Left · just now"·"Ended · 3h ago"·"Released by lead · 10m ago"·"Exited with error (code 1) · 2d ago" (목록 Off Duty 줄·퇴근 막대·사무실 퇴근 거리 카드) */
 export function offDutyLabel(offDuty: OffDuty, now: number): OffDutyLabel {
   const isError = offDuty.reason === 'error'
   const reason = isError
     ? offDuty.exitCode === null
-      ? '오류로 퇴근'
-      : `오류로 퇴근 (코드 ${offDuty.exitCode})`
+      ? 'Exited with error'
+      : `Exited with error (code ${offDuty.exitCode})`
     : offDuty.reason === 'dismissed'
-      ? '정리됨'
+      ? 'Ended'
       : offDuty.reason === 'released'
-        ? '팀장이 정리'
-        : '퇴근'
-  return { text: `${reason} · ${formatAgo(offDuty.endedAt, now)}`, isError, title: new Date(offDuty.endedAt).toLocaleString('ko-KR') }
+        ? 'Released by lead'
+        : 'Left'
+  return { text: `${reason} · ${formatAgo(offDuty.endedAt, now)}`, isError, title: formatDateTime(offDuty.endedAt) }
 }
 
 export interface UsageLimit {

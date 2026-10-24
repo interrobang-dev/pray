@@ -107,10 +107,10 @@ describe('seatPlaceKey', () => {
 
 describe('loungeLabel', () => {
   it('라운지 줄: 쉬는 중·조는 중 · 마지막 대화 시각 (목록 퇴근 시각과 같은 표기)', () => {
-    expect(loungeLabel(session({ turnEndedAt: ago(LOUNGE_AFTER_MS) }), NOW)).toBe('라운지에서 쉬는 중 · 마지막 대화 30분 전')
-    expect(loungeLabel(session({ turnEndedAt: ago(3 * HOUR + 59 * 60_000) }), NOW)).toBe('라운지에서 쉬는 중 · 마지막 대화 3시간 전')
-    expect(loungeLabel(session({ turnEndedAt: ago(LOUNGE_DOZE_AFTER_MS) }), NOW)).toBe('라운지에서 조는 중 · 마지막 대화 1일 전')
-    expect(loungeLabel(session({ turnEndedAt: ago(2 * LOUNGE_DOZE_AFTER_MS + HOUR) }), NOW)).toBe('라운지에서 조는 중 · 마지막 대화 2일 전')
+    expect(loungeLabel(session({ turnEndedAt: ago(LOUNGE_AFTER_MS) }), NOW)).toBe('Resting in lounge · last chat 30m ago')
+    expect(loungeLabel(session({ turnEndedAt: ago(3 * HOUR + 59 * 60_000) }), NOW)).toBe('Resting in lounge · last chat 3h ago')
+    expect(loungeLabel(session({ turnEndedAt: ago(LOUNGE_DOZE_AFTER_MS) }), NOW)).toBe('Dozing in lounge · last chat 1d ago')
+    expect(loungeLabel(session({ turnEndedAt: ago(2 * LOUNGE_DOZE_AFTER_MS + HOUR) }), NOW)).toBe('Dozing in lounge · last chat 2d ago')
   })
 
   it('책상이면 없다', () => {

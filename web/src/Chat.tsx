@@ -83,7 +83,7 @@ const SPAWNED_SESSION_ID = /"sessionId":\s*"([^"]+)"/
 const TASK_NOTIFICATION = /<task-notification>[\s\S]*?<\/task-notification>/g
 const XML_ENTITIES: Record<string, string> = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" }
 /** 알림 status → 한 줄 표시. 실제 jsonl 에 나온 값은 이 셋뿐이고 모니터 이벤트는 status 가 없다 */
-const NOTIFICATION_STATUS_LABELS: Record<string, string> = { completed: '완료', failed: '실패', killed: '중단' }
+const NOTIFICATION_STATUS_LABELS: Record<string, string> = { completed: 'completed', failed: 'failed', killed: 'stopped' }
 
 interface TaskNotification {
   /** 원문 그대로 (펼치면 보인다) */
@@ -129,17 +129,17 @@ function isWaitTimeout(json: string | null): boolean {
   }
 }
 
-/** "백그라운드 작업 완료 · MCP task … (jk-corp/jk_wait)". 요약 끝의 상태 낱말은 앞에서 한국어로 말했으니 뺀다 */
+/** "Background task completed · MCP task … (jk-corp/jk_wait)". 요약 끝의 상태 낱말은 앞에서 말했으니 뺀다 */
 function notificationTitle(notification: TaskNotification): string {
   const { status, summary } = notification
-  if (isWaitNotification(notification) && isWaitTimeout(notification.result)) return '팀원 결과 기다림 · 시간 초과'
-  const heading = status ? `백그라운드 작업 ${NOTIFICATION_STATUS_LABELS[status] ?? status}` : '백그라운드 알림'
+  if (isWaitNotification(notification) && isWaitTimeout(notification.result)) return 'Waiting for members · timed out'
+  const heading = status ? `Background task ${NOTIFICATION_STATUS_LABELS[status] ?? status}` : 'Background notice'
   const shortSummary = status && summary.endsWith(` ${status}.`) ? summary.slice(0, -(status.length + 2)) : summary
   return shortSummary ? `${heading} · ${shortSummary}` : heading
 }
 
-const COMPACT_SUMMARY_TITLE = '대화 압축됨 · 이전 대화를 요약해 이어감'
-const INTERRUPT_TITLE = '중지됨'
+const COMPACT_SUMMARY_TITLE = 'Conversation compacted · continuing from a summary'
+const INTERRUPT_TITLE = 'Stopped'
 
 /** 가운데 작은 한 줄 (보고 말풍선이 되지 않는 알림·대화 압축 요약). 원문은 접어 둔다 (글자 그대로. HTML 로 꽂지 않는다) */
 function NoticeLine({ title, raw, isFailed = false }: { title: string; raw: string; isFailed?: boolean }) {
@@ -243,18 +243,18 @@ export function formatClock(iso: string): string {
 }
 
 /**
- * 팀장 대화의 지시·보고 한 줄 "→ [FE] Park 에게 지시함 · 10:12"·"[FE] Park 에게서 보고받음 · 10:30". 내용은 툴팁(앞부분)만.
+ * 팀장 대화의 지시·보고 한 줄 "→ Assigned to [FE] Park · 10:12"·"Report from [FE] Park · 10:30". 내용은 툴팁(앞부분)만.
  * 누르면 그 팀원 대화의 그 메시지로 간다. 팀원 세션이 아직 없으면(spawn 결과 전) 누를 수 없다
  */
 function RelayLine({ relay, jumpKey, isHighlighted, onOpen }: { relay: Relay; jumpKey: string; isHighlighted: boolean; onOpen: () => void }) {
-  const label = relay.kind === 'instruction' ? `→ ${relay.memberName} 에게 지시함` : `${relay.memberName} 에게서 보고받음`
+  const label = relay.kind === 'instruction' ? `→ Assigned to ${relay.memberName}` : `Report from ${relay.memberName}`
   const clock = formatClock(relay.at)
   return (
     <button
       type="button"
       className={`relay-line${isHighlighted ? ' jump-highlight' : ''}`}
       data-jump-key={jumpKey}
-      title={relay.memberSessionId ? relayPreview(relay.text) : '팀원 세션을 만드는 중'}
+      title={relay.memberSessionId ? relayPreview(relay.text) : 'Creating member session'}
       disabled={!relay.memberSessionId}
       onClick={onOpen}
     >
@@ -302,13 +302,13 @@ function AskedCard({ toolUse, asked }: { toolUse: ToolUse; asked: Asked }) {
   if (!answers) {
     return (
       <div className="msg asked waiting">
-        <span className="asked-label">질문 중</span> {asked.questions.map((item) => item.header).filter(Boolean).join(' · ')}
+        <span className="asked-label">Asking</span> {asked.questions.map((item) => item.header).filter(Boolean).join(' · ')}
       </div>
     )
   }
   return (
     <div className="msg asked">
-      <div className="asked-label">질문 → 답</div>
+      <div className="asked-label">Question → answer</div>
       {asked.questions.map((item) => (
         <div key={item.question} className="asked-item">
           <div className="asked-question">{item.question}</div>
@@ -327,14 +327,14 @@ type Special = { kind: 'relay'; relay: Relay } | { kind: 'asked'; asked: Asked }
 const WORK_TOOL_NAMES_SHOWN = 3
 
 /**
- * "작업 14개 · Bash 6 · Read 5 · Edit 3 · 2m 10s". 시간은 작업 중 표시기와 같은 꼴(formatElapsed)이고,
+ * "14 steps · Bash 6 · Read 5 · Edit 3 · 2m 10s". 시간은 작업 중 표시기와 같은 꼴(formatElapsed)이고,
  * 1초 미만이면 빼고, 진행 중이면 작업 중 표시기에 있으니 뺀다
  */
 function workTitle(work: Work): string {
   const counts = work.toolCounts.slice(0, WORK_TOOL_NAMES_SHOWN).map(({ name, count }) => `${shortToolName(name)} ${count}`)
   const startedAt = work.parts[0].message.timestamp
   const duration = !work.isInProgress && work.durationMs >= 1000 ? [formatElapsed(startedAt, Date.parse(startedAt) + work.durationMs)] : []
-  return [`작업 ${work.toolCount}개`, ...counts, ...duration].join(' · ')
+  return [`${work.toolCount} ${work.toolCount === 1 ? 'step' : 'steps'}`, ...counts, ...duration].join(' · ')
 }
 
 /**
@@ -412,7 +412,7 @@ function answerOf(question: AskQuestion, draft: Draft): string[] {
   return customText ? [...draft.labels, customText] : draft.labels
 }
 
-const ANSWER_CONFLICT_MESSAGE = '이미 답했거나 서버가 질문을 놓쳤습니다. 터미널 탭에서 확인하세요'
+const ANSWER_CONFLICT_MESSAGE = 'Already answered, or the server lost the question. Check the Terminal tab'
 
 /**
  * claude 의 AskUserQuestion 에 답하는 카드. 승인 막대 자리(대화와 입력칸 사이)에 뜬다.
@@ -482,9 +482,9 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
         setSendState('sent')
         return
       }
-      setErrorMessage(response.status === 409 ? ANSWER_CONFLICT_MESSAGE : `보내지 못했습니다 (HTTP ${response.status})`)
+      setErrorMessage(response.status === 409 ? ANSWER_CONFLICT_MESSAGE : `Couldn't send (HTTP ${response.status})`)
     } catch {
-      setErrorMessage('보내지 못했습니다 (네트워크 오류)')
+      setErrorMessage("Couldn't send (network error)")
     }
     setSendState('idle')
   }
@@ -494,7 +494,7 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
   }
 
   return (
-    <div className="question-card" role="group" aria-label="claude 의 질문">
+    <div className="question-card" role="group" aria-label="Question from claude">
       {questions.length > 1 && (
         <div className="question-tabs" role="tablist">
           {questions.map((question, i) => {
@@ -506,7 +506,7 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
                 role="tab"
                 aria-selected={i === activeIndex}
                 className={[i === activeIndex ? 'on' : '', isAnswered ? 'answered' : ''].join(' ')}
-                title={isAnswered ? '답함' : '아직 안 답함'}
+                title={isAnswered ? 'Answered' : 'Not answered yet'}
                 onClick={() => {
                   setActiveIndex(i)
                   setFocusedOptionIndex(null)
@@ -524,7 +524,7 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
       <div className="question-body">
         <div className="question-head">
           {questions.length === 1 && <span className="question-chip">{active.header}</span>}
-          <span className="question-mode">{active.multiSelect ? '여러 개 고르기' : '하나 고르기'}</span>
+          <span className="question-mode">{active.multiSelect ? 'Select multiple' : 'Select one'}</span>
         </div>
         <div className="question-text">{active.question}</div>
         <div className="question-options">
@@ -555,7 +555,7 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
         {/* 미리보기는 글자 그대로 (HTML 로 꽂지 않는다) */}
         {previewOption && (
           <div className="question-preview">
-            <div className="question-preview-label">미리보기 · {previewOption.label}</div>
+            <div className="question-preview-label">Preview · {previewOption.label}</div>
             <pre>{previewOption.preview}</pre>
           </div>
         )}
@@ -563,7 +563,7 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
           className="question-custom"
           value={activeDraft.customText}
           onChange={(e) => changeCustomText(e.target.value)}
-          placeholder={active.multiSelect ? '직접 입력 (고른 것과 함께)' : '직접 입력 (쓰면 이 글이 답)'}
+          placeholder={active.multiSelect ? 'Type your own (sent with your picks)' : 'Type your own (this becomes the answer)'}
           rows={Math.min(Math.max(activeDraft.customText.split('\n').length, 1), 5)}
           disabled={isBusy}
         />
@@ -574,15 +574,15 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
             {errorMessage}
           </span>
         )}
-        {sendState === 'sent' && <span className="question-status">보냈습니다</span>}
-        <button type="button" className="primary" disabled={isBusy || !isAllAnswered} onClick={submit} title={isAllAnswered ? undefined : '모든 질문에 답해야 합니다'}>
-          제출
+        {sendState === 'sent' && <span className="question-status">Sent</span>}
+        <button type="button" className="primary" disabled={isBusy || !isAllAnswered} onClick={submit} title={isAllAnswered ? undefined : 'Answer every question first'}>
+          Submit
         </button>
         <button type="button" disabled={isBusy} onClick={() => void send({ chat: true })}>
-          대화로 답하기
+          Chat about this
         </button>
         <button type="button" disabled={isBusy} onClick={() => void send({ cancel: true })}>
-          취소
+          Cancel
         </button>
       </div>
     </div>
@@ -623,7 +623,7 @@ function WorkingIndicator({
           <span />
         </span>
         {/* 점은 화면 낭독기에 안 보이므로 글로 알린다 */}
-        <span className="typing-label">작업 중</span>
+        <span className="typing-label">Working</span>
         {toolText && <span className="typing-text">{toolText}</span>}
         {/* 매초 바뀌는 글자를 화면 낭독기가 계속 읽지 않게 */}
         {since && (
@@ -634,8 +634,8 @@ function WorkingIndicator({
         )}
       </div>
       {onInterrupt && (
-        <button type="button" className="interrupt" disabled={isInterrupting} onClick={onInterrupt} title="claude 의 작업을 멈춘다 (터미널의 Esc 와 같다)">
-          {isInterrupting ? '중지 중…' : '중지'}
+        <button type="button" className="interrupt" disabled={isInterrupting} onClick={onInterrupt} title="Stop claude's work (same as Esc in the terminal)">
+          {isInterrupting ? 'Stopping…' : 'Stop'}
         </button>
       )}
     </div>
@@ -702,9 +702,9 @@ function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRe
       {previewUrl && <img className="attachment-thumb" src={previewUrl} alt="" />}
       <span className="attachment-name">{file.name}</span>
       <span className="attachment-status" role={error ? 'alert' : undefined}>
-        {error ?? (path ? formatSize(file.size) : '올리는 중…')}
+        {error ?? (path ? formatSize(file.size) : 'Uploading…')}
       </span>
-      <button type="button" className="attachment-remove" onClick={onRemove} title="빼기" aria-label={`${file.name} 빼기`}>
+      <button type="button" className="attachment-remove" onClick={onRemove} title="Remove" aria-label={`Remove ${file.name}`}>
         ×
       </button>
     </div>
@@ -713,10 +713,10 @@ function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRe
 
 /** 대기 메시지 취소 결과 (서버 outcome) → 대화 맨 아래 한 줄 */
 const CANCEL_OUTCOME_LABELS: Record<string, string> = {
-  cancelled: '취소됨',
-  accepted: '이미 claude 가 받음',
-  stuck: '취소 못 함: 터미널 탭에서 확인',
-  failed: '실패: 터미널 탭에서 확인',
+  cancelled: 'cancelled',
+  accepted: 'already taken by claude',
+  stuck: "couldn't cancel: check the Terminal tab",
+  failed: 'failed: check the Terminal tab',
 }
 /** 취소 결과 한 줄을 보여 주는 시간 */
 const CANCEL_NOTICE_MS = 6_000
@@ -724,9 +724,9 @@ const CANCEL_NOTICE_MS = 6_000
 /** 중지 결과 (서버 outcome) → 대화 맨 아래 한 줄. 멈춘 것(stopped)은 대화의 "중지됨" 줄과 표시기가 사라지는 것으로 충분해 알리지 않는다 */
 const INTERRUPT_OUTCOME_LABELS: Record<string, string | null> = {
   stopped: null,
-  continued: '중지됨 · 대기 중이던 메시지를 이어서 처리합니다',
-  restored: '중지됨 · 응답 전이라 보낸 글이 claude 입력칸에 남음 (다음 글과 이어 붙음): 터미널 탭에서 확인',
-  unknown: '중지 못 했을 수 있음: 터미널 탭에서 확인',
+  continued: 'Stopped · moving on to the queued message',
+  restored: "Stopped · no response yet, so your message is back in claude's input box (it will join your next message): check the Terminal tab",
+  unknown: 'May not have stopped: check the Terminal tab',
 }
 /** 중지 결과 한 줄을 보여 주는 시간. 입력칸에 남은 글 안내는 읽을 시간이 더 필요하다 */
 const INTERRUPT_NOTICE_MS = 10_000
@@ -994,7 +994,7 @@ export function Chat({
   /** 점프한 곳을 못 찾으면 세션만 연 것으로 하고 맨 아래에서 알린다 */
   function showJumpMissing() {
     scrollToBottom()
-    setJumpNotice('해당 메시지를 찾지 못함')
+    setJumpNotice('Message not found')
   }
 
   // 점프: 이 세션 대화를 불러온 뒤 한 번. 첫 로딩의 맨 아래 스크롤(위 효과) 다음에 돈다. 접힌 작업 묶음 안이면 펼치고, 스크롤·강조는 아래 효과가 한다
@@ -1046,7 +1046,7 @@ export function Chat({
     const { memberSessionId } = relay
     if (!memberSessionId) return
     if (!Object.hasOwn(sessionNames, memberSessionId)) {
-      setLineNotice({ rowKey, text: '세션 기록이 없어 열 수 없음' })
+      setLineNotice({ rowKey, text: "Can't open: no session record" })
       return
     }
     setLineNotice(null)
@@ -1149,7 +1149,7 @@ export function Chat({
         file,
         controller: new AbortController(),
         path: null,
-        error: file.size > MAX_ATTACHMENT_BYTES ? '20MB 를 넘어 올리지 않음' : null,
+        error: file.size > MAX_ATTACHMENT_BYTES ? 'Over 20MB, not uploaded' : null,
       }),
     )
     setAttachments((current) => [...current, ...added])
@@ -1172,7 +1172,7 @@ export function Chat({
       if (response.ok && typeof body.path === 'string') settle({ path: body.path, error: null })
       else settle({ path: null, error: typeof body.message === 'string' ? body.message : `HTTP ${response.status}` })
     } catch {
-      settle({ path: null, error: '네트워크 오류' })
+      settle({ path: null, error: 'Network error' })
     }
   }
 
@@ -1235,9 +1235,9 @@ export function Chat({
         ? Object.hasOwn(INTERRUPT_OUTCOME_LABELS, outcome)
           ? INTERRUPT_OUTCOME_LABELS[outcome]
           : INTERRUPT_OUTCOME_LABELS.unknown
-        : `중지 못 함: ${body.message ?? `HTTP ${response.status}`}`
+        : `Couldn't stop: ${body.message ?? `HTTP ${response.status}`}`
     } catch {
-      notice = '중지 실패: 네트워크 오류'
+      notice = 'Stop failed: network error'
     }
     if (sessionIdRef.current !== requestSessionId) return
     // 멈췄으면 서버가 바꾼 상태가 와서 표시기가 사라질 때까지 "중지 중…" 그대로 (응답과 상태 갱신 사이에 [중지] 가 깜박이지 않게)
@@ -1260,9 +1260,9 @@ export function Chat({
       const body = (await response.json().catch(() => ({}))) as { outcome?: string; message?: string }
       notice = response.ok
         ? (CANCEL_OUTCOME_LABELS[body.outcome ?? ''] ?? CANCEL_OUTCOME_LABELS.failed)
-        : `취소 못 함: ${body.message ?? `HTTP ${response.status}`}`
+        : `couldn't cancel: ${body.message ?? `HTTP ${response.status}`}`
     } catch {
-      notice = '실패: 네트워크 오류'
+      notice = 'failed: network error'
     }
     if (sessionIdRef.current !== requestSessionId) return
     setCancellingId(null)
@@ -1333,7 +1333,7 @@ export function Chat({
             if (message.from) {
               return (
                 <div key={message.id} className={`msg user relay${highlightClass(message.id)}`} data-jump-key={message.id}>
-                  <div className="relay-label">{message.from.name} 지시</div>
+                  <div className="relay-label">Instruction from {message.from.name}</div>
                   <MarkdownText text={message.text} />
                 </div>
               )
@@ -1369,16 +1369,16 @@ export function Chat({
                 {message.text && <div className="text">{message.text}</div>}
                 {message.isQueued && (
                   <div className="queued-label">
-                    대기 중
+                    Queued
                     {message.id === lastQueuedId && canCancelQueued && (
                       <button
                         type="button"
                         className="queued-cancel"
                         disabled={cancellingId !== null}
                         onClick={() => void cancelQueued(message)}
-                        title="claude 가 받기 전에 이 메시지를 대기열에서 뺀다"
+                        title="Take this message out of the queue before claude gets it"
                       >
-                        {cancellingId === message.id ? '취소 중…' : '취소'}
+                        {cancellingId === message.id ? 'Cancelling…' : 'Cancel'}
                       </button>
                     )}
                   </div>
@@ -1390,9 +1390,9 @@ export function Chat({
             <div key={`pending-${pending.id}`} className={`msg user pending${pending.isFailed ? ' failed' : ''}`}>
               <div className="text">{pending.text}</div>
               <div className="pending-label">
-                {pending.isFailed ? '전송 실패' : '보내는 중'}
+                {pending.isFailed ? 'Send failed' : 'Sending'}
                 {pending.isFailed && (
-                  <button type="button" className="pending-dismiss" aria-label="닫기" onClick={() => dismissPending(pending.id)}>
+                  <button type="button" className="pending-dismiss" aria-label="Dismiss" onClick={() => dismissPending(pending.id)}>
                     ×
                   </button>
                 )}
@@ -1401,7 +1401,7 @@ export function Chat({
           ))}
           {cancelNotice && (
             <div className="queue-notice" role="status">
-              대기 메시지 · {cancelNotice}
+              Queued message · {cancelNotice}
             </div>
           )}
           {interruptNotice && (
@@ -1414,7 +1414,7 @@ export function Chat({
               {jumpNotice}
             </div>
           )}
-          {messages.length === 0 && pendings.length === 0 && <p className="hint">아직 대화가 없습니다</p>}
+          {messages.length === 0 && pendings.length === 0 && <p className="hint">No messages yet</p>}
           {isWorking && (
             <WorkingIndicator
               tools={runningTools}
@@ -1435,8 +1435,8 @@ export function Chat({
               type="button"
               className="to-bottom"
               onClick={onToBottomClick}
-              title="맨 아래로"
-              aria-label={hasUnread ? '맨 아래로 (새 메시지)' : '맨 아래로'}
+              title="Scroll to bottom"
+              aria-label={hasUnread ? 'Scroll to bottom (new messages)' : 'Scroll to bottom'}
             >
               ↓{hasUnread && <span className="to-bottom-dot" />}
             </button>
@@ -1444,7 +1444,7 @@ export function Chat({
           <ShellsButton key={`shells:${sessionId}`} sessionId={sessionId} shells={shells} request={shellRequest} onRequestHandled={onShellRequestHandled} />
           <FilesButton key={sessionId} sessionId={sessionId} version={version} />
           {isSuggestionShown && (
-            <button type="button" className="suggestion" onClick={fillSuggestion} title={suggestion ?? undefined} aria-label={`제안을 입력칸에 채우기: ${suggestion}`}>
+            <button type="button" className="suggestion" onClick={fillSuggestion} title={suggestion ?? undefined} aria-label={`Fill the input with the suggestion: ${suggestion}`}>
               <span className="suggestion-bubble">
                 <span className="suggestion-text">{suggestion}</span>
                 <kbd className="suggestion-key">Tab</kbd>
@@ -1463,17 +1463,17 @@ export function Chat({
         isApprovalNeeded &&
         // 질문에 Enter 는 1번 선택지로 답하고 Esc 는 작업을 멈추므로 승인 버튼을 주지 않는다 (서버가 질문을 놓쳤을 때. 서버 재시작 등)
         (pendingTool === ASK_TOOL ? (
-          <div className="approval">질문에 답하려면 터미널 탭을 열어 주세요</div>
+          <div className="approval">Open the Terminal tab to answer the question</div>
         ) : (
           <div className="approval">
             <span>
-              승인 대기: <code>{pendingTool ?? '?'}</code>
+              Needs approval: <code>{pendingTool ?? '?'}</code>
             </span>
             <button className="yes" onClick={() => void sendKeys('\r')}>
-              승인 (Enter)
+              Approve (Enter)
             </button>
             <button className="no" onClick={() => void sendKeys('\x1b')}>
-              거부 (Esc)
+              Deny (Esc)
             </button>
           </div>
         ))
@@ -1481,11 +1481,11 @@ export function Chat({
       {isWritable ? (
         <form className="composer" onSubmit={submit}>
           {attachments.length > 0 && (
-            <div className="attachments" aria-label="첨부 파일">
+            <div className="attachments" aria-label="Attachments">
               {attachments.map((attachment) => (
                 <AttachmentChip key={attachment.id} attachment={attachment} onRemove={() => removeAttachment(attachment)} />
               ))}
-              {isUploading && <span className="attachments-note">다 올라가야 보낼 수 있습니다</span>}
+              {isUploading && <span className="attachments-note">You can send once uploads finish</span>}
             </div>
           )}
           <input ref={fileInputRef} type="file" multiple hidden onChange={onFileInputChange} />
@@ -1494,8 +1494,8 @@ export function Chat({
             className="attach"
             disabled={isAsking}
             onClick={() => fileInputRef.current?.click()}
-            aria-label="파일 첨부"
-            title="파일 첨부"
+            aria-label="Attach files"
+            title="Attach files"
           >
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
               <path
@@ -1514,7 +1514,7 @@ export function Chat({
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
             onPaste={onComposerPaste}
-            placeholder={isAsking ? '위 질문에 먼저 답해 주세요' : '지시를 입력하고 Enter (줄바꿈은 Shift+Enter)'}
+            placeholder={isAsking ? 'Answer the question above first' : 'Type an instruction (Shift+Enter for a new line)'}
             rows={Math.min(Math.max(draft.split('\n').length, 1), 8)}
             disabled={isAsking}
             autoFocus={!window.matchMedia(TOUCH_QUERY).matches}
@@ -1523,8 +1523,8 @@ export function Chat({
             type="submit"
             className="send"
             disabled={(!draft.trim() && uploaded.length === 0) || isAsking || isUploading}
-            aria-label="보내기"
-            title={isUploading ? '첨부 파일을 올리는 중이라 보낼 수 없습니다' : '보내기 (Enter)'}
+            aria-label="Send"
+            title={isUploading ? "Can't send while files are uploading" : 'Send (Enter)'}
           >
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
               <path
@@ -1538,7 +1538,7 @@ export function Chat({
           </button>
         </form>
       ) : (
-        (footer ?? <p className="hint">터미널·IDE에서 띄운 세션이라 관찰만 가능합니다</p>)
+        (footer ?? <p className="hint">Started from a terminal or IDE, so this session is view-only</p>)
       )}
     </div>
   )

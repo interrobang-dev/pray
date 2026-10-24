@@ -255,11 +255,11 @@ describe('flow client', () => {
 
   it('maps flow errors to statuses with Korean messages and never includes the key', async () => {
     const cases: [Response | Error, number, string][] = [
-      [fail(401, 'API Key 정보가 올바르지 않습니다.'), 502, '플로우 API 키가 올바르지 않음: API Key 정보가 올바르지 않습니다.'],
-      [fail(429, 'too many'), 429, '플로우 요청 한도 초과 (경로마다 분당 120회). 잠시 뒤 다시 시도하세요'],
-      [fail(400, '잘못된 query 형식입니다.'), 502, '플로우 오류 (HTTP 400): 잘못된 query 형식입니다.'],
-      [new Response('<html>', { status: 500 }), 502, '플로우 응답을 해석하지 못함 (HTTP 500)'],
-      [new Error('connect ECONNREFUSED'), 502, '플로우에 연결하지 못함: connect ECONNREFUSED'],
+      [fail(401, 'API Key 정보가 올바르지 않습니다.'), 502, 'Flow API key is invalid: API Key 정보가 올바르지 않습니다.'],
+      [fail(429, 'too many'), 429, 'Flow rate limit exceeded (120 requests per minute per path). Try again shortly'],
+      [fail(400, '잘못된 query 형식입니다.'), 502, 'Flow error (HTTP 400): 잘못된 query 형식입니다.'],
+      [new Response('<html>', { status: 500 }), 502, "Couldn't parse the Flow response (HTTP 500)"],
+      [new Error('connect ECONNREFUSED'), 502, "Couldn't connect to Flow: connect ECONNREFUSED"],
     ]
     for (const [answer, status, message] of cases) {
       const client = makeFlowClient({
@@ -281,7 +281,7 @@ describe('flow client', () => {
       fetch: async () => Response.json({ response: { success: false, code: 500, error: { message: '서버 오류' } } }),
       keyPath,
     })
-    await expect(client.countUnreadChats()).rejects.toMatchObject({ status: 502, message: '플로우 오류 (HTTP 200): 서버 오류' })
+    await expect(client.countUnreadChats()).rejects.toMatchObject({ status: 502, message: 'Flow error (HTTP 200): 서버 오류' })
   })
 })
 
@@ -328,7 +328,7 @@ describe('flow poller', () => {
 
     state.isFailing = true
     await poller.check()
-    expect(poller.status()).toMatchObject({ unreadAlarmCount: 2, unreadChatCount: 0, error: '플로우 오류 (HTTP 500): 점검 중' })
+    expect(poller.status()).toMatchObject({ unreadAlarmCount: 2, unreadChatCount: 0, error: 'Flow error (HTTP 500): 점검 중' })
     await poller.check()
     expect(changes).toHaveLength(2)
 

@@ -80,9 +80,9 @@ export function Terminal({ sessionId }: Props) {
       term.write(dataOf(event))
     })
     source.addEventListener('output', (event) => term.write(dataOf(event)))
-    source.addEventListener('exit', (event) => term.write(`\r\n[세션 종료: ${dataOf(event)}]\r\n`))
+    source.addEventListener('exit', (event) => term.write(`\r\n[Session ended: ${dataOf(event)}]\r\n`))
     source.addEventListener('error', (event) => {
-      if ((event as MessageEvent).data) term.write(`\r\n[오류: ${dataOf(event)}]\r\n`)
+      if ((event as MessageEvent).data) term.write(`\r\n[Error: ${dataOf(event)}]\r\n`)
     })
 
     return () => {

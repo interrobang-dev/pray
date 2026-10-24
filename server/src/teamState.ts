@@ -150,6 +150,6 @@ export class TaskStore {
 
 export class TaskConflictError extends Error {
   constructor(memberSessionId: string) {
-    super(`팀원 ${memberSessionId.slice(0, 8)} 에게 진행 중인 task 가 있음`)
+    super(`Member ${memberSessionId.slice(0, 8)} already has a running task`)
   }
 }

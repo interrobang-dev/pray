@@ -1198,8 +1198,8 @@ function SeatCard({ session, teamName, placeLabel }: { session: Session; teamNam
     )
   }
   const isOnBreak = attendanceOf(session) === 'break'
-  const role = session.role === 'lead' ? (session.partId !== null ? '파트장' : '팀장') : null
-  const facts = [isOnBreak ? '휴식' : statusLabel[session.status], role, session.kind === 'external' ? '외부 세션' : null].filter(Boolean)
+  const role = session.role === 'lead' ? (session.partId !== null ? 'Part lead' : 'Lead') : null
+  const facts = [isOnBreak ? 'Break' : statusLabel[session.status], role, session.kind === 'external' ? 'External session' : null].filter(Boolean)
   const lounge = loungeLabel(session, Date.now())
   const text = session.lastAssistantText ?? ''
   return (
@@ -1210,7 +1210,7 @@ function SeatCard({ session, teamName, placeLabel }: { session: Session; teamNam
       </div>
       <div className="office-card-facts">{facts.join(' · ')}</div>
       {lounge && <div className="office-card-facts">{lounge}</div>}
-      {!isOnBreak && session.status === 'needs-approval' && <div className="office-card-tool">도구: {session.pendingTool ?? '?'}</div>}
+      {!isOnBreak && session.status === 'needs-approval' && <div className="office-card-tool">Tool: {session.pendingTool ?? '?'}</div>}
       {!isOnBreak && session.status === 'my-turn' && text && (
         <p className="office-card-text">{text.length > CARD_TEXT_MAX_CHARS ? `${text.slice(0, CARD_TEXT_MAX_CHARS).trimEnd()}…` : text}</p>
       )}
@@ -1890,8 +1890,8 @@ export function Office(props: Props) {
             const card: HoveredCard = {
               kind: 'more',
               key,
-              title: `${placeLabels.get(plate.place) ?? ''} · ${plate.count}명 더`,
-              lines: ['누르면 왼쪽 목록에서 보기'],
+              title: `${placeLabels.get(plate.place) ?? ''} · ${plate.count} more`,
+              lines: ['Click to show them in the list'],
             }
             moreCards.set(key, card)
             cardRects.set(key, tileRect(plate.rect))
@@ -1966,7 +1966,7 @@ export function Office(props: Props) {
               const session = layout.seated.find((s) => s.id === id)
               return session?.name ?? session?.title ?? id.slice(0, 8)
             }
-            const card: HoveredCard = { kind: 'more', key, title: `라운지 · ${plan.more.count}명 더`, lines: overflowNames(plan.overflow.map(nameOf)) }
+            const card: HoveredCard = { kind: 'more', key, title: `Lounge · ${plan.more.count} more`, lines: overflowNames(plan.overflow.map(nameOf)) }
             moreCards.set(key, card)
             cardRects.set(key, tileRect(drawn.plate))
             // 누르면 아무것도 안 한다 (끌면 맵 이동)
@@ -2220,8 +2220,8 @@ export function Office(props: Props) {
             return
           }
           const names = arrow.targets.map(({ session }) => session.name ?? session.title ?? session.id.slice(0, 8))
-          const shown = names.length > 6 ? [...names.slice(0, 5), `외 ${names.length - 5}명`] : names
-          arrowTooltipText.text = `승인 대기\n${shown.join('\n')}`
+          const shown = names.length > 6 ? [...names.slice(0, 5), `and ${names.length - 5} more`] : names
+          arrowTooltipText.text = `Needs approval\n${shown.join('\n')}`
           const w = arrowTooltipText.width + 12
           const h = arrowTooltipText.height + 8
           arrowTooltipBackground.clear().rect(0, 0, w, h).fill(COLOR.alert).rect(0, 0, w, h).stroke({ width: 1, color: COLOR.alertLine })
@@ -2437,9 +2437,9 @@ export function Office(props: Props) {
   if (isArtFailed) {
     return (
       <div className="office office-failed">
-        사무실 그림을 읽지 못함 ·{' '}
+        Couldn't load the office art ·{' '}
         <button type="button" className="link" onClick={() => window.location.reload()}>
-          새로고침
+          Reload
         </button>
       </div>
     )

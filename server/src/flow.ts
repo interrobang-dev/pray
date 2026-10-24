@@ -16,7 +16,7 @@ const PROJECT_REFETCH_MS = 60_000
 
 export type FlowFetch = (url: string, init: RequestInit) => Promise<Response>
 
-/** 화면에 그대로 돌려줄 상태코드와 한국어 문구. 키 값은 문구에 넣지 않는다 */
+/** 화면에 그대로 돌려줄 상태코드와 영어 문구. 키 값은 문구에 넣지 않는다 */
 export class FlowError extends Error {
   constructor(
     readonly status: number,
@@ -26,7 +26,7 @@ export class FlowError extends Error {
   }
 }
 
-export const FLOW_KEY_MISSING_MESSAGE = '플로우 API 키 없음: ~/.claude/flow-key.env 에 FLOW_API_KEY=<키> 줄을 넣으세요'
+export const FLOW_KEY_MISSING_MESSAGE = 'No Flow API key: add a FLOW_API_KEY=<key> line to ~/.claude/flow-key.env'
 
 /** `FLOW_API_KEY=` 줄의 값. 파일이 없거나 줄이 없거나 값이 비면 null */
 export async function readFlowKey(path = flowKeyPath): Promise<string | null> {
@@ -156,21 +156,21 @@ export function makeFlowClient({ fetch: doFetch = fetch, keyPath = flowKeyPath, 
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
     } catch (error) {
-      throw new FlowError(502, `플로우에 연결하지 못함: ${(error as Error).message}`)
+      throw new FlowError(502, `Couldn't connect to Flow: ${(error as Error).message}`)
     }
     let parsed: { response?: { success?: boolean; data?: unknown; error?: { message?: string } } }
     try {
       parsed = await response.json()
     } catch {
-      throw new FlowError(502, `플로우 응답을 해석하지 못함 (HTTP ${response.status})`)
+      throw new FlowError(502, `Couldn't parse the Flow response (HTTP ${response.status})`)
     }
     const wrapped = parsed?.response
     if (response.ok && wrapped?.success) return wrapped.data
     const detail = wrapped?.error?.message
     // 화면에서 401 은 "로그인 필요" 라 플로우 키 거부는 502 로 바꾼다
-    if (response.status === 401) throw new FlowError(502, `플로우 API 키가 올바르지 않음${detail ? `: ${detail}` : ''}`)
-    if (response.status === 429) throw new FlowError(429, '플로우 요청 한도 초과 (경로마다 분당 120회). 잠시 뒤 다시 시도하세요')
-    throw new FlowError(502, `플로우 오류 (HTTP ${response.status})${detail ? `: ${detail}` : ''}`)
+    if (response.status === 401) throw new FlowError(502, `Flow API key is invalid${detail ? `: ${detail}` : ''}`)
+    if (response.status === 429) throw new FlowError(429, 'Flow rate limit exceeded (120 requests per minute per path). Try again shortly')
+    throw new FlowError(502, `Flow error (HTTP ${response.status})${detail ? `: ${detail}` : ''}`)
   }
 
   async function alarmPage(query: { readYn?: 'Y' | 'N'; cursor?: string; size: number }): Promise<Page<RawAlarm>> {
@@ -315,7 +315,7 @@ export function makeFlowPoller(client: FlowClient, onChange: (status: FlowStatus
         const [alarms, chats] = await Promise.all([client.countUnreadAlarms(), client.countUnreadChats()])
         result = { kind: 'ok', alarms, chats }
       } catch (error) {
-        result = { kind: 'error', message: error instanceof FlowError ? error.message : `플로우 확인 실패: ${error}` }
+        result = { kind: 'error', message: error instanceof FlowError ? error.message : `Flow check failed: ${error}` }
       }
     }
     const next = nextFlowStatus(status, result, now())

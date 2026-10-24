@@ -19,7 +19,7 @@ function findExe(name: string): string {
   try {
     return execSync(`where ${name}`, { encoding: 'utf8' }).split(/\r?\n/)[0].trim()
   } catch {
-    throw new Error(`${name} 을(를) PATH 에서 찾지 못했습니다`)
+    throw new Error(`Couldn't find ${name} on PATH`)
   }
 }
 
@@ -88,7 +88,7 @@ async function showWindow(): Promise<void> {
     window = createWindow()
     const isUp = await waitForServer(15_000)
     if (!isUp) {
-      dialog.showErrorBox('jk-corp', `서버가 뜨지 않았습니다. 로그를 확인하세요:\n${logDir}`)
+      dialog.showErrorBox('jk-corp', `The server didn't start. Check the logs:\n${logDir}`)
     }
     await window.loadURL(SERVER_URL)
   }
@@ -119,47 +119,47 @@ function refreshTray(): void {
   const isAlert = status.needsApproval > 0
   tray.setImage(nativeImage.createFromBuffer(trayIconPng(isAlert)))
   const summary = status.isServerUp
-    ? `작업중 ${status.working} · 승인 대기 ${status.needsApproval}`
-    : '서버 응답 없음'
+    ? `Working ${status.working} · Needs approval ${status.needsApproval}`
+    : 'Server not responding'
   tray.setToolTip(`jk-corp · ${summary}`)
   const { host, server } = children
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '열기', click: () => void showWindow() },
+      { label: 'Open', click: () => void showWindow() },
       { label: summary, enabled: false },
       { type: 'separator' },
-      { label: `호스트: ${host.isRunning ? '실행 중' : '꺼짐'}`, enabled: false },
-      { label: `서버: ${server.isRunning ? '실행 중' : '꺼짐'}`, enabled: false },
-      { label: '서버 재시작', click: () => void server.restart() },
+      { label: `Host: ${host.isRunning ? 'Running' : 'Stopped'}`, enabled: false },
+      { label: `Server: ${server.isRunning ? 'Running' : 'Stopped'}`, enabled: false },
+      { label: 'Restart server', click: () => void server.restart() },
       {
-        label: '호스트 재시작 (웹 세션 끊김)',
+        label: 'Restart host (disconnects web sessions)',
         click: async () => {
           const { response } = await dialog.showMessageBox({
             type: 'warning',
-            buttons: ['재시작', '취소'],
+            buttons: ['Restart', 'Cancel'],
             defaultId: 1,
-            message: '호스트를 재시작하면 웹 세션이 모두 끊깁니다. 다시 뜰 때 --resume 으로 복구됩니다.',
+            message: 'Restarting the host disconnects all web sessions. They come back with --resume when it starts again.',
           })
           if (response === 0) void host.restart()
         },
       },
-      { label: '로그 폴더 열기', click: () => void shell.openPath(logDir) },
+      { label: 'Open log folder', click: () => void shell.openPath(logDir) },
       { type: 'separator' },
       {
-        label: '로그인 시 자동 실행',
+        label: 'Launch at login',
         type: 'checkbox',
         checked: app.getLoginItemSettings(loginItemOptions()).openAtLogin,
         click: (item) => app.setLoginItemSettings({ ...loginItemOptions(), openAtLogin: item.checked }),
       },
       { type: 'separator' },
       {
-        label: '종료',
+        label: 'Quit',
         click: async () => {
           const { response } = await dialog.showMessageBox({
             type: 'warning',
-            buttons: ['종료', '취소'],
+            buttons: ['Quit', 'Cancel'],
             defaultId: 1,
-            message: '종료하면 호스트·서버가 꺼지고 웹 세션이 모두 끊깁니다. 다음 실행 때 --resume 으로 복구됩니다.',
+            message: 'Quitting stops the host and server and disconnects all web sessions. They come back with --resume on next launch.',
           })
           if (response === 0) quit()
         },
@@ -203,7 +203,7 @@ if (!app.requestSingleInstanceLock()) {
     for (const child of [children.host, children.server]) {
       child.on('change', refreshTray)
       child.on('gaveUp', (name: string) => {
-        dialog.showErrorBox('jk-corp', `${name} 가 계속 죽어서 재시작을 멈췄습니다. 로그: ${logDir}`)
+        dialog.showErrorBox('jk-corp', `The ${name} keeps crashing, so it won't be restarted again. Logs: ${logDir}`)
       })
     }
     children.host.start()
@@ -211,7 +211,7 @@ if (!app.requestSingleInstanceLock()) {
     refreshTray()
     setInterval(() => void pollStatus(), 5000)
     if (!existsSync(join(repoDir, 'web', 'dist'))) {
-      dialog.showErrorBox('jk-corp', 'web/dist 가 없습니다. 먼저 npm run build 를 실행하세요.')
+      dialog.showErrorBox('jk-corp', 'web/dist not found. Run npm run build first.')
     }
     await showWindow()
   })

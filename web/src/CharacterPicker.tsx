@@ -38,7 +38,7 @@ function Preview({ art, character, frame, hair, top }: { art: RecolorArt; charac
 
 function Swatches({ label, base, colors, value, onChange }: { label: string; base: string; colors: string[]; value: string | null; onChange: (color: string | null) => void }) {
   return (
-    <div className="character-swatches" role="radiogroup" aria-label={`${label} 색`}>
+    <div className="character-swatches" role="radiogroup" aria-label={`${label} color`}>
       <span className="character-swatches-label">{label}</span>
       {[null, ...colors].map((color) => (
         <button
@@ -46,8 +46,8 @@ function Swatches({ label, base, colors, value, onChange }: { label: string; bas
           type="button"
           role="radio"
           aria-checked={value === color}
-          aria-label={color ?? '기본색'}
-          title={color === null ? `기본색 (${base})` : color}
+          aria-label={color ?? 'Default color'}
+          title={color === null ? `Default (${base})` : color}
           className={`${value === color ? 'is-selected' : ''}${color === null ? ' is-base' : ''}`}
           style={{ background: color ?? base }}
           onClick={() => onChange(color)}
@@ -92,28 +92,28 @@ export function CharacterPicker({
     const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason))
     loadCharacterSheet().then(
       (info) => isCurrent && setSheet(info),
-      (reason: unknown) => isCurrent && setError(`인물 목록을 읽지 못함 (${message(reason)})`),
+      (reason: unknown) => isCurrent && setError(`Couldn't load characters (${message(reason)})`),
     )
     loadRecolorArt().then(
       (loaded) => isCurrent && setArt(loaded),
-      (reason: unknown) => isCurrent && setArtError(`색 바꾸기를 읽지 못함 (${message(reason)})`),
+      (reason: unknown) => isCurrent && setArtError(`Couldn't load recoloring (${message(reason)})`),
     )
     return () => {
       isCurrent = false
     }
   }, [])
   if (error) return <p className="form-hint">{error}</p>
-  if (!sheet) return <p className="form-hint">인물 목록을 읽는 중…</p>
+  if (!sheet) return <p className="form-hint">Loading characters…</p>
   const autoId = pickDotCharacter(sessionId, true, sheet.characters, gender)
   const options: { id: string | null; label: string; frameId: string | null }[] = [
-    { id: null, label: '자동', frameId: autoId },
+    { id: null, label: 'Auto', frameId: autoId },
     ...sheet.characters.map((character) => ({ id: character.id, label: character.id, frameId: character.id })),
   ]
   const chosenFrame = value.id ? sheet.frames.get(value.id) : undefined
   const bases = value.id ? art?.bases[value.id] : undefined
   return (
     <>
-      <div className="character-picker" role="radiogroup" aria-label="도트 사무실 인물">
+      <div className="character-picker" role="radiogroup" aria-label="Office character">
         {options.map((option) => (
           <button
             key={option.id ?? 'auto'}
@@ -121,7 +121,7 @@ export function CharacterPicker({
             role="radio"
             aria-checked={value.id === option.id}
             className={value.id === option.id ? 'is-selected' : undefined}
-            title={option.id === null ? `자동: 세션마다 정해지는 인물 (${autoId ?? '없음'})` : option.id}
+            title={option.id === null ? `Auto: picked per session (${autoId ?? 'none'})` : option.id}
             onClick={() => option.id !== value.id && onChange({ id: option.id, hair: null, top: null })}
           >
             <Thumb frame={option.frameId ? sheet.frames.get(option.frameId) : undefined} />
@@ -134,8 +134,8 @@ export function CharacterPicker({
         <div className="character-colors">
           <Preview art={art} character={value.id} frame={chosenFrame} hair={value.hair} top={value.top} />
           <div className="character-color-rows">
-            <Swatches label="머리" base={bases.hair} colors={HAIR_COLORS} value={value.hair} onChange={(hair) => onChange({ ...value, hair })} />
-            <Swatches label="윗옷" base={bases.top} colors={TOP_COLORS} value={value.top} onChange={(top) => onChange({ ...value, top })} />
+            <Swatches label="Hair" base={bases.hair} colors={HAIR_COLORS} value={value.hair} onChange={(hair) => onChange({ ...value, hair })} />
+            <Swatches label="Top" base={bases.top} colors={TOP_COLORS} value={value.top} onChange={(top) => onChange({ ...value, top })} />
           </div>
         </div>
       )}

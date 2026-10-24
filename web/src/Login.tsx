@@ -20,11 +20,11 @@ export function Login({ canLogin, onLoggedIn }: Props) {
     setMessage(null)
     const response = await postJson('/api/auth/request', { email })
     if (!response.ok) {
-      setMessage((await response.json()).message ?? '요청 실패')
+      setMessage((await response.json()).message ?? 'Request failed')
       return
     }
     setIsCodeSent(true)
-    setMessage('허용된 주소라면 인증번호를 보냈습니다. 10분 안에 입력하세요.')
+    setMessage('If this address is allowed, a code is on its way. Enter it within 10 minutes.')
   }
 
   async function verify(event: FormEvent) {
@@ -34,7 +34,13 @@ export function Login({ canLogin, onLoggedIn }: Props) {
     if (!response.ok) {
       const reason = (await response.json()).message
       setMessage(
-        reason === 'wrong' ? '인증번호가 틀립니다' : reason === 'expired' ? '만료됐습니다. 다시 요청하세요' : reason === 'locked' ? '시도 횟수 초과. 다시 요청하세요' : '인증번호를 먼저 요청하세요',
+        reason === 'wrong'
+          ? 'Wrong code'
+          : reason === 'expired'
+            ? 'The code expired. Request a new one'
+            : reason === 'locked'
+              ? 'Too many attempts. Request a new code'
+              : 'Request a code first',
       )
       return
     }
@@ -44,19 +50,19 @@ export function Login({ canLogin, onLoggedIn }: Props) {
   return (
     <main className="login">
       <h1>jk-corp</h1>
-      {!canLogin && <p>원격 로그인이 설정되지 않았습니다. 이 PC에서 127.0.0.1 로 접속하세요.</p>}
+      {!canLogin && <p>Remote login isn't set up. Open 127.0.0.1 on this PC.</p>}
       {canLogin && !isCodeSent && (
         <form onSubmit={requestCode}>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="메일 주소" required autoFocus />
-          <button type="submit">인증번호 받기</button>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address" required autoFocus />
+          <button type="submit">Send code</button>
         </form>
       )}
       {canLogin && isCodeSent && (
         <form onSubmit={verify}>
-          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="6자리 인증번호" inputMode="numeric" pattern="\d{6}" required autoFocus />
-          <button type="submit">로그인</button>
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="6-digit code" inputMode="numeric" pattern="\d{6}" required autoFocus />
+          <button type="submit">Verify</button>
           <button type="button" onClick={() => setIsCodeSent(false)}>
-            다시 요청
+            Resend
           </button>
         </form>
       )}

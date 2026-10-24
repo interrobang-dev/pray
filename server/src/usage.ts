@@ -106,7 +106,7 @@ export async function readAccountEmail(path = claudeJsonPath): Promise<string | 
 /** 비공식 엔드포인트. Claude Code 가 로그인 시 저장한 OAuth 토큰을 그대로 쓴다. 토큰 갱신은 하지 않는다 (Claude Code 가 실행 중일 때 스스로 갱신) */
 export async function fetchUsage(now = new Date()): Promise<UsageResult> {
   const credentials = await readCredentials()
-  if (!credentials) return { ok: false, reason: 'Claude Code 로그인 정보 없음 (~/.claude/.credentials.json)' }
+  if (!credentials) return { ok: false, reason: 'No Claude Code login (~/.claude/.credentials.json)' }
   let response: Response
   try {
     response = await fetch(USAGE_URL, {
@@ -114,10 +114,10 @@ export async function fetchUsage(now = new Date()): Promise<UsageResult> {
       signal: AbortSignal.timeout(10_000),
     })
   } catch (error) {
-    return { ok: false, reason: `usage 조회 실패: ${(error as Error).message}` }
+    return { ok: false, reason: `Usage request failed: ${(error as Error).message}` }
   }
-  if (response.status === 401) return { ok: false, reason: '토큰 만료. claude 세션을 하나 실행하면 갱신됨' }
-  if (!response.ok) return { ok: false, reason: `usage 조회 실패: HTTP ${response.status}` }
+  if (response.status === 401) return { ok: false, reason: 'Token expired. Run a claude session to refresh it' }
+  if (!response.ok) return { ok: false, reason: `Usage request failed: HTTP ${response.status}` }
   const raw: unknown = await response.json()
   return { ok: true, usage: parseUsage(raw, { plan: credentials.plan, email: await readAccountEmail() }, now) }
 }

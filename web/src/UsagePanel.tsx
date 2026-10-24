@@ -87,7 +87,7 @@ export function UsagePanel() {
       const response = await fetch('/api/usage')
       setResult(response.ok ? await response.json() : { ok: false, reason: `HTTP ${response.status}` })
     } catch {
-      setResult({ ok: false, reason: '서버 연결 실패' })
+      setResult({ ok: false, reason: "Can't reach the server" })
     }
     setNow(Date.now())
   }, [])
@@ -127,7 +127,7 @@ export function UsagePanel() {
     <div className="usage" ref={rootRef}>
       <button ref={toggleRef} className="usage-toggle" onClick={toggle} aria-expanded={isOpen} aria-controls="usage-popover">
         <span className="usage-prefix">Remaining</span>
-        {result === null && <span>불러오는 중…</span>}
+        {result === null && <span>Loading…</span>}
         {result && !result.ok && <span className="error">{result.reason}</span>}
         {result?.ok &&
           result.usage.limits.map((limit, index) => {
@@ -140,7 +140,7 @@ export function UsagePanel() {
             )
           })}
       </button>
-      <button className="usage-refresh" onClick={load} title="새로 고침">
+      <button className="usage-refresh" onClick={load} title="Refresh">
         ↻
       </button>
       {isOpen && (

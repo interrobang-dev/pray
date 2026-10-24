@@ -45,7 +45,7 @@ function handle(socket: Socket, message: ClientMessage): void {
     case 'attach': {
       const data = pool.snapshot(message.sessionId)
       if (data === null) {
-        send(socket, { type: 'error', sessionId: message.sessionId, message: '세션 없음' })
+        send(socket, { type: 'error', sessionId: message.sessionId, message: 'Session not found' })
         return
       }
       send(socket, { type: 'snapshot', sessionId: message.sessionId, data })
@@ -97,7 +97,7 @@ const server = createServer((socket) => {
 function resumeOffDuty(socket: Socket, sessionId: string): void {
   try {
     const record = listOffDuty().find((r) => r.sessionId === sessionId)
-    if (!record) throw new Error('퇴근 기록 없음')
+    if (!record) throw new Error('No off-duty record')
     pool.spawn({ sessionId, cwd: record.cwd, resume: true, extraArgs: record.extraArgs })
     console.log(`resume (퇴근 기록) ${sessionId} cwd=${record.cwd}`)
   } catch (error) {

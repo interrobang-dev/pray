@@ -15,8 +15,8 @@ export function makeSendCode(smtp: SmtpConfig | null): SendCode | null {
     await transport.sendMail({
       from: `"jk-corp" <${smtp.user}>`,
       to: email,
-      subject: `[jk-corp] 로그인 인증번호 ${code}`,
-      text: `인증번호: ${code}\n\n10분 안에 입력하세요. 요청한 적이 없다면 무시하세요.`,
+      subject: `[jk-corp] Login code ${code}`,
+      text: `Your login code: ${code}\n\nEnter it within 10 minutes. If you didn't request it, ignore this email.`,
     })
   }
 }

@@ -165,9 +165,9 @@ describe('planLounge', () => {
 })
 
 describe('overflowNames', () => {
-  it('5명까지는 다, 넘으면 5명 + "외 N명"', () => {
+  it('5명까지는 다, 넘으면 5명 + "and N more"', () => {
     expect(overflowNames(['a', 'b', 'c', 'd', 'e'])).toEqual(['a', 'b', 'c', 'd', 'e'])
-    expect(overflowNames(['a', 'b', 'c', 'd', 'e', 'f'])).toEqual(['a', 'b', 'c', 'd', 'e', '외 1명'])
-    expect(overflowNames(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'])).toEqual(['a', 'b', 'c', 'd', 'e', '외 3명'])
+    expect(overflowNames(['a', 'b', 'c', 'd', 'e', 'f'])).toEqual(['a', 'b', 'c', 'd', 'e', 'and 1 more'])
+    expect(overflowNames(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'])).toEqual(['a', 'b', 'c', 'd', 'e', 'and 3 more'])
   })
 })

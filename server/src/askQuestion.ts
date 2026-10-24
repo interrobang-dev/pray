@@ -55,18 +55,18 @@ export function buildAnswers(
   questions: AskQuestion[],
   answers: unknown,
 ): { ok: true; answers: Record<string, string> } | { ok: false; message: string } {
-  if (!isRecord(answers)) return { ok: false, message: 'answers 필요 ({ [질문문]: string[] })' }
+  if (!isRecord(answers)) return { ok: false, message: 'answers required ({ [question]: string[] })' }
   const known = new Set(questions.map((q) => q.question))
   const unknown = Object.keys(answers).find((key) => !known.has(key))
-  if (unknown !== undefined) return { ok: false, message: `모르는 질문: ${unknown}` }
+  if (unknown !== undefined) return { ok: false, message: `Unknown question: ${unknown}` }
   const result: Record<string, string> = {}
   for (const question of questions) {
     const values = answers[question.question]
-    if (!Array.isArray(values) || values.length === 0) return { ok: false, message: `답 없음: ${question.question}` }
+    if (!Array.isArray(values) || values.length === 0) return { ok: false, message: `No answer: ${question.question}` }
     if (values.some((value) => typeof value !== 'string' || !value.trim())) {
-      return { ok: false, message: `빈 답: ${question.question}` }
+      return { ok: false, message: `Empty answer: ${question.question}` }
     }
-    if (!question.multiSelect && values.length !== 1) return { ok: false, message: `하나만 고를 수 있음: ${question.question}` }
+    if (!question.multiSelect && values.length !== 1) return { ok: false, message: `Only one choice allowed: ${question.question}` }
     result[question.question] = answerText(question, values)
   }
   return { ok: true, answers: result }

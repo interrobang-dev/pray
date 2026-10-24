@@ -95,21 +95,21 @@ export async function createWorktree(
   try {
     repoTop = (await git(teamCwd, ['rev-parse', '--show-toplevel'])).stdout.trim()
   } catch {
-    throw new WorktreeError(`팀 폴더가 git 저장소가 아니라 worktree 를 만들 수 없음: ${teamCwd}`, 400)
+    throw new WorktreeError(`Team folder isn't a git repository, so a worktree can't be created: ${teamCwd}`, 400)
   }
   const cwd = worktreePath(repoTop, slug)
   if (takenFolders.some((folder) => normalizeCwd(folder) === normalizeCwd(cwd))) {
-    throw new WorktreeError(`다른 파트가 이미 쓰는 worktree 폴더: ${cwd}`, 409)
+    throw new WorktreeError(`Worktree folder already used by another part: ${cwd}`, 409)
   }
   const branch = `part/${slug}`
   try {
     const listed = await findWorktree(teamCwd, cwd)
     if (listed && existsSync(cwd)) {
-      if (!listed.branch) throw new WorktreeError(`이미 있는 worktree 가 브랜치 없이(detached) 체크아웃돼 있어 연결하지 않음: ${cwd}`, 409)
+      if (!listed.branch) throw new WorktreeError(`Existing worktree is checked out without a branch (detached), so it wasn't linked: ${cwd}`, 409)
       return { cwd, branch: listed.branch, isLinked: true }
     }
     if (listed) await git(teamCwd, ['worktree', 'remove', cwd])
-    else if (existsSync(cwd)) throw new WorktreeError(`폴더가 이미 있지만 이 저장소의 worktree 가 아님: ${cwd}`, 409)
+    else if (existsSync(cwd)) throw new WorktreeError(`Folder already exists but isn't a worktree of this repository: ${cwd}`, 409)
     const hasBranch = await gitYesNo(teamCwd, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`])
     await git(teamCwd, hasBranch ? ['worktree', 'add', cwd, branch] : ['worktree', 'add', cwd, '-b', branch])
     return { cwd, branch, isLinked: hasBranch }
@@ -156,7 +156,7 @@ export async function removeWorktree(
     hasBranch = await gitYesNo(repoCwd, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`])
     isMerged = hasBranch && (await gitYesNo(repoCwd, ['merge-base', '--is-ancestor', branch, 'HEAD']))
   } catch (error) {
-    throw new WorktreeError(`git 으로 worktree 상태를 읽지 못해 아무것도 지우지 않음: ${stderrOf(error)}`, 409)
+    throw new WorktreeError(`Couldn't read the worktree state with git, so nothing was deleted: ${stderrOf(error)}`, 409)
   }
   if (hasBranch && !isMerged && choice === null) return { outcome: 'branch-unmerged' }
 
@@ -170,18 +170,18 @@ export async function removeWorktree(
       // 지우기 전에 거절하면(잠김 등) 등록이 남는다. 지우다 실패하면(Windows 에서 그 폴더를 쓰는 프로세스) 파일·등록은 지워지고 폴더만 남는다
       const isWorktreeGone = (await findWorktree(repoCwd, cwd).catch(() => listed)) === undefined || !existsSync(join(cwd, '.git'))
       const message = isWorktreeGone
-        ? `worktree 를 지웠지만 폴더가 남음 (${stderrOf(error)})${hasBranch ? `. 브랜치 ${branch} 는 남김` : ''}`
-        : `worktree 를 지우지 못해 아무것도 지우지 않음: ${stderrOf(error)}`
+        ? `Removed the worktree, but the folder remains (${stderrOf(error)})${hasBranch ? `. Kept branch ${branch}` : ''}`
+        : `Couldn't remove the worktree, so nothing was deleted: ${stderrOf(error)}`
       return { outcome: 'failed', message, isWorktreeGone }
     }
   }
-  const folderDone = folder === 'removed' ? 'worktree 폴더를 지웠지만' : folder === 'missing' ? 'worktree 폴더는 이미 없었고' : 'worktree 가 아닌 폴더는 남겼고'
+  const folderDone = folder === 'removed' ? 'Removed the worktree folder' : folder === 'missing' ? 'The worktree folder was already gone' : 'Left the non-worktree folder'
   if (!hasBranch) return { outcome: 'removed', folder, branch: 'missing' }
   if (choice === 'keep') return { outcome: 'removed', folder, branch: 'kept' }
   try {
     await git(repoCwd, ['branch', isMerged ? '-d' : '-D', branch])
   } catch (error) {
-    return { outcome: 'failed', message: `${folderDone} 브랜치 ${branch} 를 지우지 못함: ${stderrOf(error)}`, isWorktreeGone: true }
+    return { outcome: 'failed', message: `${folderDone}, but couldn't delete branch ${branch}: ${stderrOf(error)}`, isWorktreeGone: true }
   }
   return { outcome: 'removed', folder, branch: 'deleted' }
 }

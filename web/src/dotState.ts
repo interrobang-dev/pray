@@ -49,9 +49,9 @@ export function seatPlaceKey(sessions: Session[], now: number): string {
     .join(',')
 }
 
-/** 자리 카드의 라운지 줄 "라운지에서 쉬는 중 · 마지막 대화 3시간 전"·"라운지에서 조는 중 · 마지막 대화 2일 전". 책상이면 null */
+/** 자리 카드의 라운지 줄 "Resting in lounge · last chat 3h ago"·"Dozing in lounge · last chat 2d ago". 책상이면 null */
 export function loungeLabel(session: Session, now: number): string | null {
   const place = seatPlaceOf(session, now)
   if (place === 'desk' || !session.turnEndedAt) return null
-  return `${place === 'lounge-doze' ? '라운지에서 조는 중' : '라운지에서 쉬는 중'} · 마지막 대화 ${formatAgo(session.turnEndedAt, now)}`
+  return `${place === 'lounge-doze' ? 'Dozing in lounge' : 'Resting in lounge'} · last chat ${formatAgo(session.turnEndedAt, now)}`
 }

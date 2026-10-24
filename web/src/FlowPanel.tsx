@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Segmented } from './Modal'
 import { formatClock } from './Chat'
-import type { FlowAlarm, FlowAlarmPage, FlowStatus } from './types'
+import { formatAgo, formatDateTime, type FlowAlarm, type FlowAlarmPage, type FlowStatus } from './types'
 
 type AlarmFilter = 'unread' | 'all'
 
 /** 서버가 키 없음(503)을 알릴 때 패널 안내 */
-const KEY_MISSING_MESSAGE = '~/.claude/flow-key.env 에 FLOW_API_KEY 가 없습니다'
+const KEY_MISSING_MESSAGE = 'No FLOW_API_KEY in ~/.claude/flow-key.env'
 
-/** 알림 시각: "방금"·"3분 전", 그보다 오래면 "10:12", 오늘이 아니면 "10/21 10:12" */
+/** 알림 시각: "just now"·"3m ago", 그보다 오래면 "10:12", 오늘이 아니면 "10/21 10:12" */
 function formatAlarmTime(iso: string | null, now: number): string {
   if (!iso) return ''
   const minutes = Math.floor(Math.max(0, now - new Date(iso).getTime()) / 60_000)
-  if (minutes < 1) return '방금'
-  if (minutes < 60) return `${minutes}분 전`
+  if (minutes < 60) return formatAgo(iso, now)
   return formatClock(iso)
 }
 
@@ -29,7 +28,7 @@ async function fetchAlarms(filter: AlarmFilter, cursor: string | null): Promise<
     const { message } = (await response.json().catch(() => ({}))) as { message?: string }
     return { error: message ?? `HTTP ${response.status}` }
   } catch {
-    return { error: '네트워크 오류' }
+    return { error: 'Network error' }
   }
 }
 
@@ -41,7 +40,7 @@ async function postRead(path: string): Promise<{ ok: true; status: FlowStatus } 
     const { message } = (await response.json().catch(() => ({}))) as { message?: string }
     return { ok: false, message: message ?? `HTTP ${response.status}` }
   } catch {
-    return { ok: false, message: '네트워크 오류' }
+    return { ok: false, message: 'Network error' }
   }
 }
 
@@ -162,13 +161,13 @@ export function FlowPanel({
   }
 
   async function readAll() {
-    if (!confirm(`플로우의 안 읽은 알림 ${unreadAlarmCount}개를 모두 읽음으로 바꿉니다. 되돌릴 수 없습니다.`)) return
+    if (!confirm(`Mark all ${unreadAlarmCount} unread Flow alerts as read? This can't be undone.`)) return
     setIsReadingAll(true)
     setReadAllError(null)
     const result = await postRead('/api/flow/alarms/read-all')
     setIsReadingAll(false)
     if (!result.ok) {
-      setReadAllError(`전체 읽음 실패: ${result.message}`)
+      setReadAllError(`Couldn't mark all read: ${result.message}`)
       return
     }
     // 수가 바뀌면 목록을 다시 받는다 (안 읽음 보기는 빈 목록이 된다). 그 전에 보이는 것도 읽음으로
@@ -181,14 +180,14 @@ export function FlowPanel({
   return (
     <section className="panel flow-panel">
       <div className="panel-header">
-        <b>Flow 알림</b>
+        <b>Flow alerts</b>
         {(unreadAlarmCount ?? 0) > 0 && (
           <button className="flow-read-all" onClick={() => void readAll()} disabled={isReadingAll}>
-            {isReadingAll ? '…' : '전체 읽음'}
+            {isReadingAll ? '…' : 'Mark all read'}
           </button>
         )}
         {/* 폰에서는 패널이 화면 전체라 "뒤로" 가 목록으로 돌아가는 버튼이다 */}
-        <button className="close" onClick={onClose} title={isNarrow ? '목록으로' : '닫기'}>
+        <button className="close" onClick={onClose} title={isNarrow ? 'Back to list' : 'Close'}>
           {isNarrow ? '←' : '×'}
         </button>
       </div>
@@ -197,14 +196,14 @@ export function FlowPanel({
           value={filter}
           onChange={setFilter}
           options={[
-            { value: 'unread', label: '안 읽음' },
-            { value: 'all', label: '전체' },
+            { value: 'unread', label: 'Unread' },
+            { value: 'all', label: 'All' },
           ]}
         />
-        <span className={unreadChatCount ? 'flow-chat-count unread' : 'flow-chat-count'} title="채팅 내용은 플로우 공식 API 에 없어 수만 보인다">
-          채팅 안 읽음 {unreadChatCount ?? '…'}
+        <span className={unreadChatCount ? 'flow-chat-count unread' : 'flow-chat-count'} title="The Flow API has no chat messages, so only the count is shown">
+          Unread chats {unreadChatCount ?? '…'}
         </span>
-        <button className="flow-refresh" onClick={() => setReloadCount((count) => count + 1)} disabled={isLoading} title="새로고침">
+        <button className="flow-refresh" onClick={() => setReloadCount((count) => count + 1)} disabled={isLoading} title="Reload">
           ↻
         </button>
       </div>
@@ -215,7 +214,7 @@ export function FlowPanel({
       )}
       <div className="flow-list">
         {error && <p className="hint flow-error">{error}</p>}
-        {isEmpty && <p className="hint">{filter === 'unread' ? '안 읽은 알림이 없습니다' : '알림이 없습니다'}</p>}
+        {isEmpty && <p className="hint">{filter === 'unread' ? 'No unread alerts' : 'No alerts'}</p>}
         {alarms.map((alarm) => (
           <FlowAlarmItem
             key={alarm.alarmId}
@@ -228,10 +227,10 @@ export function FlowPanel({
         ))}
         {nextCursor && !error && (
           <button className="flow-more" onClick={() => void loadMore()} disabled={isLoading}>
-            {isLoading ? '불러오는 중…' : '더 보기'}
+            {isLoading ? 'Loading…' : 'Load more'}
           </button>
         )}
-        {isLoading && alarms.length === 0 && !error && <p className="hint">불러오는 중…</p>}
+        {isLoading && alarms.length === 0 && !error && <p className="hint">Loading…</p>}
       </div>
     </section>
   )
@@ -255,12 +254,12 @@ function FlowAlarmItem({
   const detail = alarm.message && alarm.content ? alarm.content : null
   return (
     <div className={alarm.isRead ? 'flow-alarm' : 'flow-alarm unread'}>
-      <span className="flow-alarm-dot" title={alarm.isRead ? '읽음' : '안 읽음'} />
+      <span className="flow-alarm-dot" title={alarm.isRead ? 'Read' : 'Unread'} />
       <div className="flow-alarm-head">
-        <span className="flow-alarm-project">{alarm.projectName ?? `프로젝트 ${alarm.projectId}`}</span>
-        {alarm.isMention && <span className="badge">멘션</span>}
-        {alarm.isWorker && <span className="badge">담당</span>}
-        <span className="flow-alarm-time" title={alarm.registeredAt ? new Date(alarm.registeredAt).toLocaleString('ko-KR') : undefined}>
+        <span className="flow-alarm-project">{alarm.projectName ?? `Project ${alarm.projectId}`}</span>
+        {alarm.isMention && <span className="badge">Mention</span>}
+        {alarm.isWorker && <span className="badge">Assigned</span>}
+        <span className="flow-alarm-time" title={alarm.registeredAt ? formatDateTime(alarm.registeredAt) : undefined}>
           {formatAlarmTime(alarm.registeredAt, now)}
         </span>
       </div>
@@ -273,14 +272,14 @@ function FlowAlarmItem({
       <div className="flow-alarm-foot">
         <span className="flow-alarm-from">{alarm.registerName}</span>
         {!alarm.isRead && (
-          <button className="flow-read" onClick={onRead} disabled={isReading} title="플로우에서 이 알림을 읽음으로">
-            {isReading ? '…' : '읽음'}
+          <button className="flow-read" onClick={onRead} disabled={isReading} title="Mark this alert read in Flow">
+            {isReading ? '…' : 'Mark read'}
           </button>
         )}
       </div>
       {readError && (
         <div className="flow-read-error" role="alert">
-          읽음 실패: {readError}
+          Couldn't mark read: {readError}
         </div>
       )}
     </div>

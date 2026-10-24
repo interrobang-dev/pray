@@ -19,6 +19,7 @@ import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, 
 import { dotLookOf } from './dotCharacter'
 import {
   attendanceOf,
+  formatDateTime,
   offDutyLabel,
   statusLabel,
   type FlowStatus,
@@ -57,11 +58,11 @@ function readIsOfficeHidden(): boolean {
 
 /** 헤더 테마 버튼: 누를 때마다 라이트 → 다크 → 시스템 */
 const NEXT_THEME: Record<ThemeChoice, ThemeChoice> = { light: 'dark', dark: 'system', system: 'light' }
-const THEME_LABELS: Record<ThemeChoice, string> = { light: '라이트', dark: '다크', system: '시스템' }
+const THEME_LABELS: Record<ThemeChoice, string> = { light: 'Light', dark: 'Dark', system: 'System' }
 
 /** 세션 API 가 그 폴더를 ~/.claude.json 에 신뢰로 기록하지 못했을 때 (isTrustFailed) */
 const SESSION_TRUST_FAILED_MESSAGE =
-  '신뢰 표시를 남기지 못했습니다. 이 폴더에서 처음 뜨는 세션이면 터미널 탭에서 신뢰를 직접 허용해야 합니다 (기본 선택 "No, exit" 를 그대로 두면 세션이 꺼집니다).'
+  `Couldn't mark the folder as trusted. If this is the first session in this folder, allow trust yourself in the Terminal tab (leaving the default "No, exit" ends the session).`
 
 /** 세션 추가 모달이 미리 채우는 이름 "[역할] 이름" 의 역할 (사용자 확정). 팀장·파트장 모두 Lead */
 const MEMBER_ROLE_TAG = 'Dev'
@@ -118,7 +119,7 @@ function formatElapsed(iso: string | null, now: number): { text: string; classNa
   const text =
     minutes < 1 ? 'now' : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`
   const className = minutes < 15 ? 'recent' : minutes > 120 ? 'stale' : ''
-  return { text, className, title: date.toLocaleString('ko-KR') }
+  return { text, className, title: formatDateTime(iso) }
 }
 
 /** 팀 카드 안 세션 줄의 정렬 순위. 작을수록 위. 승인 대기 → 내 차례 → 작업 중 → 나머지 (팀장도 상태로만 정렬) */
@@ -399,7 +400,7 @@ export function App() {
       isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
     })
     if (!response.ok) {
-      alert((await response.json()).message ?? '생성 실패')
+      alert((await response.json()).message ?? "Couldn't create session")
       return
     }
     const { sessionId, isTrustFailed } = (await response.json()) as { sessionId: string; isTrustFailed?: boolean }
@@ -416,7 +417,7 @@ export function App() {
     const anchor = spotForNewTeam(layoutOffice(office, snapshot.sessions), teamForm.groupId)
     const response = await postJson('/api/team', 'POST', { name: form.get('name'), cwd: form.get('cwd'), groupId: teamForm.groupId, ...anchor })
     if (!response.ok) {
-      alert((await response.json()).message ?? '팀 생성 실패')
+      alert((await response.json()).message ?? "Couldn't create team")
       return
     }
     setTeamForm(null)
@@ -430,12 +431,12 @@ export function App() {
     const isWorktree = partLocation === 'worktree'
     const response = await postJson(`/api/team/${partForm.teamId}/parts`, 'POST', { name: form.get('name'), isWorktree })
     if (!response.ok) {
-      alert((await response.json()).message ?? '파트 생성 실패')
+      alert((await response.json()).message ?? "Couldn't create part")
       return
     }
     const { part, isTrusted, isLinked } = (await response.json()) as { part: Part; isTrusted: boolean; isLinked?: boolean }
-    if (isWorktree && !isTrusted) alert(`신뢰 표시를 남기지 못했습니다. 이 폴더에서 처음 뜨는 세션은 터미널에서 신뢰를 직접 허용해야 합니다.\n${part.worktree?.cwd}`)
-    if (isLinked) alert(`이미 있던 worktree·브랜치 ${part.worktree?.branch} 로 연결했습니다 (현재 HEAD 에서 새로 만들지 않음).\n${part.worktree?.cwd}`)
+    if (isWorktree && !isTrusted) alert(`Couldn't mark the folder as trusted. The first session in this folder needs trust allowed in the Terminal tab.\n${part.worktree?.cwd}`)
+    if (isLinked) alert(`Linked to the existing worktree and branch ${part.worktree?.branch} (not created fresh from the current HEAD).\n${part.worktree?.cwd}`)
     setPartForm(null)
     if (!isPartLeadSpawned) return
     // 세션 추가 모달의 파트장과 같은 "[Lead] 이름" 과 그 성별. 추천을 못 받으면 이름 없이 (자동 제목)
@@ -451,7 +452,7 @@ export function App() {
       gender: leadName?.gender,
     })
     if (!leadResponse.ok) {
-      alert((await leadResponse.json()).message ?? '파트장 생성 실패')
+      alert((await leadResponse.json()).message ?? "Couldn't start part lead")
       return
     }
     const { sessionId, isTrustFailed } = (await leadResponse.json()) as { sessionId: string; isTrustFailed?: boolean }
@@ -466,22 +467,22 @@ export function App() {
     const spot = spotForNewGroup(layoutOffice(office, snapshot.sessions))
     const response = await postJson('/api/groups', 'POST', { name: form.get('name'), ...spot })
     if (!response.ok) {
-      alert((await response.json()).message ?? '그룹 생성 실패')
+      alert((await response.json()).message ?? "Couldn't create group")
       return
     }
     setIsGroupForm(false)
   }
 
   async function restartHost() {
-    if (!confirm('호스트를 재시작하면 웹 세션이 모두 끊깁니다. 다시 뜰 때 --resume 으로 복구됩니다. 재시작할까요?')) return
+    if (!confirm('Restarting the host disconnects all web sessions. They come back with --resume when it starts again. Restart?')) return
     const response = await postJson('/api/host/restart', 'POST', {})
-    if (!response.ok) alert((await response.json()).message ?? '호스트 재시작 실패')
+    if (!response.ok) alert((await response.json()).message ?? "Couldn't restart host")
   }
 
   async function restartServer() {
     if (
       !confirm(
-        '서버를 재시작하면 몇 초 동안 화면이 끊깁니다. 세션은 그대로이고, 상태 표시는 다음 훅부터, 웹에서 받던 질문은 터미널 탭에서 답합니다. 재시작할까요?',
+        'Restarting the server disconnects this screen for a few seconds. Sessions keep running, status comes back with the next hook, and questions held here must be answered in the Terminal tab. Restart?',
       )
     )
       return
@@ -489,9 +490,9 @@ export function App() {
       const response = await postJson('/api/server/restart', 'POST', {})
       if (response.ok) return
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
-      alert(`서버 재시작 실패: ${message ?? `HTTP ${response.status}`}`)
+      alert(`Couldn't restart server: ${message ?? `HTTP ${response.status}`}`)
     } catch {
-      alert('서버 재시작 실패: 네트워크 오류')
+      alert("Couldn't restart server: Network error")
     }
   }
 
@@ -517,7 +518,7 @@ export function App() {
     const form = new FormData(event.currentTarget)
     const response = await postJson(`/api/sessions/${renameTarget.id}`, 'PATCH', { name: form.get('name') })
     if (!response.ok) {
-      alert((await response.json()).message ?? '이름 변경 실패')
+      alert((await response.json()).message ?? "Couldn't rename session")
       return
     }
     const current = renameTarget.character ?? null
@@ -527,7 +528,7 @@ export function App() {
       const body = renameCharacter.id ? renameCharacter : { id: null }
       const characterResponse = await postJson(`/api/sessions/${renameTarget.id}/character`, 'PUT', body)
       if (!characterResponse.ok) {
-        alert((await characterResponse.json().catch(() => ({}))).message ?? '인물 변경 실패')
+        alert((await characterResponse.json().catch(() => ({}))).message ?? "Couldn't change character")
         return
       }
     }
@@ -563,12 +564,12 @@ export function App() {
   }
 
   function editPart(team: Team, part: Part) {
-    const name = prompt('파트 이름 (worktree 폴더·브랜치 이름은 그대로)', part.name)
+    const name = prompt('Part name (the worktree folder and branch keep their names)', part.name)
     if (name?.trim()) void postJson(`/api/team/${team.id}/parts/${part.id}`, 'PATCH', { name: name.trim() })
   }
 
   function releasePartLead(team: Team, part: Part) {
-    if (confirm(`"${part.name}" 파트장 지정을 해제할까요? (세션은 그대로 남고 파트 팀원이 됩니다)`)) {
+    if (confirm(`Remove the part lead of "${part.name}"? (The session stays and becomes a part member.)`)) {
       void postJson(`/api/team/${team.id}/parts/${part.id}`, 'PATCH', { leadSessionId: null })
     }
   }
@@ -576,40 +577,40 @@ export function App() {
   /** worktree 파트는 서버가 폴더·브랜치도 지운다. 브랜치가 병합되지 않았으면 지울지 물어 ?branch= 로 다시 보낸다 */
   async function removePart(team: Team, part: Part) {
     const effect = part.worktree
-      ? `worktree 폴더 ${part.worktree.cwd} 도 지워집니다 (그 폴더에 근무 중인 세션이나 커밋하지 않은 변경이 있으면 지우지 않습니다). 브랜치 ${part.worktree.branch} 는 병합됐으면 지우고, 아니면 다시 묻습니다.`
-      : '소속 세션은 종료되지 않고 팀 직속이 됩니다.'
-    if (!confirm(`"${part.name}" 파트를 지울까요? ${effect}`)) return
+      ? `The worktree folder ${part.worktree.cwd} is deleted too (not if a session is working there or there are uncommitted changes). Branch ${part.worktree.branch} is deleted if merged; otherwise you'll be asked.`
+      : 'Its sessions keep running and move directly under the team.'
+    if (!confirm(`Delete part "${part.name}"? ${effect}`)) return
     const url = `/api/team/${team.id}/parts/${part.id}`
     let response = await fetch(url, { method: 'DELETE' })
     let body = (await response.json().catch(() => ({}))) as { code?: string; branch?: string; message?: string }
     if (response.status === 409 && body.code === 'branch-unmerged') {
-      const isBranchDeleted = confirm(`브랜치 ${body.branch} 가 병합되지 않았습니다. 브랜치도 지울까요? (확인 = 지움, 취소 = 남김)`)
+      const isBranchDeleted = confirm(`Branch ${body.branch} isn't merged. Delete the branch too? (OK = delete, Cancel = keep)`)
       response = await fetch(`${url}?branch=${isBranchDeleted ? 'delete' : 'keep'}`, { method: 'DELETE' })
       body = await response.json().catch(() => ({}))
     }
-    if (!response.ok) alert(body.message ?? '파트 삭제 실패')
+    if (!response.ok) alert(body.message ?? "Couldn't delete part")
   }
 
   function releaseLead(team: Team) {
-    if (confirm(`"${team.name}" 팀장 지정을 해제할까요? (세션은 그대로 남고 팀원이 됩니다)`)) {
+    if (confirm(`Remove the lead of "${team.name}"? (The session stays and becomes a member.)`)) {
       void postJson(`/api/team/${team.id}`, 'PATCH', { leadSessionId: null })
     }
   }
 
   function removeTeam(team: Team) {
-    if (confirm(`"${team.name}" 팀을 지울까요? 세션은 종료되지 않고 무소속이 됩니다.`)) {
+    if (confirm(`Delete team "${team.name}"? Its sessions keep running without a team.`)) {
       void fetch(`/api/team/${team.id}`, { method: 'DELETE' })
     }
   }
 
   async function removeGroup(group: Group) {
-    if (!confirm(`"${group.name}" 그룹을 지울까요?`)) return
+    if (!confirm(`Delete group "${group.name}"?`)) return
     const response = await fetch(`/api/groups/${group.id}`, { method: 'DELETE' })
-    if (!response.ok) alert((await response.json()).message ?? '삭제 실패')
+    if (!response.ok) alert((await response.json()).message ?? "Couldn't delete group")
   }
 
   function editGroup(group: Group) {
-    const waitingNote = prompt(`"${group.name}" 대기 메모 (비우면 삭제)`, group.waitingNote ?? '')
+    const waitingNote = prompt(`Waiting note for "${group.name}" (leave empty to remove)`, group.waitingNote ?? '')
     if (waitingNote === null) return
     void postJson(`/api/groups/${group.id}`, 'PATCH', { waitingNote })
   }
@@ -640,7 +641,7 @@ export function App() {
   }
 
   function editTeam(team: Team) {
-    const name = prompt(`팀 이름 (폴더: ${team.cwd})`, team.name)
+    const name = prompt(`Team name (folder: ${team.cwd})`, team.name)
     if (name?.trim()) void postJson(`/api/team/${team.id}`, 'PATCH', { name: name.trim() })
   }
 
@@ -730,7 +731,7 @@ export function App() {
     }
     if (failure === null) return
     setOffice((prev) => applyOrder(prev, scope, previousIds))
-    alert(`순서를 바꾸지 못했습니다: ${failure}`)
+    alert(`Couldn't change the order: ${failure}`)
   }
 
   /** 끌어 놓기 중 목록 항목에 붙일 클래스: 끄는 중(흐리게)·놓일 자리 선(앞 또는 맨 끝 뒤) */
@@ -744,7 +745,7 @@ export function App() {
   /** 끌기 손잡이. "+"·"⋯" 와 같은 head-actions 안에 두어 보이는 규칙(hover·터치 기기)이 같다 */
   function renderDragHandle(scope: ReorderScope, id: string) {
     return (
-      <button className="drag-handle" onPointerDown={(event) => startReorder(event, scope, id)} title="끌어서 순서 바꾸기">
+      <button className="drag-handle" onPointerDown={(event) => startReorder(event, scope, id)} title="Drag to reorder">
         ⠿
       </button>
     )
@@ -755,13 +756,13 @@ export function App() {
     const part = team?.parts.find((p) => p.id === partId)
     const leadSessionId = part ? part.leadSessionId : team?.leadSessionId
     const hasLiveLead = Boolean(leadSessionId && snapshot.sessions.some((s) => s.id === leadSessionId && s.isAlive))
-    const leadLabel = part ? '파트장' : '팀장'
+    const leadLabel = part ? 'Part lead' : 'Lead'
     const roleTag = sessionRole === 'lead' ? LEAD_ROLE_TAG : MEMBER_ROLE_TAG
     const sessionName = typedSessionName ?? (team && suggestedSessionName ? withRoleTag(suggestedSessionName.name, roleTag) : '')
     return (
       <Modal
         title={
-          part ? `세션 추가 — 「${team?.name}」 · 파트 「${part.name}」` : team ? `세션 추가 — 팀 「${team.name}」` : '세션 추가 — 로비 (팀 없음)'
+          part ? `New session — Team "${team?.name}" · Part "${part.name}"` : team ? `New session — Team "${team.name}"` : 'New session — Focus Zone (no team)'
         }
         subtitle={part?.worktree?.cwd ?? team?.cwd}
         onClose={() => setSessionForm(null)}
@@ -772,32 +773,32 @@ export function App() {
               value={sessionRole}
               onChange={setSessionRole}
               options={[
-                { value: 'member', label: '팀원', hint: `${leadLabel}의 지시를 받아 일한다` },
+                { value: 'member', label: 'Member', hint: `Works on tasks from the ${leadLabel.toLowerCase()}` },
                 {
                   value: 'lead',
                   label: leadLabel,
                   isDisabled: hasLiveLead,
                   hint: hasLiveLead
-                    ? `이 ${part ? '파트' : '팀'}에는 이미 ${leadLabel}이 있음`
-                    : `${part ? '파트' : '팀 직속'} 팀원을 만들어 일을 나눠 준다 (MCP 도구 장착)`,
+                    ? `This ${part ? 'part' : 'team'} already has a ${leadLabel.toLowerCase()}`
+                    : `Spawns ${part ? 'part' : 'team'} members and hands out work (with MCP tools)`,
                 },
               ]}
             />
           )}
-          {!team && <input name="cwd" placeholder="폴더 경로 (예: D:\workspace\foo)" required autoFocus />}
+          {!team && <input name="cwd" placeholder="Folder path (e.g. D:\workspace\foo)" required autoFocus />}
           <input
             name="name"
-            placeholder="세션 이름 (선택. 비우면 대화 내용으로 자동 제목)"
+            placeholder="Session name (optional; empty = auto title from the chat)"
             value={sessionName}
             onChange={(event) => setTypedSessionName(event.target.value)}
             autoFocus={Boolean(team)}
           />
           <div className="actions">
             <button type="submit" className="primary">
-              시작
+              Start
             </button>
             <button type="button" onClick={() => setSessionForm(null)}>
-              취소
+              Cancel
             </button>
           </div>
         </form>
@@ -814,9 +815,9 @@ export function App() {
       .filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off')
       .sort((a, b) => rankOf(a) - rankOf(b))
     const menuItems = [
-      { label: '파트 추가', onClick: () => openPartForm(team.id) },
-      ...(team.leadSessionId ? [{ label: '팀장 해제', onClick: () => releaseLead(team) }] : []),
-      { label: '팀 삭제', onClick: () => removeTeam(team) },
+      { label: 'Add part', onClick: () => openPartForm(team.id) },
+      ...(team.leadSessionId ? [{ label: 'Remove lead', onClick: () => releaseLead(team) }] : []),
+      { label: 'Delete team', onClick: () => removeTeam(team) },
     ]
     return (
       <div
@@ -831,7 +832,7 @@ export function App() {
           </span>
           {members.length > 0 && <span className="count">{members.length}</span>}
           <span className="head-actions">
-            <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="팀 직속 세션 추가">
+            <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="Add session to team">
               +
             </button>
             <MoreMenu items={menuItems} />
@@ -847,9 +848,9 @@ export function App() {
   /** 파트 소제목(worktree 아이콘·이름·세션 수·hover 버튼) + 파트 세션. 브랜치 이름은 아이콘 툴팁 */
   function renderPart(team: Team, part: Part, members: Session[]) {
     const menuItems = [
-      { label: '이름 변경', onClick: () => editPart(team, part) },
-      ...(part.leadSessionId ? [{ label: '파트장 해제', onClick: () => releasePartLead(team, part) }] : []),
-      { label: '파트 삭제', onClick: () => void removePart(team, part) },
+      { label: 'Rename', onClick: () => editPart(team, part) },
+      ...(part.leadSessionId ? [{ label: 'Remove part lead', onClick: () => releasePartLead(team, part) }] : []),
+      { label: 'Delete part', onClick: () => void removePart(team, part) },
     ]
     const worktreeLabel = part.worktree ? `worktree · ${part.worktree.branch}` : null
     return (
@@ -863,7 +864,7 @@ export function App() {
           <span className="name">{part.name}</span>
           {members.length > 0 && <span className="count">{members.length}</span>}
           <span className="head-actions">
-            <button onClick={() => openSessionForm(team.id, part.id)} disabled={!snapshot.isHostReachable} title="이 파트에 세션 추가">
+            <button onClick={() => openSessionForm(team.id, part.id)} disabled={!snapshot.isHostReachable} title="Add session to part">
               +
             </button>
             <MoreMenu items={menuItems} />
@@ -886,7 +887,7 @@ export function App() {
     const attendance = attendanceOf(session)
     const isPresent = attendance === 'present'
     const offDuty = attendance === 'off' && session.offDuty ? offDutyLabel(session.offDuty, now) : null
-    const roleLabel = session.role === 'lead' ? (session.partId ? '파트장' : '팀장') : null
+    const roleLabel = session.role === 'lead' ? (session.partId ? 'Part lead' : 'Lead') : null
     return (
       <div
         key={session.id}
@@ -895,10 +896,10 @@ export function App() {
       >
         <span
           className={`status-dot ${isPresent ? session.status : attendance}`}
-          title={isPresent ? statusLabel[session.status] : attendance === 'break' ? '휴식' : '퇴근'}
+          title={isPresent ? statusLabel[session.status] : attendance === 'break' ? 'Break' : 'Off duty'}
         />
         <span
-          className={['avatar', roleLabel === '팀장' ? 'lead' : roleLabel === '파트장' ? 'part-lead' : '', headUrl ? 'head' : ''].join(' ')}
+          className={['avatar', roleLabel === 'Lead' ? 'lead' : roleLabel === 'Part lead' ? 'part-lead' : '', headUrl ? 'head' : ''].join(' ')}
           style={headUrl ? { backgroundImage: `url(${headUrl})` } : undefined}
           role={roleLabel ? 'img' : undefined}
           title={roleLabel ?? undefined}
@@ -912,7 +913,7 @@ export function App() {
         )}
         <div className="meta">
           {isPresent && session.status === 'needs-approval' && <span className="badge needs-approval">{statusLabel[session.status]}</span>}
-          {attendance === 'break' && <span className="badge">휴식</span>}
+          {attendance === 'break' && <span className="badge">Break</span>}
           {offDuty ? (
             <span className={offDuty.isError ? 'off-duty-reason error' : 'off-duty-reason'} title={offDuty.title}>
               {offDuty.text}
@@ -943,9 +944,9 @@ export function App() {
         />
       )
     }
-    if (attendance === 'break') return <p className="hint">휴식 중 · 호스트가 다시 띄우면 이어집니다</p>
+    if (attendance === 'break') return <p className="hint">On break · Resumes when the host starts it again</p>
     // attendance 가 없는 옛 서버 응답의 끝난 웹 세션: 다시 출근·기록 지우기를 못 한다
-    if (attendance === 'off' && session.kind === 'web') return <p className="hint">퇴근한 세션이라 기록만 볼 수 있습니다</p>
+    if (attendance === 'off' && session.kind === 'web') return <p className="hint">Off duty · Record is view only</p>
     return undefined
   }
 
@@ -954,8 +955,8 @@ export function App() {
     const from = snapshot.sessions.find((s) => s.id === back.fromSessionId)
     return (
       <div className="jump-back">
-        <button onClick={returnFromJump} disabled={!from} title={from ? '점프할 때 누른 줄로 돌아간다' : '세션 기록이 없어 열 수 없음'}>
-          ← {from ? displayName(from) : back.fromName} 대화로
+        <button onClick={returnFromJump} disabled={!from} title={from ? 'Back to the line you clicked' : "Can't open: no session record"}>
+          ← Back to {from ? displayName(from) : back.fromName}
         </button>
       </div>
     )
@@ -980,7 +981,7 @@ export function App() {
         <aside>
           <header>
             <h1>jk-corp</h1>
-            <button className="icon" onClick={cycleTheme} title={`테마: ${THEME_LABELS[theme]}`} aria-label={`테마: ${THEME_LABELS[theme]}`}>
+            <button className="icon" onClick={cycleTheme} title={`Theme: ${THEME_LABELS[theme]}`} aria-label={`Theme: ${THEME_LABELS[theme]}`}>
               <ThemeIcon choice={theme} />
             </button>
             {/* 폰 폭에는 원래 사무실이 없다 */}
@@ -988,19 +989,19 @@ export function App() {
               <button
                 className="icon"
                 onClick={toggleOffice}
-                title={isOfficeHidden ? '사무실 보이기' : '사무실 숨기기'}
-                aria-label={isOfficeHidden ? '사무실 보이기' : '사무실 숨기기'}
+                title={isOfficeHidden ? 'Show office' : 'Hide office'}
+                aria-label={isOfficeHidden ? 'Show office' : 'Hide office'}
               >
                 <OfficeToggleIcon isShown={!isOfficeHidden} />
               </button>
             )}
           </header>
           <div className="toolbar">
-            <button onClick={() => setIsGroupForm(true)} title="새 그룹">
+            <button onClick={() => setIsGroupForm(true)} title="Create a group">
               <NewGroupIcon />
               New Group
             </button>
-            <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable} title="Focus Zone 에 새 세션">
+            <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable} title="New session in Focus Zone">
               <NewSessionIcon />
               New Session
             </button>
@@ -1018,10 +1019,10 @@ export function App() {
                   <div className="group-label">
                     <span className="name">{group.name}</span>
                     <span className="head-actions">
-                      <button onClick={() => openTeamForm(group.id)} title="이 그룹에 팀 추가">
+                      <button onClick={() => openTeamForm(group.id)} title="Add team to group">
                         +
                       </button>
-                      {teams.length === 0 && <MoreMenu items={[{ label: '그룹 삭제', onClick: () => removeGroup(group) }]} />}
+                      {teams.length === 0 && <MoreMenu items={[{ label: 'Delete group', onClick: () => removeGroup(group) }]} />}
                       {renderDragHandle({ kind: 'group' }, group.id)}
                     </span>
                   </div>
@@ -1055,15 +1056,15 @@ export function App() {
           </ul>
         </aside>
         {isGroupForm && (
-          <Modal title="그룹 추가" onClose={() => setIsGroupForm(false)}>
+          <Modal title="New group" onClose={() => setIsGroupForm(false)}>
             <form className="create" onSubmit={createGroup}>
-              <input name="name" placeholder="그룹 이름" required autoFocus />
+              <input name="name" placeholder="Group name" required autoFocus />
               <div className="actions">
                 <button type="submit" className="primary">
-                  만들기
+                  Create
                 </button>
                 <button type="button" onClick={() => setIsGroupForm(false)}>
-                  취소
+                  Cancel
                 </button>
               </div>
             </form>
@@ -1071,18 +1072,18 @@ export function App() {
         )}
         {teamForm && (
           <Modal
-            title={`팀 추가 — 그룹 「${office.groups.find((g) => g.id === teamForm.groupId)?.name ?? ''}」`}
+            title={`New team — Group "${office.groups.find((g) => g.id === teamForm.groupId)?.name ?? ''}"`}
             onClose={() => setTeamForm(null)}
           >
             <form className="create" onSubmit={createTeam}>
-              <input name="name" placeholder="팀 이름" required autoFocus />
-              <input name="cwd" placeholder="작업 폴더 (예: D:\workspace\foo). 이 폴더의 세션이 팀이 됨" required />
+              <input name="name" placeholder="Team name" required autoFocus />
+              <input name="cwd" placeholder="Work folder (e.g. D:\workspace\foo). Sessions in this folder join the team" required />
               <div className="actions">
                 <button type="submit" className="primary">
-                  만들기
+                  Create
                 </button>
                 <button type="button" onClick={() => setTeamForm(null)}>
-                  취소
+                  Cancel
                 </button>
               </div>
             </form>
@@ -1091,52 +1092,52 @@ export function App() {
         {sessionForm && renderSessionModal(sessionForm.teamId, sessionForm.partId)}
         {partForm && (
           <Modal
-            title={`파트 추가 — 팀 「${office.teams.find((t) => t.id === partForm.teamId)?.name ?? ''}」`}
+            title={`New part — Team "${office.teams.find((t) => t.id === partForm.teamId)?.name ?? ''}"`}
             subtitle={office.teams.find((t) => t.id === partForm.teamId)?.cwd}
             onClose={() => setPartForm(null)}
           >
             <form className="create" onSubmit={createPart}>
-              <input name="name" placeholder="파트 이름 (예: api)" required autoFocus />
+              <input name="name" placeholder="Part name (e.g. api)" required autoFocus />
               <Segmented
                 value={partLocation}
                 onChange={setPartLocation}
                 options={[
-                  { value: 'folder', label: '팀 폴더', hint: '팀 폴더를 같이 쓴다. 파일이 겹치지 않는 일에' },
-                  { value: 'worktree', label: '새 worktree', hint: '같은 파일을 동시에 고칠 때. 저장소 옆 폴더에서 따로 일한다' },
+                  { value: 'folder', label: 'Team folder', hint: 'Shares the team folder. For work on separate files' },
+                  { value: 'worktree', label: 'New worktree', hint: 'For editing the same files at once. Works in its own folder next to the repo' },
                 ]}
               />
               <div className="form-hint">
                 {partLocation === 'worktree'
-                  ? '저장소 옆 <저장소>.worktrees/<이름> 폴더, 브랜치 part/<이름> (현재 HEAD 기준. 이름의 영문·숫자만 씀. 이미 있으면 그 worktree·브랜치에 연결). 병합은 직접'
-                  : '팀 폴더 그대로. 다른 파트·팀 직속과 같은 파일을 고치지 않게 나눈다'}
+                  ? 'Folder <repo>.worktrees/<name> next to the repo, branch part/<name> (from the current HEAD; only the letters and digits of the name are used; links to an existing worktree or branch). You merge it yourself'
+                  : "Uses the team folder as is. Split the work so it doesn't edit the same files as other parts or the team"}
               </div>
               <label className="check">
                 <input type="checkbox" checked={isPartLeadSpawned} onChange={(e) => setIsPartLeadSpawned(e.target.checked)} />
-                파트장 바로 띄우기
+                Start a part lead now
               </label>
               <div className="actions">
                 <button type="submit" className="primary" disabled={!snapshot.isHostReachable && isPartLeadSpawned}>
-                  만들기
+                  Create
                 </button>
                 <button type="button" onClick={() => setPartForm(null)}>
-                  취소
+                  Cancel
                 </button>
               </div>
             </form>
           </Modal>
         )}
         {renameTarget && (
-          <Modal title="세션 이름 변경" subtitle={renameTarget.title ?? renameTarget.id} onClose={() => setRenameTarget(null)}>
+          <Modal title="Rename session" subtitle={renameTarget.title ?? renameTarget.id} onClose={() => setRenameTarget(null)}>
             <form className="create" onSubmit={renameSession}>
               <input
                 name="name"
                 defaultValue={renameTarget.name ?? ''}
-                placeholder="비우면 자동 제목으로 돌아감"
+                placeholder="Empty = back to the auto title"
                 autoFocus
               />
               {renameTarget.role === 'lead' && (
                 <>
-                  <span className="form-hint">사무실 인물 (책상·목록 아바타·Off Duty 거리에 같이 보인다)</span>
+                  <span className="form-hint">Office character (shown at the desk, as the list avatar and on the Off Duty street)</span>
                   <CharacterPicker
                     sessionId={renameTarget.id}
                     gender={renameTarget.gender ?? null}
@@ -1147,17 +1148,17 @@ export function App() {
               )}
               <div className="actions">
                 <button type="submit" className="primary">
-                  저장
+                  Save
                 </button>
                 <button type="button" onClick={() => setRenameTarget(null)}>
-                  취소
+                  Cancel
                 </button>
               </div>
             </form>
           </Modal>
         )}
         {/* 폰 폭과 사무실을 숨겼을 때는 PixiJS 를 돌리지 않도록 마운트하지 않는다 (CSS 로 숨기기만 하면 캔버스가 계속 돈다) */}
-        {isOfficeHiddenLayout && !hasPanel && <div className="office-empty">왼쪽에서 세션을 고르면 대화가 열립니다</div>}
+        {isOfficeHiddenLayout && !hasPanel && <div className="office-empty">Pick a session on the left to open its chat</div>}
         {!isNarrow && !isOfficeHidden && (
           <Office
             office={office}
@@ -1189,7 +1190,7 @@ export function App() {
           <section className="panel">
             <div className="panel-header">
               <b>{displayName(selected)}</b>
-              <button className="rename" title="이름 변경" onClick={() => openRename(selected)}>
+              <button className="rename" title="Rename" onClick={() => openRename(selected)}>
                 ✎
               </button>
               {modelLabel(selected) && (
@@ -1199,15 +1200,15 @@ export function App() {
               )}
               <span className="cwd">{selected.cwd}</span>
               <nav className="tabs">
-                <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')} title="대화" aria-label="대화">
+                <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')} title="Chat" aria-label="Chat">
                   <ChatTabIcon />
                 </button>
                 {isSelectedLiveWeb && (
                   <button
                     className={shownTab === 'terminal' ? 'on' : ''}
                     onClick={() => setTab('terminal')}
-                    title="터미널"
-                    aria-label="터미널"
+                    title="Terminal"
+                    aria-label="Terminal"
                   >
                     <TerminalTabIcon />
                   </button>
@@ -1216,14 +1217,14 @@ export function App() {
               {isSelectedLiveWeb && (
                 <button
                   onClick={() => {
-                    if (confirm('세션을 종료할까요?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
+                    if (confirm('End this session?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
                   }}
                 >
-                  종료
+                  End
                 </button>
               )}
               {/* 폰에서는 패널이 화면 전체라 "뒤로" 가 목록으로 돌아가는 버튼이다 */}
-              <button className="close" onClick={() => setSelectedId(null)} title={isNarrow ? '목록으로' : '닫기'}>
+              <button className="close" onClick={() => setSelectedId(null)} title={isNarrow ? 'Back to list' : 'Close'}>
                 {isNarrow ? '←' : '×'}
               </button>
             </div>
@@ -1261,25 +1262,29 @@ export function App() {
         <UsagePanel />
         <span className="status-right">
           {approvalSessions.length > 0 && (
-            <button className="status-approval" onClick={() => selectSession(approvalSessions[0].id)} title="승인 대기 세션 열기">
-              승인 대기 {approvalSessions.length}
+            <button className="status-approval" onClick={() => selectSession(approvalSessions[0].id)} title="Open a session that needs approval">
+              Needs approval {approvalSessions.length}
             </button>
           )}
           <ShellsStatus lines={shellLines(office, snapshot.sessions)} onOpen={openShell} />
-          <span>
-            작업 중 {workingCount} · 근무 {presentSessions.length}
+          <span className="status-counts">
+            Working {workingCount} · On duty {presentSessions.length}
           </span>
-          <span className="status-link" title={isConnected ? '서버 연결됨' : '서버 끊김'}>
-            <span className="status-link-label">서버</span>
+          {/* 폰(390px)에서는 위 글자 대신 이 짧은 꼴 "3/9". 데스크톱 CSS 를 건드리지 않으려고 hidden 으로 숨겨 두고 style.css 폰 블록에서만 보인다 */}
+          <span className="status-counts-short" hidden title={`Working ${workingCount} · On duty ${presentSessions.length}`}>
+            {workingCount}/{presentSessions.length}
+          </span>
+          <span className="status-link" title={isConnected ? 'Server connected' : 'Server disconnected'}>
+            <span className="status-link-label">Server</span>
             <span className={isConnected ? 'dot on' : 'dot'} />
-            <button onClick={restartServer} disabled={!isConnected} title="서버 재시작 (몇 초 끊김)">
+            <button onClick={restartServer} disabled={!isConnected} title="Restart server (offline for a few seconds)">
               ↻
             </button>
           </span>
-          <span className="status-link" title={snapshot.isHostReachable ? '세션 호스트 연결됨' : '세션 호스트 끊김'}>
-            <span className="status-link-label">호스트</span>
+          <span className="status-link" title={snapshot.isHostReachable ? 'Session host connected' : 'Session host disconnected'}>
+            <span className="status-link-label">Host</span>
             <span className={snapshot.isHostReachable ? 'dot on' : 'dot'} />
-            <button onClick={restartHost} disabled={!snapshot.isHostReachable} title="호스트 재시작 (웹 세션 끊김)">
+            <button onClick={restartHost} disabled={!snapshot.isHostReachable} title="Restart host (web sessions disconnect)">
               ↻
             </button>
           </span>
@@ -1309,7 +1314,7 @@ function OffDutyBar({
   const isLocked = isReturning || busy !== null
 
   async function request(action: 'return' | 'clear') {
-    const actionLabel = action === 'return' ? '다시 출근' : '기록 지우기'
+    const actionLabel = action === 'return' ? 'clock in' : 'delete record'
     setBusy(action)
     setErrorMessage(null)
     try {
@@ -1323,15 +1328,15 @@ function OffDutyBar({
         return
       }
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
-      setErrorMessage(`${actionLabel} 실패: ${message ?? `HTTP ${response.status}`}`)
+      setErrorMessage(`Couldn't ${actionLabel}: ${message ?? `HTTP ${response.status}`}`)
     } catch {
-      setErrorMessage(`${actionLabel} 실패: 네트워크 오류`)
+      setErrorMessage(`Couldn't ${actionLabel}: Network error`)
     }
     setBusy(null)
   }
 
   function clearRecord() {
-    if (confirm('퇴근 기록을 지울까요? 목록에서 빠지고 다시 출근할 수 없습니다.')) void request('clear')
+    if (confirm("Delete the off duty record? The session leaves the list and can't clock in again.")) void request('clear')
   }
 
   return (
@@ -1343,10 +1348,10 @@ function OffDutyBar({
       )}
       <div className="off-duty-actions">
         <button className="primary" disabled={isLocked} onClick={() => void request('return')}>
-          {isReturning || busy === 'return' ? '출근 중…' : '다시 출근'}
+          {isReturning || busy === 'return' ? 'Clocking in…' : 'Clock in'}
         </button>
         <button disabled={isLocked} onClick={clearRecord}>
-          {busy === 'clear' || busy === 'cleared' ? '지우는 중…' : '기록 지우기'}
+          {busy === 'clear' || busy === 'cleared' ? 'Deleting…' : 'Delete record'}
         </button>
       </div>
       {errorMessage && (
@@ -1366,14 +1371,14 @@ function FlowRow({ status, isSelected, onOpen }: { status: FlowStatus | null; is
   const hasCounts = status !== null && status.unreadAlarmCount !== null && status.unreadChatCount !== null
   const hasUnread = hasCounts && (status.unreadAlarmCount! > 0 || status.unreadChatCount! > 0)
   let summary: string
-  let title = '플로우 알림 보기'
+  let title = 'Show Flow alerts'
   if (status === null) summary = '…'
   else if (!status.isConfigured) {
-    summary = '키 없음'
-    title = '~/.claude/flow-key.env 에 FLOW_API_KEY 가 없습니다'
-  } else if (hasCounts) summary = `알림 ${status.unreadAlarmCount} · 채팅 ${status.unreadChatCount}`
-  else summary = status.error ? '확인 실패' : '…'
-  if (status?.isConfigured && status.error) title = `플로우 확인 실패: ${status.error}`
+    summary = 'No key'
+    title = 'No FLOW_API_KEY in ~/.claude/flow-key.env'
+  } else if (hasCounts) summary = `Alerts ${status.unreadAlarmCount} · Chats ${status.unreadChatCount}`
+  else summary = status.error ? 'Check failed' : '…'
+  if (status?.isConfigured && status.error) title = `Flow check failed: ${status.error}`
   return (
     <button
       className={['flow-row', isSelected ? 'selected' : '', hasUnread ? 'unread' : ''].join(' ')}
@@ -1427,7 +1432,7 @@ function MoreMenu({ items }: { items: { label: string; onClick: () => void }[] }
 
   return (
     <span ref={rootRef} className={isOpen ? 'menu open' : 'menu'}>
-      <button onClick={() => setIsOpen((prev) => !prev)} title="더보기">
+      <button onClick={() => setIsOpen((prev) => !prev)} title="More">
         ⋯
       </button>
       {isOpen && (

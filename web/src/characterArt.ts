@@ -63,7 +63,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(`그림을 읽지 못함: ${url}`))
+    image.onerror = () => reject(new Error(`Couldn't load image: ${url}`))
     image.src = url
   })
 }
@@ -73,7 +73,7 @@ function pixelsOf(image: CanvasImageSource & { width: number; height: number }):
   canvas.width = image.width
   canvas.height = image.height
   const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context) throw new Error('canvas 2d 를 못 씀')
+  if (!context) throw new Error('Canvas 2d is not available')
   context.drawImage(image, 0, 0)
   return context.getImageData(0, 0, image.width, image.height)
 }

@@ -123,7 +123,7 @@ const COOKIE = 'jk_session'
 /** 팀원에게 보낸 지시 기록 (한 줄 = InstructionRecord). 대화 탭이 사람 입력과 구분하는 데 쓴다 */
 const instructionLogPath = join(configDir, 'instructions.jsonl')
 /** 지휘 단위에 팀장·파트장이 없을 때 지시 말풍선에 쓰는 이름 */
-const NO_LEAD_NAME = '팀 API'
+const NO_LEAD_NAME = 'Team API'
 
 const app = express()
 // SSE 는 압축하면 압축 버퍼에 쌓여 이벤트가 늦게 가거나 안 가므로 뺀다 (Express 가 `; charset=utf-8` 을 붙여 앞부분으로 비교)
@@ -143,7 +143,7 @@ app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/auth/') || req.path === '/hook' || req.path === '/hook/ask') return next()
   if (isLoopback(req.socket.remoteAddress)) return next()
   if (auth.emailOf(parseCookie(req.headers.cookie, COOKIE))) return next()
-  res.status(401).json({ message: '로그인 필요' })
+  res.status(401).json({ message: 'Login required' })
 })
 
 app.get('/api/auth/me', (req, res) => {
@@ -155,12 +155,12 @@ app.get('/api/auth/me', (req, res) => {
 app.post('/api/auth/request', async (req, res) => {
   const { email } = req.body as { email?: string }
   if (typeof email !== 'string' || !sendCode) {
-    res.status(400).json({ message: '메일 로그인이 설정되지 않음' })
+    res.status(400).json({ message: 'Email login is not set up' })
     return
   }
   const { result, code } = auth.requestCode(email)
   if (result === 'too-soon') {
-    res.status(429).json({ message: '잠시 후 다시 요청하세요' })
+    res.status(429).json({ message: 'Try again in a moment' })
     return
   }
   // 허용되지 않은 주소에도 같은 응답 (주소 유출 방지)
@@ -169,7 +169,7 @@ app.post('/api/auth/request', async (req, res) => {
       await sendCode(email, code)
     } catch (error) {
       console.error('인증 메일 발송 실패', error)
-      res.status(502).json({ message: '메일 발송 실패' })
+      res.status(502).json({ message: 'Failed to send email' })
       return
     }
   }
@@ -292,34 +292,34 @@ app.post('/api/sessions', async (req, res) => {
   }
   const team = teamId ? findTeam(teamId) : undefined
   if (teamId && !team) {
-    res.status(404).json({ message: '팀 없음' })
+    res.status(404).json({ message: 'Team not found' })
     return
   }
   const part = team ? unitPart(team, partId) : null
   if (part === undefined || (partId && !team)) {
-    res.status(404).json({ message: '파트 없음' })
+    res.status(404).json({ message: 'Part not found' })
     return
   }
   const cwd = part?.worktree?.cwd ?? team?.cwd ?? rawCwd
   if (!cwd) {
-    res.status(400).json({ message: 'cwd 또는 teamId 필요' })
+    res.status(400).json({ message: 'cwd or teamId required' })
     return
   }
   if (!host.isReachable) {
-    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    res.status(503).json({ message: 'Not connected to session host' })
     return
   }
   let extraArgs: string[] | undefined
   if (isLead) {
     if (!team) {
-      res.status(400).json({ message: '팀장은 팀을 골라야 함' })
+      res.status(400).json({ message: 'Choose a team for the lead' })
       return
     }
     const currentLeadId = part ? part.leadSessionId : team.leadSessionId
     if (currentLeadId) {
       const { sessions } = await snapshotPayload()
       if (sessions.some((s) => s.id === currentLeadId && s.isAlive)) {
-        res.status(409).json({ message: part ? '이 파트에는 이미 파트장이 있음' : '이 팀에는 이미 팀장이 있음' })
+        res.status(409).json({ message: part ? 'This part already has a part lead' : 'This team already has a lead' })
         return
       }
     }
@@ -387,7 +387,7 @@ app.get('/api/sessions/:id/messages', async (req, res) => {
 /** 세션 작업 폴더(scratchpad)의 파일 목록. 하위 폴더 포함, 상한 MAX_FILES. 폴더가 없으면 빈 목록 */
 app.get('/api/sessions/:id/files', async (req, res) => {
   if (!isSessionId(req.params.id)) {
-    res.status(400).json({ message: '세션 ID 형식 오류' })
+    res.status(400).json({ message: 'Invalid session ID' })
     return
   }
   const scratchpad = await findScratchpad(req.params.id)
@@ -402,13 +402,13 @@ app.get('/api/sessions/:id/files', async (req, res) => {
 app.get('/api/sessions/:id/files/raw', async (req, res) => {
   const { path } = req.query
   if (!isSessionId(req.params.id) || typeof path !== 'string') {
-    res.status(400).json({ message: '세션 ID 또는 path 형식 오류' })
+    res.status(400).json({ message: 'Invalid session ID or path' })
     return
   }
   const scratchpad = await findScratchpad(req.params.id)
   const file = scratchpad ? await resolveScratchpadFile(scratchpad, path) : null
   if (!file) {
-    res.status(404).json({ message: '파일 없음' })
+    res.status(404).json({ message: 'File not found' })
     return
   }
   const { type, isActive } = contentTypeOf(file)
@@ -434,7 +434,7 @@ app.get('/api/sessions/:id/shells/:shellId/output', async (req, res) => {
   const rawLines = req.query.lines
   const count = rawLines === undefined ? DEFAULT_SHELL_LINES : typeof rawLines === 'string' ? Number(rawLines) : NaN
   if (!isSessionId(sessionId) || !SHELL_ID.test(shellId) || !Number.isInteger(count) || count < 1) {
-    res.status(400).json({ message: '세션 ID·shell ID 또는 lines(1 이상 정수) 형식 오류' })
+    res.status(400).json({ message: 'Invalid session ID, shell ID or lines (positive integer)' })
     return
   }
   const jsonl = await findTranscript(sessionId)
@@ -443,7 +443,7 @@ app.get('/api/sessions/:id/shells/:shellId/output', async (req, res) => {
   // 확인한 뒤 읽기 전에 지워졌을 수도 있다
   const tail = file ? await readTail(file, Math.min(count, MAX_SHELL_LINES)).catch(() => null) : null
   if (!tail) {
-    res.status(404).json({ message: 'shell 또는 출력 파일 없음' })
+    res.status(404).json({ message: 'Shell or output file not found' })
     return
   }
   res.json(tail)
@@ -469,17 +469,17 @@ function readAttachmentBody(req: Request, res: Response): Promise<Buffer> {
 app.post('/api/sessions/:id/attachments', async (req, res) => {
   const sessionId = req.params.id
   if (!isSessionId(sessionId)) {
-    res.status(400).json({ message: '세션 ID 형식 오류' })
+    res.status(400).json({ message: 'Invalid session ID' })
     return
   }
   if (!host.sessions.some((s) => s.sessionId === sessionId)) {
-    res.status(409).json({ message: '근무 중인 웹 세션이 아님' })
+    res.status(409).json({ message: 'Not an on-duty web session' })
     return
   }
   // Claude Code 가 세션을 시작할 때 만든다. 없으면 claude 가 확인 창 없이 읽는 곳이 아니므로 만들지 않는다
   const scratchpad = await findScratchpad(sessionId)
   if (!scratchpad) {
-    res.status(409).json({ message: '세션 작업 폴더(scratchpad) 없음' })
+    res.status(409).json({ message: 'Session scratchpad not found' })
     return
   }
   let data: Buffer
@@ -487,7 +487,7 @@ app.post('/api/sessions/:id/attachments', async (req, res) => {
     data = await readAttachmentBody(req, res)
   } catch (error) {
     const isTooLarge = (error as { status?: unknown }).status === 413
-    res.status(isTooLarge ? 413 : 400).json({ message: isTooLarge ? '20MB 를 넘는 파일' : '본문을 읽지 못함' })
+    res.status(isTooLarge ? 413 : 400).json({ message: isTooLarge ? 'File is over 20MB' : "Couldn't read the file" })
     return
   }
   const name = typeof req.query.name === 'string' ? req.query.name : ''
@@ -498,7 +498,7 @@ app.post('/api/sessions/:id/attachments', async (req, res) => {
 app.patch('/api/sessions/:id', (req, res) => {
   const { name } = req.body as { name?: unknown }
   if (typeof name !== 'string') {
-    res.status(400).json({ message: 'name 필요 (빈 문자열이면 삭제)' })
+    res.status(400).json({ message: 'name required (empty string clears it)' })
     return
   }
   // 역할만 바꾸면 성별을 두고, 이름 부분이 바뀌거나 지우면 성별도 지운다 (새 이름과 성별이 안 맞을 수 있어서)
@@ -513,7 +513,7 @@ app.patch('/api/sessions/:id', (req, res) => {
 app.put('/api/sessions/:id/character', (req, res) => {
   const character = parseCharacter(req.body)
   if (character === undefined) {
-    res.status(400).json({ message: 'id(소문자·숫자·하이픈 1~40자 또는 null), hair·top(#rrggbb 또는 null) 필요' })
+    res.status(400).json({ message: 'id (1–40 lowercase letters, digits or hyphens, or null) and hair/top (#rrggbb or null) required' })
     return
   }
   setCharacter(req.params.id, character)
@@ -535,20 +535,20 @@ app.post('/api/sessions/:id/resume', async (req, res) => {
   const sessionId = req.params.id
   const record = listOffDuty().find((r) => r.sessionId === sessionId)
   if (!record) {
-    res.status(404).json({ message: '퇴근 기록 없음' })
+    res.status(404).json({ message: 'No off-duty record' })
     return
   }
   const { sessions } = await snapshotPayload()
   if (sessions.some((s) => s.id === sessionId && s.isAlive)) {
-    res.status(409).json({ message: '이미 근무 중' })
+    res.status(409).json({ message: 'Already on duty' })
     return
   }
   if (!existsSync(record.cwd)) {
-    res.status(409).json({ message: `폴더 없음: ${record.cwd}` })
+    res.status(409).json({ message: `Folder not found: ${record.cwd}` })
     return
   }
   if (!host.isReachable) {
-    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    res.status(503).json({ message: 'Not connected to session host' })
     return
   }
   const isCommander = record.extraArgs?.includes('--mcp-config') ?? false
@@ -557,11 +557,11 @@ app.post('/api/sessions/:id/resume', async (req, res) => {
     (t) => t.leadSessionId === sessionId || t.parts.some((p) => p.leadSessionId === sessionId),
   )
   if (isCommander && !isStillCommander) {
-    res.status(409).json({ message: '지시자가 바뀌어 다시 출근할 수 없음' })
+    res.status(409).json({ message: "Can't clock in: the lead has changed" })
     return
   }
   if (!host.send({ type: 'resume', sessionId })) {
-    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    res.status(503).json({ message: 'Not connected to session host' })
     return
   }
   res.json({})
@@ -570,11 +570,11 @@ app.post('/api/sessions/:id/resume', async (req, res) => {
 /** 퇴근 기록을 지운다 (목록에서 빠짐). 호스트가 그 세션 이름도 같이 지운다 */
 app.delete('/api/sessions/:id/off-duty', (req, res) => {
   if (!listOffDuty().some((r) => r.sessionId === req.params.id)) {
-    res.status(404).json({ message: '퇴근 기록 없음' })
+    res.status(404).json({ message: 'No off-duty record' })
     return
   }
   if (!host.send({ type: 'forget', sessionId: req.params.id })) {
-    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    res.status(503).json({ message: 'Not connected to session host' })
     return
   }
   res.json({})
@@ -588,7 +588,7 @@ app.post('/api/sessions/:id/input', (req, res) => {
   }
   // 대기 메시지 취소가 입력칸을 다루는 동안 다른 키가 끼면 꺼낸 글·다시 넣는 글과 섞인다
   if (unqueues.has(req.params.id)) {
-    res.status(409).json({ message: '대기 메시지를 취소하는 중' })
+    res.status(409).json({ message: 'Cancelling a queued message' })
     return
   }
   host.send({ type: 'input', sessionId: req.params.id, data })
@@ -616,31 +616,31 @@ app.post('/api/sessions/:id/queue/cancel-last', async (req, res) => {
   const sessionId = req.params.id
   const { text } = (req.body ?? {}) as { text?: unknown }
   if (typeof text !== 'string' || !text) {
-    res.status(400).json({ message: 'text 필요' })
+    res.status(400).json({ message: 'text required' })
     return
   }
   if (!host.sessions.some((s) => s.sessionId === sessionId)) {
-    res.status(404).json({ message: '웹 세션이 아님' })
+    res.status(404).json({ message: 'Not a web session' })
     return
   }
   if (hookStates.get(sessionId)?.status !== 'working' || heldQuestions.has(sessionId)) {
-    res.status(409).json({ message: 'claude 가 작업 중일 때만 취소할 수 있음' })
+    res.status(409).json({ message: 'Can only cancel while claude is working' })
     return
   }
   const jsonl = (await findTranscript(sessionId)) ?? ''
   // 위 await 사이에 다른 취소가 시작됐을 수 있어 여기서 본다
   if (unqueues.has(sessionId)) {
-    res.status(409).json({ message: '이미 취소하는 중' })
+    res.status(409).json({ message: 'Already cancelling' })
     return
   }
   // 중지 중에 ↑ 가 들어가면 멈춘 뒤의 입력칸에서 이전 입력 기록을 불러온다
   if (interrupts.has(sessionId)) {
-    res.status(409).json({ message: '중지하는 중' })
+    res.status(409).json({ message: 'Stopping' })
     return
   }
   const queued = queuedPrompts(jsonl)
   if (queued.at(-1)?.text !== text) {
-    res.status(409).json({ message: '대기열의 마지막 메시지가 아님 (이미 받았을 수 있음)' })
+    res.status(409).json({ message: 'Not the last queued message (claude may have received it)' })
     return
   }
   const progress: UnqueueProgress = { queued: queued.map((item) => item.raw), step: { kind: 'popping' } }
@@ -650,7 +650,7 @@ app.post('/api/sessions/:id/queue/cancel-last', async (req, res) => {
   unqueues.set(sessionId, progress)
   try {
     if (!host.send({ type: 'input', sessionId, data: UP_KEY })) {
-      res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+      res.status(503).json({ message: 'Not connected to session host' })
       return
     }
     const startedAt = Date.now()
@@ -692,10 +692,10 @@ const INTERRUPT_POLL_MS = 100
 app.post('/api/sessions/:id/interrupt', async (req, res) => {
   const sessionId = req.params.id
   if (!host.sessions.some((s) => s.sessionId === sessionId)) {
-    res.status(404).json({ message: '웹 세션이 아님' })
+    res.status(404).json({ message: 'Not a web session' })
     return
   }
-  const conflict = interrupts.has(sessionId) ? '이미 중지하는 중' : interruptConflict(sessionId)
+  const conflict = interrupts.has(sessionId) ? 'Already stopping' : interruptConflict(sessionId)
   if (conflict) {
     res.status(409).json({ message: conflict })
     return
@@ -714,7 +714,7 @@ app.post('/api/sessions/:id/interrupt', async (req, res) => {
     const fromLine = jsonl.split('\n').length - 1
     const wasAwaitingFirstResponse = isAwaitingFirstResponse(jsonl)
     if (!host.send({ type: 'input', sessionId, data: ESC_KEY })) {
-      res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+      res.status(503).json({ message: 'Not connected to session host' })
       return
     }
     let judgement: InterruptJudgement = 'unknown'
@@ -741,9 +741,9 @@ app.post('/api/sessions/:id/interrupt', async (req, res) => {
 /** 중지할 수 없는 이유 (409 문구). 없으면 null. 진행 중인 중지(interrupts)는 부르는 쪽이 본다 (중지 도중의 재확인에는 자기 자신이 들어 있다) */
 function interruptConflict(sessionId: string): string | null {
   const status = hookStates.get(sessionId)?.status
-  if (heldQuestions.has(sessionId) || status === 'needs-approval') return '승인 대기·질문 중에는 중지할 수 없음 (Esc 가 도구 거부·질문 거절이 된다)'
-  if (status !== 'working') return 'claude 가 작업 중일 때만 중지할 수 있음'
-  if (unqueues.has(sessionId)) return '대기 메시지를 취소하는 중'
+  if (heldQuestions.has(sessionId) || status === 'needs-approval') return "Can't stop while it needs approval or is asking a question (Esc would reject the tool or question)"
+  if (status !== 'working') return 'Can only stop while claude is working'
+  if (unqueues.has(sessionId)) return 'Cancelling a queued message'
   return null
 }
 
@@ -755,7 +755,7 @@ app.post('/api/sessions/:id/answer', (req, res) => {
   const sessionId = req.params.id
   const held = heldQuestions.get(sessionId)
   if (!held) {
-    res.status(409).json({ message: '답할 질문 없음' })
+    res.status(409).json({ message: 'No question to answer' })
     return
   }
   const { answers, cancel, chat } = (req.body ?? {}) as { answers?: unknown; cancel?: unknown; chat?: unknown }
@@ -801,7 +801,7 @@ app.get('/api/sessions/:id/stream', (req, res) => {
   }
   host.on('message', onMessage)
   req.on('close', () => host.off('message', onMessage))
-  if (!host.send({ type: 'attach', sessionId })) sendSse(res, 'error', '세션 호스트에 연결되지 않음')
+  if (!host.send({ type: 'attach', sessionId })) sendSse(res, 'error', 'Not connected to session host')
 })
 
 function broadcastOffice(): void {
@@ -837,7 +837,7 @@ app.get('/api/flow', (_req, res) => {
 app.get('/api/flow/alarms', async (req, res) => {
   const { readYn, cursor } = req.query
   if ((readYn !== undefined && readYn !== 'Y' && readYn !== 'N') || (cursor !== undefined && !/^\d{1,9}$/.test(String(cursor)))) {
-    res.status(400).json({ message: 'readYn 은 Y·N, cursor 는 숫자' })
+    res.status(400).json({ message: 'readYn must be Y or N, and cursor a number' })
     return
   }
   const query: AlarmQuery = { readYn: readYn as AlarmQuery['readYn'], cursor: cursor as string | undefined }
@@ -863,7 +863,7 @@ app.post('/api/flow/alarms/read-all', async (_req, res) => {
 app.post('/api/flow/alarms/:alarmId/read', async (req, res) => {
   const { alarmId } = req.params
   if (!/^\d{1,20}$/.test(alarmId)) {
-    res.status(400).json({ message: 'alarmId 는 숫자' })
+    res.status(400).json({ message: 'alarmId must be a number' })
     return
   }
   try {
@@ -930,12 +930,12 @@ function unitPart(team: Team, partId: unknown): Part | null | undefined {
 function findUnit(teamId: string, partId: unknown, res: Response): { team: Team; part: Part | null } | null {
   const team = findTeam(teamId)
   if (!team) {
-    res.status(404).json({ message: '팀 없음' })
+    res.status(404).json({ message: 'Team not found' })
     return null
   }
   const part = unitPart(team, partId)
   if (part === undefined) {
-    res.status(404).json({ message: '파트 없음' })
+    res.status(404).json({ message: 'Part not found' })
     return null
   }
   return { team, part }
@@ -946,20 +946,20 @@ async function assignTask(team: Team, part: Part | null, sessionId: string, inst
   const { sessions } = await snapshotPayload()
   const member = sessions.find((s) => s.id === sessionId)
   if (!member || member.teamId !== team.id) {
-    res.status(404).json({ message: '이 팀의 세션이 아님' })
+    res.status(404).json({ message: 'Not a session of this team' })
     return
   }
   if (member.partId !== (part?.id ?? null)) {
-    res.status(403).json({ message: '다른 지휘 단위(팀 직속·다른 파트)의 세션에는 지시할 수 없음' })
+    res.status(403).json({ message: "Can't instruct a session in another unit (directly under the team or another part)" })
     return
   }
   if (member.role !== 'member') {
-    res.status(404).json({ message: '팀원(웹 세션)이 아님' })
+    res.status(404).json({ message: 'Not a member (web session)' })
     return
   }
   // 휴식·퇴근 세션도 kind 가 web 이라 role 이 member 다. 받아 주면 입력이 갈 곳이 없어 13초 뒤 failed 가 된다
   if (!member.isAlive) {
-    res.status(409).json({ message: '퇴근·휴식 중인 팀원이라 지시할 수 없음' })
+    res.status(409).json({ message: "Can't instruct a member on break or off duty" })
     return
   }
   let task
@@ -974,7 +974,7 @@ async function assignTask(team: Team, part: Part | null, sessionId: string, inst
   }
   if (!submitInstruction(sessionId, instruction)) {
     tasks.markExited(sessionId)
-    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    res.status(503).json({ message: 'Not connected to session host' })
     return
   }
   recordInstruction(sessionId, (part ? part.leadSessionId : team.leadSessionId) ?? null, instruction)
@@ -985,18 +985,19 @@ async function assignTask(team: Team, part: Part | null, sessionId: string, inst
 app.post('/api/team', (req, res) => {
   const { name, cwd, groupId, x, y } = req.body as { name?: string; cwd?: string; groupId?: string; x?: unknown; y?: unknown }
   if (!name?.trim() || !cwd?.trim() || !groupId) {
-    res.status(400).json({ message: 'name, cwd, groupId 필요' })
+    res.status(400).json({ message: 'name, cwd and groupId required' })
     return
   }
   try {
     res.json(addTeam({ name: name.trim(), cwd: cwd.trim(), groupId, x, y }))
   } catch (error) {
+    // hq 오류 문구는 한국어라 화면용 영어 문구로 바꿔 보낸다 (아래 hq 오류도 같다)
     if (error instanceof TeamConflictError) {
-      res.status(409).json({ message: error.message })
+      res.status(409).json({ message: `A team for this folder already exists: ${cwd.trim()}` })
       return
     }
     if (error instanceof GroupNotFoundError) {
-      res.status(400).json({ message: error.message })
+      res.status(400).json({ message: 'Group not found' })
       return
     }
     throw error
@@ -1031,7 +1032,7 @@ app.get('/api/team/:teamId', async (req, res) => {
 app.patch('/api/team/:teamId', (req, res) => {
   const team = updateTeam(req.params.teamId, req.body as TeamPatch)
   if (!team) {
-    res.status(404).json({ message: '팀 없음' })
+    res.status(404).json({ message: 'Team not found' })
     return
   }
   res.json(team)
@@ -1041,7 +1042,7 @@ app.patch('/api/team/:teamId', (req, res) => {
 /** 팀 기록만 지운다. 세션은 그대로 (무소속이 됨) */
 app.delete('/api/team/:teamId', (req, res) => {
   if (!removeTeam(req.params.teamId)) {
-    res.status(404).json({ message: '팀 없음' })
+    res.status(404).json({ message: 'Team not found' })
     return
   }
   res.json({})
@@ -1055,7 +1056,7 @@ app.put('/api/team/:teamId/desks/:sessionId', (req, res) => {
     return
   }
   if (!setDesk(req.params.teamId, req.params.sessionId, { dx, dy })) {
-    res.status(404).json({ message: '팀 없음' })
+    res.status(404).json({ message: 'Team not found' })
     return
   }
   res.json({})
@@ -1087,7 +1088,7 @@ app.get('/api/team/:teamId/member-name', async (req, res) => {
   if (!unit) return
   const role = parseMemberRole(req.query.role)
   if (!role) {
-    res.status(400).json({ message: 'role 은 1~12자이고 [ ] 와 줄바꿈이 없어야 함 (예: Dev, Lead, PL)' })
+    res.status(400).json({ message: 'role must be 1–12 characters with no [ ] or line breaks (e.g. Dev, Lead, PL)' })
     return
   }
   res.json(pickMemberName(role, await usedMemberNames(unit.team.id)))
@@ -1114,7 +1115,7 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   }
   const modelChoice = parseMemberModelChoice({ model, effort })
   if (!modelChoice) {
-    res.status(400).json({ message: 'model 은 haiku·sonnet·opus·fable, effort 는 low·medium·high·xhigh·max 중 하나 (빼면 기본값)' })
+    res.status(400).json({ message: 'model must be haiku, sonnet, opus or fable, and effort low, medium, high, xhigh or max (omit for the default)' })
     return
   }
   const sessionId = randomUUID()
@@ -1123,14 +1124,14 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   if (role != null) {
     const parsedRole = parseMemberRole(role)
     if (!parsedRole) {
-      res.status(400).json({ message: 'role 은 1~12자이고 [ ] 와 줄바꿈이 없어야 함 (예: FE, BE, QA)' })
+      res.status(400).json({ message: 'role must be 1–12 characters with no [ ] or line breaks (e.g. FE, BE, QA)' })
       return
     }
     ;({ name: memberName, gender: memberGender } = pickMemberName(parsedRole, await usedMemberNames(team.id)))
   } else if (name?.trim()) {
     memberName = name.trim()
   } else {
-    res.status(400).json({ message: 'role 또는 name 필요' })
+    res.status(400).json({ message: 'role or name required' })
     return
   }
   const extraArgs = memberExtraArgs(memberName, permissionMode ?? 'bypassPermissions', modelChoice)
@@ -1139,7 +1140,7 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   const isTrustFailed = markFolderTrusted(cwd) === false
   if (!host.send({ type: 'spawn', sessionId, cwd, extraArgs })) {
     if (part && !part.worktree) setPartOf(team.id, sessionId, null)
-    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    res.status(503).json({ message: 'Not connected to session host' })
     return
   }
   recentMemberNames.set(sessionId, { teamId: team.id, name: memberName })
@@ -1174,7 +1175,7 @@ app.post('/api/team/:teamId/tasks', async (req, res) => {
   if (!unit) return
   const { sessionId, instruction } = req.body as { sessionId?: string; instruction?: string }
   if (!sessionId || !instruction?.trim()) {
-    res.status(400).json({ message: 'sessionId, instruction 필요' })
+    res.status(400).json({ message: 'sessionId and instruction required' })
     return
   }
   await assignTask(unit.team, unit.part, sessionId, instruction.trim(), res)
@@ -1201,12 +1202,12 @@ app.get('/api/team/:teamId/tasks/:taskId/wait', async (req, res) => {
 app.post('/api/team/:teamId/parts', async (req, res) => {
   const team = findTeam(req.params.teamId)
   if (!team) {
-    res.status(404).json({ message: '팀 없음' })
+    res.status(404).json({ message: 'Team not found' })
     return
   }
   const { name, isWorktree } = req.body as { name?: string; isWorktree?: boolean }
   if (!name?.trim()) {
-    res.status(400).json({ message: 'name 필요' })
+    res.status(400).json({ message: 'name required' })
     return
   }
   let worktree: Part['worktree']
@@ -1235,7 +1236,7 @@ app.post('/api/team/:teamId/parts', async (req, res) => {
 app.patch('/api/team/:teamId/parts/:partId', (req, res) => {
   const part = updatePart(req.params.teamId, req.params.partId, req.body as PartPatch)
   if (!part) {
-    res.status(404).json({ message: '파트 없음' })
+    res.status(404).json({ message: 'Part not found' })
     return
   }
   res.json(part)
@@ -1251,7 +1252,7 @@ app.delete('/api/team/:teamId/parts/:partId', async (req, res) => {
   const team = findTeam(req.params.teamId)
   const part = team?.parts.find((p) => p.id === req.params.partId)
   if (!team || !part) {
-    res.status(404).json({ message: '파트 없음' })
+    res.status(404).json({ message: 'Part not found' })
     return
   }
   const finish = () => {
@@ -1267,7 +1268,7 @@ app.delete('/api/team/:teamId/parts/:partId', async (req, res) => {
   const { branch } = req.query
   const choice: BranchChoice = branch === 'delete' || branch === 'keep' ? branch : null
   if (branch !== undefined && choice === null) {
-    res.status(400).json({ message: 'branch 는 delete 또는 keep' })
+    res.status(400).json({ message: 'branch must be delete or keep' })
     return
   }
   // 하위 폴더에서 일하는 세션도 막는다 — Windows 에서 폴더를 쓰는 프로세스가 있으면 git 이 파일만 지우고 폴더를 못 지운다
@@ -1279,7 +1280,7 @@ app.delete('/api/team/:teamId/parts/:partId', async (req, res) => {
   })
   if (busy.length > 0) {
     const names = busy.map((s) => s.name ?? s.title ?? s.id.slice(0, 8)).join(', ')
-    res.status(409).json({ message: `먼저 세션을 정리하세요: worktree 폴더에서 근무 중인 세션 ${busy.length}개 (${names})` })
+    res.status(409).json({ message: `End the sessions in the worktree folder first: ${busy.length} on duty (${names})` })
     return
   }
   let removal
@@ -1293,17 +1294,17 @@ app.delete('/api/team/:teamId/parts/:partId', async (req, res) => {
     throw error
   }
   if (removal.outcome === 'dirty') {
-    res.status(409).json({ message: `커밋하지 않은 변경이 있어 지우지 않음 (커밋하거나 정리한 뒤 다시): ${part.worktree.cwd}` })
+    res.status(409).json({ message: `Uncommitted changes, so nothing was deleted (commit or clean up, then try again): ${part.worktree.cwd}` })
     return
   }
   if (removal.outcome === 'branch-unmerged') {
     const unmerged = part.worktree.branch
-    res.status(409).json({ code: 'branch-unmerged', branch: unmerged, message: `브랜치 ${unmerged} 가 병합되지 않음` })
+    res.status(409).json({ code: 'branch-unmerged', branch: unmerged, message: `Branch ${unmerged} is not merged` })
     return
   }
   if (removal.outcome === 'failed') {
     if (removal.isWorktreeGone) finish()
-    const record = removal.isWorktreeGone ? '파트 기록은 지움' : '파트 기록은 남김'
+    const record = removal.isWorktreeGone ? 'Part record deleted' : 'Part record kept'
     res.status(500).json({ message: `${removal.message}. ${record}`, isPartRemoved: removal.isWorktreeGone })
     return
   }
@@ -1315,38 +1316,38 @@ app.delete('/api/team/:teamId/parts/:partId', async (req, res) => {
 app.put('/api/team/:teamId/partOf/:sessionId', async (req, res) => {
   const team = findTeam(req.params.teamId)
   if (!team) {
-    res.status(404).json({ message: '팀 없음' })
+    res.status(404).json({ message: 'Team not found' })
     return
   }
   const { partId } = req.body as { partId?: unknown }
   if (partId !== null && typeof partId !== 'string') {
-    res.status(400).json({ message: 'partId 필요 (null 이면 팀 직속)' })
+    res.status(400).json({ message: 'partId required (null = directly under the team)' })
     return
   }
   const sessionId = req.params.sessionId
   const { sessions } = await snapshotPayload()
   const session = sessions.find((s) => s.id === sessionId)
   if (!session || session.teamId !== team.id) {
-    res.status(404).json({ message: '이 팀의 세션이 아님' })
+    res.status(404).json({ message: 'Not a session of this team' })
     return
   }
   if (normalizeCwd(session.cwd) !== normalizeCwd(team.cwd)) {
-    res.status(409).json({ message: 'worktree 폴더의 세션은 폴더로 소속이 정해져 옮길 수 없음' })
+    res.status(409).json({ message: "A session in a worktree folder belongs to that part by folder and can't be moved" })
     return
   }
   if (team.leadSessionId === sessionId || team.parts.some((p) => p.leadSessionId === sessionId)) {
-    res.status(409).json({ message: '팀장·파트장은 옮길 수 없음 (먼저 해제)' })
+    res.status(409).json({ message: "Leads and part leads can't be moved (unassign first)" })
     return
   }
   try {
     setPartOf(team.id, sessionId, partId)
   } catch (error) {
     if (error instanceof PartNotFoundError) {
-      res.status(404).json({ message: error.message })
+      res.status(404).json({ message: 'Part not found' })
       return
     }
     if (error instanceof WorktreePartError) {
-      res.status(409).json({ message: error.message })
+      res.status(409).json({ message: "A worktree part's members are set by folder and can't be changed" })
       return
     }
     throw error
@@ -1359,7 +1360,7 @@ app.put('/api/team/:teamId/partOf/:sessionId', async (req, res) => {
 /** 호스트에게 스스로 종료하라고 보낸다. 트레이 앱이 새 코드로 다시 띄운다 (작업 스케줄러 방식에서는 다시 뜨지 않음) */
 app.post('/api/host/restart', (_req, res) => {
   if (!host.send({ type: 'restart' })) {
-    res.status(503).json({ message: '세션 호스트에 연결되지 않음' })
+    res.status(503).json({ message: 'Not connected to session host' })
     return
   }
   res.json({})
@@ -1383,12 +1384,12 @@ app.get('/api/office', (_req, res) => {
 app.delete('/api/groups/:id', (req, res) => {
   try {
     if (!removeGroup(req.params.id)) {
-      res.status(404).json({ message: '그룹 없음' })
+      res.status(404).json({ message: 'Group not found' })
       return
     }
   } catch (error) {
     if (error instanceof GroupNotEmptyError) {
-      res.status(409).json({ message: error.message })
+      res.status(409).json({ message: "Can't delete a group that has teams. Move or delete its teams first" })
       return
     }
     throw error
@@ -1401,7 +1402,7 @@ app.delete('/api/groups/:id', (req, res) => {
 app.post('/api/groups', (req, res) => {
   const { name, x, y } = req.body as { name?: string; x?: unknown; y?: unknown }
   if (!name?.trim()) {
-    res.status(400).json({ message: '이름 필요' })
+    res.status(400).json({ message: 'Name required' })
     return
   }
   res.json(addGroup(name.trim(), { x, y }))
@@ -1412,14 +1413,14 @@ app.post('/api/groups', (req, res) => {
 app.put('/api/groups/order', (req, res) => {
   const { ids } = req.body as { ids?: unknown }
   if (!isIdList(ids)) {
-    res.status(400).json({ message: 'ids(문자열 배열) 필요' })
+    res.status(400).json({ message: 'ids (array of strings) required' })
     return
   }
   try {
     res.json(reorderGroups(ids))
   } catch (error) {
     if (error instanceof OrderMismatchError) {
-      res.status(400).json({ message: error.message })
+      res.status(400).json({ message: "IDs don't match the current list (missing, unknown or duplicate). Reload and try again" })
       return
     }
     throw error
@@ -1431,19 +1432,19 @@ app.put('/api/groups/order', (req, res) => {
 app.put('/api/groups/:groupId/teams/order', (req, res) => {
   const { ids } = req.body as { ids?: unknown }
   if (!isIdList(ids)) {
-    res.status(400).json({ message: 'ids(문자열 배열) 필요' })
+    res.status(400).json({ message: 'ids (array of strings) required' })
     return
   }
   try {
     const teams = reorderTeams(req.params.groupId, ids)
     if (!teams) {
-      res.status(404).json({ message: '그룹 없음' })
+      res.status(404).json({ message: 'Group not found' })
       return
     }
     res.json(teams)
   } catch (error) {
     if (error instanceof OrderMismatchError) {
-      res.status(400).json({ message: error.message })
+      res.status(400).json({ message: "IDs don't match the current list (missing, unknown or duplicate). Reload and try again" })
       return
     }
     throw error
