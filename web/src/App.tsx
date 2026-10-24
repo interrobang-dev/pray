@@ -1216,11 +1216,14 @@ export function App() {
               </nav>
               {isSelectedLiveWeb && (
                 <button
+                  className="end-session"
+                  title="End session"
+                  aria-label="End session"
                   onClick={() => {
                     if (confirm('End this session?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
                   }}
                 >
-                  End
+                  <EndSessionIcon />
                 </button>
               )}
               {/* 폰에서는 패널이 화면 전체라 "뒤로" 가 목록으로 돌아가는 버튼이다 */}
@@ -1513,6 +1516,22 @@ function TerminalTabIcon() {
       <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
       <path
         d="M4.5 6l2 2-2 2M8 10.5h3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** 패널 헤더 종료 버튼 아이콘: 전원 ⏻ */
+function EndSessionIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M8 2v5.5M4.9 4.3a5 5 0 1 0 6.2 0"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.25"
