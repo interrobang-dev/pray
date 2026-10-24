@@ -616,6 +616,36 @@ function dotRoundRect(g: Graphics, x: number, y: number, w: number, h: number, l
 }
 
 /**
+ * worktree 파트 라벨의 브랜치 아이콘 (목록 App.tsx WorktreeIcon 과 같은 모양: 왼쪽 위·아래 원과 그 사이 줄기, 오른쪽 위 원에서 줄기 쪽으로 휘어 드는 선).
+ * 파트 글자(12 도트 px) 높이. # = 칠하는 도트 px 한 칸
+ */
+const WORKTREE_ICON = [
+  '.##.......',
+  '#..#...##.',
+  '#..#..#..#',
+  '.##...#..#',
+  '.#.....##.',
+  '.#.....#..',
+  '.#...##...',
+  '.#.##.....',
+  '.##.......',
+  '#..#......',
+  '#..#......',
+  '.##.......',
+]
+
+/** WORKTREE_ICON 을 도트 px 사각형으로 찍는다 (정수 배율에서 또렷하게). 이벤트는 받지 않는다 — 라벨 글자(dotLabelText)와 같은 이유 */
+function dotWorktreeIcon(color: number): Graphics {
+  const icon = new Graphics()
+  WORKTREE_ICON.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) if (row[x] === '#') icon.rect(x, y, 1, 1)
+  })
+  icon.fill(color)
+  icon.eventMode = 'none'
+  return icon
+}
+
+/**
  * 끌 수 있는 라벨의 손잡이: (x, y) 에 w×h 영역(hitArea)과 그 둘레 3px 밖의 옅은 테두리(마우스 올림·끄는 중에만). 내용은 부르는 쪽이 손잡이 안 (0, 0) 기준으로 넣는다
  */
 function dragLabel(x: number, y: number, w: number, h: number): DragLabel {
@@ -710,15 +740,17 @@ function drawDotIsland(island: Island, memberCount: number, onEdit: () => void, 
     const zy = y - 60
     const zw = zone.w * DOT_TILE + 30
     const zh = zone.h * DOT_TILE + 84
-    // 라벨: 상자 없는 작은 회색 글자. worktree 파트는 브랜치를 옆에
+    // 라벨: 상자 없는 작은 회색 글자. worktree 파트만 이름 왼쪽에 브랜치 아이콘 (목록 파트 소제목과 같다. 브랜치 이름은 안 쓴다)
     const partName = dotLabelText(zone.part.name, DOT_FONT.part, COLOR.partLabel, 'bold')
-    partName.position.set(zx + 10, zy + 8)
     dot.addChild(new Graphics().rect(zx, zy, zw, zh).fill({ color: 0xffffff, alpha: 0.25 }).stroke({ width: 2, color: COLOR.partLine, alignment: 1 }), partName)
+    let nameX = zx + 10
     if (zone.part.worktree) {
-      const branch = dotLabelText(`⎇ ${zone.part.worktree.branch}`, DOT_FONT.part, COLOR.labelMuted)
-      branch.position.set(partName.x + Math.ceil(partName.width) + 6, zy + 8)
-      dot.addChild(branch)
+      const icon = dotWorktreeIcon(COLOR.labelMuted)
+      icon.position.set(nameX, zy + 8 + Math.round((partName.height - WORKTREE_ICON.length) / 2))
+      dot.addChild(icon)
+      nameX += WORKTREE_ICON[0].length + 6
     }
+    partName.position.set(nameX, zy + 8)
   }
   // 화분 열: 블록 줄마다 오른쪽 끝 칸막이(6) 옆에 큰 화분 (블록 모듈 높이 가운데쯤)
   for (const plant of island.plants) {
