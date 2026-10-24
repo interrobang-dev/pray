@@ -31,7 +31,7 @@ server.registerTool(
   'jk_spawn_member',
   {
     description:
-      '팀원 세션을 새로 만든다 (팀 폴더, 파트가 worktree 면 그 폴더). 사무실에 책상이 생기고 사람이 볼 수 있다. instruction 을 주면 첫 지시로 보내고 task 를 돌려준다. 팀원 결과는 마지막 응답 텍스트 하나로만 돌아오니 지시에 "끝나면 결과 요약을 마지막 메시지로 써라" 를 넣어라.',
+      '팀원 세션을 새로 만든다 (팀 폴더, 파트가 worktree 면 그 폴더). 사무실에 책상이 생기고 사람이 볼 수 있다. instruction 을 주면 첫 지시로 보내고 task 를 돌려준다. 팀원 결과는 마지막 응답 텍스트 하나로만 돌아오니 지시에 "끝나면 결과 요약을 마지막 메시지로 써라" 를 넣어라. model·effort 는 일에 맞게 고르되 애매하면 둘 다 빼라 (사용자 기본값 그대로).',
     inputSchema: {
       role: z
         .string()
@@ -40,12 +40,24 @@ server.registerTool(
           '팀원 역할 약어 (1~12자). 이름 "[역할] 이름" 은 서버가 붙여 결과 member.name 으로 돌려준다. 권장: FE(화면), BE(서버·호스트), FS(풀스택), UI/UX, QA(검증·테스트), Ops(배포·인프라), Docs(문서), Research(조사)',
         ),
       name: z.string().optional().describe('예전 방식의 팀원 이름. role 이 있으면 쓰지 않는다. role 과 name 중 하나는 필요'),
+      model: z
+        .enum(['haiku', 'sonnet', 'opus', 'fable'])
+        .optional()
+        .describe(
+          '팀원 모델 (선택). 빼면 사용자 기본 모델 — 애매하면 늘 뺀다. opus: 설계·디버깅·여러 파일 수정·조사 결론 (기본과 같은 급). sonnet: 할 일이 분명한 것만 (정해진 설계대로의 구현, 테스트 추가, 문서 정리, 화면 스크린샷 확인). haiku: 결과를 판단에 쓰지 않는 단순 실행만 (더미 작업, 명령 하나 돌려 출력 전달). 파일 수정·조사에는 쓰지 않는다. fable: 사용자가 지정했을 때만 (주간 한도가 따로 있다). 결과가 부실하거나 실패하면 다음에는 한 단계 높은 모델(haiku → sonnet → opus)로 새 팀원을 만든다. 일하는 도중에 모델은 바꾸지 않는다 — 다른 모델이 맞는 일이 생기면 그 모델로 팀원을 새로 만든다.',
+        ),
+      effort: z
+        .enum(['low', 'medium', 'high', 'xhigh', 'max'])
+        .optional()
+        .describe(
+          '팀원 effort (선택). 빼면 사용자 기본 effort — 애매하면 늘 뺀다. max: 어려운 설계·디버깅. low·medium: haiku 로 하는 단순 실행에만. 파일 수정·조사에는 낮추지 않는다.',
+        ),
       instruction: z.string().optional().describe('첫 지시 (선택)'),
     },
   },
-  async ({ role, name, instruction }) => {
+  async ({ role, name, model, effort, instruction }) => {
     try {
-      return text(await api.spawnMember({ role, name }, instruction))
+      return text(await api.spawnMember({ role, name, model, effort }, instruction))
     } catch (error) {
       return failure(error)
     }
@@ -93,7 +105,8 @@ server.registerTool(
 server.registerTool(
   'jk_status',
   {
-    description: '팀의 세션 목록(역할·웹/외부·상태·마지막 말)과 task 목록을 본다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다.',
+    description:
+      '팀의 세션 목록(역할·웹/외부·상태·모델·effort·마지막 말)과 task 목록을 본다. 모델·effort 는 마지막 응답 기준이라 아직 대화가 없으면 null 이다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다.',
     inputSchema: {},
   },
   async () => {

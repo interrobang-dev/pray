@@ -12,6 +12,13 @@ describe('lead', () => {
     expect(prompt).toContain('팀원 정리 규칙')
   })
 
+  it('prompt tells the lead when to pick a model and effort for a member', () => {
+    const prompt = leadSystemPrompt(team)
+    expect(prompt).toContain('jk_spawn_member 의 model·effort')
+    expect(prompt).toContain('애매하면 늘 둘 다 빼서')
+    for (const word of ['- opus:', '- sonnet:', '- haiku:', '- fable:', 'max 는', 'low·medium 은']) expect(prompt).toContain(word)
+  })
+
   it('extra args carry name, permission mode and the prompt', () => {
     const args = leadExtraArgs(team, null, 'http://127.0.0.1:4710')
     expect(args.slice(0, 4)).toEqual(['--name', '개발 팀장', '--permission-mode', 'bypassPermissions'])

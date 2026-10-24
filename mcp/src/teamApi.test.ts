@@ -56,6 +56,19 @@ describe('TeamApi', () => {
     ])
   })
 
+  it('sends model and effort when given', async () => {
+    const { calls, fetchImpl } = fakeFetch(200, { ok: true })
+    const api = new TeamApi('http://x', 'T1', 'P1', fetchImpl)
+    await api.spawnMember({ role: 'QA', model: 'sonnet', effort: 'max' }, '해라')
+    await api.spawnMember({ role: 'Ops', model: 'haiku' })
+    await api.spawnMember({ role: 'BE', effort: 'low' })
+    expect(calls.map((c) => [c.url, JSON.parse(c.init?.body as string)])).toEqual([
+      ['http://x/api/team/T1/members?partId=P1', { role: 'QA', model: 'sonnet', effort: 'max', instruction: '해라' }],
+      ['http://x/api/team/T1/members?partId=P1', { role: 'Ops', model: 'haiku' }],
+      ['http://x/api/team/T1/members?partId=P1', { role: 'BE', effort: 'low' }],
+    ])
+  })
+
   it('throws the server message on error status', async () => {
     const { fetchImpl } = fakeFetch(409, { message: '진행 중인 task 가 있음' })
     const api = new TeamApi('http://x', 'T1', null, fetchImpl)

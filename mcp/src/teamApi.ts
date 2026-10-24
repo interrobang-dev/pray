@@ -26,11 +26,11 @@ export class TeamApi {
     return body
   }
 
-  /** role 이 있으면 서버가 이름을 붙이고 name 은 쓰지 않는다. 둘 다 없으면 서버가 400 */
-  spawnMember(member: { role?: string; name?: string }, instruction?: string): Promise<unknown> {
+  /** role 이 있으면 서버가 이름을 붙이고 name 은 쓰지 않는다. 둘 다 없으면 서버가 400. model·effort 를 빼면 사용자 기본값 */
+  spawnMember(member: { role?: string; name?: string; model?: string; effort?: string }, instruction?: string): Promise<unknown> {
     return this.call(`/api/team/${this.teamId}/members${this.unitQuery('?')}`, {
       method: 'POST',
-      body: JSON.stringify({ role: member.role, name: member.name, instruction }),
+      body: JSON.stringify({ role: member.role, name: member.name, model: member.model, effort: member.effort, instruction }),
     })
   }
 

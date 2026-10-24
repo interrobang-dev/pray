@@ -70,6 +70,7 @@ import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './fl
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
 import { givenNameOf, parseGender, parseMemberRole, pickMemberName } from './memberName.js'
+import { memberExtraArgs, parseMemberModelChoice } from './memberModel.js'
 import {
   createWorktree,
   markFolderTrusted,
@@ -1018,6 +1019,9 @@ app.get('/api/team/:teamId', async (req, res) => {
       role: s.role,
       status: s.status,
       isAlive: s.isAlive,
+      // 마지막 claude 응답 기준 (jsonl). 대화가 아직 없으면 null
+      model: s.model,
+      effort: s.effort,
       lastAssistantText: s.lastAssistantText,
       pendingTool: s.pendingTool,
     }))
@@ -1092,18 +1096,26 @@ app.get('/api/team/:teamId/member-name', async (req, res) => {
 /**
  * 지휘 단위로 팀원 세션을 띄운다. 팀 직속·worktree 파트는 cwd 판정으로 자동 합류, worktree 없는 파트는 소속을 기록.
  * role 이 있으면 이름은 서버가 "[role] 이름" 으로 붙이고 성별을 기록한다 (같은 팀 근무·휴식·퇴근 세션에 쓰인 이름은 피한다).
- * name 만 오면 그대로 쓴다 (role 인자가 생기기 전의 팀장 MCP)
+ * name 만 오면 그대로 쓴다 (role 인자가 생기기 전의 팀장 MCP).
+ * model·effort 가 오면 --model·--effort 로 넘긴다 (빼면 사용자 기본값. 목록 밖이면 400)
  */
 app.post('/api/team/:teamId/members', async (req, res) => {
   const unit = findUnit(req.params.teamId, req.query.partId, res)
   if (!unit) return
   const { team, part } = unit
   const cwd = part?.worktree?.cwd ?? team.cwd
-  const { name, role, instruction, permissionMode } = req.body as {
+  const { name, role, instruction, permissionMode, model, effort } = req.body as {
     name?: string
     role?: unknown
     instruction?: string
     permissionMode?: string
+    model?: unknown
+    effort?: unknown
+  }
+  const modelChoice = parseMemberModelChoice({ model, effort })
+  if (!modelChoice) {
+    res.status(400).json({ message: 'model 은 haiku·sonnet·opus·fable, effort 는 low·medium·high·xhigh·max 중 하나 (빼면 기본값)' })
+    return
   }
   const sessionId = randomUUID()
   let memberName: string
@@ -1121,7 +1133,7 @@ app.post('/api/team/:teamId/members', async (req, res) => {
     res.status(400).json({ message: 'role 또는 name 필요' })
     return
   }
-  const extraArgs = ['--name', memberName, '--permission-mode', permissionMode ?? 'bypassPermissions']
+  const extraArgs = memberExtraArgs(memberName, permissionMode ?? 'bypassPermissions', modelChoice)
   if (part && !part.worktree) setPartOf(team.id, sessionId, part.id)
   // 신뢰 기록은 POST /api/sessions 와 같다. 실패는 결과로 지시자에게 알린다
   const isTrustFailed = markFolderTrusted(cwd) === false
