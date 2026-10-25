@@ -13,6 +13,8 @@ import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { FlowPanel } from './FlowPanel'
+import { GroupTodosModal } from './GroupTodosModal'
+import { remainingCount, todosOf } from './groupTodos'
 import { Modal, Segmented } from './Modal'
 import { CharacterPicker, type CharacterChoice } from './CharacterPicker'
 import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, type RecolorArt } from './characterArt'
@@ -25,6 +27,7 @@ import {
   type FlowStatus,
   type Office as OfficeData,
   type Group,
+  type GroupTodo,
   type OffDutyLabel,
   type Part,
   type Session,
@@ -247,6 +250,9 @@ export function App() {
   /** 데스크톱에서 사무실을 숨긴 화면: 패널이 목록 오른쪽 폭을 다 쓰고, 세션을 안 골랐으면 그 자리에 안내 */
   const isOfficeHiddenLayout = !isNarrow && isOfficeHidden
   const [theme, setTheme] = useState<ThemeChoice>(themeChoice)
+  /** TODO 모달을 연 그룹. 목록 그룹 라벨의 버튼과 사무실 그룹 이름표 옆 버튼이 같은 모달을 연다 */
+  const [todoGroupId, setTodoGroupId] = useState<string | null>(null)
+  const todoGroup = todoGroupId ? office.groups.find((g) => g.id === todoGroupId) : undefined
 
   useEffect(() => {
     let isCurrent = true
@@ -609,10 +615,9 @@ export function App() {
     if (!response.ok) alert((await response.json()).message ?? "Couldn't delete group")
   }
 
-  function editGroup(group: Group) {
-    const waitingNote = prompt(`Waiting note for "${group.name}" (leave empty to remove)`, group.waitingNote ?? '')
-    if (waitingNote === null) return
-    void postJson(`/api/groups/${group.id}`, 'PATCH', { waitingNote })
+  /** TODO 모달이 서버 응답으로 화면 목록을 먼저 바꾼다. 사무실 SSE 가 오면 서버 것으로 바뀐다 */
+  function changeTodos(groupId: string, update: (todos: GroupTodo[]) => GroupTodo[]) {
+    setOffice((prev) => ({ ...prev, groups: prev.groups.map((g) => (g.id === groupId ? { ...g, todos: update(todosOf(g)) } : g)) }))
   }
 
   /** 그룹 안의 팀들도 같은 만큼 옮긴다 (서버도 PATCH 한 번에 같이 옮긴다) */
@@ -747,6 +752,22 @@ export function App() {
     return (
       <button className="drag-handle" onPointerDown={(event) => startReorder(event, scope, id)} title="Drag to reorder">
         ⠿
+      </button>
+    )
+  }
+
+  /** 그룹 라벨의 TODO 버튼: 체크리스트 아이콘 + 남은 개수. 남은 것이 있으면 늘 보이고 0 이면 "+"·"⋯" 처럼 마우스를 올렸을 때만 (터치 기기는 늘) */
+  function renderTodoButton(group: Group) {
+    const remaining = remainingCount(group)
+    return (
+      <button
+        className={remaining > 0 ? 'todo-button has-todos' : 'todo-button'}
+        onClick={() => setTodoGroupId(group.id)}
+        title="TODO"
+        aria-label={remaining > 0 ? `TODO · ${remaining} left` : 'TODO'}
+      >
+        <TodoIcon />
+        {remaining > 0 && <span>{remaining}</span>}
       </button>
     )
   }
@@ -1018,6 +1039,7 @@ export function App() {
                 >
                   <div className="group-label">
                     <span className="name">{group.name}</span>
+                    {renderTodoButton(group)}
                     <span className="head-actions">
                       <button onClick={() => openTeamForm(group.id)} title="Add team to group">
                         +
@@ -1090,6 +1112,7 @@ export function App() {
           </Modal>
         )}
         {sessionForm && renderSessionModal(sessionForm.teamId, sessionForm.partId)}
+        {todoGroup && <GroupTodosModal key={todoGroup.id} group={todoGroup} onClose={() => setTodoGroupId(null)} onChangeTodos={changeTodos} />}
         {partForm && (
           <Modal
             title={`New part — Team "${office.teams.find((t) => t.id === partForm.teamId)?.name ?? ''}"`}
@@ -1174,7 +1197,7 @@ export function App() {
             onMoveGroup={moveGroup}
             onMoveTeam={moveTeam}
             onEditTeam={editTeam}
-            onEditGroup={editGroup}
+            onOpenGroupTodos={setTodoGroupId}
           />
         )}
         {isFlowOpen && !selected && (
@@ -1565,6 +1588,16 @@ function NewSessionIcon() {
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
       <circle cx="8" cy="5" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
       <path d="M3.5 13.5a4.5 4.5 0 0 1 9 0" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** 그룹 라벨의 TODO 아이콘: 체크리스트 (체크한 줄 둘 + 빈 상자 줄 하나). 사무실 그룹 이름표 옆 도트 아이콘(Office.tsx TODO_ICON)과 같은 모양 */
+function TodoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1.75 3.25l1.25 1.25 2.25-2.5M1.75 8.25l1.25 1.25 2.25-2.5M7.5 3.5h7M7.5 8.5h7M7.5 13.5h7" />
+      <rect x="1.75" y="11.75" width="3.5" height="3.5" rx="0.5" />
     </svg>
   )
 }

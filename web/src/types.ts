@@ -91,7 +91,17 @@ export interface Group {
   /** 화면은 쓰지 않는다 (그룹 크기는 안의 팀 섬으로 정한다) */
   w: number
   h: number
-  waitingNote?: string
+  /** 그룹 TODO. 서버 순서 = [할 일(사용자가 정한 순서)…, 완료(완료한 순서, 오래된 것 먼저)…]. 서버를 재시작하기 전 옛 응답은 없다 (groupTodos.ts todosOf) */
+  todos?: GroupTodo[]
+}
+
+/** 그룹 TODO 한 줄. 시각은 ISO */
+export interface GroupTodo {
+  id: string
+  text: string
+  isDone: boolean
+  createdAt: string
+  doneAt: string | null
 }
 
 /** 파트 = 팀 안의 선택적 지휘 단위 (파트장 + 파트 팀원). worktree 가 있으면 그 폴더에서 일한다 */

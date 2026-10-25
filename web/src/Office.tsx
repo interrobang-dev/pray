@@ -14,7 +14,8 @@ import {
   Spritesheet,
   type SpritesheetData,
 } from 'pixi.js'
-import { attendanceOf, offDutyLabel, statusLabel, type Office as OfficeData, type Group, type Session, type Team } from './types'
+import { attendanceOf, offDutyLabel, statusLabel, type Office as OfficeData, type Session, type Team } from './types'
+import { remainingCount } from './groupTodos'
 import { dotLookOf, type DotCharacter, type DotLook } from './dotCharacter'
 import { dotStateOf, loungeLabel, seatPlaceKey, seatPlaceOf, turnEndedAtOf, type DotState } from './dotState'
 import { overflowNames, planLounge, type LoungeDirection, type LoungeMeta, type LoungePerson, type LoungePlan } from './lounge'
@@ -111,7 +112,6 @@ const COLOR = {
   partLabel: 0x5f6573,
   /** 끌 수 있는 라벨에 마우스를 올렸을 때의 테두리 */
   labelHover: 0x8f97a8,
-  postit: 0xfde77a,
   alert: 0xffd3d3,
   alertLine: 0xe05a5a,
   select: 0x3f9c4b,
@@ -146,7 +146,8 @@ interface Props {
   /** 팀 섬을 끌어 놓음 */
   onMoveTeam: (teamId: string, anchor: { groupId: string; x: number; y: number }) => void
   onEditTeam: (team: Team) => void
-  onEditGroup: (group: Group) => void
+  /** 그룹 이름표 옆 TODO 버튼을 누름: 그 그룹의 TODO 모달을 연다 */
+  onOpenGroupTodos: (groupId: string) => void
 }
 
 /** world 아트 픽셀 단위 글자(승인 화살표 배지·툴팁)의 해상도 = world 가 가장 크게 커질 때의 배율 9 (3배 × DOT_SCALE). 그래야 흐리지 않다 */
@@ -190,6 +191,9 @@ interface DragLabel {
 
 interface GroupParts extends DragLabel {
   container: Container
+  /** 이름표 오른쪽 TODO 버튼과 마우스를 올렸을 때의 테두리 */
+  todoButton: Container
+  todoHover: Graphics
 }
 
 interface IslandParts extends DragLabel {
@@ -578,13 +582,13 @@ function dotPartitions(w: number, h: number): Graphics {
   )
 }
 
-/** 공간(그룹·Focus Zone·Lounge) 라벨·팀 명판·파트 라벨·메모 글자 (도트 px). 계층 순 */
-const DOT_FONT = { space: 18, team: 14, part: 12, note: 12 }
+/** 공간(그룹·Focus Zone·Lounge) 라벨·팀 명판(그룹 TODO 개수도)·파트 라벨 글자 (도트 px). 계층 순 */
+const DOT_FONT = { space: 18, team: 14, part: 12 }
 /** 그룹·Lounge 라벨 글자 왼쪽 위 (공간 왼쪽 위 기준, 파티션 9 + 그늘 3 안쪽) */
 const SPACE_LABEL = { x: 20, y: 16 }
 
-function dotLabel(text: string, size: number, color = COLOR.text, wrapWidth?: number): Text {
-  return label(text, size, color, wrapWidth, dotTextResolution)
+function dotLabel(text: string, size: number, color = COLOR.text): Text {
+  return label(text, size, color, undefined, dotTextResolution)
 }
 
 /** 라벨 글자 (도트 px). 굵기·자간은 라벨마다. 끌기는 감싼 손잡이가 받는다 — 부모가 interactive 면 Pixi 가 글자도 맞혀 손잡이가 아니라 바닥을 누른 것이 된다 */
@@ -636,10 +640,31 @@ const WORKTREE_ICON = [
   '.##.......',
 ]
 
-/** WORKTREE_ICON 을 도트 px 사각형으로 찍는다 (정수 배율에서 또렷하게). 이벤트는 받지 않는다 — 라벨 글자(dotLabelText)와 같은 이유 */
-function dotWorktreeIcon(color: number): Graphics {
+/**
+ * 그룹 이름표 옆 TODO 버튼 아이콘 (목록 App.tsx TodoIcon 과 같은 모양: 체크한 줄 둘 + 빈 상자 줄 하나, 줄마다 오른쪽에 가로선).
+ * 그룹 글자(18 도트 px)의 대문자 높이쯤
+ */
+const TODO_ICON = [
+  '.....#.........',
+  '#...#..########',
+  '.#.#...........',
+  '..#............',
+  '...............',
+  '.....#.........',
+  '#...#..########',
+  '.#.#...........',
+  '..#............',
+  '...............',
+  '####...........',
+  '#..#...########',
+  '#..#...........',
+  '####...........',
+]
+
+/** 도트 아이콘(WORKTREE_ICON·TODO_ICON)을 도트 px 사각형으로 찍는다 (정수 배율에서 또렷하게). 이벤트는 받지 않는다 — 라벨 글자(dotLabelText)와 같은 이유 */
+function dotPixelIcon(rows: string[], color: number): Graphics {
   const icon = new Graphics()
-  WORKTREE_ICON.forEach((row, y) => {
+  rows.forEach((row, y) => {
     for (let x = 0; x < row.length; x++) if (row[x] === '#') icon.rect(x, y, 1, 1)
   })
   icon.fill(color)
@@ -667,11 +692,15 @@ function spaceLabelText(content: string, color: number): Text {
   return dotLabelText(content, DOT_FONT.space, color, 'bold', 1)
 }
 
+/** TODO 버튼과 그룹 이름표 손잡이 사이 (도트 px). 둘의 마우스 올림 테두리(3px 밖)가 닿지 않게 */
+const TODO_BUTTON_GAP = 8
+
 /**
- * 도트 그룹(데스크존): 밝은 회색 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽, 아래는 회색 걸레받이) + 위 이름표 줄의 이름표·메모·큰 화분(고정 꾸미기).
- * 크기는 저장된 w·h 가 아니라 그려지는 영역(섬이 있으면 섬들 + 위 이름표 줄, 없으면 저장 위치의 최소 크기)
+ * 도트 그룹(데스크존): 밝은 회색 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽, 아래는 회색 걸레받이) + 위 이름표 줄의 이름표·TODO 버튼·큰 화분(고정 꾸미기).
+ * 크기는 저장된 w·h 가 아니라 그려지는 영역(섬이 있으면 섬들 + 위 이름표 줄, 없으면 저장 위치의 최소 크기).
+ * TODO 버튼은 체크리스트 도트 아이콘 + 남은(미완료) 개수 (0 이면 아이콘만 흐리게 — 캔버스는 마우스 올림 때만 보이기가 어렵다). 누르기는 redraw 가 묶는다
  */
-function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupParts {
+function drawDotGroup(area: GroupArea, art: DotArt): GroupParts {
   const { group } = area
   const container = new Container()
   container.position.set(PAD_X + area.x * TILE, PAD_Y + area.y * TILE)
@@ -679,39 +708,43 @@ function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupPa
   container.addChild(dot)
   const w = area.w * TILE * DOT_SCALE
   const h = area.h * TILE * DOT_SCALE
-  dot.addChild(dotTiling(art, 'desk-carpet', w, h), dotPartitions(w, h))
-  for (const item of groupFixtures(area)) dot.addChild(fixtureSprite(art, item))
 
   // 라벨: 바닥에 쓴 글자. 손잡이 영역은 글자 둘레 6·3 (왼쪽 위 파티션 안쪽부터)
   const name = spaceLabelText(group.name, COLOR.spaceLabel)
-  const { sign, hover } = dragLabel(SPACE_LABEL.x - 6, SPACE_LABEL.y - 3, Math.ceil(name.width) + 12, Math.ceil(name.height) + 6)
+  const signW = Math.ceil(name.width) + 12
+  const signH = Math.ceil(name.height) + 6
+  const { sign, hover } = dragLabel(SPACE_LABEL.x - 6, SPACE_LABEL.y - 3, signW, signH)
   name.position.set(6, 3)
   sign.addChild(name)
-  dot.addChild(sign)
 
-  if (group.waitingNote) {
-    const text = dotLabel(group.waitingNote, DOT_FONT.note, COLOR.text, 200)
-    const noteW = Math.ceil(text.width) + 16
-    const noteH = Math.ceil(text.height) + 12
-    const x = w - 72 - noteW
-    const note = new Graphics()
-      .rect(0, 0, noteW, noteH)
-      .fill(COLOR.postit)
-      .rect(0, 0, noteW, 4)
-      .fill(0xe8cf4e)
-      .rect(0, 0, noteW, noteH)
-      .stroke({ width: 2, color: DOT_OUTLINE, alignment: 1 })
-    note.position.set(x, 15)
-    text.position.set(x + 8, 22)
-    dot.addChild(note, text)
+  const remaining = remainingCount(group)
+  const todoColor = remaining > 0 ? COLOR.spaceLabel : COLOR.labelMuted
+  const count = remaining > 0 ? dotLabelText(String(remaining), DOT_FONT.team, todoColor, 'bold') : null
+  const iconW = TODO_ICON[0].length
+  const buttonW = 6 + iconW + (count ? 4 + Math.ceil(count.width) : 0) + 6
+  const todoButton = new Container()
+  todoButton.position.set(sign.x + signW + TODO_BUTTON_GAP, sign.y)
+  todoButton.hitArea = new Rectangle(0, 0, buttonW, signH)
+  todoButton.eventMode = 'static'
+  todoButton.cursor = 'pointer'
+  const todoHover = dotRoundRect(new Graphics(), -3, -3, buttonW + 6, signH + 6, COLOR.labelHover, { color: 0xffffff, alpha: 0.45 })
+  todoHover.visible = false
+  const icon = dotPixelIcon(TODO_ICON, todoColor)
+  icon.position.set(6, Math.round((signH - TODO_ICON.length) / 2))
+  todoButton.addChild(todoHover, icon)
+  if (count) {
+    count.position.set(6 + iconW + 4, Math.round((signH - count.height) / 2))
+    todoButton.addChild(count)
   }
+
+  dot.addChild(dotTiling(art, 'desk-carpet', w, h), dotPartitions(w, h))
+  // 큰 화분은 이름표·TODO 버튼과 겹치면(좁은 그룹·긴 이름) 두지 않는다
+  for (const item of groupFixtures(area, todoButton.x + buttonW)) dot.addChild(fixtureSprite(art, item))
+  dot.addChild(sign, todoButton)
 
   container.eventMode = 'static'
   container.cursor = 'grab'
-  container.on('pointertap', (event: FederatedPointerEvent) => {
-    if (event.detail === 2) onEdit()
-  })
-  return { container, sign, hover }
+  return { container, sign, hover, todoButton, todoHover }
 }
 
 /**
@@ -747,7 +780,7 @@ function drawDotIsland(island: Island, memberCount: number, onEdit: () => void, 
     dot.addChild(new Graphics().rect(zx, zy, zw, zh).fill({ color: 0xffffff, alpha: 0.25 }).stroke({ width: 2, color: COLOR.partLine, alignment: 1 }), partName)
     let nameX = zx + 10
     if (zone.part.worktree) {
-      const icon = dotWorktreeIcon(COLOR.labelMuted)
+      const icon = dotPixelIcon(WORKTREE_ICON, COLOR.labelMuted)
       icon.position.set(nameX, zy + 8 + Math.round((partName.height - WORKTREE_ICON.length) / 2))
       dot.addChild(icon)
       nameX += WORKTREE_ICON[0].length + 6
@@ -2034,11 +2067,17 @@ export function Office(props: Props) {
             }),
           ]
           for (const area of layout.groupAreas) {
-            const onEdit = () => {
-              if (!isDragged) latest.current.onEditGroup(area.group)
-            }
-            const parts = drawDotGroup(area, onEdit, art)
+            const parts = drawDotGroup(area, art)
             bindDragLabel(parts)
+            // TODO 버튼: 누르면 모달. 누르거나 끌어도 그룹 이름표 끌기·맵 이동이 시작되지 않게 pointerdown 을 여기서 멈춘다
+            parts.todoButton.on('pointerdown', (event: FederatedPointerEvent) => event.stopPropagation())
+            parts.todoButton.on('pointertap', () => latest.current.onOpenGroupTodos(area.group.id))
+            parts.todoButton.on('pointerover', () => {
+              if (!pan?.isMoved && !signDrag) parts.todoHover.visible = true
+            })
+            parts.todoButton.on('pointerout', () => {
+              parts.todoHover.visible = false
+            })
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               const teamIds = new Set(layout.islands.filter((i) => i.team.groupId === area.group.id).map((i) => i.team.id))
               beginSignDrag(event, parts, {

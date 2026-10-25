@@ -593,6 +593,34 @@ li.group.drop-after::after {
 .team.drop-after::after {
   bottom: -5px;
 }
+/* 그룹 라벨의 TODO 버튼 (App.tsx renderTodoButton): 체크리스트 아이콘 + 남은 개수. 남은 것이 있으면 늘 보이고,
+   0 이면 "+"·"⋯" 처럼 라벨에 마우스를 올렸을 때만 (터치 기기는 아래 hover: none 블록에서 늘) */
+.todo-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.todo-button.has-todos,
+.group-label:hover .todo-button,
+.todo-button:focus-visible {
+  opacity: 1;
+}
+.todo-button.has-todos {
+  color: var(--text);
+}
+.todo-button:hover {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--text);
+}
 .team {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -3074,6 +3102,144 @@ li.group.drop-after::after {
   border-bottom: 1px solid var(--line);
 }
 
+/* 그룹 TODO 모달 (GroupTodosModal.tsx): 입력칸 · 오류 줄 · 할 일 목록 · 완료 "Done (N)". 목록이 길면 모달 안에서 스크롤한다 */
+.todo-modal {
+  width: 440px;
+  max-height: calc(100vh - 64px);
+}
+.todo-error {
+  font-size: 12px;
+  color: var(--error);
+}
+.todo-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -6px;
+  padding: 0 6px;
+}
+.todo-scroll.dragging-list {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.todo-empty {
+  padding: 8px 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 2px 0 6px;
+  border-radius: 6px;
+}
+.todo-item:hover {
+  background: var(--bg);
+}
+.todo-item input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+/* 글: 누르면 그 자리에서 고친다. 긴 글은 줄바꿈 */
+.todo-text {
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+  cursor: text;
+}
+.todo-text:hover {
+  border-color: var(--line);
+}
+.todo-edit {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+}
+/* 완료: 줄 긋고 흐리게, 글은 고치지 않는다 */
+.todo-list.done .todo-text {
+  cursor: default;
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.todo-done-head {
+  margin: 10px 0 4px;
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* 삭제 × 와 끌기 손잡이 ⠿: 줄에 마우스를 올렸을 때만 (터치 기기는 아래 hover: none 블록에서 늘) */
+.todo-delete,
+.todo-handle {
+  flex-shrink: 0;
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 24px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  opacity: 0;
+}
+.todo-item:hover .todo-delete,
+.todo-item:hover .todo-handle,
+.todo-item:focus-within .todo-delete,
+.todo-item:focus-within .todo-handle,
+.todo-item.dragging .todo-handle {
+  opacity: 1;
+}
+.todo-delete:hover {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: transparent;
+}
+.todo-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.todo-handle:hover {
+  color: var(--text);
+  border-color: transparent;
+}
+.todo-scroll.dragging-list .todo-handle {
+  cursor: grabbing;
+}
+.todo-item.dragging {
+  opacity: 0.45;
+}
+/* 놓일 자리 선: 줄 사이 간격(2px)의 가운데 (위 목록 끌어 놓기의 .drop-before·.drop-after 공통 규칙) */
+.todo-item.drop-before::before {
+  top: -2px;
+}
+.todo-item.drop-after::after {
+  bottom: -2px;
+}
+
 /* 데스크톱에서 사무실을 숨긴 화면 (App.tsx isOfficeHiddenLayout. 폰 폭에는 이 클래스가 붙지 않는다).
    세션을 골랐으면 패널이 목록 오른쪽 폭을 다 쓰고, 안 골랐으면 그 자리에 안내 한 줄 */
 .layout.office-hidden.with-panel {
@@ -3118,6 +3284,19 @@ li.group.drop-after::after {
   .head-actions button {
     padding: 3px 10px;
     font-size: 15px;
+  }
+  /* 그룹 TODO 버튼과 TODO 모달의 삭제·끌기 손잡이도 늘 보이고 손가락으로 누를 수 있게 키운다 */
+  .todo-button {
+    opacity: 1;
+    padding: 3px 8px;
+    font-size: 13px;
+  }
+  .todo-delete,
+  .todo-handle {
+    opacity: 1;
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 18px;
   }
 }
 
@@ -3262,6 +3441,17 @@ li.group.drop-after::after {
     box-sizing: border-box;
     width: calc(100vw - 32px);
     max-width: none;
+  }
+  /* TODO 모달: 주소창이 보여도 화면 안. 줄·체크박스를 손가락으로 누르기 쉽게 */
+  .todo-modal {
+    max-height: calc(100dvh - 32px);
+  }
+  .todo-item {
+    min-height: 44px;
+  }
+  .todo-item input[type='checkbox'] {
+    width: 22px;
+    height: 22px;
   }
   /* 패널 헤더 두 줄: [← 이름 ✎ ··· 탭 종료] / [폴더 ··· 모델 칩]. 긴 이름만 줄어들어 말줄임된다.
      flex 줄바꿈은 이름의 전체 폭으로 줄을 나눠 긴 이름이면 세 줄이 되므로 grid. 종료 버튼은 자동 배치로 남은 마지막 칸에 간다 */

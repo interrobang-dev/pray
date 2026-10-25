@@ -18,7 +18,7 @@ import {
 import { LOUNGE_MIN_H, layoutOffice, type Rect } from './officeLayout'
 import type { Group, Office, Session, Team } from './types'
 
-/** office-v5-props 의 실제 크기 (도트 px) + 데스크존 모서리의 office-v2 화분 */
+/** office-v5-props 의 실제 크기 (도트 px) */
 const SIZES: PropSizes = {
   'water-cooler': { w: 30, h: 78 },
   printer: { w: 44, h: 60 },
@@ -38,7 +38,8 @@ const SIZES: PropSizes = {
   planter: { w: 144, h: 70 },
   'rug-navy': { w: 192, h: 86 },
 }
-const ENV_SIZES: PropSizes = { 'plant-large': { w: 42, h: 48 }, 'plant-small': { w: 24, h: 33 } }
+/** 데스크존 위 이름표 줄의 office-v2 큰 화분 */
+const ENV_SIZES: PropSizes = { 'plant-large': { w: 42, h: 48 } }
 const ITEMS = ['item-mug', 'item-pen-cup', 'item-papers', 'item-sticky-notes', 'item-mug-navy', 'item-succulent', 'item-notebook', 'item-desk-clock']
 
 /** 소품 그림이 차지하는 사각형 (도트 px) */
@@ -281,6 +282,9 @@ describe('맵 왼쪽 위 코너', () => {
 })
 
 describe('데스크존 이름표 줄', () => {
+  /** 짧은 이름표 + TODO 버튼이 차지하는 오른쪽 끝 (도트 px) */
+  const SHORT_LABEL_RIGHT = 120
+
   it('큰 화분 하나만 위 이름표 줄(1타일) 오른쪽 끝에 놓여 오른쪽 파티션 안이고, 어느 섬(밀린 것·오른쪽 끝에 닿은 것 포함)과도 겹치지 않는다', () => {
     const cases: [Office, Session[]][] = [
       // 큰 섬이 오른쪽 위 끝, 아래 섬이 왼쪽 아래 끝에 닿는다 (C 는 A 와 겹쳐 오른쪽으로 밀린다)
@@ -298,7 +302,7 @@ describe('데스크존 이름표 줄', () => {
     for (const [office, sessions] of cases) {
       const layout = layoutOffice(office, sessions)
       const [area] = layout.groupAreas
-      const fixtures = groupFixtures(area)
+      const fixtures = groupFixtures(area, SHORT_LABEL_RIGHT)
       expect(fixtures.map((f) => f.prop)).toEqual(['plant-large'])
       const box = boxOf(fixtures[0])
       expect(box.x).toBeGreaterThanOrEqual(0)
@@ -308,6 +312,20 @@ describe('데스크존 이름표 줄', () => {
       // 섬 사각형 전체 (명판·받침·화분 열·윗사람 머리가 다 이 안이다)
       for (const island of layout.islands) expect(overlaps(box, px({ ...island, x: island.x - area.x, y: island.y - area.y }))).toBe(false)
     }
+  })
+
+  it('이름표·TODO 버튼이 화분 자리에 닿으면(좁은 그룹·긴 이름) 화분을 두지 않고, 둘 때는 버튼 오른쪽 끝과 겹치지 않는다', () => {
+    const area = (w: number): Rect => ({ x: 0, y: 0, w, h: 7 })
+    for (const w of [5, 7, 9, 14]) {
+      for (let labelRight = 60; labelRight <= w * 48; labelRight += 6) {
+        const fixtures = groupFixtures(area(w), labelRight)
+        if (fixtures.length === 0) continue
+        expect(boxOf(fixtures[0]).x).toBeGreaterThan(labelRight)
+      }
+    }
+    // 5타일(240) 그룹: 짧은 이름이면 있고, 긴 이름이면 없다
+    expect(groupFixtures(area(5), 150)).toHaveLength(1)
+    expect(groupFixtures(area(5), 190)).toEqual([])
   })
 })
 
