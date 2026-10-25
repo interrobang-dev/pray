@@ -123,4 +123,24 @@ describe('makeUsageCache', () => {
     await cache(Date.now() + 5000)
     expect(calls).toBe(2)
   })
+
+  it('forgets the cached result and one still loading with the old account after clear()', async () => {
+    let calls = 0
+    let releaseFirst = () => {}
+    const cache = makeUsageCache(60_000, async () => {
+      calls += 1
+      const call = calls
+      if (call === 1) await new Promise<void>((resolve) => (releaseFirst = resolve))
+      return { ok: false, reason: `n${call}` }
+    })
+    const pending = cache()
+    cache.clear()
+    const fresh = cache()
+    releaseFirst()
+    expect(await pending).toEqual({ ok: false, reason: 'n1' })
+    expect(await fresh).toEqual({ ok: false, reason: 'n2' })
+    expect(await cache()).toEqual({ ok: false, reason: 'n2' })
+    cache.clear()
+    expect(await cache()).toEqual({ ok: false, reason: 'n3' })
+  })
 })

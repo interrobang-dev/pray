@@ -122,19 +122,34 @@ export async function fetchUsage(now = new Date()): Promise<UsageResult> {
   return { ok: true, usage: parseUsage(raw, { plan: credentials.plan, email: await readAccountEmail() }, now) }
 }
 
-/** 브라우저가 여러 개 떠 있어도 호출 횟수를 ttl 당 1회로 제한 */
+/**
+ * 브라우저가 여러 개 떠 있어도 호출 횟수를 ttl 당 1회로 제한.
+ * `clear()` 는 계정을 바꾼 뒤 부른다: 캐시를 비우고, 그 전에 시작한 조회(옛 계정 토큰)의 결과는 캐시에 넣지 않는다
+ */
 export function makeUsageCache(ttlMs: number, load: () => Promise<UsageResult> = fetchUsage) {
   let cached: { at: number; result: UsageResult } | null = null
   let inflight: Promise<UsageResult> | null = null
-  return async (now = Date.now()): Promise<UsageResult> => {
+  let generation = 0
+  const read = async (now = Date.now()): Promise<UsageResult> => {
     if (cached && now - cached.at < ttlMs) return cached.result
     if (!inflight) {
-      inflight = load().then((result) => {
-        cached = { at: Date.now(), result }
-        inflight = null
+      const startedIn = generation
+      const request = load().then((result) => {
+        if (startedIn === generation) {
+          cached = { at: Date.now(), result }
+          inflight = null
+        }
         return result
       })
+      inflight = request
     }
     return inflight
   }
+  return Object.assign(read, {
+    clear(): void {
+      generation++
+      cached = null
+      inflight = null
+    },
+  })
 }

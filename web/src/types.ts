@@ -244,6 +244,26 @@ export interface Usage {
 
 export type UsageResult = { ok: true; usage: Usage } | { ok: false; reason: string }
 
+/** 이 PC 에 저장된 Claude 계정 하나 (`GET /api/accounts`). 토큰은 오지 않는다. 서버와 손으로 맞춘다 */
+export interface Account {
+  id: string
+  email: string | null
+  displayName: string | null
+  organizationName: string | null
+  /** 사용량 응답의 plan 과 같은 꼴 (예 `max 5x`) */
+  plan: string | null
+  /** 지금 이 PC 의 claude 가 쓰는 계정 */
+  isActive: boolean
+  /** 이 시각이 지나면 다시 로그인해야 한다. 모르면 null */
+  refreshExpiresAt: string | null
+  savedAt: string
+}
+
+export interface AccountsResponse {
+  accounts: Account[]
+  activeId: string | null
+}
+
 /** 플로우(flow.team) 안 읽은 수 (`GET /api/flow`, 전역 SSE `flow`). 서버 flow.ts 와 손으로 맞춘다 */
 export interface FlowStatus {
   /** 키 파일에 FLOW_API_KEY 가 있는지. 서버가 막 떠 아직 확인 전이면 true (수는 null 이라 "…") */

@@ -383,6 +383,31 @@ header button.icon svg {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 닫기 × 가 있는 모달 (Modal hasCloseButton): 제목 ··· × */
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.modal-head .modal-title {
+  flex: 1;
+  min-width: 0;
+}
+.modal-close {
+  flex-shrink: 0;
+  margin: -6px -8px 0 0;
+  padding: 0 8px;
+  font-size: 18px;
+  line-height: 28px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+.modal-close:hover {
+  color: var(--text);
+  background: var(--bg);
+  border-color: transparent;
+}
 .segmented {
   display: flex;
   border: 1px solid var(--line);
@@ -2598,6 +2623,9 @@ li.group.drop-after::after {
   z-index: 8;
   box-sizing: border-box;
   width: 300px;
+  /* 계정이 많아도 화면 안에 (위 여백 14px) */
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -2676,34 +2704,156 @@ li.group.drop-after::after {
 .usage-row.danger .usage-bar span {
   background: var(--red-dot);
 }
-/* 구분선 아래 "Claude Account" 와 이메일 ··· 요금제 */
-.usage-account {
+/* 구분선 아래 계정 목록 (Accounts.tsx): "Claude accounts" / 줄마다 이메일 ··· 요금제, 지금 계정·재로그인까지 ··· 버튼 / [+ Add account] */
+.accounts {
   padding-top: 12px;
   border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .usage-account-label {
-  margin-bottom: 6px;
   font-size: 11px;
   color: var(--muted);
 }
-.usage-account-line {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 13px;
+.account-empty {
+  color: var(--muted);
 }
-.usage-email {
+.account-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.account-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.account-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+}
+.account-email {
+  min-width: 0;
+  font-size: 13px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.usage-plan {
+.account-plan {
   flex-shrink: 0;
   margin-left: auto;
   font-size: 11px;
   color: var(--muted);
+}
+/* "● Active · Re-login in 12d". 3일 이하 노랑, 지나면 빨강 "Expired" (사용량 막대와 같은 색) */
+.account-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.account-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--green-text);
+}
+.account-active::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.account-relogin.warn {
+  color: var(--yellow);
+}
+.account-relogin.danger {
+  font-weight: 600;
+  color: var(--red-dot);
+}
+.account-actions {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.account-actions button {
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 16px;
+}
+/* Remove·Log out: 올리면 빨강 (공통 button:hover 의 초록 대신) */
+.account-actions button.danger:hover:not(:disabled) {
+  color: var(--red);
+  border-color: var(--red-border);
+}
+.account-error {
+  font-size: 11px;
+  color: var(--error);
+  overflow-wrap: anywhere;
+}
+.account-add {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+.account-add:hover:not(:disabled) {
+  color: var(--text);
+}
+/* 계정 추가 모달: 상태 표시줄(.usage) 안에 렌더돼 11px·nowrap·회색을 물려받으므로 되돌린다.
+   클래스 하나라 폰(768px 이하)에서는 뒤에 오는 .modal 폭(화면 - 32px)이 이긴다 */
+.account-modal {
+  width: 400px;
+  font-size: 14px;
+  color: var(--text);
+  white-space: normal;
+}
+.account-modal-note {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.account-modal-note.error {
+  font-size: 12px;
+  color: var(--error);
+}
+.account-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.account-step b {
+  font-size: 13px;
+}
+.account-modal .form-hint {
+  font-size: 12px;
+}
+/* 로그인 페이지 링크: 새 탭으로 연다. 버튼처럼 보이게 */
+.account-signin-link {
+  align-self: flex-start;
+  padding: 5px 12px;
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  color: var(--green-text);
+  background: var(--green-soft);
+  text-decoration: none;
+}
+.account-signin-link:hover {
+  background: var(--green-line);
 }
 
 /* 툴바 세 번째 Flow 버튼 (App.tsx FlowRow): 모양은 .toolbar button 그대로, 아이콘 · Flow · 오른쪽 끝에 "알림 N · 채팅 N".
@@ -2970,6 +3120,26 @@ li.group.drop-after::after {
     left: 16px;
     right: 16px;
     width: auto;
+  }
+  /* 계정 목록·추가 모달: 손가락으로 누르기 쉽게 */
+  .account-actions {
+    gap: 6px;
+  }
+  .account-actions button {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+  .account-add,
+  .account-modal .actions button {
+    min-height: 40px;
+  }
+  .account-signin-link {
+    padding: 10px 14px;
+  }
+  .modal-close {
+    min-width: 40px;
+    min-height: 36px;
   }
   /* 16px 이 되면 안내 문구가 두 줄로 넘쳐 한 줄 입력칸에 스크롤바가 생긴다 */
   .composer textarea::placeholder,

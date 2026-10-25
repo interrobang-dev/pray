@@ -66,6 +66,8 @@ import { HostClient } from './hostClient.js'
 import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts, withoutQueued } from './messages.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
+import { AccountError, accountErrorBody, makeAccountStore } from './accountStore.js'
+import { makeLoginManager, runClaudeAuth } from './accountLogin.js'
 import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
@@ -814,6 +816,78 @@ const readUsage = makeUsageCache(60_000)
 // 계정 사용량 (5시간·주간 한도). 비공식 OAuth 엔드포인트, 60초 캐시
 app.get('/api/usage', async (_req, res) => {
   res.json(await readUsage())
+})
+
+// ---------- Claude 계정 로그인·로그아웃·전환 (한 번에 한 계정이 기본 폴더에. 보관함 ~/.claude/jk-corp/accounts.json) ----------
+
+const accountStore = makeAccountStore({ runClaude: runClaudeAuth, onChange: () => readUsage.clear() })
+const accountLogins = makeLoginManager({ saveLogin: (configDir) => accountStore.saveLogin(configDir) })
+accountStore.startWatching()
+
+/** AccountError 는 그 상태코드와 문구 그대로. 그 밖은 500 (토큰이 든 파일 내용은 오류 문구에 없다) */
+function sendAccountError(res: Response, error: unknown): void {
+  if (error instanceof AccountError) {
+    res.status(error.status).json(accountErrorBody(error))
+    return
+  }
+  console.error(`계정 요청 실패: ${(error as Error).message}`)
+  res.status(500).json({ message: `Account request failed: ${(error as Error).message}` })
+}
+
+app.get('/api/accounts', async (_req, res) => {
+  try {
+    res.json(await accountStore.list())
+  } catch (error) {
+    sendAccountError(res, error)
+  }
+})
+
+app.post('/api/accounts/login', async (_req, res) => {
+  try {
+    res.json(await accountLogins.start())
+  } catch (error) {
+    sendAccountError(res, error)
+  }
+})
+
+app.post('/api/accounts/login/:loginId/code', async (req, res) => {
+  const { code } = (req.body ?? {}) as { code?: unknown }
+  try {
+    res.json({ account: await accountLogins.submitCode(req.params.loginId, code) })
+  } catch (error) {
+    sendAccountError(res, error)
+  }
+})
+
+app.delete('/api/accounts/login/:loginId', async (req, res) => {
+  await accountLogins.cancel(req.params.loginId)
+  res.status(204).end()
+})
+
+app.post('/api/accounts/logout', async (_req, res) => {
+  try {
+    await accountStore.logout()
+    res.json({})
+  } catch (error) {
+    sendAccountError(res, error)
+  }
+})
+
+app.post('/api/accounts/:id/switch', async (req, res) => {
+  try {
+    res.json({ account: await accountStore.switchTo(req.params.id) })
+  } catch (error) {
+    sendAccountError(res, error)
+  }
+})
+
+app.delete('/api/accounts/:id', async (req, res) => {
+  try {
+    await accountStore.remove(req.params.id)
+    res.json({})
+  } catch (error) {
+    sendAccountError(res, error)
+  }
 })
 
 // ---------- 플로우(flow.team) 알림 중계. 키는 ~/.claude/flow-key.env ----------

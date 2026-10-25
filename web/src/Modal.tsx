@@ -7,11 +7,13 @@ interface Props {
   onClose: () => void
   /** 대화상자 크기·배치를 바꿀 때 덧붙이는 클래스 */
   className?: string
+  /** 제목 오른쪽에 닫기 × 버튼 (onClose 를 부른다) */
+  hasCloseButton?: boolean
   children: ReactNode
 }
 
 /** 오버레이 + 대화상자. Esc 또는 바깥 클릭으로 닫힌다 */
-export function Modal({ title, subtitle, onClose, className, children }: Props) {
+export function Modal({ title, subtitle, onClose, className, hasCloseButton, children }: Props) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -20,13 +22,26 @@ export function Modal({ title, subtitle, onClose, className, children }: Props) 
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const titleBlock = (
+    <div className="modal-title">
+      <b>{title}</b>
+      {subtitle && <span className="cwd">{subtitle}</span>}
+    </div>
+  )
+
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
       <div className={className ? `modal ${className}` : 'modal'} role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="modal-title">
-          <b>{title}</b>
-          {subtitle && <span className="cwd">{subtitle}</span>}
-        </div>
+        {hasCloseButton ? (
+          <div className="modal-head">
+            {titleBlock}
+            <button type="button" className="modal-close" onClick={onClose} title="Close" aria-label="Close">
+              ×
+            </button>
+          </div>
+        ) : (
+          titleBlock
+        )}
         {children}
       </div>
     </div>

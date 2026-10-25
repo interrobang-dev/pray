@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Accounts, AddAccountModal } from './Accounts'
 import type { UsageLimit, UsageResult } from './types'
 
 const POLL_MS = 60_000
@@ -38,11 +39,6 @@ function longNameOf(limit: UsageLimit): string {
   return limit.label
 }
 
-/** 요금제 표시 "max" → "Max" */
-function planLabel(plan: string): string {
-  return `${plan[0].toUpperCase()}${plan.slice(1)}`
-}
-
 /** 상세 창 머리의 Claude 별 (주황 빛살 12개, 긴 것·짧은 것 번갈아) */
 function ClaudeMark() {
   return (
@@ -79,6 +75,10 @@ export function UsagePanel() {
   const [result, setResult] = useState<UsageResult | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [isOpen, setIsOpen] = useState(false)
+  /** 계정 추가 모달. 상세 창은 연 채로 두고 모달이 위에 뜬다 */
+  const [isAddingAccount, setIsAddingAccount] = useState(false)
+  /** 계정 추가에 성공할 때마다 늘려 계정 목록이 다시 받게 한다 */
+  const [accountsVersion, setAccountsVersion] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
 
@@ -98,14 +98,16 @@ export function UsagePanel() {
     return () => clearInterval(timer)
   }, [load])
 
-  // 상세 창은 다시 누름·바깥 클릭·Esc 로 닫는다. 상태 표시줄 ↻ 는 이 안이라 눌러도 창이 그대로다
+  // 상세 창은 다시 누름·바깥 클릭·Esc 로 닫는다. 상태 표시줄 ↻ 와 계정 추가 모달은 이 안(DOM)이라 눌러도 창이 그대로다.
+  // 모달이 떠 있는 동안 Esc 는 모달만 닫는다
   useEffect(() => {
     if (!isOpen) return
     const onDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false)
+      // 모달 바깥(오버레이)을 누르면 React 가 이 리스너보다 먼저 모달을 지워 target 이 DOM 에서 빠진다. 그래서 contains 가 아니라 눌린 때의 이벤트 경로로 본다
+      if (rootRef.current && !event.composedPath().includes(rootRef.current)) setIsOpen(false)
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
+      if (event.key !== 'Escape' || isAddingAccount) return
       setIsOpen(false)
       if (rootRef.current?.contains(document.activeElement)) toggleRef.current?.focus()
     }
@@ -115,7 +117,7 @@ export function UsagePanel() {
       window.removeEventListener('mousedown', onDown)
       window.removeEventListener('keydown', onKey)
     }
-  }, [isOpen])
+  }, [isOpen, isAddingAccount])
 
   function toggle() {
     // 열 때 "Updated 3m ago"·리셋까지 남은 시간을 지금 기준으로 다시 잰다
@@ -175,32 +177,11 @@ export function UsagePanel() {
               })}
             </div>
           )}
-          {result?.ok && <UsageAccount email={result.usage.email ?? null} plan={result.usage.plan} />}
+          <Accounts version={accountsVersion} onAdd={() => setIsAddingAccount(true)} onUsageChange={load} />
         </div>
       )}
-    </div>
-  )
-}
-
-/** 상세 창 아래 계정 구역: 로그인된 이메일과 오른쪽 요금제. 이메일이 없으면 요금제만, 둘 다 없으면 구역이 없다 */
-function UsageAccount({ email, plan }: { email: string | null; plan: string | null }) {
-  const planText = plan ? planLabel(plan) : null
-  if (!email && !planText) return null
-  return (
-    <div className="usage-account">
-      <div className="usage-account-label">Claude Account</div>
-      <div className="usage-account-line">
-        {email ? (
-          <>
-            <span className="usage-email" title={email}>
-              {email}
-            </span>
-            {planText && <span className="usage-plan">{planText}</span>}
-          </>
-        ) : (
-          <span className="usage-email">{planText}</span>
-        )}
-      </div>
+      {/* 상세 창 밖(쌓임 맥락 밖)이지만 .usage 안이라 모달 클릭이 상세 창의 바깥 클릭이 되지 않는다 */}
+      {isAddingAccount && <AddAccountModal onClose={() => setIsAddingAccount(false)} onAdded={() => setAccountsVersion((version) => version + 1)} />}
     </div>
   )
 }
