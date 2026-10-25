@@ -33,6 +33,13 @@ import {
   reorderTeams,
   TeamConflictError,
   WorktreePartError,
+  addTodo,
+  migrateWaitingNotes,
+  parseTodoText,
+  removeTodo,
+  reorderTodos,
+  TodoNotFoundError,
+  updateTodo,
   updateGroup,
   updatePart,
   updateTeam,
@@ -1567,6 +1574,102 @@ app.patch('/api/groups/:id', (req, res) => {
   broadcastOffice()
 })
 
+// ---------- 그룹 할 일 (배열 순서 = 표시 순서. hq 가 늘 [할 일…, 완료…] 로 나눠 둔다) ----------
+
+const TODO_TEXT_MESSAGE = 'Text must be 1 to 500 characters'
+
+/** 할 일 구역 맨 끝(첫 완료 앞)에 넣는다 */
+app.post('/api/groups/:groupId/todos', (req, res) => {
+  const text = parseTodoText(((req.body ?? {}) as { text?: unknown }).text)
+  if (text === null) {
+    res.status(400).json({ message: TODO_TEXT_MESSAGE })
+    return
+  }
+  const todo = addTodo(req.params.groupId, text)
+  if (!todo) {
+    res.status(404).json({ message: 'Group not found' })
+    return
+  }
+  res.json({ todo })
+  broadcastOffice()
+})
+
+/** 글·완료 변경. 완료가 되면 맨 끝, 되돌리면 할 일 구역 맨 끝으로 (hq updateTodo) */
+app.patch('/api/groups/:groupId/todos/:todoId', (req, res) => {
+  const body = (req.body ?? {}) as { text?: unknown; isDone?: unknown }
+  if (body.text === undefined && body.isDone === undefined) {
+    res.status(400).json({ message: 'text or isDone required' })
+    return
+  }
+  if (body.isDone !== undefined && typeof body.isDone !== 'boolean') {
+    res.status(400).json({ message: 'isDone must be true or false' })
+    return
+  }
+  const text = body.text === undefined ? undefined : parseTodoText(body.text)
+  if (text === null) {
+    res.status(400).json({ message: TODO_TEXT_MESSAGE })
+    return
+  }
+  try {
+    const todo = updateTodo(req.params.groupId, req.params.todoId, {
+      text,
+      isDone: typeof body.isDone === 'boolean' ? body.isDone : undefined,
+    })
+    if (!todo) {
+      res.status(404).json({ message: 'Group not found' })
+      return
+    }
+    res.json({ todo })
+  } catch (error) {
+    if (error instanceof TodoNotFoundError) {
+      res.status(404).json({ message: 'To-do not found' })
+      return
+    }
+    throw error
+  }
+  broadcastOffice()
+})
+
+app.delete('/api/groups/:groupId/todos/:todoId', (req, res) => {
+  try {
+    if (!removeTodo(req.params.groupId, req.params.todoId)) {
+      res.status(404).json({ message: 'Group not found' })
+      return
+    }
+  } catch (error) {
+    if (error instanceof TodoNotFoundError) {
+      res.status(404).json({ message: 'To-do not found' })
+      return
+    }
+    throw error
+  }
+  res.json({})
+  broadcastOffice()
+})
+
+/** 할 일(미완료) 구역 순서. ids 는 지금 할 일 전부 (다르면 400). 완료 구역은 그대로 */
+app.put('/api/groups/:groupId/todos/order', (req, res) => {
+  const { ids } = (req.body ?? {}) as { ids?: unknown }
+  if (!isIdList(ids)) {
+    res.status(400).json({ message: 'ids (array of strings) required' })
+    return
+  }
+  try {
+    if (!reorderTodos(req.params.groupId, ids)) {
+      res.status(404).json({ message: 'Group not found' })
+      return
+    }
+  } catch (error) {
+    if (error instanceof OrderMismatchError) {
+      res.status(400).json({ message: "IDs don't match the current list (missing, unknown or duplicate). Reload and try again" })
+      return
+    }
+    throw error
+  }
+  res.json({})
+  broadcastOffice()
+})
+
 app.post('/api/hook', (req, res) => {
   const payload = req.body as HookPayload
   if (!payload?.session_id || !payload.hook_event_name) {
@@ -1690,6 +1793,14 @@ setInterval(() => void broadcast(), 5000)
 setInterval(() => tasks.expireUnacknowledged(), 1000)
 void flowPoller.check()
 setInterval(() => void flowPoller.check(), FLOW_POLL_MS)
+
+// 예전 그룹 대기 메모(waitingNote)를 할 일로 한 번 옮긴다. 요청 처리 밖이라 hq.json 을 못 읽어도 죽지 않게 로그만 (다음 시작 때 다시 한다)
+try {
+  const migratedCount = migrateWaitingNotes()
+  if (migratedCount > 0) console.log(`그룹 대기 메모 ${migratedCount}개를 할 일로 옮김`)
+} catch (error) {
+  console.error(`그룹 대기 메모 옮기기 실패: ${error}`)
+}
 
 // 빌드된 웹이 있으면 서버 하나로 화면까지 제공한다 (개발 중에는 Vite 4711 을 쓴다)
 const webDist = join(import.meta.dirname, '..', '..', 'web', 'dist')
