@@ -264,6 +264,32 @@ export interface AccountsResponse {
   activeId: string | null
 }
 
+/** 계정을 바꾸면 영향을 받는 세션 하나 (`GET /api/accounts/switch-impact`). 서버 switchImpact.ts 와 손으로 맞춘다 */
+export interface ImpactSession {
+  id: string
+  name: string
+  kind: 'web' | 'external'
+  status: SessionStatus
+  /** 차례가 끝난 뒤 지난 분. 모르면 null */
+  minutesSinceTurn: number | null
+  /** 다음 차례에 다시 읽을 문맥 크기. 모르면 null */
+  contextTokens: number | null
+}
+
+export interface SwitchImpact {
+  /** 최근 1시간 안에 대화했거나 지금 작업 중인 근무 세션. contextTokens 큰 순 */
+  recentSessions: ImpactSession[]
+  totalContextTokens: number
+  /** 지금 작업 중·승인 대기인 근무 세션 (웹·외부) */
+  busySessions: ImpactSession[]
+}
+
+/** `POST /api/accounts/:id/switch`. hasBusyWebSessions = 전환을 마친 뒤 서버가 다시 센, 작업 중·승인 대기인 웹 세션이 있는지 (옛 서버는 없음) */
+export interface SwitchResponse {
+  account: Account
+  hasBusyWebSessions?: boolean
+}
+
 /** 플로우(flow.team) 안 읽은 수 (`GET /api/flow`, 전역 SSE `flow`). 서버 flow.ts 와 손으로 맞춘다 */
 export interface FlowStatus {
   /** 키 파일에 FLOW_API_KEY 가 있는지. 서버가 막 떠 아직 확인 전이면 true (수는 null 이라 "…") */

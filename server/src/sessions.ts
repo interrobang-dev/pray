@@ -125,6 +125,11 @@ export async function findTranscript(sessionId: string): Promise<string | null> 
   return transcripts.read(sessionId)
 }
 
+/** 세션 목록과 같은 캐시의 요약 (stat 이 같으면 다시 읽지 않는다). jsonl 이 없으면 null */
+export async function findTranscriptSummary(sessionId: string): Promise<TranscriptSummary | null> {
+  return transcripts.summarize(sessionId)
+}
+
 /** pid 기록이 살아 있는 세션인지. 근무 판정은 이것 또는 호스트 목록 (listSessions 의 attendance 와 같은 기준) */
 export async function isLiveSession(sessionId: string): Promise<boolean> {
   return (await readLiveSessions(sessionsDir)).some((s) => s.sessionId === sessionId)

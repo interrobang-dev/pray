@@ -50,7 +50,7 @@ import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js
 import { makeSendCode } from './mail.js'
 import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptJudgement } from './interrupt.js'
-import { findTranscript, isLiveSession, listSessions, projectsDir } from './sessions.js'
+import { displayStatus, findTranscript, findTranscriptSummary, isLiveSession, listSessions, projectsDir } from './sessions.js'
 import {
   contentTypeOf,
   findScratchpad,
@@ -96,6 +96,7 @@ import { serialRunner } from './serialRunner.js'
 import { applySuggestion } from './suggestion.js'
 import { parseCharacter } from './character.js'
 import { answerBox, decideOutcome, judgeQueue, type QueueJudgement, type UnqueueProgress } from './unqueue.js'
+import { hasBusyWebSessions, switchImpact } from './switchImpact.js'
 
 setupFileLog()
 const PORT = 4710
@@ -873,9 +874,34 @@ app.post('/api/accounts/logout', async (_req, res) => {
   }
 })
 
+/** 전환하면 프롬프트 캐시가 깨질 세션과 그 문맥 크기, 작업 중인 세션 (세션 정보만. 계정 파일은 읽지 않는다) */
+app.get('/api/accounts/switch-impact', async (_req, res) => {
+  let sessions
+  try {
+    sessions = (await snapshotPayload()).sessions
+  } catch (error) {
+    console.error(`전환 영향 계산 실패: ${error}`)
+    res.status(500).json({ message: "Couldn't read the session list" })
+    return
+  }
+  const candidates = await Promise.all(
+    sessions
+      .filter((s) => s.attendance === 'present')
+      .map(async (s) => ({ ...s, contextTokens: (await findTranscriptSummary(s.id))?.contextTokens ?? null })),
+  )
+  res.json(switchImpact(candidates, Date.now()))
+})
+
 app.post('/api/accounts/:id/switch', async (req, res) => {
   try {
-    res.json({ account: await accountStore.switchTo(req.params.id) })
+    const account = await accountStore.switchTo(req.params.id)
+    // 전환을 마친 뒤 다시 센다. 근무 중인 웹 세션 = 호스트 목록 (hq.json 을 읽지 않아 전환 뒤에 실패하지 않는다)
+    const webSessions = host.sessions.map((s) => ({
+      kind: 'web' as const,
+      attendance: 'present' as const,
+      status: displayStatus(hookStates.get(s.sessionId), 'present'),
+    }))
+    res.json({ account, hasBusyWebSessions: hasBusyWebSessions(webSessions) })
   } catch (error) {
     sendAccountError(res, error)
   }

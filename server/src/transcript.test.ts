@@ -21,11 +21,20 @@ describe('summarizeTranscript', () => {
       lastAssistantText: '답변',
       model: null,
       effort: null,
+      contextTokens: null,
     })
   })
 
   it('returns nulls for empty input', () => {
-    expect(summarizeTranscript('')).toEqual({ title: null, lastAt: null, turnEndedAt: null, lastAssistantText: null, model: null, effort: null })
+    expect(summarizeTranscript('')).toEqual({
+      title: null,
+      lastAt: null,
+      turnEndedAt: null,
+      lastAssistantText: null,
+      model: null,
+      effort: null,
+      contextTokens: null,
+    })
   })
 
   const assistant = (fields: Record<string, unknown>, model = 'claude-opus-5-5') =>
@@ -62,6 +71,41 @@ describe('summarizeTranscript', () => {
       assistant({}, '<synthetic>'),
     ].join('\n')
     expect(summarizeTranscript(jsonl)).toMatchObject({ model: null, effort: null })
+  })
+
+  describe('contextTokens', () => {
+    const usage = (input: unknown, cacheRead: unknown, cacheCreation: unknown) => ({
+      input_tokens: input,
+      cache_read_input_tokens: cacheRead,
+      cache_creation_input_tokens: cacheCreation,
+      output_tokens: 345,
+    })
+    const reply = (fields: Record<string, unknown>, model = 'claude-opus-5-5') =>
+      JSON.stringify({ type: 'assistant', message: { model, content: [{ type: 'text', text: '응답' }], ...fields } })
+
+    it('sums input, cache read and cache creation tokens of the last response (not output)', () => {
+      const jsonl = [reply({ usage: usage(5, 100, 10) }), reply({ usage: usage(2, 166928, 10970) })].join('\n')
+      expect(summarizeTranscript(jsonl).contextTokens).toBe(177900)
+    })
+
+    it('skips <synthetic> responses like model and effort', () => {
+      const jsonl = [reply({ usage: usage(2, 1000, 0) }), reply({ usage: usage(0, 0, 0) }, '<synthetic>')].join('\n')
+      expect(summarizeTranscript(jsonl).contextTokens).toBe(1002)
+    })
+
+    it('counts missing fields as 0 and is null without usage or any number', () => {
+      expect(summarizeTranscript(reply({ usage: { input_tokens: 7 } })).contextTokens).toBe(7)
+      expect(summarizeTranscript(reply({ usage: usage(null, '3', undefined) })).contextTokens).toBeNull()
+      // 앞 응답 값이 남지 않는다 (모델·effort 와 같은 줄)
+      expect(summarizeTranscript([reply({ usage: usage(1, 2, 3) }), reply({})].join('\n')).contextTokens).toBeNull()
+    })
+
+    it('becomes unknown after a compact boundary until the next response', () => {
+      const boundary = JSON.stringify({ type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted' })
+      const before = reply({ usage: usage(2, 400000, 0) })
+      expect(summarizeTranscript([before, boundary].join('\n'))).toMatchObject({ model: 'claude-opus-5-5', contextTokens: null })
+      expect(summarizeTranscript([before, boundary, reply({ usage: usage(3, 0, 20000) })].join('\n')).contextTokens).toBe(20003)
+    })
   })
 
   describe('turnEndedAt', () => {

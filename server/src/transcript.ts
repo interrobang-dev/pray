@@ -11,6 +11,11 @@ export interface TranscriptSummary {
   model: string | null
   /** 같은 응답의 effort. 그 차례에 실제로 쓴 perTurnEffort 를 먼저, 없으면 effort */
   effort: string | null
+  /**
+   * 같은 응답 usage 의 input_tokens + cache_read_input_tokens + cache_creation_input_tokens = 다음 차례에 다시 읽을 문맥 크기.
+   * usage 가 없거나 그 뒤에 대화 압축(compact_boundary)이 있으면 null (압축 뒤 문맥은 요약이라 크기를 모른다)
+   */
+  contextTokens: number | null
 }
 
 interface ContentBlock {
@@ -20,6 +25,16 @@ interface ContentBlock {
 
 /** Claude Code 가 직접 만든 응답(API 오류·"No response requested." 등)의 model. 모델·effort 판정에서 건너뛴다 */
 const SYNTHETIC_MODEL = '<synthetic>'
+
+/** 응답 usage 의 문맥 토큰 합. 세 값 중 숫자가 하나도 없으면 null */
+function contextTokensOf(usage: unknown): number | null {
+  if (typeof usage !== 'object' || usage === null) return null
+  const { input_tokens, cache_read_input_tokens, cache_creation_input_tokens } = usage as Record<string, unknown>
+  const counts = [input_tokens, cache_read_input_tokens, cache_creation_input_tokens].filter(
+    (count): count is number => typeof count === 'number',
+  )
+  return counts.length === 0 ? null : counts.reduce((sum, count) => sum + count, 0)
+}
 
 /** turnEndedAt 에 넣는 대화 줄인지 */
 function isConversationLine(record: Record<string, unknown>): boolean {
@@ -32,7 +47,15 @@ function isConversationLine(record: Record<string, unknown>): boolean {
 }
 
 export function summarizeTranscript(jsonl: string): TranscriptSummary {
-  const summary: TranscriptSummary = { title: null, lastAt: null, turnEndedAt: null, lastAssistantText: null, model: null, effort: null }
+  const summary: TranscriptSummary = {
+    title: null,
+    lastAt: null,
+    turnEndedAt: null,
+    lastAssistantText: null,
+    model: null,
+    effort: null,
+    contextTokens: null,
+  }
   for (const line of jsonl.split('\n')) {
     if (!line.trim()) continue
     let record: Record<string, unknown>
@@ -48,8 +71,9 @@ export function summarizeTranscript(jsonl: string): TranscriptSummary {
       summary.lastAt = record.timestamp
       if (isConversationLine(record)) summary.turnEndedAt = record.timestamp
     }
+    if (record.type === 'system' && record.subtype === 'compact_boundary') summary.contextTokens = null
     if (record.type === 'assistant') {
-      const message = record.message as { content?: ContentBlock[]; model?: unknown } | undefined
+      const message = record.message as { content?: ContentBlock[]; model?: unknown; usage?: unknown } | undefined
       const text = message?.content
         ?.filter((block) => block.type === 'text' && block.text)
         .map((block) => (block.text ?? '').trim())
@@ -59,6 +83,7 @@ export function summarizeTranscript(jsonl: string): TranscriptSummary {
         summary.model = message.model
         const effort = record.perTurnEffort ?? record.effort
         summary.effort = typeof effort === 'string' ? effort : null
+        summary.contextTokens = contextTokensOf(message.usage)
       }
     }
   }

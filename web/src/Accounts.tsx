@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { accountName, accountTitle, isLoginOver, planLabel, reloginLabel } from './accountLabels'
+import { createPortal } from 'react-dom'
+import { accountName, accountTitle, busyLabel, impactMeta, isLoginOver, planLabel, reloginLabel, shortList, tokenLabel } from './accountLabels'
 import { Modal } from './Modal'
-import type { Account, AccountsResponse } from './types'
+import type { Account, AccountsResponse, ImpactSession, SwitchImpact, SwitchResponse } from './types'
 
 type Result<T> = { ok: true; data: T } | { ok: false; status: number; message: string; data: unknown }
 
@@ -24,17 +25,34 @@ async function request<T>(path: string, method: string, body?: unknown): Promise
 /** 진행 중인 계정 동작. 하나가 도는 동안 다른 버튼도 막는다 (전환 중 삭제 같은 것이 섞이지 않게) */
 type Busy = { id: string; action: 'switch' | 'remove' | 'logout' | 'restart' }
 
+/** 호스트 재시작 요청이 끝난 뒤에도 "Restarting host…" 를 두는 시간 (호스트가 다시 뜨는 동안) */
+const RESTART_NOTE_MS = 5000
+
+interface AccountsProps {
+  version: number
+  onAdd: () => void
+  onUsageChange: () => Promise<void>
+  /** 전환 확인 모달을 띄울 자리 (.usage). 상세 창 안에 두면 모달이 그 쌓임 맥락에 갇힌다 */
+  modalRoot: HTMLElement | null
+  /** 전환 확인 모달이 떴는지 알린다 (떠 있는 동안 Esc 는 모달만 닫는다) */
+  onSwitchOpenChange: (isOpen: boolean) => void
+}
+
 /**
  * 사용량 상세 창 아래 계정 목록. 창을 열 때(마운트)·`version` 이 바뀔 때(추가 모달 성공)·동작 뒤에 목록을 다시 받는다.
- * 지금 계정은 [Log out], 나머지는 [Switch]·[Remove]. 실패는 그 줄 아래 빨강 (서버 문구)
+ * 지금 계정은 [Log out], 나머지는 [Switch](확인 모달)·[Remove]. 실패는 그 줄 아래 빨강 (서버 문구)
  */
-export function Accounts({ version, onAdd, onUsageChange }: { version: number; onAdd: () => void; onUsageChange: () => Promise<void> }) {
+export function Accounts({ version, onAdd, onUsageChange, modalRoot, onSwitchOpenChange }: AccountsProps) {
   const [list, setList] = useState<AccountsResponse | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [busy, setBusy] = useState<Busy | null>(null)
   /** 계정 ID → 마지막 동작의 실패 문구 */
   const [errors, setErrors] = useState<Record<string, string>>({})
+  /** 전환 확인 모달을 연 계정 */
+  const [switchTarget, setSwitchTarget] = useState<Account | null>(null)
+  /** 호스트 재시작을 요청한 계정 줄 ("Restarting host…") */
+  const [restartingId, setRestartingId] = useState<string | null>(null)
   /** 늦게 온 옛 목록 응답을 버리기 위한 요청 번호 */
   const requestIdRef = useRef(0)
 
@@ -56,6 +74,14 @@ export function Accounts({ version, onAdd, onUsageChange }: { version: number; o
     void load()
   }, [load, version])
 
+  // 상세 창이 닫혀 이 목록이 사라져도 "떠 있음" 이 남지 않게 정리에서 되돌린다
+  const isSwitchOpen = switchTarget !== null
+  useEffect(() => {
+    if (!isSwitchOpen) return
+    onSwitchOpenChange(true)
+    return () => onSwitchOpenChange(false)
+  }, [isSwitchOpen, onSwitchOpenChange])
+
   function setError(id: string, message: string | null) {
     setErrors((prev) => {
       const next = { ...prev }
@@ -65,23 +91,38 @@ export function Accounts({ version, onAdd, onUsageChange }: { version: number; o
     })
   }
 
-  async function switchTo(account: Account) {
-    if (!confirm(`Switch to ${accountName(account)}? Every claude on this PC (terminal and IDE too) will use this account.`)) return
+  function openSwitch(account: Account) {
     setError(account.id, null)
+    setSwitchTarget(account)
+  }
+
+  /**
+   * 전환 확인 모달의 [Switch]. 실패면 서버 문구를 돌려줘 모달에 보인다. 성공하면 모달을 닫고 호스트를 다시 띄운다 —
+   * 전환을 마친 뒤 작업 중·승인 대기인 웹 세션이 없으면(hasBusyWebSessions false) 끊길 일이 없어 묻지 않고, 있거나 옛 서버(필드 없음)면 묻는다
+   */
+  async function switchTo(account: Account): Promise<string | null> {
     setBusy({ id: account.id, action: 'switch' })
-    const result = await request<{ account: Account }>(`/api/accounts/${encodeURIComponent(account.id)}/switch`, 'POST', {})
+    const result = await request<SwitchResponse>(`/api/accounts/${encodeURIComponent(account.id)}/switch`, 'POST', {})
     setBusy(null)
     if (!result.ok) {
-      setError(account.id, result.message)
-      await load()
-      return
+      void load()
+      return result.message
     }
+    setSwitchTarget(null)
     await Promise.all([load(), onUsageChange()])
-    if (!confirm('Restart host now? Web sessions reconnect with the new account.')) return
+    if (result.data?.hasBusyWebSessions !== false && !confirm('Restart host now? Web sessions reconnect with the new account.')) return null
     setBusy({ id: account.id, action: 'restart' })
+    setRestartingId(account.id)
     const restart = await request<unknown>('/api/host/restart', 'POST', {})
     setBusy(null)
-    if (!restart.ok) setError(account.id, `Couldn't restart host: ${restart.message}`)
+    if (!restart.ok) {
+      setRestartingId(null)
+      setError(account.id, `Couldn't restart host: ${restart.message}`)
+      return null
+    }
+    // 응답은 호스트가 나가기 전에 오므로, 호스트가 다시 뜨는 몇 초 동안 그대로 둔다
+    setTimeout(() => setRestartingId((id) => (id === account.id ? null : id)), RESTART_NOTE_MS)
+    return null
   }
 
   async function remove(account: Account) {
@@ -149,7 +190,7 @@ export function Accounts({ version, onAdd, onUsageChange }: { version: number; o
                       </button>
                     ) : (
                       <>
-                        <button onClick={() => void switchTo(account)} disabled={busy !== null}>
+                        <button onClick={() => openSwitch(account)} disabled={busy !== null}>
                           {label(account, 'switch', 'Switch')}
                         </button>
                         <button className="danger" onClick={() => void remove(account)} disabled={busy !== null}>
@@ -159,6 +200,7 @@ export function Accounts({ version, onAdd, onUsageChange }: { version: number; o
                     )}
                   </span>
                 </div>
+                {restartingId === account.id && <div className="account-progress">Restarting host…</div>}
                 {error && <div className="account-error">{error}</div>}
               </li>
             )
@@ -168,7 +210,119 @@ export function Accounts({ version, onAdd, onUsageChange }: { version: number; o
       <button className="account-add" onClick={onAdd} disabled={busy !== null}>
         + Add account
       </button>
+      {switchTarget &&
+        modalRoot &&
+        createPortal(
+          <SwitchAccountModal account={switchTarget} onClose={() => setSwitchTarget(null)} onSwitch={() => switchTo(switchTarget)} />,
+          modalRoot,
+        )}
     </div>
+  )
+}
+
+type Impact = { kind: 'checking' } | { kind: 'failed'; message: string } | { kind: 'ready'; impact: SwitchImpact }
+
+/** 작업 중 경고의 세션 이름. 외부(터미널·IDE) 세션은 표시를 붙인다 */
+function busyName(session: ImpactSession): string {
+  return session.kind === 'external' ? `${session.name} (external)` : session.name
+}
+
+/**
+ * [Switch] 확인. 열면 전환이 세션에 미치는 영향(`GET /api/accounts/switch-impact`)을 받아 보인다:
+ * 최근 1시간 안에 쓴 세션(프롬프트 캐시가 조직마다 따로라 다음 차례에 대화 전체를 새 계정으로 다시 읽는다)과 그 합계, 작업 중·승인 대기인 세션 경고.
+ * 받는 동안은 [Switch] 를 막고, 못 받으면 그 문구를 두고 전환할 수 있다. 전환하는 동안은 닫히지 않고, 실패하면 모달 안에 서버 문구를 두고 다시 누를 수 있다
+ */
+function SwitchAccountModal({ account, onClose, onSwitch }: { account: Account; onClose: () => void; onSwitch: () => Promise<string | null> }) {
+  const [impact, setImpact] = useState<Impact>({ kind: 'checking' })
+  const [isSwitching, setIsSwitching] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isCancelled = false
+    void request<SwitchImpact>('/api/accounts/switch-impact', 'GET').then((result) => {
+      if (isCancelled) return
+      const data = result.ok ? result.data : null
+      if (data && Array.isArray(data.recentSessions) && Array.isArray(data.busySessions)) setImpact({ kind: 'ready', impact: data })
+      else setImpact({ kind: 'failed', message: result.ok ? 'Unexpected response' : result.message })
+    })
+    return () => {
+      isCancelled = true
+    }
+  }, [])
+
+  async function submit() {
+    setIsSwitching(true)
+    setError(null)
+    const message = await onSwitch()
+    // 성공하면 Accounts 가 이 모달을 닫는다
+    if (message === null) return
+    setIsSwitching(false)
+    setError(message)
+  }
+
+  return (
+    <Modal title={`Switch to ${accountName(account)}`} onClose={isSwitching ? () => {} : onClose} className="account-modal switch-modal">
+      <div className="create">
+        <p className="account-modal-note">Every claude on this PC (terminal and IDE too) will use this account.</p>
+        {impact.kind === 'checking' && <p className="account-modal-note switch-checking">Checking sessions…</p>}
+        {impact.kind === 'failed' && <p className="account-modal-note error">Couldn't check sessions: {impact.message}</p>}
+        {impact.kind === 'ready' && <SwitchImpactView impact={impact.impact} />}
+        {error && <p className="account-modal-note error">{error}</p>}
+        <div className="actions">
+          <button type="button" className="primary" onClick={() => void submit()} disabled={isSwitching || impact.kind === 'checking'}>
+            {isSwitching ? '…' : 'Switch'}
+          </button>
+          <button type="button" onClick={onClose} disabled={isSwitching}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/** 전환 확인 모달의 영향: 최근 세션 목록·다시 읽을 합계(모르면 줄 없음), 작업 중 경고 */
+function SwitchImpactView({ impact }: { impact: SwitchImpact }) {
+  const recent = shortList(impact.recentSessions)
+  const busy = shortList(impact.busySessions)
+  const busyNames = busy.shown.map(busyName).join(', ')
+  return (
+    <>
+      {impact.recentSessions.length === 0 ? (
+        <p className="account-modal-note">No session was used in the last hour, so no extra re-reading.</p>
+      ) : (
+        <div className="switch-recent">
+          <p className="account-modal-note">
+            Sessions used in the last hour will re-read their whole conversation on the next turn, using more of the new account's limit and replying
+            slower at first.
+          </p>
+          <ul className="switch-sessions">
+            {recent.shown.map((session) => (
+              <li key={session.id}>
+                <span className="switch-session-name" title={session.name}>
+                  {session.name}
+                </span>
+                <span className="switch-session-meta">{impactMeta(session)}</span>
+              </li>
+            ))}
+            {recent.moreCount > 0 && <li className="switch-more">and {recent.moreCount} more</li>}
+          </ul>
+          {impact.totalContextTokens > 0 && <p className="switch-total">About {tokenLabel(impact.totalContextTokens)} tokens to re-read</p>}
+        </div>
+      )}
+      {impact.busySessions.length > 0 && (
+        <div className="switch-busy" role="alert">
+          <p>
+            <b>{busyLabel(impact.busySessions.length)}</b> Switching mid-task makes their next step re-read the whole conversation on the new account.
+            Wait for them to finish if you can.
+          </p>
+          <p className="switch-busy-names">{busy.moreCount > 0 ? `${busyNames}, and ${busy.moreCount} more` : busyNames}</p>
+          {impact.busySessions.some((session) => session.kind === 'external') && (
+            <p>Terminal and IDE sessions fully switch only after you restart them.</p>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 

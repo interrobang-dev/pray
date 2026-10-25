@@ -79,7 +79,10 @@ export function UsagePanel() {
   const [isAddingAccount, setIsAddingAccount] = useState(false)
   /** 계정 추가에 성공할 때마다 늘려 계정 목록이 다시 받게 한다 */
   const [accountsVersion, setAccountsVersion] = useState(0)
-  const rootRef = useRef<HTMLDivElement>(null)
+  /** 계정 전환 확인 모달 (Accounts 가 .usage 안으로 띄운다). 상세 창은 연 채로 둔다 */
+  const [isSwitchOpen, setIsSwitchOpen] = useState(false)
+  /** .usage. 계정 모달을 이 안(상세 창 밖)에 띄우므로 Accounts 에도 넘긴다 */
+  const [rootElement, setRootElement] = useState<HTMLDivElement | null>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
 
   const load = useCallback(async () => {
@@ -98,18 +101,18 @@ export function UsagePanel() {
     return () => clearInterval(timer)
   }, [load])
 
-  // 상세 창은 다시 누름·바깥 클릭·Esc 로 닫는다. 상태 표시줄 ↻ 와 계정 추가 모달은 이 안(DOM)이라 눌러도 창이 그대로다.
+  // 상세 창은 다시 누름·바깥 클릭·Esc 로 닫는다. 상태 표시줄 ↻ 와 계정 추가·전환 모달은 이 안(DOM)이라 눌러도 창이 그대로다.
   // 모달이 떠 있는 동안 Esc 는 모달만 닫는다
   useEffect(() => {
     if (!isOpen) return
     const onDown = (event: MouseEvent) => {
       // 모달 바깥(오버레이)을 누르면 React 가 이 리스너보다 먼저 모달을 지워 target 이 DOM 에서 빠진다. 그래서 contains 가 아니라 눌린 때의 이벤트 경로로 본다
-      if (rootRef.current && !event.composedPath().includes(rootRef.current)) setIsOpen(false)
+      if (rootElement && !event.composedPath().includes(rootElement)) setIsOpen(false)
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || isAddingAccount) return
+      if (event.key !== 'Escape' || isAddingAccount || isSwitchOpen) return
       setIsOpen(false)
-      if (rootRef.current?.contains(document.activeElement)) toggleRef.current?.focus()
+      if (rootElement?.contains(document.activeElement)) toggleRef.current?.focus()
     }
     window.addEventListener('mousedown', onDown)
     window.addEventListener('keydown', onKey)
@@ -117,7 +120,7 @@ export function UsagePanel() {
       window.removeEventListener('mousedown', onDown)
       window.removeEventListener('keydown', onKey)
     }
-  }, [isOpen, isAddingAccount])
+  }, [isOpen, isAddingAccount, isSwitchOpen, rootElement])
 
   function toggle() {
     // 열 때 "Updated 3m ago"·리셋까지 남은 시간을 지금 기준으로 다시 잰다
@@ -126,7 +129,7 @@ export function UsagePanel() {
   }
 
   return (
-    <div className="usage" ref={rootRef}>
+    <div className="usage" ref={setRootElement}>
       <button ref={toggleRef} className="usage-toggle" onClick={toggle} aria-expanded={isOpen} aria-controls="usage-popover">
         <span className="usage-prefix">Remaining</span>
         {result === null && <span>Loading…</span>}
@@ -177,7 +180,13 @@ export function UsagePanel() {
               })}
             </div>
           )}
-          <Accounts version={accountsVersion} onAdd={() => setIsAddingAccount(true)} onUsageChange={load} />
+          <Accounts
+            version={accountsVersion}
+            onAdd={() => setIsAddingAccount(true)}
+            onUsageChange={load}
+            modalRoot={rootElement}
+            onSwitchOpenChange={setIsSwitchOpen}
+          />
         </div>
       )}
       {/* 상세 창 밖(쌓임 맥락 밖)이지만 .usage 안이라 모달 클릭이 상세 창의 바깥 클릭이 되지 않는다 */}
