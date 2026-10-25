@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DESK_WALL_DECOR,
   MAX_WALL_DECOR_RUN,
+  PARTITION_W,
   WALL_BAY_TILES,
   WIDE_DESK_ZONE_TILES,
   cornerFixtures,
@@ -279,19 +280,8 @@ describe('맵 왼쪽 위 코너', () => {
   })
 })
 
-describe('데스크존 모서리', () => {
-  /** 섬이 실제로 그리는 경계 (도트 px, 그룹 영역 기준): 섬 사각형에서 받침·머리·의자가 안 닿는 테두리(왼쪽 24·위 30·오른쪽 36·아래 24)를 뺀 것 */
-  const drawnIslands = (office: Office, sessions: Session[]) => {
-    const layout = layoutOffice(office, sessions)
-    const [area] = layout.groupAreas
-    const islands = layout.islands.map((island) => {
-      const rect = px({ ...island, x: island.x - area.x, y: island.y - area.y })
-      return { x: rect.x + 24, y: rect.y + 30, w: rect.w - 60, h: rect.h - 54 }
-    })
-    return { area, islands }
-  }
-
-  it('그룹 영역 안, 섬(밀린 것 포함)과 겹치지 않는 둘레 고리에 화분 둘·휴지통', () => {
+describe('데스크존 이름표 줄', () => {
+  it('큰 화분 하나만 위 이름표 줄(1타일) 오른쪽 끝에 놓여 오른쪽 파티션 안이고, 어느 섬(밀린 것·오른쪽 끝에 닿은 것 포함)과도 겹치지 않는다', () => {
     const cases: [Office, Session[]][] = [
       // 큰 섬이 오른쪽 위 끝, 아래 섬이 왼쪽 아래 끝에 닿는다 (C 는 A 와 겹쳐 오른쪽으로 밀린다)
       [
@@ -302,18 +292,21 @@ describe('데스크존 모서리', () => {
         { groups: [group('g1', 0)], teams: [team('A', 'g1', 2), team('B', 'g1', 10), team('C', 'g1', 2, 9), team('D', 'g1', 14, 14)] },
         [...members('A', 2), ...members('B', 14), ...members('C', 9), ...members('D', 4)],
       ],
+      // 가장 좁은 그룹: 지휘자 없는 섬 하나 (5타일)
+      [{ groups: [group('g1', 0)], teams: [team('A', 'g1', 2)] }, members('A', 1)],
     ]
     for (const [office, sessions] of cases) {
-      const { area, islands } = drawnIslands(office, sessions)
+      const layout = layoutOffice(office, sessions)
+      const [area] = layout.groupAreas
       const fixtures = groupFixtures(area)
-      expect(fixtures.map((f) => f.prop)).toEqual(['plant-large', 'plant-small', 'trash-bin'])
-      for (const box of fixtures.map(boxOf)) {
-        expect(box.x).toBeGreaterThanOrEqual(0)
-        expect(box.y).toBeGreaterThanOrEqual(0)
-        expect(box.x + box.w).toBeLessThanOrEqual(area.w * 48)
-        expect(box.y + box.h).toBeLessThanOrEqual(area.h * 48)
-        for (const island of islands) expect(overlaps(box, island)).toBe(false)
-      }
+      expect(fixtures.map((f) => f.prop)).toEqual(['plant-large'])
+      const box = boxOf(fixtures[0])
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.y).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.w).toBeLessThanOrEqual(area.w * 48 - PARTITION_W)
+      expect(box.y + box.h).toBeLessThanOrEqual(48)
+      // 섬 사각형 전체 (명판·받침·화분 열·윗사람 머리가 다 이 안이다)
+      for (const island of layout.islands) expect(overlaps(box, px({ ...island, x: island.x - area.x, y: island.y - area.y }))).toBe(false)
     }
   })
 })

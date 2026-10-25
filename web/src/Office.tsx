@@ -20,9 +20,11 @@ import { dotStateOf, loungeLabel, seatPlaceKey, seatPlaceOf, turnEndedAtOf, type
 import { overflowNames, planLounge, type LoungeDirection, type LoungeMeta, type LoungePerson, type LoungePlan } from './lounge'
 import { CHARACTER_ATLAS, loadRecolorArt, paintCharacter, type CharacterDirection, type RecolorArt } from './characterArt'
 import {
-  GROUP_MARGIN,
+  GROUP_LABEL_H,
+  dropGroup,
   dropIsland,
   layoutOffice,
+  minGroupDragDelta,
   type BlockRow,
   type GroupArea,
   type Island,
@@ -666,8 +668,8 @@ function spaceLabelText(content: string, color: number): Text {
 }
 
 /**
- * 도트 그룹(데스크존): 밝은 회색 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽, 아래는 회색 걸레받이) + 이름표·메모 + 모서리 고정 꾸미기(화분·휴지통).
- * 크기는 저장된 w·h 가 아니라 그려지는 영역(안의 섬들을 다 담는다)
+ * 도트 그룹(데스크존): 밝은 회색 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽, 아래는 회색 걸레받이) + 위 이름표 줄의 이름표·메모·큰 화분(고정 꾸미기).
+ * 크기는 저장된 w·h 가 아니라 그려지는 영역(섬이 있으면 섬들 + 위 이름표 줄, 없으면 저장 위치의 최소 크기)
  */
 function drawDotGroup(area: GroupArea, onEdit: () => void, art: DotArt): GroupParts {
   const { group } = area
@@ -2040,11 +2042,11 @@ export function Office(props: Props) {
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               const teamIds = new Set(layout.islands.filter((i) => i.team.groupId === area.group.id).map((i) => i.team.id))
               beginSignDrag(event, parts, {
-                // 그려지는 영역이 맵 왼쪽·위 끝을 넘지 않게 (그래서 안의 팀 앵커도 0 이상)
-                minDelta: { x: -area.x, y: -area.y },
+                // 그려지는 상자가 맵 왼쪽·위 끝을 넘지 않고 저장 위치도 0 이상 (그래서 안의 팀 앵커도 0 이상)
+                minDelta: minGroupDragDelta(area),
                 containers: [parts.container, ...[...teamIds].flatMap((id) => islandViews.get(id) ?? []), ...deskViewsOf(teamIds)],
-                // 밀려 그려졌으면 그려진 자리에서 옮긴 곳을 저장한다
-                drop: (delta) => latest.current.onMoveGroup(area.group.id, { x: area.origin.x + delta.x, y: area.origin.y + delta.y }),
+                // 상자 위치가 아니라 밀린 뒤 저장 위치(origin)에서 옮긴 곳을 저장한다
+                drop: (delta) => latest.current.onMoveGroup(area.group.id, dropGroup(area, delta)),
               })
             })
             world.addChild(parts.container)
@@ -2068,8 +2070,8 @@ export function Office(props: Props) {
             bindDragLabel(parts)
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               beginSignDrag(event, parts, {
-                // 섬 둘레 그룹 벽 여백까지 맵 안에 남게
-                minDelta: { x: Math.min(0, GROUP_MARGIN - island.x), y: Math.min(0, GROUP_MARGIN - island.y) },
+                // 섬과 그 위 그룹 이름표 줄까지 맵 안에 남게
+                minDelta: { x: Math.min(0, -island.x), y: Math.min(0, GROUP_LABEL_H - island.y) },
                 containers: [parts.container, ...deskViewsOf(new Set([team.id]))],
                 drop: (delta) =>
                   latest.current.onMoveTeam(team.id, dropIsland(layout, team, { x: island.anchor.x + delta.x, y: island.anchor.y + delta.y })),

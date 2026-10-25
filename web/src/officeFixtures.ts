@@ -110,17 +110,12 @@ export function cornerFixtures(padTiles: number): Fixture[] {
 // ---------- 데스크존 ----------
 
 /**
- * 데스크존 모서리 (그룹 영역 왼쪽 위 기준). 그룹 영역 = 섬들 + 벽 여백 1타일의 경계라 둘레 1타일 고리에는 섬이 오지 않는다.
- * 왼쪽 위는 그룹 이름표, 오른쪽 위 큰 화분(그 왼쪽은 대기 메모), 왼쪽 아래 작은 화분, 오른쪽 아래 휴지통
+ * 데스크존 위 이름표 줄 (그룹 영역 왼쪽 위 기준). 그룹 영역 = 섬들 + 위 이름표 줄 1타일이라 이 줄에는 섬이 오지 않는다.
+ * 왼쪽은 그룹 이름표, 오른쪽 끝 큰 화분(그 왼쪽은 대기 메모). 화분 아래 끝을 줄 아래 끝에 맞춰 어느 섬과도 겹치지 않는다 (위는 파티션에 걸친다).
+ * 왼쪽·오른쪽·아래는 섬 테두리가 그룹 벽에 닿아 소품을 둘 자리가 없다
  */
 export function groupFixtures(area: Rect): Fixture[] {
-  const w = area.w * TILE
-  const h = area.h * TILE
-  return [
-    { sheet: 'env', prop: 'plant-large', x: w - 36, y: 66 },
-    { sheet: 'env', prop: 'plant-small', x: 30, y: h - 12 },
-    { sheet: 'props', prop: 'trash-bin', x: w - 30, y: h - 12 },
-  ]
+  return [{ sheet: 'env', prop: 'plant-large', x: area.w * TILE - 36, y: TILE }]
 }
 
 // ---------- 라운지 ----------

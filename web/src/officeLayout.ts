@@ -30,14 +30,16 @@ const LEAD_SEAT = { dy: 1, h: 2 }
 const PART_GAP = 2
 /** 섬 테두리: 단위들 둘레 1타일 (팀 이름표 자리). 그래서 앵커 = 섬 왼쪽 위 + 1 */
 const ISLAND_PADDING = 1
-/** 그룹 벽과 섬 사이 (그룹 이름표·화분 자리) */
-export const GROUP_MARGIN = 1
-/** 섬끼리, 그룹끼리 띄우는 간격 */
+/** 섬끼리 띄우는 간격: 없다 (섬 테두리 1타일씩이 섬 사이 통로다) */
+const ISLAND_GAP = 0
+/** 그룹 위쪽 이름표 줄 (그룹 이름표·대기 메모·큰 화분). 왼쪽·오른쪽·아래는 여백 없이 섬 테두리가 그룹 벽에 닿는다 */
+export const GROUP_LABEL_H = 1
+/** 그룹끼리, 그룹·섬과 Focus Zone, Focus Zone 과 라운지 사이 간격 */
 const GAP = 1
 /** 새 팀 자리로 잡는 크기: 지휘자 + 짝 하나 섬. 빈 섬(빈 짝 하나)만큼만 잡으면 지휘자가 생기거나 팀원이 늘면 옆 섬과 겹친다 */
 const NEW_ISLAND = { w: LEAD_W + PAIR_W + PLANT_W + 2 * ISLAND_PADDING, h: BLOCK_ROW_H + 2 * ISLAND_PADDING }
-/** 팀 없는 그룹 크기 = 새 팀 하나가 들어갈 크기 */
-const MIN_GROUP = { w: NEW_ISLAND.w + 2 * GROUP_MARGIN, h: NEW_ISLAND.h + 2 * GROUP_MARGIN }
+/** 팀 없는 그룹 크기 = 새 팀 하나 + 위 이름표 줄 */
+const MIN_GROUP = { w: NEW_ISLAND.w, h: GROUP_LABEL_H + NEW_ISLAND.h }
 const LOBBY_COLUMNS = 2
 /** Focus Zone 부스 간격. 부스 그림이 자리 폭보다 넓고 의자가 자리 아래로 나와 3×4 */
 const BOOTH_STEP_X = 3
@@ -104,10 +106,16 @@ export interface Island extends Rect {
   plants: Rect[]
 }
 
-/** 그려지는 그룹 영역: 그려지는 위치의 최소 크기 + 안의 섬들 */
+/**
+ * 그룹 영역 (x·y·w·h = 그려지는 상자). 섬이 있으면 그 섬들(밀린 뒤)의 경계 + 위 이름표 줄이라 저장된 그룹 위치와 관계없고,
+ * 섬이 없으면 origin 에 최소 크기
+ */
 export interface GroupArea extends Rect {
   group: Group
-  /** 그려지는 그룹 위치 = 밀린 만큼 옮긴 group.x,y */
+  /**
+   * 저장된 그룹 위치(group.x,y)를 그룹이 밀린 만큼 옮긴 것 (밀린 칸 수 = origin.x - group.x). 그려지는 상자 위치가 아니다 —
+   * 섬이 있는 그룹은 상자가 섬들을 따라가 이것과 다를 수 있다. 끌어 놓을 때 저장값의 기준이다 (dropGroup)
+   */
   origin: Point
 }
 
@@ -220,10 +228,12 @@ function placeTeam(team: Team, members: Session[], seats: Map<string, Seat>): Is
   return { team, zones, anchor: { x: team.x, y: team.y }, ...parts, ...inflate(boundingBox(occupied), ISLAND_PADDING) }
 }
 
-/** origin 위치의 최소 크기 영역에 그 그룹 섬들(+ 벽 여백)을 더한 경계 */
+/** 그룹 영역: 섬이 있으면 그 섬들의 경계 + 위 이름표 줄 (origin 은 넣지 않는다), 없으면 origin 에 최소 크기 */
 function groupAreaOf(group: Group, origin: Point, islands: Island[]): GroupArea {
-  const own = islands.filter((i) => i.team.groupId === group.id).map((i) => inflate(i, GROUP_MARGIN))
-  return { group, origin, ...boundingBox([{ ...origin, ...MIN_GROUP }, ...own]) }
+  const own = islands.filter((i) => i.team.groupId === group.id)
+  if (own.length === 0) return { group, origin, ...origin, ...MIN_GROUP }
+  const box = boundingBox(own)
+  return { group, origin, ...box, y: box.y - GROUP_LABEL_H, h: box.h + GROUP_LABEL_H }
 }
 
 function shiftIsland(island: Island, dx: number): Island {
@@ -271,7 +281,7 @@ export function layoutOffice(office: Office, sessions: Session[]): OfficeLayout 
       seats,
     ),
   )
-  // 인원이 늘어 커진 섬이 이웃과 겹치면 그릴 때만 오른쪽으로 민다: 같은 그룹 섬끼리(그룹이 지워진 팀끼리도) → 그 결과 넓어진 그룹끼리
+  // 인원이 늘어 커진 섬이 이웃과 겹치면 그릴 때만 오른쪽으로 민다: 같은 그룹 섬끼리(그룹이 지워진 팀끼리도. 붙어도 된다) → 그 결과 넓어진 그룹끼리
   const groupIds = new Set(office.groups.map((g) => g.id))
   for (const groupId of [...groupIds, null]) {
     const members = islands.flatMap((island, index) =>
@@ -279,7 +289,7 @@ export function layoutOffice(office: Office, sessions: Session[]): OfficeLayout 
     )
     const shifts = pushRight(
       members.map((index) => islands[index]),
-      GAP,
+      ISLAND_GAP,
     )
     members.forEach((index, i) => {
       islands[index] = shiftIsland(islands[index], shifts[i])
@@ -359,16 +369,22 @@ export function spotForNewGroup(layout: OfficeLayout): Point {
 }
 
 /**
- * 새 팀의 앵커. 그룹 안 왼쪽 위에서 가장 가까운 빈 자리이고, 그룹을 왼쪽·위로 늘리지 않는다.
- * 그룹이 그 섬만큼 늘어나도 다른 그룹과 겹치지 않게 다른 그룹은 벽 여백만큼 더 띄운다. 그룹이 없으면 null
+ * 새 팀의 앵커. 그룹 안 왼쪽 위(이름표 줄 아래)에서 가장 가까운 빈 자리이고, 그룹을 왼쪽·위로 늘리지 않는다. 다른 섬과는 붙어도 된다.
+ * 그룹이 그 섬과 그 위 이름표 줄만큼 늘어나도 다른 그룹과 GAP 만큼 떨어지게 다른 그룹을 GAP 만큼 넓혀 보고, 그 그룹 아래쪽은 새 섬 위에 생길 이름표 줄만큼 더 넓힌다.
+ * 그룹이 없으면 null
  */
 export function spotForNewTeam(layout: OfficeLayout, groupId: string): Point | null {
   const area = layout.groupAreas.find((a) => a.group.id === groupId)
   if (!area) return null
-  const origin = { x: area.x + GROUP_MARGIN, y: area.y + GROUP_MARGIN }
+  const origin = { x: area.x, y: area.y + GROUP_LABEL_H }
   const obstacles = [
-    ...layout.islands.map((i) => inflate(i, GAP)),
-    ...layout.groupAreas.filter((a) => a !== area).map((a) => inflate(a, GROUP_MARGIN + GAP)),
+    ...layout.islands.map((i) => inflate(i, ISLAND_GAP)),
+    ...layout.groupAreas
+      .filter((a) => a !== area)
+      .map((a) => {
+        const rect = inflate(a, GAP)
+        return { ...rect, h: rect.h + GROUP_LABEL_H }
+      }),
   ]
   const spot = findFreeSpot(NEW_ISLAND, origin, obstacles, origin)
   // 저장하는 앵커는 그룹이 밀리기 전 좌표 (그릴 때 그룹과 같이 다시 밀린다)
@@ -377,7 +393,7 @@ export function spotForNewTeam(layout: OfficeLayout, groupId: string): Point | n
 
 /**
  * 끌어 놓은 섬의 새 자리. anchor 는 화면에 그려진(밀린) 좌표다. 그룹은 놓은 앵커가 든 그룹(그 섬을 뺀 그룹 영역 기준, 없으면 원래 그룹)이고,
- * 다른 섬(그려진 자리)과 겹치거나 GAP 보다 가까우면 놓은 자리에서 가장 가까운 빈 자리로 붙인다
+ * 다른 섬(그려진 자리)과 겹치면 놓은 자리에서 가장 가까운 빈 자리로 붙인다 (섬끼리는 붙어도 된다). 섬 위에 그룹 이름표 줄이 남게 섬 위 끝은 GROUP_LABEL_H 부터
  */
 export function dropIsland(layout: OfficeLayout, team: Team, anchor: Point): { groupId: string; x: number; y: number } {
   const island = layout.islands.find((i) => i.team.id === team.id)
@@ -394,8 +410,25 @@ export function dropIsland(layout: OfficeLayout, team: Team, anchor: Point): { g
   const spot = findFreeSpot(
     island,
     { x: anchor.x + offset.x, y: anchor.y + offset.y },
-    others.map((i) => inflate(i, GAP)),
-    { x: GROUP_MARGIN, y: GROUP_MARGIN },
+    others.map((i) => inflate(i, ISLAND_GAP)),
+    { x: 0, y: GROUP_LABEL_H },
   )
   return { groupId, x: Math.max(0, spot.x - offset.x - groupShift), y: spot.y - offset.y }
+}
+
+/**
+ * 그룹 이름표 끌기의 왼쪽·위 한계 (타일, 0 이하): 그려지는 상자가 맵 왼쪽·위 끝을 넘지 않고, 놓을 때 저장할 위치(dropGroup)도 0 이상.
+ * 서버는 음수 위치를 받으면 그 축을 아예 옮기지 않는다. 그래서 저장 위치가 상자보다 왼쪽·위인 그룹(섬이 그룹 위치보다 오른쪽·아래에 있는 예전 배치 —
+ * 팀 앵커가 그룹 위치 + 2 라 상자가 1타일 오른쪽)은 상자가 맵 끝에 그 차이만큼 못 닿고 멈춘다
+ */
+export function minGroupDragDelta(area: GroupArea): Point {
+  return { x: -Math.min(area.x, area.origin.x), y: -Math.min(area.y, area.origin.y) }
+}
+
+/**
+ * 그룹 이름표를 delta 만큼 끌어 놓을 때 저장할 그룹 위치 = origin(밀린 뒤 저장 위치) + delta. 서버가 안의 팀 앵커도 같은 만큼 옮겨 다시 그려도 상자가
+ * 놓은 자리에 온다. 그려지는 상자 위치(x·y)를 기준으로 하면 상자와 저장 위치가 다른 그룹은 그 차이만큼 팀들이 더 옮겨진다
+ */
+export function dropGroup(area: GroupArea, delta: Point): Point {
+  return { x: area.origin.x + delta.x, y: area.origin.y + delta.y }
 }
