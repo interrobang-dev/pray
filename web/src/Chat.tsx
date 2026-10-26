@@ -344,7 +344,9 @@ function workTitle(work: Work): string {
 function WorkParts({ work, highlightKey }: { work: Work; highlightKey: string | null }) {
   return (
     <>
-      {work.parts.map((part) => (
+      {work.parts
+        .filter((part) => part.text || part.toolUses.length > 0)
+        .map((part) => (
         <div
           key={part.message.id}
           className={`msg assistant${part.text && highlightKey === part.message.id ? ' jump-highlight' : ''}`}
@@ -367,21 +369,25 @@ function WorkParts({ work, highlightKey }: { work: Work; highlightKey: string | 
  */
 function WorkLine({ work, isOpen, onToggle, highlightKey }: { work: Work; isOpen: boolean; onToggle: () => void; highlightKey: string | null }) {
   const title = workTitle(work)
+  // 진행 중인데 끝난 도구가 아직 없으면(첫 도구가 도는 중) 줄 없이 설명 글 말풍선만 보인다
+  const hasLine = !work.isInProgress || work.toolCount > 0
   return (
     <>
-      <div className="work">
-        <button type="button" className="work-summary" aria-expanded={isOpen} onClick={onToggle} title={title}>
-          {title}
-        </button>
-        {isOpen && (
-          <div className="work-items">
-            <WorkParts work={work} highlightKey={highlightKey} />
-          </div>
-        )}
-      </div>
+      {hasLine && (
+        <div className="work">
+          <button type="button" className="work-summary" aria-expanded={isOpen} onClick={onToggle} title={title}>
+            {title}
+          </button>
+          {isOpen && (
+            <div className="work-items">
+              <WorkParts work={work} highlightKey={highlightKey} />
+            </div>
+          )}
+        </div>
+      )}
       {/* 대화 말풍선과 같은 자리·간격이 되게 .work 밖에 둔다. 차례가 끝나면 마지막 글은 답변 말풍선이 되고 나머지는 줄 안으로 들어간다 */}
       {work.isInProgress &&
-        !isOpen &&
+        !(isOpen && hasLine) &&
         work.parts.map(
           (part) =>
             part.text && (

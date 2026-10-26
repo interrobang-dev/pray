@@ -46,14 +46,41 @@ describe('buildChatRows', () => {
     expect(work.parts.map((part) => part.text)).toEqual(['찾아본다', null, '이제 고친다'])
   })
 
-  it('진행 중 개수에는 실행 중인(결과 없는) 도구도 센다', () => {
-    const messages = [message('user', '고쳐 줘'), message('assistant', '', [tool('Bash'), tool('Bash', null), tool('Read', null)])]
+  it('진행 중 개수에서 실행 중인(결과 없는) 도구는 빠지고, 끝나 결과가 들어오면 든다', () => {
+    const running = tool('Read', null)
+    const messages = [message('user', '고쳐 줘'), message('assistant', '', [tool('Bash'), tool('Bash'), tool('Bash', null), running])]
     const [work] = works(build(messages, true))
-    expect(work.toolCount).toBe(3)
-    expect(work.toolCounts).toEqual([
+    expect(work.toolCount).toBe(2)
+    expect(work.toolCounts).toEqual([{ name: 'Bash', count: 2 }])
+    const [finished] = works(build(messages.map((item) => ({ ...item, toolUses: item.toolUses.map((use) => (use === running ? { ...use, result: '결과' } : use)) })), true))
+    expect(finished.toolCount).toBe(3)
+    expect(finished.toolCounts).toEqual([
       { name: 'Bash', count: 2 },
       { name: 'Read', count: 1 },
     ])
+  })
+
+  it('진행 중 묶음에 끝난 도구가 없으면 toolCount 0 (줄 없음), 묶음 키·설명 글은 그대로', () => {
+    const first = message('assistant', '찾아본다', [tool('Read', null)])
+    const [work] = works(build([message('user', '고쳐 줘'), first], true))
+    expect(work.toolCount).toBe(0)
+    expect(work.key).toBe(first.id)
+    expect(work.parts.map((part) => part.text)).toEqual(['찾아본다'])
+  })
+
+  it('진행 중 펼친 parts 에서도 도는 도구는 빠진다', () => {
+    const messages = [message('user', '고쳐 줘'), message('assistant', '', [tool('Read')]), message('assistant', '쓴다', [tool('Write', null)])]
+    const [work] = works(build(messages, true))
+    expect(work.parts.map((part) => part.toolUses.map((use) => use.name))).toEqual([['Read'], []])
+    expect(work.parts[1].text).toBe('쓴다')
+  })
+
+  it('끝난 묶음은 결과 없는 도구도 센다', () => {
+    const messages = [message('user', '고쳐 줘'), message('assistant', '', [tool('Bash'), tool('Read', null)]), message('assistant', '끝')]
+    const [work] = works(build(messages, false))
+    expect(work.isInProgress).toBe(false)
+    expect(work.toolCount).toBe(2)
+    expect(work.parts[0].toolUses).toHaveLength(2)
   })
 
   it('도구만 있고 글이 없는 진행 중 묶음', () => {

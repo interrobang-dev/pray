@@ -22,7 +22,8 @@ export interface Work {
   durationMs: number
   /**
    * 아직 안 끝난 묶음 = 차례가 진행 중이고 대화 맨 끝(대기 메시지 제외)의 묶음. 접혀 있어도 설명 글은 말풍선으로 보이고(도구 줄만 접힌다)
-   * 줄에 시간이 없다. 아직 답변인지 모르는 가장 최근 글도 따로 빼지 않고 parts 의 제자리에 든다
+   * 줄에 시간이 없다. 아직 답변인지 모르는 가장 최근 글도 따로 빼지 않고 parts 의 제자리에 든다.
+   * 지금 도는 도구(결과 없음)는 toolCount·toolCounts·parts 의 도구에서 빠진다 (끝난 도구가 없으면 toolCount 0 이고 줄을 그리지 않는다)
    */
   isInProgress: boolean
 }
@@ -43,7 +44,10 @@ interface RunItem {
   toolUses: ToolUse[]
 }
 
-function workOf(parts: WorkPart[], run: RunItem[], isInProgress: boolean): Work {
+function workOf(allParts: WorkPart[], run: RunItem[], isInProgress: boolean): Work {
+  // 진행 중 묶음은 지금 도는 도구(결과가 아직 없는 호출)를 개수·펼친 안쪽에서 뺀다 — 작업 중 표시기에 보이고, 끝나 결과가 들어오면 그때 든다.
+  // 도구만 있던 part 가 비어도 parts 는 줄이지 않는다 (시간 계산·Chat 의 parts[0] 때문. 그리는 쪽이 빈 part 를 건너뛴다)
+  const parts = isInProgress ? allParts.map((part) => ({ ...part, toolUses: part.toolUses.filter((toolUse) => toolUse.result !== null) })) : allParts
   const toolUses = parts.flatMap((part) => part.toolUses)
   const counts = new Map<string, number>()
   for (const toolUse of toolUses) counts.set(toolUse.name, (counts.get(toolUse.name) ?? 0) + 1)
