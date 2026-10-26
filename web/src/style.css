@@ -233,7 +233,7 @@ header button.icon svg {
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
-/* New Group·New Session·Flow: 위아래로 쌓여 툴바 폭 전체를 쓰고, 아이콘(App.tsx NewGroupIcon·NewSessionIcon·FlowIcon)과 글자는 버튼 안 왼쪽에 한 줄로 */
+/* New Group·New Session·Flow: 위아래로 쌓여 툴바 폭 전체를 쓰고, 아이콘(App.tsx NewGroupIcon·NewSessionIcon·플로우 로고)과 글자는 버튼 안 왼쪽에 한 줄로 */
 .toolbar button {
   display: inline-flex;
   align-items: center;
@@ -2960,17 +2960,36 @@ li.group.drop-after::after {
   font-weight: 600;
 }
 
-/* 툴바 세 번째 Flow 버튼 (App.tsx FlowRow): 모양은 .toolbar button 그대로, 아이콘 · Flow · 오른쪽 끝에 "알림 N · 채팅 N".
-   누르면 오른쪽 패널이 플로우 알림이 된다. 요약은 안 읽은 것이 없으면 회색, 하나라도 있으면 빨강 */
+/* 툴바 세 번째 Flow 버튼 (App.tsx FlowRow): 모양은 .toolbar button 그대로, 플로우 로고 · Flow · 오른쪽 끝에 [종] N · [말풍선] N.
+   누르면 오른쪽 패널이 플로우 알림이 된다. 요약(아이콘은 currentColor)은 안 읽은 것이 없으면 회색, 하나라도 있으면 빨강.
+   로고(web/public/flow-logo.png)는 꽉 찬 각진 사각형이라 둥근 사각형으로 자른다 */
 .flow-row.selected {
   background: var(--green-soft);
   border-color: var(--green);
 }
+.flow-logo {
+  display: block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
 .flow-row-summary {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
+}
+.flow-row-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.flow-row-count svg {
+  display: block;
 }
 .flow-row.unread .flow-row-summary {
   color: var(--red);

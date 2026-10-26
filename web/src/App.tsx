@@ -1376,20 +1376,34 @@ function OffDutyBar({
 }
 
 /**
- * 툴바 세 번째(New Session 아래) Flow 버튼: 아이콘 · "Flow" · "알림 N · 채팅 N". 누르면 오른쪽 패널이 플로우 알림이 된다.
- * 둘 다 0 이면 회색, 하나라도 있으면 강조. 아직 못 셌으면 "…", 키 없음이면 "키 없음", 확인 실패면 짧게 (전문은 title. 앞 수가 있으면 수 + ⚠)
+ * 툴바 세 번째(New Session 아래) Flow 버튼: 플로우 로고 · "Flow" · [종] N · [말풍선] N (안 읽은 알림·채팅). 누르면 오른쪽 패널이 플로우 알림이 된다.
+ * 둘 다 0 이면 회색, 하나라도 있으면 강조. 아직 못 셌으면 "…", 키 없음이면 "No key", 확인 실패면 짧게 (전문은 title. 앞 수가 있으면 수 + ⚠)
  */
 function FlowRow({ status, isSelected, onOpen }: { status: FlowStatus | null; isSelected: boolean; onOpen: () => void }) {
   const hasCounts = status !== null && status.unreadAlarmCount !== null && status.unreadChatCount !== null
   const hasUnread = hasCounts && (status.unreadAlarmCount! > 0 || status.unreadChatCount! > 0)
-  let summary: string
+  let summary: ReactNode
   let title = 'Show Flow alerts'
   if (status === null) summary = '…'
   else if (!status.isConfigured) {
     summary = 'No key'
     title = 'No FLOW_API_KEY in ~/.claude/flow-key.env'
-  } else if (hasCounts) summary = `Alerts ${status.unreadAlarmCount} · Chats ${status.unreadChatCount}`
-  else summary = status.error ? 'Check failed' : '…'
+  } else if (hasCounts) {
+    summary = (
+      <>
+        <span className="flow-row-count">
+          <AlertsIcon />
+          {status.unreadAlarmCount}
+        </span>
+        ·
+        <span className="flow-row-count">
+          <ChatsIcon />
+          {status.unreadChatCount}
+        </span>
+      </>
+    )
+    title = `Show Flow alerts · Alerts ${status.unreadAlarmCount} · Chats ${status.unreadChatCount}`
+  } else summary = status.error ? 'Check failed' : '…'
   if (status?.isConfigured && status.error) title = `Flow check failed: ${status.error}`
   return (
     <button
@@ -1397,7 +1411,7 @@ function FlowRow({ status, isSelected, onOpen }: { status: FlowStatus | null; is
       onClick={onOpen}
       title={title}
     >
-      <FlowIcon />
+      <img className="flow-logo" src="/flow-logo.png" alt="" width={16} height={16} />
       <span>Flow</span>
       <span className={status?.isConfigured && status.error && !hasCounts ? 'flow-row-summary error' : 'flow-row-summary'}>{summary}</span>
       {status?.isConfigured && status.error && hasCounts && <span className="flow-row-warning">⚠</span>}
@@ -1405,16 +1419,31 @@ function FlowRow({ status, isSelected, onOpen }: { status: FlowStatus | null; is
   )
 }
 
-/** 플로우 줄 아이콘: 종 (알림) */
-function FlowIcon() {
+/** Flow 버튼 요약의 안 읽은 알림 아이콘: 종 */
+function AlertsIcon() {
   return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+    <svg viewBox="0 0 16 16" width="12" height="12" role="img" aria-label="Alerts">
       <path
         d="M4 11.5V7a4 4 0 0 1 8 0v4.5l1 1.5H3l1-1.5zM6.5 13.5a1.5 1.5 0 0 0 3 0"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.25"
         strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Flow 버튼 요약의 안 읽은 채팅 아이콘: 말풍선 (ChatTabIcon 과 같은 그림) */
+function ChatsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" role="img" aria-label="Chats">
+      <path
+        d="M4 2.5h8a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5v-2.5H4a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 4 2.5z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
         strokeLinejoin="round"
       />
     </svg>
