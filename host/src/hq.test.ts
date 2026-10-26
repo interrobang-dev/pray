@@ -37,6 +37,7 @@ import {
   setCharacter,
   setGender,
   setSessionName,
+  setWebSessionArgs,
   updateGroup,
 } from './hq.js'
 
@@ -224,9 +225,17 @@ describe('off duty records', () => {
     expect(readdirSync(hqDir)).toEqual(['hq.json'])
   })
 
+  it('replaces the spawn args of a web session record and keeps the rest', () => {
+    addWebSession(record)
+    addWebSession({ ...record, sessionId: 'b' })
+    expect(setWebSessionArgs('a', ['--name', '팀장', '--model', 'opus'])).toBe(true)
+    expect(listWebSessions()).toEqual([{ ...record, extraArgs: ['--name', '팀장', '--model', 'opus'] }, { ...record, sessionId: 'b' }])
+  })
+
   it('does nothing for sessions without a record', () => {
     addGroup('개발')
     const before = readFileSync(hqPath, 'utf8')
+    expect(setWebSessionArgs('nope', ['--model', 'opus'])).toBe(false)
     expect(moveToOffDuty('nope', end)).toBe(false)
     expect(returnFromOffDuty('nope')).toBeNull()
     expect(removeOffDuty('nope')).toBe(false)

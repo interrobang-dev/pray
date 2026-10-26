@@ -167,6 +167,16 @@ export function addWebSession(record: WebSessionRecord): void {
   writeHq(hq)
 }
 
+/** webSessions 기록의 extraArgs 를 바꾼다 (모델·effort 바꾸기). 기록이 없으면 아무것도 쓰지 않고 false */
+export function setWebSessionArgs(sessionId: string, extraArgs: string[]): boolean {
+  const hq = readHq()
+  const record = hq.webSessions.find((s) => s.sessionId === sessionId)
+  if (!record) return false
+  record.extraArgs = extraArgs
+  writeHq(hq)
+  return true
+}
+
 export function removeWebSession(sessionId: string): void {
   const hq = readHq()
   hq.webSessions = hq.webSessions.filter((s) => s.sessionId !== sessionId)

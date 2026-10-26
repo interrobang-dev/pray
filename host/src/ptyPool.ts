@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import * as pty from 'node-pty'
 import { RingBuffer } from './ringBuffer.js'
 import type { HostSession } from './protocol.js'
-import { addWebSession, discardWebSession, moveToOffDuty, pruneOffDuty, type OffDutyReason } from './hq.js'
+import { addWebSession, discardWebSession, moveToOffDuty, pruneOffDuty, setWebSessionArgs, type OffDutyReason } from './hq.js'
 import { getArg } from './runtime.js'
 
 const RING_LIMIT = 200_000
@@ -70,6 +70,8 @@ interface Entry {
   cwd: string
   /** kill 요청으로 끝나는 중이면 그 퇴근 이유 */
   killReason: KillReason | null
+  /** 다시 띄우는 중(restart)이면 새 인자. onExit 가 퇴근으로 옮기지 않고 이 인자로 --resume 한다 (kill 요청이 오면 kill 이 이긴다) */
+  restartArgs: string[] | null
 }
 
 export interface SpawnOptions {
@@ -79,6 +81,9 @@ export interface SpawnOptions {
   resume?: boolean
   /** claude 에 추가로 넘길 인자 (--name, --permission-mode, --mcp-config 등) */
   extraArgs?: string[]
+  /** pty 크기. 다시 띄울 때(restart) 앞 pty 크기를 잇는다 — 화면 터미널 탭은 자기 크기가 바뀌기 전엔 resize 를 다시 보내지 않는다 */
+  cols?: number
+  rows?: number
 }
 
 /** 이벤트: output(sessionId, data), exit(sessionId, exitCode), change() */
@@ -99,7 +104,7 @@ export class PtyPool extends EventEmitter {
     return this.entries.has(sessionId)
   }
 
-  spawn({ sessionId, cwd, prompt, resume, extraArgs = [] }: SpawnOptions): void {
+  spawn({ sessionId, cwd, prompt, resume, extraArgs = [], cols = 120, rows = 30 }: SpawnOptions): void {
     if (this.entries.has(sessionId)) throw new Error(`Already running: ${sessionId}`)
     const args = resume ? ['--resume', sessionId] : ['--session-id', sessionId]
     // --mcp-config 는 값을 여러 개 받아서 첫 지시를 뒤에 두면 설정 파일 이름으로 읽고 claude 가 종료된다
@@ -108,13 +113,13 @@ export class PtyPool extends EventEmitter {
 
     const child = pty.spawn(CLAUDE_COMMAND, args, {
       name: 'xterm-256color',
-      cols: 120,
-      rows: 30,
+      cols,
+      rows,
       cwd,
       env: childEnv(sessionId),
     })
     const ring = new RingBuffer(RING_LIMIT)
-    const entry: Entry = { pty: child, ring, cwd, killReason: null }
+    const entry: Entry = { pty: child, ring, cwd, killReason: null, restartArgs: null }
     this.entries.set(sessionId, entry)
     if (!resume) {
       const record = { sessionId, cwd, createdAt: new Date().toISOString(), extraArgs: extraArgs.length ? extraArgs : undefined }
@@ -127,9 +132,14 @@ export class PtyPool extends EventEmitter {
     })
     child.onExit(({ exitCode }) => {
       this.entries.delete(sessionId)
-      // 호스트 자체가 죽을 때는 여기가 돌지 않아 기록이 webSessions 에 남는다 (휴식 → 다음 호스트가 resume)
-      const hasTranscript = this.hasTranscript(sessionId)
-      this.recordEnd(sessionId, offDutyReason({ killReason: entry.killReason, exitCode, hasTranscript }), exitCode)
+      const restartArgs = entry.killReason ? null : entry.restartArgs
+      if (restartArgs) {
+        this.resumeAfterRestart(sessionId, entry, restartArgs)
+      } else {
+        // 호스트 자체가 죽을 때는 여기가 돌지 않아 기록이 webSessions 에 남는다 (휴식 → 다음 호스트가 resume)
+        const hasTranscript = this.hasTranscript(sessionId)
+        this.recordEnd(sessionId, offDutyReason({ killReason: entry.killReason, exitCode, hasTranscript }), exitCode)
+      }
       this.emit('exit', sessionId, exitCode)
       this.emit('change')
     })
@@ -163,6 +173,34 @@ export class PtyPool extends EventEmitter {
     }
     entry.killReason = reason
     entry.pty.kill()
+  }
+
+  /**
+   * 근무 중인 웹 세션을 extraArgs 를 바꿔 다시 띄운다 (모델·effort 바꾸기). webSessions 기록을 먼저 바꾸고 claude 를 끄면
+   * onExit 가 퇴근으로 옮기지 않고 그 인자로 --resume 한다. 프로세스가 없거나(휴식·퇴근) 끝나는 중이거나 기록이 없으면 던지고
+   * 아무것도 바꾸지 않는다 (hq.json 을 못 쓰면 그 오류도 던진다 — 기록이 옛 인자인 채 끄면 다음 호스트가 옛 인자로 resume 한다).
+   * 다시 띄우는 중에 또 오면 기록·인자만 새것으로 바꾼다 (이미 끄는 중이다)
+   */
+  restart(sessionId: string, extraArgs: string[]): void {
+    const entry = this.entries.get(sessionId)
+    if (!entry) throw new Error(`Not running: ${sessionId}`)
+    if (entry.killReason) throw new Error(`Ending: ${sessionId}`)
+    if (!setWebSessionArgs(sessionId, extraArgs)) throw new Error(`No web session record: ${sessionId}`)
+    const isRestarting = entry.restartArgs !== null
+    entry.restartArgs = extraArgs
+    if (!isRestarting) entry.pty.kill()
+  }
+
+  /** restart 로 끈 claude 를 같은 폴더·pty 크기·새 인자로 --resume 한다. 띄우지 못하면 claude 가 오류로 끝난 것과 같게 퇴근(error)으로 옮긴다 */
+  private resumeAfterRestart(sessionId: string, entry: Entry, extraArgs: string[]): void {
+    try {
+      this.spawn({ sessionId, cwd: entry.cwd, resume: true, extraArgs, cols: entry.pty.cols, rows: entry.pty.rows })
+      console.log(`restart → resume ${sessionId}`)
+    } catch (error) {
+      console.error(`restart 뒤 resume 실패 ${sessionId}`, error)
+      const hasTranscript = this.hasTranscript(sessionId)
+      this.recordEnd(sessionId, offDutyReason({ killReason: null, exitCode: null, hasTranscript }), null)
+    }
   }
 
   /** 끝난 웹 세션을 퇴근 기록으로 옮기거나(reason) 기록 없이 지우고(null), 보관 기간이 지난 퇴근 기록을 정리한다 */

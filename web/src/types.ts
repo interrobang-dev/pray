@@ -51,6 +51,10 @@ export interface Session {
   character?: SessionCharacter | null
   /** 서버가 이름을 지을 때 정한 성별. 직접 지은 이름이면 null (성별 없이 인물을 고른다). 옛 서버 응답에는 빠져 있다 */
   gender?: 'male' | 'female' | null
+  /** 웹 세션이 다음에 뜰 때 쓰는 모델·effort 설정. 칸이 null 이면 설정 없음, 외부 세션은 null. 옛 서버 응답에는 빠져 있다 (현재 모델 기준으로 본다) */
+  modelSetting?: { model: string | null; effort: string | null } | null
+  /** 다음 차례에 다시 읽을 문맥 크기 (토큰). 모르면 null, 옛 서버 응답에는 빠져 있다 */
+  contextTokens?: number | null
 }
 
 /** 도트 인물 프리셋 id 와 머리·윗옷 색 ('#rrggbb', null = 그 인물 기본색) */

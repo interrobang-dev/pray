@@ -67,7 +67,7 @@ import {
   resolveSessionTempFile,
   saveAttachment,
 } from './scratchpad.js'
-import { parseShells, readTail } from './shells.js'
+import { parseShells, readTail, runningShells } from './shells.js'
 import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
 import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts, withoutQueued } from './messages.js'
@@ -79,7 +79,7 @@ import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './fl
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
 import { givenNameOf, parseGender, parseMemberRole, pickMemberName } from './memberName.js'
-import { memberExtraArgs, parseMemberModelChoice } from './memberModel.js'
+import { memberExtraArgs, modelSettingOf, parseMemberModelChoice, withModelSetting } from './memberModel.js'
 import {
   createWorktree,
   markFolderTrusted,
@@ -754,6 +754,76 @@ function interruptConflict(sessionId: string): string | null {
   if (heldQuestions.has(sessionId) || status === 'needs-approval') return "Can't stop while it needs approval or is asking a question (Esc would reject the tool or question)"
   if (status !== 'working') return 'Can only stop while claude is working'
   if (unqueues.has(sessionId)) return 'Cancelling a queued message'
+  return null
+}
+
+/**
+ * 근무 중인 웹 세션의 모델·effort 바꾸기 `{ model, effort }` (model = haiku·sonnet·opus·fable, effort = low…max 또는 null = 사용자 전역 설정).
+ * 세션 안에서 /model·/effort 를 보내면 사용자 전역 설정(~/.claude/settings.json)의 기본값까지 바뀌어서, 호스트가 hq 기록의 extraArgs 를
+ * 바꿔 claude 를 --resume 으로 다시 띄운다 (restart-session). 지금 기록 값과 같으면 아무것도 안 하고 { isRestarted: false },
+ * 다르면 다시 뜨기를 기다리지 않고 { isRestarted: true }. 끄면 사라지는 것(진행 중인 차례·대기 메시지·백그라운드 shell)이 있으면 409
+ */
+app.put('/api/sessions/:id/model', async (req, res) => {
+  const sessionId = req.params.id
+  if (!isSessionId(sessionId)) {
+    res.status(400).json({ message: 'Invalid session ID' })
+    return
+  }
+  // model 은 null 이 안 된다: --model 없이 resume 하면 마지막 응답의 모델이 그대로라 "기본값" 이 뜻이 없다
+  const choice = parseMemberModelChoice((req.body ?? {}) as { model?: unknown; effort?: unknown })
+  if (!choice?.model) {
+    res.status(400).json({ message: 'model (haiku, sonnet, opus or fable) and effort (low, medium, high, xhigh, max or null) required' })
+    return
+  }
+  if (!host.isReachable) {
+    res.status(503).json({ message: 'Not connected to session host' })
+    return
+  }
+  if (!host.sessions.some((s) => s.sessionId === sessionId)) {
+    res.status(404).json({ message: 'Not an on-duty web session' })
+    return
+  }
+  // hq.json 을 못 읽으면 Express 5 가 500 으로 끝낸다
+  const record = listWebSessions().find((r) => r.sessionId === sessionId)
+  if (!record) {
+    res.status(404).json({ message: 'No web session record' })
+    return
+  }
+  const extraArgs = record.extraArgs ?? []
+  const current = modelSettingOf(extraArgs)
+  if (current.model === choice.model && current.effort === choice.effort) {
+    res.json({ isRestarted: false })
+    return
+  }
+  const jsonl = await findTranscript(sessionId)
+  // 위 await 사이에 차례가 시작됐거나 질문·대기 취소·중지가 시작됐을 수 있어 그 뒤에 본다
+  const conflict = modelChangeConflict(sessionId, jsonl)
+  if (conflict) {
+    res.status(409).json({ message: conflict })
+    return
+  }
+  if (!host.send({ type: 'restart-session', sessionId, extraArgs: withModelSetting(extraArgs, choice) })) {
+    res.status(503).json({ message: 'Not connected to session host' })
+    return
+  }
+  res.json({ isRestarted: true })
+})
+
+/**
+ * 모델·effort 를 바꾸려고 claude 를 끌 수 없는 이유 (409 문구, 화면이 그대로 보인다). 없으면 null.
+ * 끄면 진행 중인 차례·붙잡은 질문·대기 메시지(프로세스 메모리에만 있다)·백그라운드 shell 이 사라진다
+ */
+function modelChangeConflict(sessionId: string, jsonl: string | null): string | null {
+  const status = hookStates.get(sessionId)?.status
+  if (heldQuestions.has(sessionId)) return "Can't change the model while claude is asking a question"
+  if (status === 'working') return "Can't change the model while claude is working"
+  if (status === 'needs-approval') return "Can't change the model while claude needs approval"
+  if (unqueues.has(sessionId)) return "Can't change the model while cancelling a queued message"
+  if (interrupts.has(sessionId)) return "Can't change the model while stopping"
+  // 대화가 한 번도 없으면 jsonl 이 없어 resume 할 수 없다 (끄면 호스트가 기록을 지운다)
+  if (!jsonl) return "Can't change the model before the first message"
+  if (queuedPrompts(jsonl).length) return "Can't change the model while messages are queued"
+  if (runningShells(jsonl).length) return "Can't change the model while background shells are running"
   return null
 }
 

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -16,6 +17,8 @@ import { FlowPanel } from './FlowPanel'
 import { GroupTodosModal } from './GroupTodosModal'
 import { remainingCount, todosOf } from './groupTodos'
 import { Modal, Segmented } from './Modal'
+import { ModelSettingModal, useRestartingSessions } from './ModelSettingModal'
+import { nextLabel } from './modelSetting'
 import { CharacterPicker, type CharacterChoice } from './CharacterPicker'
 import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, type RecolorArt } from './characterArt'
 import { dotLookOf } from './dotCharacter'
@@ -204,6 +207,10 @@ export function App() {
   /** 이름 모달에서 고른 도트 인물 (null = 자동). 지시자일 때만 모달에 보인다 */
   const [renameCharacter, setRenameCharacter] = useState<CharacterChoice>({ id: null, hair: null, top: null })
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
+  /** 모델·effort 변경 창을 연 세션 ID. 다른 세션을 고르면 창은 그리지 않는다 */
+  const [modelModalSessionId, setModelModalSessionId] = useState<string | null>(null)
+  /** Chat 이 알려 준 "대화 맨 끝에 대기 메시지가 있는" 세션 ID (없으면 null) */
+  const [queuedSessionId, setQueuedSessionId] = useState<string | null>(null)
   /** 고른 세션의 대화에서 찾아 갈 곳. Chat 이 그 세션 대화를 불러온 뒤 처리하고 비운다 */
   const [jump, setJump] = useState<(Jump & { sessionId: string }) | null>(null)
   /** 점프로 연 세션의 "← 팀장 대화로". 다른 세션을 직접 고르면 사라진다 */
@@ -315,6 +322,11 @@ export function App() {
     })
   }, [snapshot])
 
+  const handleQueuedChange = useCallback(
+    (sessionId: string, hasQueuedMessage: boolean) => setQueuedSessionId((previous) => (hasQueuedMessage ? sessionId : previous === sessionId ? null : previous)),
+    [],
+  )
+  const { restartingIds, beginRestart } = useRestartingSessions()
   const selected = snapshot.sessions.find((s) => s.id === selectedId) ?? null
   const isSelectedPresent = selected !== null && attendanceOf(selected) === 'present'
   /** 근무 중인 웹 세션. 터미널·입력·승인·종료는 이때만 (휴식·퇴근 세션 pty 에 키·resize 를 보내지 않게) */
@@ -1205,10 +1217,26 @@ export function App() {
               <button className="rename" title="Rename" onClick={() => openRename(selected)}>
                 ✎
               </button>
-              {modelLabel(selected) && (
-                <span className="model-chip" title={selected.model ?? undefined}>
-                  {modelLabel(selected)}
+              {restartingIds.has(selected.id) ? (
+                <span className="model-chip" title="Restarting with the new model / effort">
+                  Restarting…
                 </span>
+              ) : isSelectedLiveWeb ? (
+                <button
+                  type="button"
+                  className="model-chip is-button"
+                  title={[selected.model, nextLabel(selected) && `Next: ${nextLabel(selected)}`, 'Change model & effort'].filter(Boolean).join('\n')}
+                  onClick={() => setModelModalSessionId(selected.id)}
+                >
+                  {modelLabel(selected) ?? 'Model'}
+                  {nextLabel(selected) && <span className="model-next"> → {nextLabel(selected)}</span>}
+                </button>
+              ) : (
+                modelLabel(selected) && (
+                  <span className="model-chip" title={selected.model ?? undefined}>
+                    {modelLabel(selected)}
+                  </span>
+                )
               )}
               <span className="cwd">{selected.cwd}</span>
               <nav className="tabs">
@@ -1267,9 +1295,21 @@ export function App() {
                 shells={selected.shells ?? []}
                 shellRequest={shellRequest?.sessionId === selected.id ? shellRequest : null}
                 onShellRequestHandled={() => setShellRequest(null)}
+                onQueuedChange={handleQueuedChange}
               />
             )}
           </section>
+        )}
+        {selected && isSelectedLiveWeb && modelModalSessionId === selected.id && (
+          <ModelSettingModal
+            session={selected}
+            hasQueuedMessage={queuedSessionId === selected.id}
+            onClose={() => setModelModalSessionId(null)}
+            onApplied={(isRestarted) => {
+              if (isRestarted) beginRestart(selected.id)
+              setModelModalSessionId(null)
+            }}
+          />
         )}
       </main>
       {/* 화면 아래 상태 표시줄: 왼쪽 사용량, 오른쪽 세션 집계·연결 상태와 재시작 ↻ (폰은 목록 화면에서만. style.css) */}

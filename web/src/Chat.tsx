@@ -60,6 +60,8 @@ interface Props {
   /** 상태 표시줄 Shells 창에서 고른 이 세션의 shell. ShellsButton 이 그 shell 을 고른 채 모달을 열고 onShellRequestHandled 로 비운다 */
   shellRequest: ShellRequest | null
   onShellRequestHandled: () => void
+  /** 대화 맨 끝에 대기 중인 메시지가 있는지 알린다 (App 의 모델 변경 창이 Apply 를 막는 데 쓴다). 사라질 때 false */
+  onQueuedChange?: (sessionId: string, hasQueuedMessage: boolean) => void
 }
 
 function summarizeInput(name: string, input: unknown): string {
@@ -818,6 +820,7 @@ export function Chat({
   shells,
   shellRequest,
   onShellRequestHandled,
+  onQueuedChange,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   /** messages 가 어느 세션 것인지. 세션을 바꾼 뒤 새 대화가 오기 전까지는 앞 세션 것이 남아 있어 점프는 이것이 맞을 때만 처리한다 */
@@ -861,6 +864,11 @@ export function Chat({
    * claude 가 작업 중이고 승인 대기·질문 중이 아닐 때만 (서버도 다시 확인한다)
    */
   const lastQueuedId = useMemo(() => [...messages].reverse().find((m) => m.isQueued && m.role === 'user' && !m.from)?.id ?? null, [messages])
+  const hasQueuedMessage = useMemo(() => messages.some((m) => m.isQueued && m.role === "user"), [messages])
+  useEffect(() => {
+    onQueuedChange?.(sessionId, hasQueuedMessage)
+    return () => onQueuedChange?.(sessionId, false)
+  }, [sessionId, hasQueuedMessage, onQueuedChange])
   const canCancelQueued = isWritable && isWorking && !isApprovalNeeded && !isAsking
   /** 작업 중 표시기 옆 [중지]. 대기 메시지 취소와 같은 조건 (승인 대기·질문 중 Esc 는 도구 거부·질문 거절이 된다. 서버도 다시 확인한다) */
   const canInterrupt = isWritable && isWorking && !isApprovalNeeded && !isAsking

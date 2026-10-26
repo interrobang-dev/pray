@@ -7,6 +7,7 @@ import type { HookState } from './hookState.js'
 import { summarizeTranscript, type TranscriptSummary } from './transcript.js'
 import { runningShells } from './shells.js'
 import { readLiveSessions } from './liveSessions.js'
+import { modelSettingOf } from './memberModel.js'
 import { partOfSession, roleOf, teamOf, type Team } from '@jk-corp/host/team'
 import type { OffDutyRecord, SessionCharacter, SessionGender, WebSessionRecord } from '@jk-corp/host/hq'
 
@@ -210,6 +211,8 @@ export async function listSessions(
         lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
         model: transcript?.model ?? null,
         effort: transcript?.effort ?? null,
+        modelSetting: isWeb ? modelSettingOf(record?.extraArgs ?? []) : null,
+        contextTokens: transcript?.contextTokens ?? null,
         pendingTool: hook?.pendingTool ?? null,
         workingSince: hook?.workingSince ?? null,
         teamId: team?.id ?? null,

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import * as pty from 'node-pty'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { addWebSession, discardWebSession, moveToOffDuty, pruneOffDuty } from './hq.js'
+import { addWebSession, discardWebSession, moveToOffDuty, pruneOffDuty, setWebSessionArgs } from './hq.js'
 import { offDutyReason, PtyPool, type SpawnOptions } from './ptyPool.js'
 
 // 실제 claude 를 띄우지 않고 넘어간 인자만 본다
@@ -16,6 +16,7 @@ vi.mock('./hq.js', () => ({
   discardWebSession: vi.fn(),
   moveToOffDuty: vi.fn(),
   pruneOffDuty: vi.fn(() => []),
+  setWebSessionArgs: vi.fn(() => true),
 }))
 
 // 모킹이 안 먹었으면 실제 기록을 건드리게 되므로 시작하지 않는다
@@ -170,5 +171,123 @@ describe('PtyPool exit records', () => {
   it('moves a record without a process straight to released off duty on a kill by the lead', () => {
     new PtyPool(() => true).kill(SESSION_ID, 'released')
     expect(moveToOffDuty).toHaveBeenCalledWith(SESSION_ID, expect.objectContaining({ reason: 'released', exitCode: null }))
+  })
+})
+
+describe('PtyPool.restart', () => {
+  const NEW_ARGS = ['--name', '개발 팀장', '--model', 'opus', '--effort', 'max']
+
+  beforeEach(() => {
+    vi.mocked(pty.spawn).mockClear()
+    vi.mocked(moveToOffDuty).mockClear()
+    vi.mocked(discardWebSession).mockClear()
+    vi.mocked(addWebSession).mockClear()
+    vi.mocked(setWebSessionArgs).mockClear()
+  })
+
+  type FakePty = { pid: number; cols?: number; rows?: number; onData: ReturnType<typeof vi.fn>; onExit: ReturnType<typeof vi.fn>; kill: ReturnType<typeof vi.fn> }
+
+  /** n 번째(0부터)로 띄운 가짜 pty */
+  function spawned(index: number): FakePty {
+    return vi.mocked(pty.spawn).mock.results[index].value as FakePty
+  }
+
+  function exit(fake: FakePty, exitCode: number): void {
+    fake.onExit.mock.calls[0][0]({ exitCode })
+  }
+
+  function startPool(): PtyPool {
+    vi.mocked(pty.spawn).mockReturnValueOnce({ pid: 1, cols: 90, rows: 40, onData: vi.fn(), onExit: vi.fn(), kill: vi.fn() } as unknown as pty.IPty)
+    const pool = new PtyPool(() => true)
+    pool.spawn({ sessionId: SESSION_ID, cwd: 'D:/repo', extraArgs: EXTRA_ARGS })
+    return pool
+  }
+
+  it('saves the new args, kills claude and resumes it with them instead of moving it off duty', () => {
+    const pool = startPool()
+    const events: string[] = []
+    pool.on('exit', () => events.push('exit'))
+    pool.on('change', () => events.push('change'))
+    pool.restart(SESSION_ID, NEW_ARGS)
+    expect(setWebSessionArgs).toHaveBeenCalledWith(SESSION_ID, NEW_ARGS)
+    expect(spawned(0).kill).toHaveBeenCalledTimes(1)
+
+    exit(spawned(0), 1)
+    expect(vi.mocked(pty.spawn).mock.calls[1][1]).toEqual(['--resume', SESSION_ID, ...NEW_ARGS])
+    expect(vi.mocked(pty.spawn).mock.calls[1][2]).toMatchObject({ cwd: 'D:/repo', cols: 90, rows: 40 })
+    expect(moveToOffDuty).not.toHaveBeenCalled()
+    expect(discardWebSession).not.toHaveBeenCalled()
+    // resume 은 기록을 새로 만들지 않는다 (처음 spawn 의 한 번뿐)
+    expect(addWebSession).toHaveBeenCalledTimes(1)
+    expect(pool.has(SESSION_ID)).toBe(true)
+    expect(events).toEqual(['change', 'exit', 'change'])
+  })
+
+  it('ends the resumed process normally afterwards', () => {
+    const pool = startPool()
+    pool.restart(SESSION_ID, NEW_ARGS)
+    exit(spawned(0), 1)
+    exit(spawned(1), 0)
+    expect(moveToOffDuty).toHaveBeenCalledWith(SESSION_ID, expect.objectContaining({ reason: 'exit', exitCode: 0 }))
+    expect(pool.has(SESSION_ID)).toBe(false)
+  })
+
+  it('throws and changes nothing for a session without a process', () => {
+    expect(() => new PtyPool(() => true).restart(SESSION_ID, NEW_ARGS)).toThrow('Not running')
+    expect(setWebSessionArgs).not.toHaveBeenCalled()
+  })
+
+  it('throws and does not kill when there is no web session record', () => {
+    const pool = startPool()
+    vi.mocked(setWebSessionArgs).mockReturnValueOnce(false)
+    expect(() => pool.restart(SESSION_ID, NEW_ARGS)).toThrow('No web session record')
+    expect(spawned(0).kill).not.toHaveBeenCalled()
+  })
+
+  it('does not kill when hq.json cannot be written', () => {
+    const pool = startPool()
+    vi.mocked(setWebSessionArgs).mockImplementationOnce(() => {
+      throw new Error('hq.json 을 읽을 수 없어 읽기·저장을 막음')
+    })
+    expect(() => pool.restart(SESSION_ID, NEW_ARGS)).toThrow('hq.json')
+    expect(spawned(0).kill).not.toHaveBeenCalled()
+  })
+
+  it('lets a kill request win over a restart in progress', () => {
+    const pool = startPool()
+    pool.restart(SESSION_ID, NEW_ARGS)
+    pool.kill(SESSION_ID)
+    exit(spawned(0), 1)
+    expect(vi.mocked(pty.spawn)).toHaveBeenCalledTimes(1)
+    expect(moveToOffDuty).toHaveBeenCalledWith(SESSION_ID, expect.objectContaining({ reason: 'dismissed', exitCode: 1 }))
+  })
+
+  it('refuses to restart a session that is being killed', () => {
+    const pool = startPool()
+    pool.kill(SESSION_ID)
+    expect(() => pool.restart(SESSION_ID, NEW_ARGS)).toThrow('Ending')
+    expect(setWebSessionArgs).not.toHaveBeenCalled()
+  })
+
+  it('takes the latest args when asked again while restarting, killing only once', () => {
+    const pool = startPool()
+    const latest = ['--name', '개발 팀장', '--model', 'sonnet']
+    pool.restart(SESSION_ID, NEW_ARGS)
+    pool.restart(SESSION_ID, latest)
+    expect(spawned(0).kill).toHaveBeenCalledTimes(1)
+    expect(setWebSessionArgs).toHaveBeenLastCalledWith(SESSION_ID, latest)
+    exit(spawned(0), 1)
+    expect(vi.mocked(pty.spawn).mock.calls[1][1]).toEqual(['--resume', SESSION_ID, ...latest])
+  })
+
+  it('moves the session off duty as an error when it cannot be started again', () => {
+    const pool = startPool()
+    pool.restart(SESSION_ID, NEW_ARGS)
+    vi.mocked(pty.spawn).mockImplementationOnce(() => {
+      throw new Error('spawn failed')
+    })
+    exit(spawned(0), 1)
+    expect(moveToOffDuty).toHaveBeenCalledWith(SESSION_ID, expect.objectContaining({ reason: 'error', exitCode: null }))
+    expect(pool.has(SESSION_ID)).toBe(false)
   })
 })

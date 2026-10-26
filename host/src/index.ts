@@ -63,6 +63,15 @@ function handle(socket: Socket, message: ClientMessage): void {
     case 'resume':
       resumeOffDuty(socket, message.sessionId)
       return
+    case 'restart-session':
+      try {
+        pool.restart(message.sessionId, message.extraArgs)
+        console.log(`restart-session ${message.sessionId}`)
+      } catch (error) {
+        console.error(`restart-session 실패 ${message.sessionId}`, error)
+        send(socket, { type: 'error', sessionId: message.sessionId, message: String(error) })
+      }
+      return
     case 'forget':
       try {
         if (removeOffDuty(message.sessionId)) console.log(`퇴근 기록 지움 ${message.sessionId}`)
