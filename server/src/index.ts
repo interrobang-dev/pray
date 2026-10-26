@@ -13,12 +13,14 @@ import {
   listCharacters,
   listGenders,
   listOffDuty,
+  listPositions,
   listSessionNames,
   listTeams,
   listWebSessions,
   readOffice,
   setCharacter,
   setGender,
+  setPosition,
   setSessionName,
   removeTeam,
   setDesk,
@@ -34,6 +36,7 @@ import {
   TeamConflictError,
   WorktreePartError,
   addTodo,
+  migratePositionNames,
   migrateWaitingNotes,
   parseTodoText,
   removeTodo,
@@ -78,7 +81,15 @@ import { makeLoginManager, runClaudeAuth } from './accountLogin.js'
 import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { leadExtraArgs } from './lead.js'
-import { givenNameOf, parseGender, parseMemberRole, pickMemberName } from './memberName.js'
+import {
+  givenNameOf,
+  nameAndPosition,
+  parseGender,
+  parseMemberRole,
+  parsePositionInput,
+  pickMemberName,
+  withPosition,
+} from './memberName.js'
 import { memberExtraArgs, modelSettingOf, parseMemberModelChoice, withModelSetting } from './memberModel.js'
 import {
   createWorktree,
@@ -134,6 +145,8 @@ const COOKIE = 'jk_session'
 const instructionLogPath = join(configDir, 'instructions.jsonl')
 /** 지휘 단위에 팀장·파트장이 없을 때 지시 말풍선에 쓰는 이름 */
 const NO_LEAD_NAME = 'Team API'
+/** 세션 역할(position) 꼴이 틀렸을 때 (parsePositionInput) */
+const POSITION_FORMAT_MESSAGE = 'position must be 1–12 characters with no [ ] or line breaks (e.g. FE, BE, Lead)'
 
 const app = express()
 // SSE 는 압축하면 압축 버퍼에 쌓여 이벤트가 늦게 가거나 안 가므로 뺀다 (Express 가 `; charset=utf-8` 을 붙여 앞부분으로 비교)
@@ -237,6 +250,7 @@ async function snapshotPayload() {
       listOffDuty(),
       listCharacters(),
       listGenders(),
+      listPositions(),
     ),
   }
 }
@@ -287,18 +301,20 @@ app.get('/api/sessions', async (_req, res) => {
 
 /**
  * teamId 가 있으면 그 팀 폴더로 띄운다. partId 가 있으면 그 파트로 (worktree 파트면 그 폴더).
- * isLead 면 그 지휘 단위의 지시자로 (팀장 또는 파트장. 살아 있는 지시자가 이미 있으면 거부)
+ * isLead 면 그 지휘 단위의 지시자로 (팀장 또는 파트장. 살아 있는 지시자가 이미 있으면 거부).
+ * name·position 은 세션 이름과 역할 (빼거나 빈 글이면 없음. 이름이 옛 꼴 "[역할] 이름" 이면 나눈다)
  */
 app.post('/api/sessions', async (req, res) => {
-  const { cwd: rawCwd, teamId, partId, prompt, isLead, name, gender } = req.body as {
+  const { cwd: rawCwd, teamId, partId, prompt, isLead, name, gender, position } = req.body as {
     cwd?: string
     teamId?: string
     partId?: string
     prompt?: string
     isLead?: boolean
-    name?: string
+    name?: unknown
     /** 이름 추천 API 가 준 성별. 화면은 추천 이름을 그대로 쓸 때만 넘긴다 */
     gender?: unknown
+    position?: unknown
   }
   const team = teamId ? findTeam(teamId) : undefined
   if (teamId && !team) {
@@ -313,6 +329,11 @@ app.post('/api/sessions', async (req, res) => {
   const cwd = part?.worktree?.cwd ?? team?.cwd ?? rawCwd
   if (!cwd) {
     res.status(400).json({ message: 'cwd or teamId required' })
+    return
+  }
+  const parsedPosition = parsePositionInput(position)
+  if (parsedPosition === undefined) {
+    res.status(400).json({ message: POSITION_FORMAT_MESSAGE })
     return
   }
   if (!host.isReachable) {
@@ -346,11 +367,13 @@ app.post('/api/sessions', async (req, res) => {
   }
   // worktree 없는 파트는 폴더로 구분이 안 되므로 소속을 기록한다
   if (team && part && !part.worktree) setPartOf(team.id, sessionId, part.id)
-  if (name?.trim()) {
-    setSessionName(sessionId, name)
+  const label = nameAndPosition(typeof name === 'string' ? name : null, parsedPosition)
+  if (label.name) {
+    setSessionName(sessionId, label.name)
     const parsedGender = parseGender(gender)
     if (parsedGender) setGender(sessionId, parsedGender)
   }
+  if (label.position) setPosition(sessionId, label.position)
   // 신뢰 확인 창(기본 "No, exit")에 막혀 세션이 꺼지지 않게 띄우기 전에 폴더를 신뢰로 기록한다. 실패해도 띄우고 화면이 경고한다
   const isTrustFailed = markFolderTrusted(cwd) === false
   host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
@@ -358,11 +381,14 @@ app.post('/api/sessions', async (req, res) => {
   if (isLead || part) broadcastOffice()
 })
 
-/** 세션 화면 이름: 사용자 지정 → 자동 제목(ai-title) → ID 앞 8자리 */
-async function displayNameOf(sessionId: string, names: Record<string, string>): Promise<string> {
-  if (names[sessionId]) return names[sessionId]
-  const jsonl = await findTranscript(sessionId)
-  return (jsonl ? summarizeTranscript(jsonl).title : null) ?? sessionId.slice(0, 8)
+/**
+ * 세션 화면 이름: 사용자 지정 → 자동 제목(ai-title) → ID 앞 8자리. 역할이 있으면 앞에 "[역할] " 을 붙인다
+ * (지시 말풍선의 지시자 이름은 글 하나로만 가서 화면이 역할을 따로 붙일 수 없다)
+ */
+async function displayNameOf(sessionId: string, names: Record<string, string>, positions: Record<string, string>): Promise<string> {
+  const jsonl = names[sessionId] ? null : await findTranscript(sessionId)
+  const name = names[sessionId] ?? (jsonl ? summarizeTranscript(jsonl).title : null) ?? sessionId.slice(0, 8)
+  return withPosition(name, positions[sessionId] ?? null)
 }
 
 /**
@@ -389,8 +415,9 @@ app.get('/api/sessions/:id/messages', async (req, res) => {
     return
   }
   const names = listSessionNames()
+  const positions = listPositions()
   const fromIds = [...new Set(records.map((r) => r.fromSessionId).filter((id): id is string => id !== null))]
-  const fromNames = new Map(await Promise.all(fromIds.map(async (id) => [id, await displayNameOf(id, names)] as const)))
+  const fromNames = new Map(await Promise.all(fromIds.map(async (id) => [id, await displayNameOf(id, names, positions)] as const)))
   res.json(attachInstructions(messages, records, (id) => (id ? (fromNames.get(id) ?? id.slice(0, 8)) : NO_LEAD_NAME)))
 })
 
@@ -504,17 +531,38 @@ app.post('/api/sessions/:id/attachments', async (req, res) => {
   res.json(await saveAttachment(scratchpad, name, data))
 })
 
-/** 세션 이름 지정. 빈 문자열이면 지워서 자동 제목(ai-title)으로 돌아간다. 외부 세션에도 붙일 수 있다 */
+/**
+ * 세션 이름·역할 `{ name?, position? }`. 준 것만 바꾸고, 빈 글·null 이면 지운다 (이름은 자동 제목(ai-title)으로). 외부 세션에도 붙일 수 있다.
+ * 이름이 옛 꼴 "[역할] 이름" 이면 나눠 역할도 바꾼다 (따로 준 역할이 있으면 그것이 이긴다)
+ */
 app.patch('/api/sessions/:id', (req, res) => {
-  const { name } = req.body as { name?: unknown }
-  if (typeof name !== 'string') {
-    res.status(400).json({ message: 'name required (empty string clears it)' })
+  const sessionId = req.params.id
+  const { name, position } = req.body as { name?: unknown; position?: unknown }
+  const isNameGiven = name !== undefined
+  const isPositionGiven = position !== undefined
+  if (!isNameGiven && !isPositionGiven) {
+    res.status(400).json({ message: 'name or position required (an empty string clears it)' })
     return
   }
-  // 역할만 바꾸면 성별을 두고, 이름 부분이 바뀌거나 지우면 성별도 지운다 (새 이름과 성별이 안 맞을 수 있어서)
-  const oldName = listSessionNames()[req.params.id]
-  if (oldName !== undefined && (!name.trim() || givenNameOf(oldName) !== givenNameOf(name))) setGender(req.params.id, null)
-  setSessionName(req.params.id, name)
+  if (isNameGiven && name !== null && typeof name !== 'string') {
+    res.status(400).json({ message: 'name must be a string (an empty string clears it)' })
+    return
+  }
+  const parsedPosition = isPositionGiven ? parsePositionInput(position) : null
+  if (parsedPosition === undefined) {
+    res.status(400).json({ message: POSITION_FORMAT_MESSAGE })
+    return
+  }
+  if (isNameGiven) {
+    const label = nameAndPosition(name as string | null, parsedPosition)
+    // 역할만 바뀌면 성별을 두고, 이름이 바뀌거나 지우면 성별도 지운다 (새 이름과 성별이 안 맞을 수 있어서)
+    const oldName = listSessionNames()[sessionId]
+    if (oldName !== undefined && (!label.name || givenNameOf(oldName) !== givenNameOf(label.name))) setGender(sessionId, null)
+    setSessionName(sessionId, label.name)
+    if (isPositionGiven || label.position) setPosition(sessionId, label.position)
+  } else {
+    setPosition(sessionId, parsedPosition)
+  }
   res.json({})
   void broadcast()
 })
@@ -1193,6 +1241,7 @@ app.get('/api/team/:teamId', async (req, res) => {
     .map((s) => ({
       sessionId: s.id,
       name: s.name ?? s.title ?? s.id.slice(0, 8),
+      position: s.position,
       kind: s.kind,
       role: s.role,
       status: s.status,
@@ -1257,7 +1306,8 @@ async function usedMemberNames(teamId: string): Promise<string[]> {
 }
 
 /**
- * 세션 추가 모달에 미리 채울 이름 "[role] 이름" → { name, gender }. 이름 회피는 팀 전체 기준 (?partId= 는 확인만 한다).
+ * 세션 추가 모달에 미리 채울 이름 → { name, gender }. name 은 이름만이고 역할은 붙이지 않는다 (화면이 역할 칸에 따로 넣는다).
+ * ?role= 은 꼴만 확인한다. 이름 회피는 팀 전체 기준 (?partId= 는 확인만 한다).
  * 추천만 하고 recentMemberNames 에 넣지 않는다 — 모달을 열기만 하고 닫을 수 있어서
  */
 app.get('/api/team/:teamId/member-name', async (req, res) => {
@@ -1268,13 +1318,13 @@ app.get('/api/team/:teamId/member-name', async (req, res) => {
     res.status(400).json({ message: 'role must be 1–12 characters with no [ ] or line breaks (e.g. Dev, Lead, PL)' })
     return
   }
-  res.json(pickMemberName(role, await usedMemberNames(unit.team.id)))
+  res.json(pickMemberName(await usedMemberNames(unit.team.id)))
 })
 
 /**
  * 지휘 단위로 팀원 세션을 띄운다. 팀 직속·worktree 파트는 cwd 판정으로 자동 합류, worktree 없는 파트는 소속을 기록.
- * role 이 있으면 이름은 서버가 "[role] 이름" 으로 붙이고 성별을 기록한다 (같은 팀 근무·휴식·퇴근 세션에 쓰인 이름은 피한다).
- * name 만 오면 그대로 쓴다 (role 인자가 생기기 전의 팀장 MCP).
+ * role 이 있으면 역할(position)로 저장하고 이름은 서버가 골라 성별과 같이 기록한다 (같은 팀 근무·휴식·퇴근 세션에 쓰인 이름은 피한다).
+ * name 만 오면 그대로 쓴다 (role 인자가 생기기 전의 팀장 MCP). 옛 꼴 "[역할] 이름" 이면 역할과 이름으로 나눈다.
  * model·effort 가 오면 --model·--effort 로 넘긴다 (빼면 사용자 기본값. 목록 밖이면 400)
  */
 app.post('/api/team/:teamId/members', async (req, res) => {
@@ -1283,7 +1333,7 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   const { team, part } = unit
   const cwd = part?.worktree?.cwd ?? team.cwd
   const { name, role, instruction, permissionMode, model, effort } = req.body as {
-    name?: string
+    name?: unknown
     role?: unknown
     instruction?: string
     permissionMode?: string
@@ -1296,22 +1346,25 @@ app.post('/api/team/:teamId/members', async (req, res) => {
     return
   }
   const sessionId = randomUUID()
-  let memberName: string
+  let memberName: string | null
+  let memberPosition: string | null
   let memberGender: SessionGender | null = null
   if (role != null) {
-    const parsedRole = parseMemberRole(role)
-    if (!parsedRole) {
+    memberPosition = parseMemberRole(role)
+    if (!memberPosition) {
       res.status(400).json({ message: 'role must be 1–12 characters with no [ ] or line breaks (e.g. FE, BE, QA)' })
       return
     }
-    ;({ name: memberName, gender: memberGender } = pickMemberName(parsedRole, await usedMemberNames(team.id)))
-  } else if (name?.trim()) {
-    memberName = name.trim()
+    ;({ name: memberName, gender: memberGender } = pickMemberName(await usedMemberNames(team.id)))
+  } else if (typeof name === 'string' && name.trim()) {
+    ;({ name: memberName, position: memberPosition } = nameAndPosition(name, null))
   } else {
     res.status(400).json({ message: 'role or name required' })
     return
   }
-  const extraArgs = memberExtraArgs(memberName, permissionMode ?? 'bypassPermissions', modelChoice)
+  // claude 쪽 세션 이름(터미널 제목·resume 목록)에는 역할을 붙여 둔다. jk-corp 화면은 이 값을 읽지 않는다
+  const claudeName = memberName ? withPosition(memberName, memberPosition) : `[${memberPosition}]`
+  const extraArgs = memberExtraArgs(claudeName, permissionMode ?? 'bypassPermissions', modelChoice)
   if (part && !part.worktree) setPartOf(team.id, sessionId, part.id)
   // 신뢰 기록은 POST /api/sessions 와 같다. 실패는 결과로 지시자에게 알린다
   const isTrustFailed = markFolderTrusted(cwd) === false
@@ -1320,12 +1373,15 @@ app.post('/api/team/:teamId/members', async (req, res) => {
     res.status(503).json({ message: 'Not connected to session host' })
     return
   }
-  recentMemberNames.set(sessionId, { teamId: team.id, name: memberName })
-  setTimeout(() => recentMemberNames.delete(sessionId), RECENT_MEMBER_NAME_MS)
-  // 팀원 이름을 화면에도 보이게
+  if (memberName) {
+    recentMemberNames.set(sessionId, { teamId: team.id, name: memberName })
+    setTimeout(() => recentMemberNames.delete(sessionId), RECENT_MEMBER_NAME_MS)
+  }
+  // 팀원 이름·역할을 화면에도 보이게
   setSessionName(sessionId, memberName)
+  if (memberPosition) setPosition(sessionId, memberPosition)
   if (memberGender) setGender(sessionId, memberGender)
-  const member = { sessionId, name: memberName, cwd }
+  const member = { sessionId, name: memberName, position: memberPosition, cwd }
   if (!instruction) {
     res.json({ member, task: null, isTrustFailed })
     return
@@ -1870,6 +1926,13 @@ try {
   if (migratedCount > 0) console.log(`그룹 대기 메모 ${migratedCount}개를 할 일로 옮김`)
 } catch (error) {
   console.error(`그룹 대기 메모 옮기기 실패: ${error}`)
+}
+// 옛 세션 이름 "[역할] 이름" 을 역할과 이름으로 한 번 나눈다. 위와 같이 실패는 로그만 (다음 시작 때 다시 한다)
+try {
+  const migratedCount = migratePositionNames()
+  if (migratedCount > 0) console.log(`세션 이름 ${migratedCount}개에서 역할을 떼어 따로 저장함`)
+} catch (error) {
+  console.error(`세션 이름 역할 옮기기 실패: ${error}`)
 }
 
 // 빌드된 웹이 있으면 서버 하나로 화면까지 제공한다 (개발 중에는 Vite 4711 을 쓴다)

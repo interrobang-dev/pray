@@ -37,7 +37,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          '팀원 역할 약어 (1~12자). 이름 "[역할] 이름" 은 서버가 붙여 결과 member.name 으로 돌려준다. 권장: FE(화면), BE(서버·호스트), FS(풀스택), UI/UX, QA(검증·테스트), Ops(배포·인프라), Docs(문서), Research(조사)',
+          '팀원 역할 약어 (1~12자). 역할은 따로 저장되고(결과 member.position) 이름은 서버가 붙여 결과 member.name 으로 돌려준다. 권장: FE(화면), BE(서버·호스트), FS(풀스택), UI/UX, QA(검증·테스트), Ops(배포·인프라), Docs(문서), Research(조사)',
         ),
       name: z.string().optional().describe('예전 방식의 팀원 이름. role 이 있으면 쓰지 않는다. role 과 name 중 하나는 필요'),
       model: z
@@ -106,7 +106,7 @@ server.registerTool(
   'jk_status',
   {
     description:
-      '팀의 세션 목록(역할·웹/외부·상태·모델·effort·마지막 말)과 task 목록을 본다. 모델·effort 는 마지막 응답 기준이라 아직 대화가 없으면 null 이다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다.',
+      '팀의 세션 목록(role = 지휘자·팀원 구분, position = 역할 약어, 웹/외부·상태·모델·effort·마지막 말)과 task 목록을 본다. 모델·effort 는 마지막 응답 기준이라 아직 대화가 없으면 null 이다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다.',
     inputSchema: {},
   },
   async () => {

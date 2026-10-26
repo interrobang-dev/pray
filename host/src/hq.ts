@@ -68,7 +68,7 @@ export interface SessionCharacter {
   top: string | null
 }
 
-/** 서버가 지은 이름 "[역할] 이름" 의 성별. 도트 사무실이 그 성별 인물을 고른다 */
+/** 서버가 지은 이름의 성별. 도트 사무실이 그 성별 인물을 고른다 */
 export type SessionGender = 'male' | 'female'
 
 interface HqFile extends Office {
@@ -80,6 +80,8 @@ interface HqFile extends Office {
   characters: Record<string, SessionCharacter>
   /** 서버가 이름을 지은 세션의 성별. 사용자가 직접 지은 이름이면 없다. 이름과 같이 지운다 */
   genders: Record<string, SessionGender>
+  /** 세션 역할 (FE·BE·Lead 등, parsePosition 꼴). 이름(sessionNames)에는 넣지 않는다 — 화면이 따로 붙인다. 이름과 같이 지운다 */
+  positions: Record<string, string>
 }
 
 const hqDir = join(homedir(), '.claude', 'jk-corp')
@@ -112,6 +114,7 @@ function readHq(): HqFile {
     sessionNames: rest.sessionNames ?? {},
     characters: rest.characters ?? {},
     genders: rest.genders ?? {},
+    positions: rest.positions ?? {},
   }
 }
 
@@ -183,7 +186,7 @@ export function removeWebSession(sessionId: string): void {
   writeHq(hq)
 }
 
-/** 다시 출근할 수 없는 웹 세션(대화가 없음)의 기록과 이름·고른 인물·성별을 지운다. webSessions 에 없으면 아무것도 쓰지 않고 false */
+/** 다시 출근할 수 없는 웹 세션(대화가 없음)의 기록과 이름·고른 인물·성별·역할을 지운다. webSessions 에 없으면 아무것도 쓰지 않고 false */
 export function discardWebSession(sessionId: string): boolean {
   const hq = readHq()
   if (!hq.webSessions.some((s) => s.sessionId === sessionId)) return false
@@ -191,6 +194,7 @@ export function discardWebSession(sessionId: string): boolean {
   delete hq.sessionNames[sessionId]
   delete hq.characters[sessionId]
   delete hq.genders[sessionId]
+  delete hq.positions[sessionId]
   writeHq(hq)
   return true
 }
@@ -224,7 +228,7 @@ export function returnFromOffDuty(sessionId: string): WebSessionRecord | null {
   return webSession
 }
 
-/** 퇴근 기록과 그 세션 이름·고른 인물·성별을 지운다. 없으면 false */
+/** 퇴근 기록과 그 세션 이름·고른 인물·성별·역할을 지운다. 없으면 false */
 export function removeOffDuty(sessionId: string): boolean {
   const hq = readHq()
   if (!hq.offDuty.some((s) => s.sessionId === sessionId)) return false
@@ -232,11 +236,12 @@ export function removeOffDuty(sessionId: string): boolean {
   delete hq.sessionNames[sessionId]
   delete hq.characters[sessionId]
   delete hq.genders[sessionId]
+  delete hq.positions[sessionId]
   writeHq(hq)
   return true
 }
 
-/** 이유별 보관 기간이 지난 퇴근 기록과 그 이름·고른 인물·성별을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
+/** 이유별 보관 기간이 지난 퇴근 기록과 그 이름·고른 인물·성별·역할을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
 export function pruneOffDuty(now = Date.now()): string[] {
   const hq = readHq()
   const expired = hq.offDuty.filter((s) => now - Date.parse(s.endedAt) > retentionOf(s.reason)).map((s) => s.sessionId)
@@ -246,6 +251,7 @@ export function pruneOffDuty(now = Date.now()): string[] {
     delete hq.sessionNames[sessionId]
     delete hq.characters[sessionId]
     delete hq.genders[sessionId]
+    delete hq.positions[sessionId]
   }
   writeHq(hq)
   return expired
@@ -286,6 +292,61 @@ export function setGender(sessionId: string, gender: SessionGender | null): void
   if (gender) hq.genders[sessionId] = gender
   else delete hq.genders[sessionId]
   writeHq(hq)
+}
+
+// ---------- 세션 역할 ----------
+
+const MAX_POSITION_LENGTH = 12
+
+/** trim 한 역할. 1~12자이고 `[`·`]`·줄바꿈이 없어야 한다. 아니면 null (화면이 "[역할]" 로 붙이므로 괄호를 막는다) */
+export function parsePosition(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed.length < 1 || trimmed.length > MAX_POSITION_LENGTH || /[[\]\r\n]/.test(trimmed)) return null
+  return trimmed
+}
+
+/**
+ * 역할을 이름에 붙이던 옛 꼴 "[역할] 이름" 을 나눈다. 이름 부분이 비면 name 은 null (자동 제목).
+ * 그 꼴이 아니거나 괄호 안이 역할 꼴(parsePosition)이 아니면 null — 이름 그대로 둔다
+ */
+export function splitPositionName(name: string): { position: string; name: string | null } | null {
+  const match = /^\[([^\]]*)\]\s*(.*)$/s.exec(name.trim())
+  const position = match ? parsePosition(match[1]) : null
+  if (!match || !position) return null
+  return { position, name: match[2].trim() || null }
+}
+
+export function listPositions(): Record<string, string> {
+  return readHq().positions
+}
+
+/** null 이면 지운다. 꼴은 부른 쪽이 parsePosition 으로 거른다 */
+export function setPosition(sessionId: string, position: string | null): void {
+  const hq = readHq()
+  if (position) hq.positions[sessionId] = position
+  else delete hq.positions[sessionId]
+  writeHq(hq)
+}
+
+/**
+ * 옛 이름 "[역할] 이름" 을 역할(positions)과 이름으로 나눈다 (서버가 시작할 때 부른다). 이름 부분이 비면 이름은 지운다.
+ * 이미 역할이 있으면 그 역할을 두고 이름에서만 뗀다 — 따로 정한 역할이 더 새것이고, 이름에 남기면 화면에 역할이 두 번 보인다.
+ * 성별은 이름 부분이 그대로라 남긴다. 나눈 이름 수 (없으면 쓰지 않는다)
+ */
+export function migratePositionNames(): number {
+  const hq = readHq()
+  let migratedCount = 0
+  for (const [sessionId, name] of Object.entries(hq.sessionNames)) {
+    const split = splitPositionName(name)
+    if (!split) continue
+    if (split.name) hq.sessionNames[sessionId] = split.name
+    else delete hq.sessionNames[sessionId]
+    hq.positions[sessionId] ??= split.position
+    migratedCount++
+  }
+  if (migratedCount > 0) writeHq(hq)
+  return migratedCount
 }
 
 export function readOffice(): Office {

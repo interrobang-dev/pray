@@ -20,7 +20,11 @@ import {
   listCharacters,
   listGenders,
   listOffDuty,
+  listPositions,
   listSessionNames,
+  migratePositionNames,
+  parsePosition,
+  splitPositionName,
   listTeams,
   listWebSessions,
   moveToOffDuty,
@@ -36,6 +40,7 @@ import {
   returnFromOffDuty,
   setCharacter,
   setGender,
+  setPosition,
   setSessionName,
   setWebSessionArgs,
   updateGroup,
@@ -251,12 +256,22 @@ describe('off duty records', () => {
     setCharacter('other', { id: 'lead', hair: null, top: null })
     setGender('a', 'female')
     setGender('other', 'male')
+    setPosition('a', 'BE')
+    setPosition('other', 'QA')
     moveToOffDuty('a', end)
     expect(removeOffDuty('a')).toBe(true)
     expect(listOffDuty()).toEqual([])
     expect(listSessionNames()).toEqual({ other: '남의 이름' })
     expect(listCharacters()).toEqual({ other: { id: 'lead', hair: null, top: null } })
     expect(listGenders()).toEqual({ other: 'male' })
+    expect(listPositions()).toEqual({ other: 'QA' })
+  })
+
+  it('sets and clears a position', () => {
+    setPosition('a', 'FE')
+    expect(listPositions()).toEqual({ a: 'FE' })
+    setPosition('a', null)
+    expect(listPositions()).toEqual({})
   })
 
   it('sets and clears a gender', () => {
@@ -278,12 +293,14 @@ describe('off duty records', () => {
     setSessionName('a', '서버 개발자')
     setCharacter('a', { id: 'afro', hair: null, top: null })
     setGender('a', 'male')
+    setPosition('a', 'FE')
     expect(discardWebSession('a')).toBe(true)
     expect(listWebSessions()).toEqual([])
     expect(listOffDuty()).toEqual([])
     expect(listSessionNames()).toEqual({})
     expect(listCharacters()).toEqual({})
     expect(listGenders()).toEqual({})
+    expect(listPositions()).toEqual({})
   })
 
   it('prunes records older than the retention period with their names', () => {
@@ -297,6 +314,7 @@ describe('off duty records', () => {
       setSessionName(sessionId, sessionId)
       setCharacter(sessionId, { id: 'lead', hair: null, top: null })
       setGender(sessionId, 'female')
+      setPosition(sessionId, 'FE')
       moveToOffDuty(sessionId, { ...end, endedAt })
     }
     expect(pruneOffDuty(now)).toEqual(['old'])
@@ -304,6 +322,7 @@ describe('off duty records', () => {
     expect(listSessionNames()).toEqual({ edge: 'edge', new: 'new' })
     expect(Object.keys(listCharacters())).toEqual(['edge', 'new'])
     expect(Object.keys(listGenders())).toEqual(['edge', 'new'])
+    expect(Object.keys(listPositions())).toEqual(['edge', 'new'])
     const before = readFileSync(hqPath, 'utf8')
     expect(pruneOffDuty(now)).toEqual([])
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
@@ -330,6 +349,7 @@ describe('off duty records', () => {
       setSessionName(sessionId, sessionId)
       setCharacter(sessionId, { id: 'lead', hair: null, top: null })
       setGender(sessionId, 'male')
+      setPosition(sessionId, 'QA')
       moveToOffDuty(sessionId, { endedAt, reason, exitCode: 1 })
     }
     const kept = ['released-edge', 'dismissed-7h', 'exit-7h', 'error-7h', 'error-edge']
@@ -338,6 +358,7 @@ describe('off duty records', () => {
     expect(Object.keys(listSessionNames())).toEqual(kept)
     expect(Object.keys(listCharacters())).toEqual(kept)
     expect(Object.keys(listGenders())).toEqual(kept)
+    expect(Object.keys(listPositions())).toEqual(kept)
   })
 
   it('keeps an off duty record with an unknown reason for the default period', () => {
@@ -575,5 +596,79 @@ describe('waiting note migration', () => {
     setSessionName('s', '이름')
     expect(savedGroups()[0]).toMatchObject({ waitingNote: '- 가', todos: [openTodo, doneTodo] })
     expect(readOffice().groups[0].todos).toEqual([openTodo, doneTodo])
+  })
+})
+
+describe('session position', () => {
+  it('accepts a trimmed position of 1 to 12 characters without brackets or line breaks', () => {
+    expect(parsePosition(' FE ')).toBe('FE')
+    expect(parsePosition('UI/UX')).toBe('UI/UX')
+    expect(parsePosition('a'.repeat(12))).toBe('a'.repeat(12))
+    for (const value of ['', ' ', 'a'.repeat(13), '[FE]', 'F]E', 'FE\nBE', 3, null]) {
+      expect(parsePosition(value), JSON.stringify(value)).toBeNull()
+    }
+  })
+
+  it('splits an old "[role] name" into the position and the name', () => {
+    expect(splitPositionName('[FE] Jisoo')).toEqual({ position: 'FE', name: 'Jisoo' })
+    expect(splitPositionName(' [ UI/UX ]  Junho 2 ')).toEqual({ position: 'UI/UX', name: 'Junho 2' })
+    expect(splitPositionName('[QA]Emma')).toEqual({ position: 'QA', name: 'Emma' })
+    expect(splitPositionName('[Lead]')).toEqual({ position: 'Lead', name: null })
+    expect(splitPositionName('[Asst]   ')).toEqual({ position: 'Asst', name: null })
+  })
+
+  it('leaves a name alone when it does not start with a role in brackets', () => {
+    for (const name of ['Jisoo', '웹 개발자', 'Jisoo [FE]', '[] Jisoo', '[  ] Jisoo', `[${'a'.repeat(13)}] Jisoo`, '[FE Jisoo']) {
+      expect(splitPositionName(name), name).toBeNull()
+    }
+  })
+})
+
+describe('position name migration', () => {
+  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
+  afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
+
+  const writeHqFile = (content: Record<string, unknown>) => {
+    mkdirSync(hqDir, { recursive: true })
+    writeFileSync(hqPath, JSON.stringify({ ...content, decor: { kept: true } }))
+  }
+
+  it('moves the role out of old names once and keeps the rest of the file', () => {
+    writeHqFile({
+      sessionNames: { a: '[FE] Jisoo', b: '[Lead] Minho', c: '[Dev]', d: '서버 개발자', e: '[] 괄호만', f: '[Asst] Kim' },
+      genders: { a: 'female', b: 'male' },
+    })
+    expect(migratePositionNames()).toBe(4)
+    expect(listSessionNames()).toEqual({ a: 'Jisoo', b: 'Minho', d: '서버 개발자', e: '[] 괄호만', f: 'Kim' })
+    expect(listPositions()).toEqual({ a: 'FE', b: 'Lead', c: 'Dev', f: 'Asst' })
+    expect(listGenders()).toEqual({ a: 'female', b: 'male' })
+    expect(JSON.parse(readFileSync(hqPath, 'utf8')).decor).toEqual({ kept: true })
+    const before = readFileSync(hqPath, 'utf8')
+    expect(migratePositionNames()).toBe(0)
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+  })
+
+  it('keeps a position that is already there and only cleans the name', () => {
+    writeHqFile({ sessionNames: { a: '[FE] Jisoo' }, positions: { a: 'BE' } })
+    expect(migratePositionNames()).toBe(1)
+    expect(listSessionNames()).toEqual({ a: 'Jisoo' })
+    expect(listPositions()).toEqual({ a: 'BE' })
+  })
+
+  it('writes nothing when there is no file or nothing to move', () => {
+    expect(migratePositionNames()).toBe(0)
+    expect(existsSync(hqPath)).toBe(false)
+    writeHqFile({ sessionNames: { a: 'Jisoo' } })
+    const before = readFileSync(hqPath, 'utf8')
+    expect(migratePositionNames()).toBe(0)
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+  })
+
+  it('refuses a broken file and leaves it as is', () => {
+    mkdirSync(hqDir, { recursive: true })
+    const broken = '{"sessionNames": {"a": "[FE] Jisoo"'
+    writeFileSync(hqPath, broken)
+    expect(() => migratePositionNames()).toThrow(/읽을 수 없어/)
+    expect(readFileSync(hqPath, 'utf8')).toBe(broken)
   })
 })

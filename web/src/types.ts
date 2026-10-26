@@ -15,6 +15,8 @@ export interface Session {
   cwd: string
   /** 사용자가 붙인 이름. 화면은 name ?? title ?? id 순 */
   name: string | null
+  /** 역할 (`FE`·`Lead` 등). name 에는 역할이 없다. 없으면 칩 없이. 옛 서버 응답에는 빠져 있고 이름 앞 "[역할]" 이 있을 수 있다 — positionOf 로 읽는다 */
+  position?: string | null
   title: string | null
   status: SessionStatus
   kind: 'web' | 'external'

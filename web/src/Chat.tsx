@@ -16,6 +16,8 @@ import { buildChatRows, hidingWorkKey, type ChatRow, type Work } from './chatRow
 import { runningToolNames, shortToolName } from './runningTools'
 import { FilesButton, formatSize } from './Files'
 import { MarkdownText } from './Markdown'
+import { PositionChip } from './PositionChip'
+import { memberOf as memberDisplay } from './sessionPosition'
 import { formatElapsed, ShellsButton, type ShellRequest } from './Shells'
 import type { AskQuestion, ChatMessage, Shell, ToolUse } from './types'
 
@@ -50,6 +52,8 @@ interface Props {
   version: number
   /** 세션 ID → 화면 이름 (App 의 세션 목록). 팀원 이름 찾기와 지시·보고 한 줄을 눌렀을 때 그 팀원이 목록에 있는지 보는 데 쓴다 */
   sessionNames: Record<string, string>
+  /** 세션 ID → 역할 (칩). 없거나 null 이면 칩 없이. 옛 서버 응답이면 이름 앞 "[역할]" 에서 읽는다 */
+  sessionPositions?: Record<string, string | null>
   /** 이 세션 대화에서 찾아 갈 곳 (점프·돌아가기). 없으면 null */
   jump: Jump | null
   onJumpHandled: () => void
@@ -158,6 +162,8 @@ interface Relay {
   /** 지시를 받은·보고한 팀원. 결과가 아직 없는 jk_spawn_member 면 null (세션이 아직 없다) */
   memberSessionId: string | null
   memberName: string
+  /** 팀원 역할 (칩). 없으면 null */
+  memberPosition: string | null
   text: string
   /** 지시 = 팀장이 도구를 부른 시각, 보고 = 팀원 task 가 끝난 시각. 줄에 보이고, 팀원 대화에 같은 글이 여럿이면 이것과 가장 가까운 것으로 간다 */
   at: string
@@ -177,48 +183,66 @@ function waitReport(json: string): { memberSessionId: string; result: string; fi
 }
 
 /** 보고 한 줄. task 가 끝난 시각이 없으면(옛 서버) 결과를 받은 메시지 시각 */
-function reportRelay(report: NonNullable<ReturnType<typeof waitReport>>, receivedAt: string, memberNameOf: (sessionId: string) => string): Relay {
+function reportRelay(report: NonNullable<ReturnType<typeof waitReport>>, receivedAt: string, memberOf: MemberOf): Relay {
   return {
     kind: 'report',
     memberSessionId: report.memberSessionId,
-    memberName: memberNameOf(report.memberSessionId),
+    ...nameParts(memberOf(report.memberSessionId)),
     text: report.result,
     at: report.finishedAt ?? receivedAt,
   }
 }
 
-/** jk_spawn_member 결과의 새 팀원: 첫 sessionId 와 서버가 붙인 이름 member.name (role 로 만들면 입력에 이름이 없다) */
-function spawnedMember(toolUse: ToolUse): { sessionId: string; name: string | null } | null {
+/** 세션 ID → 지시·보고 한 줄에 보일 팀원 이름과 역할 */
+type MemberOf = (sessionId: string) => { name: string; position: string | null }
+
+function nameParts(member: { name: string; position: string | null }): { memberName: string; memberPosition: string | null } {
+  return { memberName: member.name, memberPosition: member.position }
+}
+
+/**
+ * jk_spawn_member 결과의 새 팀원: 첫 sessionId 와 서버가 붙인 이름 member.name·역할 member.position (role 로 만들면 입력에 이름이 없다).
+ * 옛 대화 기록은 이름에 "[FE] Park" 꼴로 역할이 들어 있고 position 이 없다
+ */
+function spawnedMember(toolUse: ToolUse): { sessionId: string; name: string | null; position: string | null } | null {
   const sessionId = toolUse.result?.match(SPAWNED_SESSION_ID)?.[1]
   if (!sessionId) return null
   try {
-    const { member } = JSON.parse(toolUse.result ?? '') as { member?: { name?: unknown } }
-    return { sessionId, name: typeof member?.name === 'string' ? member.name : null }
+    const { member } = JSON.parse(toolUse.result ?? '') as { member?: { name?: unknown; position?: unknown } }
+    return {
+      sessionId,
+      name: typeof member?.name === 'string' ? member.name : null,
+      position: typeof member?.position === 'string' ? member.position : null,
+    }
   } catch {
-    return { sessionId, name: null }
+    return { sessionId, name: null, position: null }
   }
 }
 
 /** 팀장 대화의 jk 도구 호출을 지시·보고 한 줄로. 실패한 지시(결과가 JSON 이 아닌 오류 글)·jk_status·jk_dismiss 는 null */
-function relayOf(toolUse: ToolUse, message: ChatMessage, memberNameOf: (sessionId: string) => string): Relay | null {
+function relayOf(toolUse: ToolUse, message: ChatMessage, memberOf: MemberOf): Relay | null {
   const input = (toolUse.input ?? {}) as { name?: unknown; role?: unknown; sessionId?: unknown; instruction?: unknown }
   const isDelivered = toolUse.result === null || toolUse.result.startsWith('{')
   if (typeof input.instruction === 'string' && input.instruction && isDelivered) {
     const instruction = { kind: 'instruction', text: input.instruction, at: message.timestamp } as const
     if (toolUse.name === SPAWN_TOOL) {
       const memberSessionId = spawnedMember(toolUse)?.sessionId ?? null
-      if (memberSessionId) return { ...instruction, memberSessionId, memberName: memberNameOf(memberSessionId) }
+      if (memberSessionId) return { ...instruction, memberSessionId, ...nameParts(memberOf(memberSessionId)) }
       // 결과(새 세션)가 오기 전: 팀장이 준 이름, role 로 만들면 "[역할]"
-      const pendingName = typeof input.name === 'string' ? input.name : typeof input.role === 'string' ? `[${input.role}]` : null
-      if (pendingName) return { ...instruction, memberSessionId: null, memberName: pendingName }
+      const pendingName = typeof input.name === 'string' ? input.name : null
+      const pendingPosition = typeof input.role === 'string' ? input.role : null
+      if (pendingName || pendingPosition) {
+        const pending = pendingName ? memberDisplay(pendingName, pendingPosition) : { name: '', position: pendingPosition }
+        return { ...instruction, memberSessionId: null, ...nameParts(pending) }
+      }
     }
     if (toolUse.name === ASSIGN_TOOL && typeof input.sessionId === 'string') {
-      return { ...instruction, memberSessionId: input.sessionId, memberName: memberNameOf(input.sessionId) }
+      return { ...instruction, memberSessionId: input.sessionId, ...nameParts(memberOf(input.sessionId)) }
     }
   }
   if (toolUse.name === WAIT_TOOL && toolUse.result) {
     const report = waitReport(toolUse.result)
-    if (report) return reportRelay(report, message.timestamp, memberNameOf)
+    if (report) return reportRelay(report, message.timestamp, memberOf)
   }
   return null
 }
@@ -244,11 +268,11 @@ export function formatClock(iso: string): string {
 }
 
 /**
- * 팀장 대화의 지시·보고 한 줄 "→ Assigned to [FE] Park · 10:12"·"← Report from [FE] Park · 10:30". 내용은 툴팁(앞부분)만.
+ * 팀장 대화의 지시·보고 한 줄 "→ Assigned to (FE 칩) Park · 10:12"·"← Report from (FE 칩) Park · 10:30". 내용은 툴팁(앞부분)만.
  * 누르면 그 팀원 대화의 그 메시지로 간다. 팀원 세션이 아직 없으면(spawn 결과 전) 누를 수 없다
  */
 function RelayLine({ relay, jumpKey, isHighlighted, onOpen }: { relay: Relay; jumpKey: string; isHighlighted: boolean; onOpen: () => void }) {
-  const label = relay.kind === 'instruction' ? `→ Assigned to ${relay.memberName}` : `← Report from ${relay.memberName}`
+  const label = relay.kind === 'instruction' ? '→ Assigned to' : '← Report from'
   const clock = formatClock(relay.at)
   return (
     <button
@@ -259,7 +283,9 @@ function RelayLine({ relay, jumpKey, isHighlighted, onOpen }: { relay: Relay; ju
       disabled={!relay.memberSessionId}
       onClick={onOpen}
     >
-      {clock ? `${label} · ${clock}` : label}
+      {label} <PositionChip position={relay.memberPosition} />
+      {relay.memberName}
+      {clock ? ` · ${clock}` : ''}
     </button>
   )
 }
@@ -814,6 +840,7 @@ export function Chat({
   suggestion,
   version,
   sessionNames,
+  sessionPositions,
   jump,
   onJumpHandled,
   onOpenRelay,
@@ -893,20 +920,26 @@ export function Chat({
   const isFirstLoadRef = useRef(true)
   const lastMessageIdRef = useRef<string | null>(null)
 
-  /** 팀원 이름: jk_spawn_member 때 붙인 이름(서버가 붙인 member.name, 없으면 팀장이 준 name) → 세션 목록 이름 → ID 앞 8자리 */
-  const memberNameOf = useMemo(() => {
-    const spawnedNames = new Map<string, string>()
+  /** 팀원 이름·역할: jk_spawn_member 때 붙은 것(서버가 붙인 member.name·member.position, 없으면 팀장이 준 name) → 세션 목록 이름·역할 → ID 앞 8자리 */
+  const memberOf = useMemo<MemberOf>(() => {
+    const spawned = new Map<string, { name: string; position: string | null }>()
     for (const message of messages) {
       for (const toolUse of message.toolUses) {
         if (toolUse.name !== SPAWN_TOOL) continue
         const inputName = (toolUse.input as { name?: unknown } | null)?.name
-        const spawned = spawnedMember(toolUse)
-        const name = spawned?.name ?? (typeof inputName === 'string' ? inputName : null)
-        if (spawned && name) spawnedNames.set(spawned.sessionId, name)
+        const member = spawnedMember(toolUse)
+        const name = member?.name ?? (typeof inputName === 'string' ? inputName : null)
+        if (member && name) spawned.set(member.sessionId, memberDisplay(name, member.position))
       }
     }
-    return (id: string) => spawnedNames.get(id) ?? sessionNames[id] ?? id.slice(0, 8)
-  }, [messages, sessionNames])
+    return (id: string) => {
+      const own = spawned.get(id)
+      if (own) return own
+      const listed = sessionNames[id]
+      // 목록 이름은 세션 목록의 이름이라 옛 꼴 "[역할] 이름" 일 수 있다. 목록에 역할이 따로 있으면 그것이 먼저
+      return listed ? memberDisplay(listed, sessionPositions?.[id]) : { name: id.slice(0, 8), position: null }
+    }
+  }, [messages, sessionNames, sessionPositions])
 
   /**
    * 화면 줄: 구간마다 claude 의 중간 설명 글·일반 도구 호출을 작업 묶음으로 접고, relay 한 줄·질문 카드는 그 자리에 둔다.
@@ -920,14 +953,14 @@ export function Chat({
       buildChatRows<Special>(
         messages,
         (toolUse, message) => {
-          const relay = relayOf(toolUse, message, memberNameOf)
+          const relay = relayOf(toolUse, message, memberOf)
           if (relay) return { kind: 'relay', relay }
           const asked = askedOf(toolUse)
           return asked ? { kind: 'asked', asked } : null
         },
         isTurnInProgress,
       ),
-    [messages, memberNameOf, isTurnInProgress],
+    [messages, memberOf, isTurnInProgress],
   )
   /** 설명 글이 말풍선으로 보이는 진행 중 묶음. 이게 바뀌면(끝남) 중간 설명 글이 줄 안으로 들어가 대화 길이가 갑자기 줄어든다 */
   const liveWorkRow = rows.find((row) => row.kind === 'work' && row.work.isInProgress)
@@ -1374,7 +1407,7 @@ export function Chat({
                     }
                     const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
                     if (!report) return <NoticeLine key={key} title={notificationTitle(part)} raw={part.raw} isFailed={part.status === 'failed'} />
-                    return renderRelayLine(reportRelay(report, message.timestamp, memberNameOf), `relay:${key}`)
+                    return renderRelayLine(reportRelay(report, message.timestamp, memberOf), `relay:${key}`)
                   })}
                 </Fragment>
               )

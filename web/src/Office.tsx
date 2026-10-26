@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { PositionChip } from './PositionChip'
+import { nameOf as sessionNameOf, positionOf } from './sessionPosition'
 import {
   AnimatedSprite,
   Application,
@@ -1246,13 +1248,17 @@ type HoveredCard = { kind: 'session'; sessionId: string; rectKey: string } | { k
  */
 function SeatCard({ session, teamName, placeLabel }: { session: Session; teamName: string | null; placeLabel: string | null }) {
   if (attendanceOf(session) === 'off') {
-    const name = session.name ?? session.title ?? session.id.slice(0, 8)
+    const name = sessionNameOf(session)
     const label = session.offDuty ? offDutyLabel(session.offDuty, Date.now()) : null
     return (
       <>
         <div className="office-card-head">
           <span className="status-dot off" />
-          <b>{teamName ? `${teamName} · ${name}` : name}</b>
+          <b>
+            {teamName ? `${teamName} · ` : ''}
+            <PositionChip position={positionOf(session)} />
+            {name}
+          </b>
         </div>
         <div className="office-card-facts">
           {label && <span className={label.isError ? 'office-card-error' : undefined}>{label.text}</span>}
@@ -1271,7 +1277,10 @@ function SeatCard({ session, teamName, placeLabel }: { session: Session; teamNam
     <>
       <div className="office-card-head">
         <span className={`status-dot ${isOnBreak ? '' : session.status}`} />
-        <b>{session.name ?? session.title ?? session.id.slice(0, 8)}</b>
+        <b>
+          <PositionChip position={positionOf(session)} />
+          {sessionNameOf(session)}
+        </b>
       </div>
       <div className="office-card-facts">{facts.join(' · ')}</div>
       {lounge && <div className="office-card-facts">{lounge}</div>}
@@ -2029,7 +2038,7 @@ export function Office(props: Props) {
             const key = 'more:lounge'
             const nameOf = (id: string) => {
               const session = layout.seated.find((s) => s.id === id)
-              return session?.name ?? session?.title ?? id.slice(0, 8)
+              return session ? sessionNameOf(session) : id.slice(0, 8)
             }
             const card: HoveredCard = { kind: 'more', key, title: `Lounge · ${plan.more.count} more`, lines: overflowNames(plan.overflow.map(nameOf)) }
             moreCards.set(key, card)
@@ -2290,7 +2299,7 @@ export function Office(props: Props) {
             arrowTooltip.visible = false
             return
           }
-          const names = arrow.targets.map(({ session }) => session.name ?? session.title ?? session.id.slice(0, 8))
+          const names = arrow.targets.map(({ session }) => sessionNameOf(session))
           const shown = names.length > 6 ? [...names.slice(0, 5), `and ${names.length - 5} more`] : names
           arrowTooltipText.text = `Needs approval\n${shown.join('\n')}`
           const w = arrowTooltipText.width + 12

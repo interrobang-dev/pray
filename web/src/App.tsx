@@ -20,6 +20,8 @@ import { Modal, Segmented } from './Modal'
 import { ModelSettingModal, useRestartingSessions } from './ModelSettingModal'
 import { nextLabel } from './modelSetting'
 import { sessionMenuEntries } from './sessionMenu'
+import { LEAD_POSITION, MEMBER_POSITION, editableNameOf, modalName, modalPosition, nameOf, positionOf, renamePatch } from './sessionPosition'
+import { PositionChip } from './PositionChip'
 import { CharacterPicker, type CharacterChoice } from './CharacterPicker'
 import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, type RecolorArt } from './characterArt'
 import { dotLookOf } from './dotCharacter'
@@ -73,19 +75,10 @@ const THEME_LABELS: Record<ThemeChoice, string> = { light: 'Light', dark: 'Dark'
 const SESSION_TRUST_FAILED_MESSAGE =
   `Couldn't mark the folder as trusted. If this is the first session in this folder, allow trust yourself in the Terminal tab (leaving the default "No, exit" ends the session).`
 
-/** 세션 추가 모달이 미리 채우는 이름 "[역할] 이름" 의 역할 (사용자 확정). 팀장·파트장 모두 Lead */
-const MEMBER_ROLE_TAG = 'Dev'
-const LEAD_ROLE_TAG = 'Lead'
-
-/** 이름 추천 API 응답. 성별은 서버가 그 이름에 맞춰 정한다 (옛 서버 응답에는 없다) */
+/** 이름 추천 API 응답. name 은 이름만 (역할은 따로). 성별은 서버가 그 이름에 맞춰 정한다 (옛 서버 응답에는 없다) */
 interface MemberNameSuggestion {
   name: string
   gender?: 'male' | 'female'
-}
-
-/** "[역할] 이름" 의 역할 부분만 바꾼다 (이름은 그대로) */
-function withRoleTag(name: string, roleTag: string): string {
-  return name.replace(/^\[[^\]]*\]/, `[${roleTag}]`)
 }
 
 /** 미디어 쿼리 일치 여부. 창 폭이 바뀌면 따라간다 */
@@ -103,7 +96,7 @@ function useMediaQuery(query: string): boolean {
 
 /** 화면에 쓰는 세션 이름: 사용자 지정 → 자동 제목 → ID 앞 8자리 */
 function displayName(session: Session): string {
-  return session.name ?? session.title ?? session.id.slice(0, 8)
+  return nameOf(session)
 }
 
 /** 모델 ID → 짧은 이름. claude-<이름>-<주>-<부> 는 "Opus 5.5" 꼴로, 모르는 꼴은 ID 그대로 (날짜가 붙은 옛 ID 가 "Opus 4.20250514" 가 되지 않게 버전은 두 자리까지) */
@@ -196,12 +189,14 @@ export function App() {
   const [sessionForm, setSessionForm] = useState<{ teamId: string | null; partId: string | null } | null>(null)
   const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
   /**
-   * 팀·파트 세션 추가 모달에 미리 채울 이름과 그 성별. 서버가 이름을 고른 "[Dev] 이름" 이고, 보일 때는 세그먼트에 맞춰 역할만 바꾼다.
-   * 성별은 이 이름을 그대로 쓸 때만 세션 생성에 넘긴다
+   * 팀·파트 세션 추가 모달에 미리 채울 이름(이름만)과 그 성별. 성별은 이 이름을 그대로 쓸 때만 세션 생성에 넘긴다.
+   * Role 칸은 세그먼트(Member/Lead)에 따라 Dev/Lead 로 채운다
    */
   const [suggestedSessionName, setSuggestedSessionName] = useState<MemberNameSuggestion | null>(null)
-  /** 사용자가 이름 칸에 직접 쓴 값. null 이면 아직 안 고쳤다 — 고친 뒤로는 미리 채운 이름·세그먼트로 바꾸지 않는다 */
+  /** 사용자가 Name 칸에 직접 쓴 값. null 이면 아직 안 고쳤다 — 고친 뒤로는 추천 이름으로 바꾸지 않는다 */
   const [typedSessionName, setTypedSessionName] = useState<string | null>(null)
+  /** 사용자가 Role 칸에 직접 쓴 값. null 이면 아직 안 고쳤다 — 고친 뒤로는 세그먼트로 Dev↔Lead 를 바꾸지 않는다 */
+  const [typedSessionPosition, setTypedSessionPosition] = useState<string | null>(null)
   /** 파트 추가 모달. 팀 "⋯" 의 "파트 추가" 로 열린다 */
   const [partForm, setPartForm] = useState<{ teamId: string } | null>(null)
   const [partLocation, setPartLocation] = useState<'folder' | 'worktree'>('folder')
@@ -304,7 +299,7 @@ export function App() {
   useEffect(() => {
     if (!sessionForm?.teamId) return
     let isCancelled = false
-    const query = new URLSearchParams({ role: MEMBER_ROLE_TAG })
+    const query = new URLSearchParams({ role: MEMBER_POSITION })
     if (sessionForm.partId) query.set('partId', sessionForm.partId)
     fetch(`/api/team/${sessionForm.teamId}/member-name?${query}`)
       .then((r) => (r.ok ? (r.json() as Promise<MemberNameSuggestion>) : null))
@@ -410,6 +405,7 @@ export function App() {
       teamId: sessionForm.teamId ?? undefined,
       partId: sessionForm.partId ?? undefined,
       name: form.get('name'),
+      position: String(form.get('position') ?? '').trim() || undefined,
       gender: isSuggestedName ? suggestedSessionName?.gender : undefined,
       isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
     })
@@ -453,8 +449,8 @@ export function App() {
     if (isLinked) alert(`Linked to the existing worktree and branch ${part.worktree?.branch} (not created fresh from the current HEAD).\n${part.worktree?.cwd}`)
     setPartForm(null)
     if (!isPartLeadSpawned) return
-    // 세션 추가 모달의 파트장과 같은 "[Lead] 이름" 과 그 성별. 추천을 못 받으면 이름 없이 (자동 제목)
-    const leadQuery = new URLSearchParams({ role: LEAD_ROLE_TAG, partId: part.id })
+    // 세션 추가 모달의 파트장과 같은 역할 Lead + 추천 이름과 그 성별. 추천을 못 받으면 이름 없이 (자동 제목)
+    const leadQuery = new URLSearchParams({ role: LEAD_POSITION, partId: part.id })
     const leadName = await fetch(`/api/team/${partForm.teamId}/member-name?${leadQuery}`)
       .then((r) => (r.ok ? (r.json() as Promise<MemberNameSuggestion>) : null))
       .catch(() => null)
@@ -463,6 +459,7 @@ export function App() {
       partId: part.id,
       isLead: true,
       name: leadName?.name,
+      position: LEAD_POSITION,
       gender: leadName?.gender,
     })
     if (!leadResponse.ok) {
@@ -530,10 +527,14 @@ export function App() {
     event.preventDefault()
     if (!renameTarget) return
     const form = new FormData(event.currentTarget)
-    const response = await postJson(`/api/sessions/${renameTarget.id}`, 'PATCH', { name: form.get('name') })
-    if (!response.ok) {
-      alert((await response.json()).message ?? "Couldn't rename session")
-      return
+    // 바뀐 이름·역할만 보낸다 (이름만 고쳤는데 역할이 지워지지 않게)
+    const patch = renamePatch(renameTarget, String(form.get('name') ?? ''), String(form.get('position') ?? ''))
+    if (Object.keys(patch).length > 0) {
+      const response = await postJson(`/api/sessions/${renameTarget.id}`, 'PATCH', patch)
+      if (!response.ok) {
+        alert((await response.json()).message ?? "Couldn't rename session")
+        return
+      }
     }
     const current = renameTarget.character ?? null
     const isCharacterChanged =
@@ -566,6 +567,7 @@ export function App() {
     setSessionRole('member')
     setSuggestedSessionName(null)
     setTypedSessionName(null)
+    setTypedSessionPosition(null)
     setSessionForm({ teamId, partId })
   }
 
@@ -834,8 +836,8 @@ export function App() {
     const leadSessionId = part ? part.leadSessionId : team?.leadSessionId
     const hasLiveLead = Boolean(leadSessionId && snapshot.sessions.some((s) => s.id === leadSessionId && s.isAlive))
     const leadLabel = part ? 'Part lead' : 'Lead'
-    const roleTag = sessionRole === 'lead' ? LEAD_ROLE_TAG : MEMBER_ROLE_TAG
-    const sessionName = typedSessionName ?? (team && suggestedSessionName ? withRoleTag(suggestedSessionName.name, roleTag) : '')
+    const sessionPosition = modalPosition(typedSessionPosition, sessionRole, Boolean(team))
+    const sessionName = modalName(typedSessionName, suggestedSessionName?.name ?? null, Boolean(team))
     return (
       <Modal
         title={
@@ -863,13 +865,27 @@ export function App() {
             />
           )}
           {!team && <input name="cwd" placeholder="Folder path (e.g. D:\workspace\foo)" required autoFocus />}
-          <input
-            name="name"
-            placeholder="Session name (optional; empty = auto title from the chat)"
-            value={sessionName}
-            onChange={(event) => setTypedSessionName(event.target.value)}
-            autoFocus={Boolean(team)}
-          />
+          <div className="field-row">
+            <label className="field role">
+              <span>Role</span>
+              <input
+                name="position"
+                placeholder="e.g. FE"
+                value={sessionPosition}
+                onChange={(event) => setTypedSessionPosition(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Name</span>
+              <input
+                name="name"
+                placeholder="Optional; empty = auto title"
+                value={sessionName}
+                onChange={(event) => setTypedSessionName(event.target.value)}
+                autoFocus={Boolean(team)}
+              />
+            </label>
+          </div>
           <div className="actions">
             <button type="submit" className="primary">
               Start
@@ -1011,7 +1027,11 @@ export function App() {
           title={roleLabel ?? undefined}
           aria-label={roleLabel ?? undefined}
         />
-        <div className="title">{teamName ? `${teamName} · ${displayName(session)}` : displayName(session)}</div>
+        <div className="title">
+          {teamName ? `${teamName} · ` : ''}
+          <PositionChip position={positionOf(session)} />
+          {displayName(session)}
+        </div>
         {model && (
           <span className="model" title={session.model ?? undefined}>
             {model}
@@ -1259,12 +1279,16 @@ export function App() {
         {renameTarget && (
           <Modal title="Rename session" subtitle={renameTarget.title ?? renameTarget.id} onClose={() => setRenameTarget(null)}>
             <form className="create" onSubmit={renameSession}>
-              <input
-                name="name"
-                defaultValue={renameTarget.name ?? ''}
-                placeholder="Empty = back to the auto title"
-                autoFocus
-              />
+              <div className="field-row">
+                <label className="field role">
+                  <span>Role</span>
+                  <input name="position" defaultValue={positionOf(renameTarget) ?? ''} placeholder="e.g. FE" />
+                </label>
+                <label className="field">
+                  <span>Name</span>
+                  <input name="name" defaultValue={editableNameOf(renameTarget)} placeholder="Empty = back to the auto title" autoFocus />
+                </label>
+              </div>
               {renameTarget.role === 'lead' && (
                 <>
                   <span className="form-hint">Office character (shown at the desk, as the list avatar and on the Off Duty street)</span>
@@ -1319,7 +1343,10 @@ export function App() {
         {selected && (
           <section className="panel">
             <div className="panel-header">
-              <b>{displayName(selected)}</b>
+              <b>
+                <PositionChip position={positionOf(selected)} />
+                {displayName(selected)}
+              </b>
               <button className="rename" title="Rename" onClick={() => openRename(selected)}>
                 ✎
               </button>
@@ -1392,6 +1419,7 @@ export function App() {
                 suggestion={selected.suggestion ?? null}
                 version={transcriptVersions[selected.id] ?? 0}
                 sessionNames={Object.fromEntries(snapshot.sessions.map((s) => [s.id, displayName(s)]))}
+                sessionPositions={Object.fromEntries(snapshot.sessions.map((s) => [s.id, positionOf(s)]))}
                 jump={jump?.sessionId === selected.id ? jump : null}
                 onJumpHandled={() => setJump(null)}
                 onOpenRelay={openRelay}

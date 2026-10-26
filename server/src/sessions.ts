@@ -164,6 +164,8 @@ export async function listSessions(
   characters: Record<string, SessionCharacter> = {},
   /** hq.json genders (서버가 이름을 지은 세션의 성별) */
   genders: Record<string, SessionGender> = {},
+  /** hq.json positions (세션 역할) */
+  positions: Record<string, string> = {},
 ): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
   const recordedById = new Map(recorded.map((r) => [r.sessionId, r]))
@@ -197,6 +199,7 @@ export async function listSessions(
         id,
         cwd,
         name: names[id] ?? null,
+        position: positions[id] ?? null,
         character: characters[id] ?? null,
         gender: genders[id] ?? null,
         title: transcript?.title ?? null,
