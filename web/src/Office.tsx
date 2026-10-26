@@ -107,8 +107,10 @@ const COLOR = {
   spaceLabelOnNavy: 0xd9dff0,
   /** 팀 명판 테두리 */
   plateLine: 0xc3c7d1,
-  /** 팀 명판 인원 수·파트 worktree 브랜치 */
+  /** 팀 명판 인원 수·파트 worktree 브랜치·남은 것이 없는 그룹 TODO 아이콘 */
   labelMuted: 0x7a7f8e,
+  /** 그룹 TODO 버튼의 남은(미완료) 개수 배지 */
+  todoBadge: 0xe8620c,
   partLabel: 0x5f6573,
   /** 끌 수 있는 라벨에 마우스를 올렸을 때의 테두리 */
   labelHover: 0x8f97a8,
@@ -582,8 +584,8 @@ function dotPartitions(w: number, h: number): Graphics {
   )
 }
 
-/** 공간(그룹·Focus Zone·Lounge) 라벨·팀 명판(그룹 TODO 개수도)·파트 라벨 글자 (도트 px). 계층 순 */
-const DOT_FONT = { space: 18, team: 14, part: 12 }
+/** 공간(그룹·Focus Zone·Lounge) 라벨·팀 명판·파트 라벨·그룹 TODO 개수 배지 글자 (도트 px). 계층 순 */
+const DOT_FONT = { space: 18, team: 14, part: 12, badge: 11 }
 /** 그룹·Lounge 라벨 글자 왼쪽 위 (공간 왼쪽 위 기준, 파티션 9 + 그늘 3 안쪽) */
 const SPACE_LABEL = { x: 20, y: 16 }
 
@@ -694,11 +696,33 @@ function spaceLabelText(content: string, color: number): Text {
 
 /** TODO 버튼과 그룹 이름표 손잡이 사이 (도트 px). 둘의 마우스 올림 테두리(3px 밖)가 닿지 않게 */
 const TODO_BUTTON_GAP = 8
+/** TODO 버튼 흰 판의 아이콘 양옆 (테두리 2 포함, 도트 px) */
+const TODO_PLATE_PAD_X = 7
+/** 남은 개수 배지 줄마다 양 끝에서 깎는 칸 = 도트 원(지름 16)의 둥근 끝. 줄 수 = 배지 높이. 두 자리 이상은 가운데를 늘려 알약 */
+const TODO_BADGE_INSET = [5, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 5]
+/** 배지 왼쪽 끝 = 판 오른쪽 끝 − 이 값 (도트 px). 판 오른쪽 여백·테두리에만 걸쳐 아이콘(판 오른쪽 끝 − 8 까지)을 덮지 않는다. 두 자리 이상은 오른쪽으로 늘어난다 */
+const TODO_BADGE_OVERLAP = 6
+
+/** 남은 개수 배지: 주황 도트 원(한 자리)·알약(두 자리 이상) + 흰 굵은 숫자. 이벤트는 받지 않는다. w = 배지 폭 (도트 px) */
+function dotCountBadge(count: number): { badge: Container; w: number } {
+  const badge = new Container()
+  badge.eventMode = 'none'
+  const digits = dotLabelText(String(count), DOT_FONT.badge, 0xffffff, 'bold')
+  const h = TODO_BADGE_INSET.length
+  const w = Math.max(h, Math.ceil(digits.width) + 8)
+  const shape = new Graphics()
+  TODO_BADGE_INSET.forEach((inset, y) => shape.rect(inset, y, w - 2 * inset, 1))
+  shape.fill(COLOR.todoBadge)
+  digits.position.set(Math.round((w - digits.width) / 2), Math.round((h - digits.height) / 2))
+  badge.addChild(shape, digits)
+  return { badge, w }
+}
 
 /**
  * 도트 그룹(데스크존): 밝은 회색 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽, 아래는 회색 걸레받이) + 위 이름표 줄의 이름표·TODO 버튼·큰 화분(고정 꾸미기).
  * 크기는 저장된 w·h 가 아니라 그려지는 영역(섬이 있으면 섬들 + 위 이름표 줄, 없으면 저장 위치의 최소 크기).
- * TODO 버튼은 체크리스트 도트 아이콘 + 남은(미완료) 개수 (0 이면 아이콘만 흐리게 — 캔버스는 마우스 올림 때만 보이기가 어렵다). 누르기는 redraw 가 묶는다
+ * TODO 버튼은 팀 명판과 같은 흰 둥근 판(높이 = 이름표 손잡이) 안의 체크리스트 도트 아이콘. 남은(미완료) 것이 있으면 아이콘은 진회색이고
+ * 판 오른쪽 위 모서리에 주황 개수 배지, 0 이면 흐린 아이콘만 (캔버스는 마우스 올림 때만 보이기가 어려워 늘 그린다). 누르기는 redraw 가 묶는다
  */
 function drawDotGroup(area: GroupArea, art: DotArt): GroupParts {
   const { group } = area
@@ -717,29 +741,35 @@ function drawDotGroup(area: GroupArea, art: DotArt): GroupParts {
   name.position.set(6, 3)
   sign.addChild(name)
 
+  // TODO 버튼: 흰 판 + 아이콘 + 배지. 마우스 올림 테두리는 판 둘레 3px 밖, 클릭 영역은 배지까지
   const remaining = remainingCount(group)
-  const todoColor = remaining > 0 ? COLOR.spaceLabel : COLOR.labelMuted
-  const count = remaining > 0 ? dotLabelText(String(remaining), DOT_FONT.team, todoColor, 'bold') : null
-  const iconW = TODO_ICON[0].length
-  const buttonW = 6 + iconW + (count ? 4 + Math.ceil(count.width) : 0) + 6
+  const plateW = TODO_ICON[0].length + 2 * TODO_PLATE_PAD_X
   const todoButton = new Container()
   todoButton.position.set(sign.x + signW + TODO_BUTTON_GAP, sign.y)
-  todoButton.hitArea = new Rectangle(0, 0, buttonW, signH)
   todoButton.eventMode = 'static'
   todoButton.cursor = 'pointer'
-  const todoHover = dotRoundRect(new Graphics(), -3, -3, buttonW + 6, signH + 6, COLOR.labelHover, { color: 0xffffff, alpha: 0.45 })
+  const todoHover = dotRoundRect(new Graphics(), -3, -3, plateW + 6, signH + 6, COLOR.labelHover, { color: 0xffffff, alpha: 0.45 })
   todoHover.visible = false
-  const icon = dotPixelIcon(TODO_ICON, todoColor)
-  icon.position.set(6, Math.round((signH - TODO_ICON.length) / 2))
-  todoButton.addChild(todoHover, icon)
-  if (count) {
-    count.position.set(6 + iconW + 4, Math.round((signH - count.height) / 2))
-    todoButton.addChild(count)
+  const plate = dotRoundRect(new Graphics(), 0, 0, plateW, signH, COLOR.plateLine, { color: 0xffffff, alpha: 1 })
+  plate.eventMode = 'none'
+  const icon = dotPixelIcon(TODO_ICON, remaining > 0 ? COLOR.spaceLabel : COLOR.labelMuted)
+  icon.position.set(TODO_PLATE_PAD_X, Math.round((signH - TODO_ICON.length) / 2))
+  todoButton.addChild(todoHover, plate, icon)
+  let buttonRight = plateW
+  let buttonTop = 0
+  if (remaining > 0) {
+    const { badge, w: badgeW } = dotCountBadge(remaining)
+    // 위 끝 = 그룹 위 파티션 바로 아래: 판 위로 나오되 흰 파티션은 덮지 않고 그 아래 그늘(3)만 덮는다
+    badge.position.set(plateW - TODO_BADGE_OVERLAP, PARTITION_W - todoButton.y)
+    todoButton.addChild(badge)
+    buttonRight = Math.max(plateW, badge.x + badgeW)
+    buttonTop = badge.y
   }
+  todoButton.hitArea = new Rectangle(0, buttonTop, buttonRight, signH - buttonTop)
 
   dot.addChild(dotTiling(art, 'desk-carpet', w, h), dotPartitions(w, h))
-  // 큰 화분은 이름표·TODO 버튼과 겹치면(좁은 그룹·긴 이름) 두지 않는다
-  for (const item of groupFixtures(area, todoButton.x + buttonW)) dot.addChild(fixtureSprite(art, item))
+  // 큰 화분은 이름표·TODO 버튼(배지까지)과 겹치면(좁은 그룹·긴 이름) 두지 않는다
+  for (const item of groupFixtures(area, todoButton.x + buttonRight)) dot.addChild(fixtureSprite(art, item))
   dot.addChild(sign, todoButton)
 
   container.eventMode = 'static'
