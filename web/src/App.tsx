@@ -19,6 +19,7 @@ import { remainingCount, todosOf } from './groupTodos'
 import { Modal, Segmented } from './Modal'
 import { ModelSettingModal, useRestartingSessions } from './ModelSettingModal'
 import { nextLabel } from './modelSetting'
+import { sessionMenuEntries } from './sessionMenu'
 import { CharacterPicker, type CharacterChoice } from './CharacterPicker'
 import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, type RecolorArt } from './characterArt'
 import { dotLookOf } from './dotCharacter'
@@ -48,6 +49,9 @@ const EMPTY_OFFICE: OfficeData = { groups: [], teams: [] }
 
 /** 이 폭 이하는 폰 화면: 한 열(목록 ↔ 패널)이고 사무실을 마운트하지 않는다. style.css 의 @media 와 같은 값 */
 const NARROW_QUERY = '(max-width: 768px)'
+
+/** 마우스가 없는 기기. style.css 의 `@media (hover: none)` 과 같은 값 */
+const TOUCH_QUERY = '(hover: none)'
 
 /** 사무실 숨기기 여부를 남기는 localStorage 키 (이 브라우저만) */
 const OFFICE_HIDDEN_KEY = 'jk-corp.isOfficeHidden'
@@ -207,7 +211,7 @@ export function App() {
   /** 이름 모달에서 고른 도트 인물 (null = 자동). 지시자일 때만 모달에 보인다 */
   const [renameCharacter, setRenameCharacter] = useState<CharacterChoice>({ id: null, hair: null, top: null })
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
-  /** 모델·effort 변경 창을 연 세션 ID. 다른 세션을 고르면 창은 그리지 않는다 */
+  /** 모델·effort 변경 창을 연 세션 ID. 패널 모델 칩과 목록 ⋯ 메뉴가 같이 연다 (패널이 안 열린 세션도 된다) */
   const [modelModalSessionId, setModelModalSessionId] = useState<string | null>(null)
   /** Chat 이 알려 준 "대화 맨 끝에 대기 메시지가 있는" 세션 ID (없으면 null) */
   const [queuedSessionId, setQueuedSessionId] = useState<string | null>(null)
@@ -239,6 +243,8 @@ export function App() {
   const [reorderDrag, setReorderDrag] = useState<{ scope: ReorderScope; id: string; dropIndex: number | null } | null>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const isNarrow = useMediaQuery(NARROW_QUERY)
+  /** 마우스가 없는 기기. 세션 줄 ⋯ 는 hover 로 나타나서 두지 않는다 */
+  const isTouch = useMediaQuery(TOUCH_QUERY)
   /** 헤더 버튼으로 사무실을 숨겼는지 (localStorage). 폰 폭은 원래 사무실이 없어 이 값과 무관하다 */
   const [isOfficeHidden, setIsOfficeHidden] = useState(readIsOfficeHidden)
   /** 목록 아바타를 도트 인물 머리로 그릴 아틀라스. 읽기 전·못 읽으면 빈 칩 */
@@ -328,6 +334,7 @@ export function App() {
   )
   const { restartingIds, beginRestart } = useRestartingSessions()
   const selected = snapshot.sessions.find((s) => s.id === selectedId) ?? null
+  const modelModalSession = snapshot.sessions.find((s) => s.id === modelModalSessionId) ?? null
   const isSelectedPresent = selected !== null && attendanceOf(selected) === 'present'
   /** 근무 중인 웹 세션. 터미널·입력·승인·종료는 이때만 (휴식·퇴근 세션 pty 에 키·resize 를 보내지 않게) */
   const isSelectedLiveWeb = isSelectedPresent && selected.kind === 'web'
@@ -616,6 +623,45 @@ export function App() {
     if (!response.ok) alert((await response.json()).message ?? "Couldn't delete group")
   }
 
+  async function renameGroup(group: Group) {
+    const name = prompt('Group name', group.name)?.trim()
+    if (!name || name === group.name) return
+    const response = await postJson(`/api/groups/${group.id}`, 'PATCH', { name })
+    if (!response.ok) alert(((await response.json().catch(() => ({}))) as { message?: string }).message ?? "Couldn't rename group")
+  }
+
+  function endSession(sessionId: string) {
+    if (confirm('End this session?')) void fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' })
+  }
+
+  /** 목록 ⋯ 메뉴의 Clock in. 받아들여지면 패널 퇴근 막대와 같이 근무로 바뀔 때까지 "Clocking in…" 으로 막는다 */
+  async function clockIn(session: Session) {
+    try {
+      const response = await postJson(`/api/sessions/${session.id}/resume`, 'POST', {})
+      if (response.ok) {
+        setReturningSessions((prev) => ({ ...prev, [session.id]: session.offDuty?.endedAt ?? '' }))
+        return
+      }
+      const { message } = (await response.json().catch(() => ({}))) as { message?: string }
+      alert(`Couldn't clock in: ${message ?? `HTTP ${response.status}`}`)
+    } catch {
+      alert("Couldn't clock in: Network error")
+    }
+  }
+
+  /** 목록 ⋯ 메뉴의 Delete record. 확인 문구는 패널 퇴근 막대와 같다 */
+  async function deleteRecord(sessionId: string) {
+    if (!confirm("Delete the off duty record? The session leaves the list and can't clock in again.")) return
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/off-duty`, { method: 'DELETE' })
+      if (response.ok) return
+      const { message } = (await response.json().catch(() => ({}))) as { message?: string }
+      alert(`Couldn't delete record: ${message ?? `HTTP ${response.status}`}`)
+    } catch {
+      alert("Couldn't delete record: Network error")
+    }
+  }
+
   /** TODO 모달이 서버 응답으로 화면 목록을 먼저 바꾼다. 사무실 SSE 가 오면 서버 것으로 바뀐다 */
   function changeTodos(groupId: string, update: (todos: GroupTodo[]) => GroupTodo[]) {
     setOffice((prev) => ({ ...prev, groups: prev.groups.map((g) => (g.id === groupId ? { ...g, todos: update(todosOf(g)) } : g)) }))
@@ -757,6 +803,15 @@ export function App() {
     )
   }
 
+  /** 끌 수 없는 줄(파트, 그룹이 지워진 팀)의 빈 ⠿ 칸. 손잡이와 같은 폭이라 버튼 열이 줄마다 세로로 맞는다 */
+  function renderDragSpacer() {
+    return (
+      <button className="drag-handle drag-spacer" tabIndex={-1} aria-hidden="true" disabled>
+        ⠿
+      </button>
+    )
+  }
+
   /** 그룹 라벨의 TODO 버튼: 체크리스트 아이콘 + 남은 개수. 남은 것이 있으면 늘 보이고 0 이면 "+"·"⋯" 처럼 마우스를 올렸을 때만 (터치 기기는 늘) */
   function renderTodoButton(group: Group) {
     const remaining = remainingCount(group)
@@ -833,9 +888,11 @@ export function App() {
     const scope: ReorderScope = { kind: 'team', groupId: team.groupId }
     // 근무·휴식 세션. 순서는 서버가 준 그대로 (생성순)
     const members = snapshot.sessions.filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off')
-    const menuItems = [
+    const menuItems: MenuItem[] = [
+      { label: 'Rename', onClick: () => editTeam(team) },
       { label: 'Add part', onClick: () => openPartForm(team.id) },
       ...(team.leadSessionId ? [{ label: 'Remove lead', onClick: () => releaseLead(team) }] : []),
+      'separator',
       { label: 'Delete team', onClick: () => removeTeam(team) },
     ]
     return (
@@ -855,7 +912,7 @@ export function App() {
               +
             </button>
             <MoreMenu items={menuItems} />
-            {position && renderDragHandle(scope, team.id)}
+            {position ? renderDragHandle(scope, team.id) : renderDragSpacer()}
           </span>
         </div>
         {members.filter((s) => !s.partId).map((session) => renderSession(session, false))}
@@ -866,9 +923,10 @@ export function App() {
 
   /** 파트 소제목(worktree 아이콘·이름·세션 수·hover 버튼) + 파트 세션. 브랜치 이름은 아이콘 툴팁 */
   function renderPart(team: Team, part: Part, members: Session[]) {
-    const menuItems = [
+    const menuItems: MenuItem[] = [
       { label: 'Rename', onClick: () => editPart(team, part) },
       ...(part.leadSessionId ? [{ label: 'Remove part lead', onClick: () => releasePartLead(team, part) }] : []),
+      'separator',
       { label: 'Delete part', onClick: () => void removePart(team, part) },
     ]
     const worktreeLabel = part.worktree ? `worktree · ${part.worktree.branch}` : null
@@ -887,11 +945,41 @@ export function App() {
               +
             </button>
             <MoreMenu items={menuItems} />
+            {renderDragSpacer()}
           </span>
         </div>
         {members.map((session) => renderSession(session, false))}
       </div>
     )
+  }
+
+  /** 세션 줄 ⋯ 메뉴: 그 세션에서 되는 것만, 패널의 ✎·모델 칩·전원 아이콘·퇴근 막대와 같은 동작을 부른다 */
+  function sessionMenuItems(session: Session): MenuItem[] {
+    return sessionMenuEntries(session).map((entry): MenuItem => {
+      switch (entry) {
+        case 'separator':
+          return 'separator'
+        case 'rename':
+          return { label: 'Rename…', onClick: () => openRename(session) }
+        case 'model':
+          return restartingIds.has(session.id)
+            ? { label: 'Model & effort…', onClick: () => undefined, isDisabled: true, title: 'Restarting…' }
+            : { label: 'Model & effort…', onClick: () => setModelModalSessionId(session.id) }
+        case 'end':
+          return { label: 'End session', onClick: () => endSession(session.id) }
+        case 'clock-in': {
+          const isReturning = session.id in returningSessions
+          return {
+            label: 'Clock in',
+            onClick: () => void clockIn(session),
+            isDisabled: isReturning,
+            title: isReturning ? 'Clocking in…' : undefined,
+          }
+        }
+        case 'delete-record':
+          return { label: 'Delete record', onClick: () => void deleteRecord(session.id) }
+      }
+    })
   }
 
   /**
@@ -933,15 +1021,23 @@ export function App() {
         <div className="meta">
           {isPresent && session.status === 'needs-approval' && <span className="badge needs-approval">{statusLabel[session.status]}</span>}
           {attendance === 'break' && <span className="badge">Break</span>}
-          {offDuty ? (
-            <span className={offDuty.isError ? 'off-duty-reason error' : 'off-duty-reason'} title={offDuty.title}>
-              {offDuty.text}
-            </span>
-          ) : (
-            <span className={`time ${elapsed.className}`} title={elapsed.title}>
-              {elapsed.text}
-            </span>
-          )}
+          {/* 시각(퇴근은 이유 · 시각)과 ⋯ 는 한 칸에 겹쳐 있어 줄 폭이 안 바뀐다. 마우스를 올리면 시각이 숨고 ⋯ 가 보인다 */}
+          <span className="session-tail">
+            {offDuty ? (
+              <span className={offDuty.isError ? 'off-duty-reason error' : 'off-duty-reason'} title={offDuty.title}>
+                {offDuty.text}
+              </span>
+            ) : (
+              <span className={`time ${elapsed.className}`} title={elapsed.title}>
+                {elapsed.text}
+              </span>
+            )}
+            {!isNarrow && !isTouch && (
+              <span className="session-more" onClick={(event) => event.stopPropagation()}>
+                <MoreMenu items={sessionMenuItems(session)} />
+              </span>
+            )}
+          </span>
         </div>
         {hasCwd && <div className="cwd">{session.cwd}</div>}
       </div>
@@ -1045,7 +1141,18 @@ export function App() {
                       <button onClick={() => openTeamForm(group.id)} title="Add team to group">
                         +
                       </button>
-                      {teams.length === 0 && <MoreMenu items={[{ label: 'Delete group', onClick: () => removeGroup(group) }]} />}
+                      <MoreMenu
+                        items={[
+                          { label: 'Rename', onClick: () => void renameGroup(group) },
+                          'separator',
+                          {
+                            label: 'Delete group',
+                            onClick: () => void removeGroup(group),
+                            isDisabled: teams.length > 0,
+                            title: teams.length > 0 ? 'Move or delete its teams first' : undefined,
+                          },
+                        ]}
+                      />
                       {renderDragHandle({ kind: 'group' }, group.id)}
                     </span>
                   </div>
@@ -1259,9 +1366,7 @@ export function App() {
                   className="end-session"
                   title="End session"
                   aria-label="End session"
-                  onClick={() => {
-                    if (confirm('End this session?')) void fetch(`/api/sessions/${selected.id}`, { method: 'DELETE' })
-                  }}
+                  onClick={() => endSession(selected.id)}
                 >
                   <EndSessionIcon />
                 </button>
@@ -1300,13 +1405,13 @@ export function App() {
             )}
           </section>
         )}
-        {selected && isSelectedLiveWeb && modelModalSessionId === selected.id && (
+        {modelModalSession && attendanceOf(modelModalSession) === 'present' && modelModalSession.kind === 'web' && (
           <ModelSettingModal
-            session={selected}
-            hasQueuedMessage={queuedSessionId === selected.id}
+            session={modelModalSession}
+            hasQueuedMessage={queuedSessionId === modelModalSession.id}
             onClose={() => setModelModalSessionId(null)}
             onApplied={(isRestarted) => {
-              if (isRestarted) beginRestart(selected.id)
+              if (isRestarted) beginRestart(modelModalSession.id)
               setModelModalSessionId(null)
             }}
           />
@@ -1493,8 +1598,11 @@ function ChatsIcon() {
   )
 }
 
+/** 드롭다운 항목. 'separator' 는 구분선, isDisabled 는 흐리게 두고 누를 수 없다 (이유는 title) */
+type MenuItem = { label: string; onClick: () => void; isDisabled?: boolean; title?: string } | 'separator'
+
 /** "⋯" 버튼 + 작은 드롭다운. 바깥 클릭·Esc 로 닫힌다 */
-function MoreMenu({ items }: { items: { label: string; onClick: () => void }[] }) {
+function MoreMenu({ items }: { items: MenuItem[] }) {
   const [isOpen, setIsOpen] = useState(false)
   const rootRef = useRef<HTMLSpanElement>(null)
 
@@ -1521,17 +1629,23 @@ function MoreMenu({ items }: { items: { label: string; onClick: () => void }[] }
       </button>
       {isOpen && (
         <div className="menu-list">
-          {items.map((item) => (
-            <button
-              key={item.label}
-              onClick={() => {
-                setIsOpen(false)
-                item.onClick()
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
+          {items.map((item, index) =>
+            item === 'separator' ? (
+              <hr key={`separator-${index}`} className="menu-separator" />
+            ) : (
+              <button
+                key={item.label}
+                disabled={item.isDisabled}
+                title={item.title}
+                onClick={() => {
+                  setIsOpen(false)
+                  item.onClick()
+                }}
+              >
+                {item.label}
+              </button>
+            ),
+          )}
         </div>
       )}
     </span>

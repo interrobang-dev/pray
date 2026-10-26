@@ -478,7 +478,8 @@ header button.icon svg {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 2px 0;
+  /* 오른쪽 9px = 팀 카드의 테두리 1 + 안쪽 8 — 그룹·팀·파트 머리줄의 버튼 열(+ ⋯ ⠿)이 세로로 맞는다 */
+  padding: 2px 9px 0 2px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.4px;
@@ -551,8 +552,23 @@ header button.icon svg {
   background: transparent;
   border-radius: 4px;
 }
-.menu-list button:hover {
+.menu-list button:hover:not(:disabled) {
   background: var(--bg);
+}
+.menu-list button:disabled {
+  color: var(--muted);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.menu-list .menu-separator {
+  height: 0;
+  margin: 3px 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+/* 끌 수 없는 줄(파트, 그룹이 지워진 팀)의 빈 ⠿ 칸: 자리만 차지해 "+"·"⋯"·⠿ 열이 줄마다 세로로 맞는다 */
+.head-actions .drag-spacer {
+  visibility: hidden;
 }
 /* 목록 끌어 놓기 (App.tsx). 손잡이는 head-actions 안이라 "+"·"⋯" 와 같이 hover 때만 보이고 터치 기기는 늘 보인다.
    손잡이에서만 끌리게(touch-action: none) 해 목록 스크롤과 부딪히지 않는다 */
@@ -709,7 +725,9 @@ li.group.drop-after::after {
 .session.selected {
   background: var(--green-soft);
 }
-.session.dead {
+/* 퇴근 줄은 흐리게. 줄 전체에 opacity 를 주면 안의 ⋯ 메뉴까지 비활성처럼 흐려져서 메뉴만 빼고 흐리게 한다 */
+.session.dead > :not(.meta),
+.session.dead .session-tail > :not(.session-more) {
   opacity: 0.45;
 }
 .status-dot {
@@ -754,6 +772,40 @@ li.group.drop-after::after {
   gap: 6px;
   font-size: 11px;
   color: var(--muted);
+}
+/* 시각(퇴근은 이유 · 시각)과 ⋯ 를 한 칸에 겹친다: 칸 폭은 둘 중 넓은 쪽이라 마우스를 올려도 줄 폭·제목 말줄임이 안 바뀐다.
+   ⋯ 는 마우스 기기에서만 렌더된다 (App.tsx). 메뉴가 열려 있는 동안은 마우스가 벗어나도 ⋯ 를 보인다 */
+.session-tail {
+  display: inline-grid;
+  justify-items: end;
+  align-items: center;
+}
+.session-tail > * {
+  grid-area: 1 / 1;
+}
+.session-more {
+  opacity: 0;
+}
+.session-more .menu > button {
+  padding: 0 4px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+.session-more .menu > button:hover {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--text);
+}
+.session:hover .session-more,
+.session:has(.menu.open) .session-more {
+  opacity: 1;
+}
+.session:hover .session-tail > :not(.session-more),
+.session:has(.menu.open) .session-tail > :not(.session-more) {
+  visibility: hidden;
 }
 .session .time {
   color: var(--text);
