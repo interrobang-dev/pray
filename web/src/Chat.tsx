@@ -244,11 +244,11 @@ export function formatClock(iso: string): string {
 }
 
 /**
- * 팀장 대화의 지시·보고 한 줄 "→ Assigned to [FE] Park · 10:12"·"Report from [FE] Park · 10:30". 내용은 툴팁(앞부분)만.
+ * 팀장 대화의 지시·보고 한 줄 "→ Assigned to [FE] Park · 10:12"·"← Report from [FE] Park · 10:30". 내용은 툴팁(앞부분)만.
  * 누르면 그 팀원 대화의 그 메시지로 간다. 팀원 세션이 아직 없으면(spawn 결과 전) 누를 수 없다
  */
 function RelayLine({ relay, jumpKey, isHighlighted, onOpen }: { relay: Relay; jumpKey: string; isHighlighted: boolean; onOpen: () => void }) {
-  const label = relay.kind === 'instruction' ? `→ Assigned to ${relay.memberName}` : `Report from ${relay.memberName}`
+  const label = relay.kind === 'instruction' ? `→ Assigned to ${relay.memberName}` : `← Report from ${relay.memberName}`
   const clock = formatClock(relay.at)
   return (
     <button
