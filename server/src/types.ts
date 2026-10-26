@@ -25,6 +25,8 @@ export interface Session {
   isAlive: boolean
   /** 퇴근일 때만. released = 팀장이 정리(jk_dismiss), dismissed = 그 밖의 kill 요청(종료 버튼), exit = 종료 코드 0, error = 그 밖 */
   offDuty: { endedAt: string; reason: 'exit' | 'dismissed' | 'error' | 'released'; exitCode: number | null } | null
+  /** 세션 생성 시각 (목록 정렬 기준: 오래된 것 먼저). 웹 세션은 hq 기록의 createdAt, 없으면 jsonl 첫 시각, 둘 다 없으면 null */
+  createdAt: string | null
   lastAt: string | null
   /** 마지막 대화 줄(사람 쪽 user·claude 응답) 시각 (jsonl). 대화가 없으면 null. 화면이 차례가 끝나고 오래된 세션을 졸게 그린다 */
   turnEndedAt: string | null

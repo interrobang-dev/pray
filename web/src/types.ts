@@ -24,6 +24,8 @@ export interface Session {
   attendance?: Attendance
   /** 퇴근 세션만 값이 있다. 옛 서버 응답에는 빠져 있다 */
   offDuty?: OffDuty | null
+  /** 세션 생성 시각. 서버가 이것의 오름차순으로 목록을 준다. 모르면 null, 옛 서버 응답에는 빠져 있다 */
+  createdAt?: string | null
   lastAt: string | null
   /** 마지막 대화 줄(사람 쪽 user·claude 응답) 시각. 대화가 없으면 null, 옛 서버 응답에는 빠져 있다 (모르는 것으로 본다) */
   turnEndedAt?: string | null

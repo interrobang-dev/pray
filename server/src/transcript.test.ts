@@ -16,6 +16,7 @@ describe('summarizeTranscript', () => {
     ].join('\n')
     expect(summarizeTranscript(jsonl)).toEqual({
       title: '제목',
+      startedAt: '2026-10-20T01:00:00Z',
       lastAt: '2026-10-20T01:00:05Z',
       turnEndedAt: '2026-10-20T01:00:05Z',
       lastAssistantText: '답변',
@@ -28,6 +29,7 @@ describe('summarizeTranscript', () => {
   it('returns nulls for empty input', () => {
     expect(summarizeTranscript('')).toEqual({
       title: null,
+      startedAt: null,
       lastAt: null,
       turnEndedAt: null,
       lastAssistantText: null,
@@ -35,6 +37,19 @@ describe('summarizeTranscript', () => {
       effort: null,
       contextTokens: null,
     })
+  })
+
+  it('takes startedAt from the first line that has a timestamp', () => {
+    const jsonl = [
+      JSON.stringify({ type: 'ai-title', aiTitle: '제목' }),
+      JSON.stringify({ type: 'user', timestamp: '2026-10-20T01:00:00Z', message: { role: 'user', content: 'hi' } }),
+      JSON.stringify({ type: 'user', timestamp: '2026-10-20T02:00:00Z', message: { role: 'user', content: 'again' } }),
+    ].join('\n')
+    expect(summarizeTranscript(jsonl).startedAt).toBe('2026-10-20T01:00:00Z')
+  })
+
+  it('returns null startedAt when no line has a timestamp', () => {
+    expect(summarizeTranscript(JSON.stringify({ type: 'ai-title', aiTitle: '제목' })).startedAt).toBeNull()
   })
 
   const assistant = (fields: Record<string, unknown>, model = 'claude-opus-5-5') =>

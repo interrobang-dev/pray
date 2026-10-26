@@ -199,6 +199,7 @@ export async function listSessions(
         character: characters[id] ?? null,
         gender: genders[id] ?? null,
         title: transcript?.title ?? null,
+        createdAt: record?.createdAt || (transcript?.startedAt ?? null),
         status: displayStatus(hook, attendance),
         kind: isWeb ? 'web' : 'external',
         attendance,
@@ -221,5 +222,27 @@ export async function listSessions(
       }
     }),
   )
-  return sessions.sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? ''))
+  return sessions.sort(compareByCreatedAt)
+}
+
+/** 시각 문자열 → ms. 비었거나 해석이 안 되면 null */
+function createdAtMs(createdAt: string | null): number | null {
+  if (!createdAt) return null
+  const ms = Date.parse(createdAt)
+  return Number.isNaN(ms) ? null : ms
+}
+
+/**
+ * 세션 목록 순서: 생성 시각 오름차순(오래된 것 먼저), 모르는 것은 맨 뒤, 같으면 id 오름차순.
+ * 문자열이 아니라 시각으로 비교한다 (밀리초 유무·Z/오프셋이 다른 ISO 도 맞게)
+ */
+export function compareByCreatedAt(a: Pick<Session, 'id' | 'createdAt'>, b: Pick<Session, 'id' | 'createdAt'>): number {
+  const aMs = createdAtMs(a.createdAt)
+  const bMs = createdAtMs(b.createdAt)
+  if (aMs !== bMs) {
+    if (aMs === null) return 1
+    if (bMs === null) return -1
+    return aMs - bMs
+  }
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }

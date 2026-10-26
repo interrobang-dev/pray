@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { displayStatus, TranscriptCache } from './sessions.js'
+import { compareByCreatedAt, displayStatus, TranscriptCache } from './sessions.js'
 import type { HookState } from './hookState.js'
 
 const SESSION = 'a56abbde-182b-475e-ab39-c3cf9c7933a7'
@@ -129,5 +129,49 @@ describe('displayStatus', () => {
     expect(displayStatus(hook('ended', 'my-turn'), 'off')).toBe('ended')
     expect(displayStatus(hook('working'), 'present')).toBe('working')
     expect(displayStatus(undefined, 'present')).toBe('unknown')
+  })
+})
+
+describe('compareByCreatedAt', () => {
+  const sort = (items: { id: string; createdAt: string | null }[]) => [...items].sort(compareByCreatedAt).map((item) => item.id)
+
+  it('puts older sessions first', () => {
+    expect(
+      sort([
+        { id: 'c', createdAt: '2026-10-22T00:00:00.000Z' },
+        { id: 'a', createdAt: '2026-10-20T00:00:00.000Z' },
+        { id: 'b', createdAt: '2026-10-21T00:00:00.000Z' },
+      ]),
+    ).toEqual(['a', 'b', 'c'])
+  })
+
+  it('puts unknown and unparsable times last', () => {
+    expect(
+      sort([
+        { id: 'a', createdAt: null },
+        { id: 'b', createdAt: 'nope' },
+        { id: 'c', createdAt: '' },
+        { id: 'd', createdAt: '2026-10-20T00:00:00Z' },
+      ]),
+    ).toEqual(['d', 'a', 'b', 'c'])
+  })
+
+  it('breaks ties by id', () => {
+    expect(
+      sort([
+        { id: 'b', createdAt: '2026-10-20T00:00:00Z' },
+        { id: 'a', createdAt: '2026-10-20T00:00:00.000Z' },
+      ]),
+    ).toEqual(['a', 'b'])
+  })
+
+  it('compares as times, not strings (milliseconds and offsets)', () => {
+    expect(
+      sort([
+        { id: 'late', createdAt: '2026-10-20T00:00:00.500Z' },
+        { id: 'early', createdAt: '2026-10-20T00:00:00Z' },
+        { id: 'offset', createdAt: '2026-10-20T09:00:00.200+09:00' },
+      ]),
+    ).toEqual(['early', 'offset', 'late'])
   })
 })

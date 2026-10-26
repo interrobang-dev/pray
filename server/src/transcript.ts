@@ -1,5 +1,7 @@
 export interface TranscriptSummary {
   title: string | null
+  /** timestamp 가 있는 첫 줄의 시각 (세션 시작). 세션 목록의 생성 시각이 hq 기록에 없을 때(외부 세션) 쓴다 */
+  startedAt: string | null
   lastAt: string | null
   /**
    * 마지막 대화 줄 시각: 사람 쪽 user 줄(지시·도구 결과·중지 줄)과 claude 응답 줄. 사이드체인·메타·압축 요약·`<` 로 시작하는 글
@@ -49,6 +51,7 @@ function isConversationLine(record: Record<string, unknown>): boolean {
 export function summarizeTranscript(jsonl: string): TranscriptSummary {
   const summary: TranscriptSummary = {
     title: null,
+    startedAt: null,
     lastAt: null,
     turnEndedAt: null,
     lastAssistantText: null,
@@ -68,6 +71,7 @@ export function summarizeTranscript(jsonl: string): TranscriptSummary {
       summary.title = record.aiTitle
     }
     if (typeof record.timestamp === 'string') {
+      summary.startedAt ??= record.timestamp
       summary.lastAt = record.timestamp
       if (isConversationLine(record)) summary.turnEndedAt = record.timestamp
     }

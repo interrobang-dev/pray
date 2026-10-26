@@ -31,7 +31,6 @@ import {
   type OffDutyLabel,
   type Part,
   type Session,
-  type SessionStatus,
   type Shell,
   type Team,
 } from './types'
@@ -123,16 +122,6 @@ function formatElapsed(iso: string | null, now: number): { text: string; classNa
     minutes < 1 ? 'now' : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`
   const className = minutes < 15 ? 'recent' : minutes > 120 ? 'stale' : ''
   return { text, className, title: formatDateTime(iso) }
-}
-
-/** 팀 카드 안 세션 줄의 정렬 순위. 작을수록 위. 승인 대기 → 내 차례 → 작업 중 → 나머지 (팀장도 상태로만 정렬) */
-const statusOrder: Record<SessionStatus, number> = {
-  'needs-approval': 0,
-  'my-turn': 1,
-  working: 2,
-  idle: 3,
-  unknown: 3,
-  ended: 3,
 }
 
 async function postJson(url: string, method: string, body: unknown): Promise<Response> {
@@ -830,11 +819,8 @@ export function App() {
   /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 팀 직속 세션 + 파트별(소제목 + 세션). 폴더는 툴팁. position 은 그룹 안 순번 (그룹이 없는 팀은 없어 끌기 손잡이도 없다) */
   function renderTeam(team: Team, position?: { index: number; count: number }) {
     const scope: ReorderScope = { kind: 'team', groupId: team.groupId }
-    // 근무·휴식 세션. 휴식은 훅 상태가 남아 있어도 "나머지" 순위
-    const rankOf = (session: Session) => (attendanceOf(session) === 'break' ? statusOrder.idle : statusOrder[session.status])
-    const members = snapshot.sessions
-      .filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off')
-      .sort((a, b) => rankOf(a) - rankOf(b))
+    // 근무·휴식 세션. 순서는 서버가 준 그대로 (생성순)
+    const members = snapshot.sessions.filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off')
     const menuItems = [
       { label: 'Add part', onClick: () => openPartForm(team.id) },
       ...(team.leadSessionId ? [{ label: 'Remove lead', onClick: () => releaseLead(team) }] : []),
