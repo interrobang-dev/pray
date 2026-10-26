@@ -803,7 +803,7 @@ export function App() {
     )
   }
 
-  /** 끌 수 없는 줄(파트, 그룹이 지워진 팀)의 빈 ⠿ 칸. 손잡이와 같은 폭이라 버튼 열이 줄마다 세로로 맞는다 */
+  /** 끌 수 없는 팀(그룹이 지워진 팀)의 빈 ⠿ 칸. 손잡이와 같은 폭이라 버튼 열이 그룹·팀 줄과 세로로 맞는다 */
   function renderDragSpacer() {
     return (
       <button className="drag-handle drag-spacer" tabIndex={-1} aria-hidden="true" disabled>
@@ -945,7 +945,6 @@ export function App() {
               +
             </button>
             <MoreMenu items={menuItems} />
-            {renderDragSpacer()}
           </span>
         </div>
         {members.map((session) => renderSession(session, false))}

@@ -566,7 +566,7 @@ header button.icon svg {
   border: 0;
   border-top: 1px solid var(--line);
 }
-/* 끌 수 없는 줄(파트, 그룹이 지워진 팀)의 빈 ⠿ 칸: 자리만 차지해 "+"·"⋯"·⠿ 열이 줄마다 세로로 맞는다 */
+/* 끌 수 없는 팀(그룹이 지워진 팀)의 빈 ⠿ 칸: 자리만 차지해 "+"·"⋯"·⠿ 열이 그룹·팀 줄과 세로로 맞는다 */
 .head-actions .drag-spacer {
   visibility: hidden;
 }
