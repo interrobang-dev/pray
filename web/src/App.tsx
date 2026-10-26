@@ -998,8 +998,10 @@ export function App() {
   }
 
   /**
-   * 세션 한 줄: 상태 점 · 아바타 · 제목 · (승인 대기·휴식 배지 · 시각). 팀장은 아바타 금색, 파트장은 은색 테두리. 팀 안에서는 폴더를 숨긴다 (팀 = 폴더). teamName 이 있으면 제목 앞에 붙인다 (퇴근).
-   * 휴식은 회색 점 + "휴식", 퇴근은 시각 대신 퇴근 이유 · 시각 (옛 서버 응답이라 이유가 없으면 시각)
+   * 세션 한 줄: 아바타 · 제목 · (승인 대기·휴식 배지 · 시각). 상태는 아바타 테두리가 나타낸다
+   * (작업 중 파랑 숨쉬기·승인 대기 빨강·내 차례 초록·휴식 회색 점선, 그 밖은 없음). 아바타의 title·aria-label 이 상태 글자이고
+   * 팀장·파트장이면 앞에 "Lead · "·"Part lead · " 이 붙는다. 팀 안에서는 폴더를 숨긴다 (팀 = 폴더). teamName 이 있으면 제목 앞에 붙인다 (퇴근).
+   * 퇴근은 시각 대신 퇴근 이유 · 시각 (옛 서버 응답이라 이유가 없으면 시각)
    */
   function renderSession(session: Session, hasCwd: boolean, teamName?: string) {
     const look = dotHeadArt ? dotLookOf(session, dotHeadArt.sheet.characters) : null
@@ -1010,6 +1012,8 @@ export function App() {
     const isPresent = attendance === 'present'
     const offDuty = attendance === 'off' && session.offDuty ? offDutyLabel(session.offDuty, now) : null
     const roleLabel = session.role === 'lead' ? (session.partId ? 'Part lead' : 'Lead') : null
+    const stateLabel = isPresent ? statusLabel[session.status] : attendance === 'break' ? 'Break' : 'Off duty'
+    const avatarLabel = roleLabel ? `${roleLabel} · ${stateLabel}` : stateLabel
     return (
       <div
         key={session.id}
@@ -1017,15 +1021,11 @@ export function App() {
         onClick={() => selectSession(session.id)}
       >
         <span
-          className={`status-dot ${isPresent ? session.status : attendance}`}
-          title={isPresent ? statusLabel[session.status] : attendance === 'break' ? 'Break' : 'Off duty'}
-        />
-        <span
-          className={['avatar', roleLabel === 'Lead' ? 'lead' : roleLabel === 'Part lead' ? 'part-lead' : '', headUrl ? 'head' : ''].join(' ')}
+          className={['avatar', isPresent ? session.status : attendance, headUrl ? 'head' : ''].join(' ')}
           style={headUrl ? { backgroundImage: `url(${headUrl})` } : undefined}
-          role={roleLabel ? 'img' : undefined}
-          title={roleLabel ?? undefined}
-          aria-label={roleLabel ?? undefined}
+          role="img"
+          title={avatarLabel}
+          aria-label={avatarLabel}
         />
         <div className="title">
           {teamName ? `${teamName} · ` : ''}

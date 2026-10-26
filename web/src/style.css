@@ -44,9 +44,6 @@
   --code-bg: #f1f2f6;
   --pre-bg: #f6f8fa;
   --avatar-bg: #dcdde6;
-  /* 목록 아바타의 팀장·파트장 테두리 */
-  --gold: #d9a63a;
-  --silver: #7d8696;
   --overlay: rgba(43, 47, 58, 0.35);
   /* 공통 스크롤바 손잡이 / 올렸을 때 (아래 스크롤바 규칙) */
   --scrollbar-thumb: rgba(43, 47, 58, 0.22);
@@ -89,7 +86,6 @@
   --code-bg: #2a2e37;
   --pre-bg: #191c22;
   --avatar-bg: #343844;
-  --silver: #a9b0bd;
   --overlay: rgba(0, 0, 0, 0.55);
   --scrollbar-thumb: rgba(227, 229, 234, 0.2);
   --scrollbar-thumb-hover: rgba(227, 229, 234, 0.36);
@@ -671,8 +667,8 @@ li.group.drop-after::after {
 }
 .session {
   display: grid;
-  /* 점 · 아바타 · 제목 · 모델(남는 폭만. 좁으면 말줄임되다 사라진다) · 배지·시각 */
-  grid-template-columns: 8px 22px auto minmax(0, 1fr) auto;
+  /* 아바타(테두리가 상태) · 제목 · 모델(남는 폭만. 좁으면 말줄임되다 사라진다) · 배지·시각 */
+  grid-template-columns: 22px auto minmax(0, 1fr) auto;
   column-gap: 7px;
   align-items: center;
   padding: 6px 8px;
@@ -753,11 +749,11 @@ li.group.drop-after::after {
   background: var(--red-dot);
 }
 .session .title {
-  grid-column: 3;
+  grid-column: 2;
   margin: 0;
 }
 .session .model {
-  grid-column: 4;
+  grid-column: 3;
   font-size: 11px;
   color: var(--muted);
   text-align: right;
@@ -766,7 +762,7 @@ li.group.drop-after::after {
   text-overflow: ellipsis;
 }
 .session .meta {
-  grid-column: 5;
+  grid-column: 4;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -825,7 +821,7 @@ li.group.drop-after::after {
   color: var(--red);
 }
 .session .cwd {
-  grid-column: 3 / -1;
+  grid-column: 2 / -1;
   margin-top: 1px;
 }
 .avatar {
@@ -838,13 +834,40 @@ li.group.drop-after::after {
 .avatar.head {
   background-size: 22px 22px;
 }
-/* 팀장 금색·파트장 은색 테두리 (사무실 명패와 같은 계열). 안쪽 그림자라 아바타 크기·줄 높이가 그대로다 */
-.avatar.lead {
-  box-shadow: inset 0 0 0 2px var(--gold);
+/* 목록 세션 줄의 상태 테두리: 아바타 위에 덮은 ::after 안쪽 테두리라 크기·줄 높이가 그대로고, 숨쉬기도 테두리만 흐려진다 (그림은 그대로).
+   working 파랑(숨쉬기)·needs-approval 빨강·my-turn 초록·break 회색 점선. 그 밖(idle·unknown·ended·off)은 테두리 없음 */
+.session .avatar {
+  position: relative;
 }
-/* 라이트 은색은 사무실 것(#a9b0bd)보다 진하게: 그대로면 아바타 바탕(--avatar-bg)과 거의 같은 밝기라 안 보인다. 다크는 바탕이 어두워 사무실 은색 그대로 */
-.avatar.part-lead {
-  box-shadow: inset 0 0 0 2px var(--silver);
+.session .avatar.working::after,
+.session .avatar.needs-approval::after,
+.session .avatar.my-turn::after,
+.session .avatar.break::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.session .avatar.working::after {
+  border-color: var(--blue-dot);
+  animation: dot-breathe 1.6s ease-in-out infinite;
+}
+.session .avatar.needs-approval::after {
+  border-color: var(--red-dot);
+}
+.session .avatar.my-turn::after {
+  border-color: var(--green);
+}
+.session .avatar.break::after {
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+@media (prefers-reduced-motion: reduce) {
+  .session .avatar.working::after {
+    animation: none;
+  }
 }
 .kind {
   font-size: 10px;
