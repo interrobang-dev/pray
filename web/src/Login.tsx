@@ -49,7 +49,10 @@ export function Login({ canLogin, onLoggedIn }: Props) {
 
   return (
     <main className="login">
-      <h1>jk-corp</h1>
+      <h1>
+        <img className="logo" src="/favicon.svg" width={32} height={32} alt="" />
+        jk-corp
+      </h1>
       {!canLogin && <p>Remote login isn't set up. Open 127.0.0.1 on this PC.</p>}
       {canLogin && !isCodeSent && (
         <form onSubmit={requestCode}>

@@ -199,6 +199,19 @@ h1 {
   margin: 0;
   margin-right: auto;
 }
+/* 앱 제목(목록 헤더·로그인) = 로고 마크(App.tsx·Login.tsx 의 .logo = web/public/favicon.svg, 16×16 도트 격자) + "jk-corp".
+   마크는 정수배(16·32)로만 그린다 */
+header h1,
+.login h1 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.logo {
+  display: block;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+}
 .dot {
   width: 9px;
   height: 9px;
@@ -2432,6 +2445,11 @@ li.group.drop-after::after {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
+}
+/* 로그인 제목은 크게: 마크 32px(2배) + 글자 24px (Silkscreen 8px 격자의 3배라 또렷하다) */
+.login h1 {
+  font-size: 24px;
+  gap: 10px;
 }
 .login form {
   display: flex;

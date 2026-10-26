@@ -1,13 +1,43 @@
 import { deflateSync } from 'node:zlib'
 
-/** 외부 이미지 파일 없이 트레이 아이콘을 만든다: 32x32 도트 모니터. alert 면 오른쪽 위에 빨간 점 */
+/** 외부 이미지 파일 없이 트레이·창 아이콘을 만든다: 로고(도트 빌딩 마크) 16x16 격자를 2배로 찍은 32x32. alert 면 오른쪽 위에 빨간 점.
+ *  격자는 web/public/favicon.svg 와 같은 그림이라 고치면 같이 고친다. 오른쪽 위는 빨간 점 자리라 비워 둔다 */
 const SIZE = 32
+const SCALE = SIZE / 16
 const GREEN = [0x3f, 0x9c, 0x4b, 255]
-const DARK = [0x2b, 0x2f, 0x3a, 255]
-const SCREEN = [0x4a, 0xa3, 0xe8, 255]
-const LIGHT = [0xdf, 0xf0, 0xff, 255]
+const DARK_GREEN = [0x2a, 0x6e, 0x34, 255]
+const LIGHT_GREEN = [0x5b, 0xb8, 0x66, 255]
 const RED = [0xe0, 0x5a, 0x5a, 255]
 const WHITE = [0xff, 0xff, 0xff, 255]
+
+/** 16줄 x 16글자, '.' = 투명. 왼쪽 높은 동(안테나·지붕 띠·창 4층·출입문) + 오른쪽 낮은 별관 */
+const MARK = [
+  '.....A..........',
+  '.....O..........',
+  '.OOOOOOOOO......',
+  '.OCCCCCCCO......',
+  '.OWWWWWWWO......',
+  '.OWLLWLLWO......',
+  '.OWWWWWWWO......',
+  '.OWLLWDDWOOOOOO.',
+  '.OWWWWWWWOCCCCO.',
+  '.OWDDWLLWOWLLWO.',
+  '.OWWWWWWWOWWWWO.',
+  '.OWLLWLLWOWDDWO.',
+  '.OWWWWWWWOWWWWO.',
+  '.OWWEEEWWOWLLWO.',
+  '.OWWEEEWWOWWWWO.',
+  '.OOOOOOOOOOOOOO.',
+]
+const MARK_COLORS: Record<string, number[]> = {
+  O: DARK_GREEN, // 외곽선
+  W: GREEN, // 벽
+  C: LIGHT_GREEN, // 지붕 띠
+  L: WHITE, // 켜진 창
+  D: DARK_GREEN, // 꺼진 창
+  E: DARK_GREEN, // 출입문
+  A: DARK_GREEN, // 안테나 끝
+}
 
 function crc32(bytes: Uint8Array): number {
   let crc = 0xffffffff
@@ -36,14 +66,13 @@ export function trayIconPng(isAlert: boolean): Buffer {
   const rect = (x: number, y: number, w: number, h: number, color: number[]) => {
     for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) put(xx, yy, color)
   }
-  // 모니터: 초록 베젤, 파란 화면, 받침
-  rect(3, 5, 26, 18, GREEN)
-  rect(5, 7, 22, 14, SCREEN)
-  rect(7, 9, 8, 4, LIGHT)
-  rect(17, 11, 6, 2, LIGHT)
-  rect(7, 15, 14, 2, LIGHT)
-  rect(13, 23, 6, 3, DARK)
-  rect(9, 26, 14, 2, DARK)
+  // 빌딩 마크: 격자 한 칸 = 2x2 픽셀
+  for (let y = 0; y < MARK.length; y++) {
+    for (let x = 0; x < MARK[y].length; x++) {
+      const color = MARK_COLORS[MARK[y][x]]
+      if (color) rect(x * SCALE, y * SCALE, SCALE, SCALE, color)
+    }
+  }
   if (isAlert) {
     rect(21, 1, 10, 10, WHITE)
     rect(22, 2, 8, 8, RED)

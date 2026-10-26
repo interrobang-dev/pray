@@ -987,7 +987,10 @@ export function App() {
       <main className={`layout${hasPanel ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}`}>
         <aside>
           <header>
-            <h1>jk-corp</h1>
+            <h1>
+              <img className="logo" src="/favicon.svg" width={16} height={16} alt="" />
+              jk-corp
+            </h1>
             <button className="icon" onClick={cycleTheme} title={`Theme: ${THEME_LABELS[theme]}`} aria-label={`Theme: ${THEME_LABELS[theme]}`}>
               <ThemeIcon choice={theme} />
             </button>
