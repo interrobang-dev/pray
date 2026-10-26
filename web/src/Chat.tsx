@@ -17,7 +17,6 @@ import { runningToolNames, shortToolName } from './runningTools'
 import { FilesButton, formatSize } from './Files'
 import { MarkdownText } from './Markdown'
 import { formatElapsed, ShellsButton, type ShellRequest } from './Shells'
-import { NEWLINE_KEYS } from './Terminal'
 import type { AskQuestion, ChatMessage, Shell, ToolUse } from './types'
 
 /**
@@ -666,6 +665,9 @@ interface PendingMessage {
 /** 확인되지 않은 임시 말풍선을 조용히 없애기까지. `/help` 같은 슬래시 명령은 user 메시지로 안 남을 수 있다 */
 const PENDING_TIMEOUT_MS = 15_000
 
+/** 보낼 글을 쓴 뒤 Enter(`\r`) 를 보내기까지. 짧으면 글과 `\r` 이 한 덩어리로 읽혀 제출 대신 줄바꿈이 된다 */
+const SUBMIT_ENTER_DELAY_MS = 300
+
 /** 첨부 한도. 서버 첨부 API(server/src/index.ts MAX_ATTACHMENT_BYTES)와 같다. 넘으면 올리지 않고 칩에 알린다 */
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
@@ -683,11 +685,12 @@ interface Attachment {
 
 /**
  * 보낼 글: 입력한 글 + 빈 줄 + "첨부 파일:" + 경로 한 줄씩. 글 없이 첨부만이면 목록만.
- * claude 는 자기 세션 scratchpad 파일을 확인 창 없이 읽으므로 경로만 주면 Read 한다
+ * claude 는 자기 세션 scratchpad 파일을 확인 창 없이 읽으므로 경로만 주면 Read 한다.
+ * 경로는 백틱으로 감싼다: 글이 800자를 넘으면 Claude Code 가 붙여넣기로 보고 그림 경로를 `[Image #N]` 으로 바꾸는데 백틱이면 안 바뀐다
  */
 function withAttachmentPaths(text: string, paths: string[]): string {
   if (paths.length === 0) return text
-  const list = ['첨부 파일:', ...paths].join('\n')
+  const list = ['첨부 파일:', ...paths.map((path) => `\`${path}\``)].join('\n')
   return text ? `${text}\n\n${list}` : list
 }
 
@@ -866,6 +869,7 @@ export function Chat({
   /** 중지 결과·실패 한 줄. INTERRUPT_NOTICE_MS 뒤 사라진다 */
   const [interruptNotice, setInterruptNotice] = useState<string | null>(null)
   const nextPendingIdRef = useRef(1)
+  const sendQueueRef = useRef<Promise<void>>(Promise.resolve())
   const nextAttachmentIdRef = useRef(1)
   const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -1126,20 +1130,18 @@ export function Chat({
     setTimeout(() => setPendings((current) => current.filter((pending) => pending.id !== pendingId || pending.isFailed)), PENDING_TIMEOUT_MS)
     const markFailed = () =>
       setPendings((current) => current.map((pending) => (pending.id === pendingId ? { ...pending, isFailed: true } : pending)))
-    const send = async (data: string) => {
-      if (!(await sendKeys(data)).ok) markFailed()
-    }
-    try {
-      // 줄마다 따로 보내고 줄 사이에 Claude Code 줄바꿈 키를 넣는다 (\n 을 그대로 보내면 줄바꿈으로 안 들어간다)
-      const lines = text.split(/\r?\n/)
-      for (const [index, line] of lines.entries()) {
-        if (index > 0) await send(NEWLINE_KEYS)
-        if (line) await send(line)
+    // 글 전체를 한 번에 쓰고 잠시 뒤 Enter: 조각이나 \r 을 짧은 간격으로 이으면 claude 가 한 read 로 받아 \r 이 줄바꿈이 된다.
+    // 앞 보내기의 \r 까지 끝난 뒤에 시작해야 두 글이 섞이지 않는다
+    const run = async () => {
+      try {
+        if (!(await sendKeys(text)).ok) return markFailed()
+        await new Promise((resolve) => setTimeout(resolve, SUBMIT_ENTER_DELAY_MS))
+        if (!(await sendKeys('\r')).ok) markFailed()
+      } catch {
+        markFailed()
       }
-      await send('\r')
-    } catch {
-      markFailed()
     }
+    sendQueueRef.current = sendQueueRef.current.then(run)
   }
 
   function dismissPending(pendingId: number) {
