@@ -95,7 +95,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `web/src/main.tsx` — 로그인 또는 App · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `types.ts` — 응답 타입·공통 문구 함수
 - `web/src/theme.ts` — 테마 · `Modal.tsx` — 모달·세그먼트 · `sessionMenu.ts` — 세션 줄 ⋯ 메뉴 · `sessionPosition.ts`·`PositionChip.tsx` — 역할·이름
 - `web/src/GroupTodosModal.tsx`·`groupTodos.ts` — 그룹 TODO · `ModelSettingModal.tsx`·`modelSetting.ts` — 모델·effort 변경 창
-- `web/src/Chat.tsx`·`chatRows.ts`·`runningTools.ts` — 대화 탭 · `Markdown.tsx` — 마크다운 · `CopyButton.tsx`·`copyText.ts`·`codeText.ts` — 복사 버튼·클립보드·코드 글자 뽑기 · `Files.tsx` — 작업 파일 · `Shells.tsx` — shell 보기 · `Terminal.tsx` — xterm (→ `chat.md`)
+- `web/src/Chat.tsx`·`chatRows.ts`·`runningTools.ts` — 대화 탭 · `Markdown.tsx` — 마크다운 · `CopyButton.tsx`·`copyText.ts`·`codeText.ts` — 복사 버튼·클립보드·코드 글자 뽑기 · `Files.tsx` — 작업 파일 · `Shells.tsx` — shell 보기 · `Terminal.tsx` — xterm · `chatSearch.ts`·`ChatSearchBar.tsx`·`chatSearchPaint.ts` — 대화 탭 안 검색(찾기·막대·글자 칠하기) (→ `chat.md`)
 - `web/src/Office.tsx` — PixiJS 사무실 · `officeLayout.ts` — 배치 · `officeFixtures.ts` — 고정 꾸미기 · `lounge.ts` — 라운지 자리 · `dotState.ts` — 인물 상태·라운지 판정 · `offDutyStreet.ts` — 퇴근 거리 배치 (→ `office.md`)
 - `web/src/characterArt.ts`·`dotCharacter.ts`·`recolor.ts`·`CharacterPicker.tsx` — 인물 그림·고르기·색 · `tools/sprites/` — 스프라이트 파이프라인 · `web/public/office/` — 아틀라스 (→ `office-art.md`)
 - `web/src/UsagePanel.tsx`·`Accounts.tsx`·`accountLabels.ts` — 사용량·계정 (→ `accounts.md`) · `FlowPanel.tsx` — 플로우 (→ `flow.md`)

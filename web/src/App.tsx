@@ -206,6 +206,10 @@ export function App() {
   /** 이름 모달에서 고른 도트 인물 (null = 자동). 지시자일 때만 모달에 보인다 */
   const [renameCharacter, setRenameCharacter] = useState<CharacterChoice>({ id: null, hair: null, top: null })
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
+  /** 대화 탭 안 검색 막대를 열었는지. 세션을 바꾸거나 대화 탭을 떠나면 닫는다 */
+  const [isChatSearchOpen, setIsChatSearchOpen] = useState(false)
+  /** 바뀔 때마다 열려 있는 검색 막대의 입력칸에 포커스한다 (Ctrl+F 를 다시 누름) */
+  const [chatSearchFocusId, setChatSearchFocusId] = useState(0)
   /** 모델·effort 변경 창을 연 세션 ID. 패널 모델 칩과 목록 ⋯ 메뉴가 같이 연다 (패널이 안 열린 세션도 된다) */
   const [modelModalSessionId, setModelModalSessionId] = useState<string | null>(null)
   /** Chat 이 알려 준 "대화 맨 끝에 대기 메시지가 있는" 세션 ID (없으면 null) */
@@ -335,6 +339,35 @@ export function App() {
   const isSelectedLiveWeb = isSelectedPresent && selected.kind === 'web'
   /** 터미널을 못 여는 세션이면 보던 탭이 터미널이어도 대화 */
   const shownTab = isSelectedLiveWeb ? tab : 'chat'
+  /** 대화 안 검색을 쓸 수 있는 때: 세션 패널의 대화 탭 (터미널 탭은 범위 밖) */
+  const isChatSearchAvailable = selected !== null && shownTab === 'chat'
+
+  useEffect(() => {
+    setIsChatSearchOpen(false)
+  }, [selectedId, shownTab])
+
+  // Ctrl+F (맥 Meta+F): 대화 탭이 열려 있고 모달이 없을 때만 가로채 대화 검색을 연다. 그 밖에서는 브라우저 찾기 그대로
+  useEffect(() => {
+    if (!isChatSearchAvailable) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isFindKey = event.code === 'KeyF' || event.key.toLowerCase() === 'f'
+      if (!isFindKey || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || document.querySelector('.modal-overlay')) return
+      event.preventDefault()
+      setIsChatSearchOpen(true)
+      setChatSearchFocusId((id) => id + 1)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isChatSearchAvailable])
+
+  function toggleChatSearch() {
+    if (isChatSearchOpen) {
+      setIsChatSearchOpen(false)
+      return
+    }
+    setIsChatSearchOpen(true)
+    setChatSearchFocusId((id) => id + 1)
+  }
 
   /**
    * 세션을 고른다. 다른 세션이면 대화 탭으로 연다 (같은 세션을 다시 누르면 보던 탭 그대로).
@@ -1387,6 +1420,18 @@ export function App() {
                   </button>
                 )}
               </nav>
+              {shownTab === 'chat' && (
+                <button
+                  type="button"
+                  className={`search-toggle${isChatSearchOpen ? ' on' : ''}`}
+                  title="Search conversation"
+                  aria-label="Search conversation"
+                  aria-pressed={isChatSearchOpen}
+                  onClick={toggleChatSearch}
+                >
+                  <SearchTabIcon />
+                </button>
+              )}
               {isSelectedLiveWeb && (
                 <button
                   className="end-session"
@@ -1428,6 +1473,9 @@ export function App() {
                 shellRequest={shellRequest?.sessionId === selected.id ? shellRequest : null}
                 onShellRequestHandled={() => setShellRequest(null)}
                 onQueuedChange={handleQueuedChange}
+                isSearchOpen={isChatSearchOpen}
+                searchFocusId={chatSearchFocusId}
+                onSearchClose={() => setIsChatSearchOpen(false)}
               />
             )}
           </section>
@@ -1727,6 +1775,16 @@ function ChatTabIcon() {
         strokeWidth="1.25"
         strokeLinejoin="round"
       />
+    </svg>
+  )
+}
+
+/** 패널 헤더 대화 검색 아이콘: 돋보기 */
+function SearchTabIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <circle cx="6.8" cy="6.8" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M10 10l3.8 3.8" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   )
 }

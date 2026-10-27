@@ -32,6 +32,10 @@
   --yellow: #e0a63a;
   /* 점프로 찾아 간 줄의 테두리 */
   --highlight: #e8b53a;
+  /* 대화 안 검색: 일치한 글자 칠하기 (::highlight) — 전체 일치 / 현재 결과 안의 것 */
+  --search-match-bg: #fff0a8;
+  --search-current-bg: #ffc800;
+  --search-current-text: #2b2f3a;
   --blue-dot: #3b82d6;
   --link: #2f6fd0;
   /* 팀장·파트장 지시 말풍선·지시/보고 한 줄·돌아가기 */
@@ -78,6 +82,9 @@
   --error: #ef7b72;
   --yellow: #e3b341;
   --blue-dot: #4c93e6;
+  --search-match-bg: #5a4a10;
+  --search-current-bg: #b88a00;
+  --search-current-text: #ffffff;
   --link: #6ea8ff;
   --relay-bg: #222a40;
   --relay-line: #38446b;
@@ -1095,6 +1102,25 @@ li.group.drop-after::after {
   border-color: var(--line);
   color: var(--text);
 }
+/* 대화 검색 버튼 (App.tsx SearchTabIcon). 종료 버튼과 같은 크기, 막대가 열려 있으면 눌린 모양 */
+.panel-header .search-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  color: var(--muted);
+}
+.panel-header .search-toggle svg {
+  display: block;
+}
+.panel-header .search-toggle.on {
+  background: var(--bg);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
 /* 종료 버튼 (App.tsx EndSessionIcon). 옆 .close(×)와 같은 버튼 크기, 올리면 빨강 (터치 기기는 hover 가 없어 그대로) */
 .panel-header .end-session {
   display: inline-flex;
@@ -1334,6 +1360,63 @@ li.group.drop-after::after {
     animation: none;
     outline-color: var(--highlight);
   }
+}
+/* 대화 안 검색의 현재 결과 테두리 (Chat.tsx). 점프와 같은 노란 테두리지만 깜빡임 없이 검색하는 동안 늘 켜 둔다 */
+.search-current {
+  outline: 3px solid var(--highlight);
+  outline-offset: 2px;
+}
+/* 일치한 글자 칠하기 (chatSearchPaint.ts, CSS Custom Highlight API) */
+::highlight(chat-search) {
+  background-color: var(--search-match-bg);
+}
+::highlight(chat-search-current) {
+  background-color: var(--search-current-bg);
+  color: var(--search-current-text);
+}
+/* 대화 안 검색 막대 (ChatSearch.tsx): 대화(.messages) 바로 위에 붙는다. 사무실 숨기기 넓은 화면에서는 대화 열(--chat-gutter)과 맞춘다 */
+.chat-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.chat-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 9px;
+}
+.chat-search-count {
+  min-width: 3.5em;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+.chat-search-count.empty {
+  color: var(--error);
+}
+.chat-search button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--muted);
+}
+.chat-search button:hover:not(:disabled) {
+  color: var(--text);
+}
+.chat-search button svg {
+  display: block;
+}
+.layout.office-hidden .chat-search {
+  padding-left: var(--chat-gutter);
+  padding-right: var(--chat-gutter);
 }
 /* 점프로 연 세션 패널의 "← <팀장> 대화로" (App.tsx). 헤더 바로 아래 한 줄, 지시 한 줄과 같은 파랑 */
 .jump-back {
@@ -3738,7 +3821,7 @@ li.group.drop-after::after {
      flex 줄바꿈은 이름의 전체 폭으로 줄을 나눠 긴 이름이면 세 줄이 되므로 grid. 종료 버튼은 자동 배치로 남은 마지막 칸에 간다 */
   .panel-header {
     display: grid;
-    grid-template-columns: auto minmax(0, max-content) 1fr auto auto;
+    grid-template-columns: auto minmax(0, max-content) 1fr auto auto auto;
     gap: 4px 8px;
   }
   .panel-header .close {
@@ -3754,9 +3837,18 @@ li.group.drop-after::after {
     grid-area: 1 / 3;
     justify-self: start;
   }
-  /* 종료 버튼: 옆 ← 버튼(35px)과 같은 크기 */
-  .panel-header .end-session {
+  /* 대화 검색·종료 버튼: 옆 ← 버튼(35px)과 같은 크기. 검색 버튼은 대화 탭에만 있어 칸을 정해 둔다 (자동 배치면 둘째 줄로 밀린다) */
+  .panel-header .search-toggle {
+    grid-area: 1 / 5;
     width: 36px;
+  }
+  .panel-header .end-session {
+    grid-area: 1 / 6;
+    width: 36px;
+  }
+  .chat-search button {
+    width: 36px;
+    height: 36px;
   }
   .panel-header .tabs {
     grid-area: 1 / 4;

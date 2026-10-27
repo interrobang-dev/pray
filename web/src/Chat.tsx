@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -13,6 +14,8 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import { buildChatRows, hidingWorkKey, type ChatRow, type Work } from './chatRows'
+import { ChatSearch } from './ChatSearchBar'
+import type { SearchTarget } from './chatSearch'
 import { runningToolNames, shortToolName } from './runningTools'
 import { FilesButton, formatSize } from './Files'
 import { CopyButton } from './CopyButton'
@@ -67,6 +70,11 @@ interface Props {
   onShellRequestHandled: () => void
   /** 대화 맨 끝에 대기 중인 메시지가 있는지 알린다 (App 의 모델 변경 창이 Apply 를 막는 데 쓴다). 사라질 때 false */
   onQueuedChange?: (sessionId: string, hasQueuedMessage: boolean) => void
+  /** 대화 안 검색 막대를 열었는지 (App 의 머리 돋보기 버튼·Ctrl+F). 열려 있는 동안 막대가 대화 위에 붙는다 */
+  isSearchOpen: boolean
+  /** 바뀔 때마다 이미 열려 있는 검색 막대의 입력칸에 포커스한다 */
+  searchFocusId: number
+  onSearchClose: () => void
 }
 
 function summarizeInput(name: string, input: unknown): string {
@@ -148,9 +156,9 @@ const COMPACT_SUMMARY_TITLE = 'Conversation compacted · continuing from a summa
 const INTERRUPT_TITLE = 'Stopped'
 
 /** 가운데 작은 한 줄 (보고 말풍선이 되지 않는 알림·대화 압축 요약). 원문은 접어 둔다 (글자 그대로. HTML 로 꽂지 않는다) */
-function NoticeLine({ title, raw, isFailed = false }: { title: string; raw: string; isFailed?: boolean }) {
+function NoticeLine({ title, raw, isFailed = false, jumpKey, markClass = '' }: { title: string; raw: string; isFailed?: boolean; jumpKey: string; markClass?: string }) {
   return (
-    <details className={`msg notice${isFailed ? ' failed' : ''}`}>
+    <details className={`msg notice${isFailed ? ' failed' : ''}${markClass}`} data-jump-key={jumpKey}>
       <summary title={title}>{title}</summary>
       <pre>{raw}</pre>
     </details>
@@ -268,17 +276,27 @@ export function formatClock(iso: string): string {
   return date.toDateString() === new Date().toDateString() ? time : `${date.getMonth() + 1}/${date.getDate()} ${time}`
 }
 
+function relayLabel(relay: Relay): string {
+  return relay.kind === 'instruction' ? '→ Assigned to' : '← Report from'
+}
+
+/** 한 줄에 보이는 글 (검색 대상). RelayLine 이 그리는 글과 같은 꼴 */
+function relayLineText(relay: Relay): string {
+  const clock = formatClock(relay.at)
+  return `${relayLabel(relay)} ${relay.memberPosition ?? ''}${relay.memberName}${clock ? ` · ${clock}` : ''}`
+}
+
 /**
  * 팀장 대화의 지시·보고 한 줄 "→ Assigned to (FE 칩) Park · 10:12"·"← Report from (FE 칩) Park · 10:30". 내용은 툴팁(앞부분)만.
  * 누르면 그 팀원 대화의 그 메시지로 간다. 팀원 세션이 아직 없으면(spawn 결과 전) 누를 수 없다
  */
-function RelayLine({ relay, jumpKey, isHighlighted, onOpen }: { relay: Relay; jumpKey: string; isHighlighted: boolean; onOpen: () => void }) {
-  const label = relay.kind === 'instruction' ? '→ Assigned to' : '← Report from'
+function RelayLine({ relay, jumpKey, markClass, onOpen }: { relay: Relay; jumpKey: string; markClass: string; onOpen: () => void }) {
+  const label = relayLabel(relay)
   const clock = formatClock(relay.at)
   return (
     <button
       type="button"
-      className={`relay-line${isHighlighted ? ' jump-highlight' : ''}`}
+      className={`relay-line${markClass}`}
       data-jump-key={jumpKey}
       title={relay.memberSessionId ? relayPreview(relay.text) : 'Creating member session'}
       disabled={!relay.memberSessionId}
@@ -299,10 +317,12 @@ function shellCommandOf(toolUse: ToolUse): string | null {
   return typeof command === 'string' ? command : null
 }
 
-function ToolBlock({ toolUse }: { toolUse: ToolUse }) {
+function ToolBlock({ toolUse, searchKey = null }: { toolUse: ToolUse; searchKey?: string | null }) {
   const command = shellCommandOf(toolUse)
+  // 명령 줄은 대화 안 검색 대상이라 요소를 찾을 키를 단다
+  const jumpKey = command !== null ? `tool:${toolUse.id}` : undefined
   return (
-    <details className="tool">
+    <details className={`tool${jumpKey && jumpKey === searchKey ? ' search-current' : ''}`} data-jump-key={jumpKey}>
       <summary>
         {command !== null && <CopyButton text={command} label="Copy command" />}
         <code>{toolUse.name}</code> {summarizeInput(toolUse.name, toolUse.input)}
@@ -375,11 +395,16 @@ function workTitle(work: Work): string {
   return [`${work.toolCount} ${work.toolCount === 1 ? 'step' : 'steps'}`, ...counts, ...duration].join(' · ')
 }
 
+/** 말풍선 테두리 클래스: 점프로 찾아 간 줄(2초 깜빡임)과 대화 안 검색의 현재 결과(늘 켜 둠) */
+function markClasses(key: string, highlightKey: string | null, searchKey: string | null): string {
+  return `${highlightKey === key ? ' jump-highlight' : ''}${searchKey === key ? ' search-current' : ''}`
+}
+
 /**
  * 묶음 안 claude 메시지 말풍선들: 설명 글(마크다운)·도구 줄을 시간 순서대로.
  * 설명 글이 있는 말풍선은 점프로 찾아 갈 수 있다 (data-jump-key = 메시지 ID. 글 없는 것은 답변 말풍선과 ID 가 겹쳐 빼고)
  */
-function WorkParts({ work, highlightKey }: { work: Work; highlightKey: string | null }) {
+function WorkParts({ work, highlightKey, searchKey }: { work: Work; highlightKey: string | null; searchKey: string | null }) {
   return (
     <>
       {work.parts
@@ -387,7 +412,7 @@ function WorkParts({ work, highlightKey }: { work: Work; highlightKey: string | 
         .map((part) => (
         <div
           key={part.message.id}
-          className={`msg assistant${part.text && highlightKey === part.message.id ? ' jump-highlight' : ''}`}
+          className={`msg assistant${part.text ? markClasses(part.message.id, highlightKey, searchKey) : ''}`}
           data-jump-key={part.text ? part.message.id : undefined}
         >
           {part.text && (
@@ -397,7 +422,7 @@ function WorkParts({ work, highlightKey }: { work: Work; highlightKey: string | 
             </>
           )}
           {part.toolUses.map((toolUse) => (
-            <ToolBlock key={toolUse.id} toolUse={toolUse} />
+            <ToolBlock key={toolUse.id} toolUse={toolUse} searchKey={searchKey} />
           ))}
         </div>
       ))}
@@ -410,7 +435,19 @@ function WorkParts({ work, highlightKey }: { work: Work; highlightKey: string | 
  * 아직 안 끝난 묶음(진행 중)은 접혀 있어도 설명 글만 줄 아래에 말풍선으로 시간 순서대로 보인다 — 도구 줄은 접고, 지금 도는 도구는
  * 대화 맨 아래 작업 중 표시기에만 보인다. 펼치면 그 말풍선들 대신 펼친 안쪽에 보인다 (같은 글이 두 번 보이지 않게)
  */
-function WorkLine({ work, isOpen, onToggle, highlightKey }: { work: Work; isOpen: boolean; onToggle: () => void; highlightKey: string | null }) {
+function WorkLine({
+  work,
+  isOpen,
+  onToggle,
+  highlightKey,
+  searchKey,
+}: {
+  work: Work
+  isOpen: boolean
+  onToggle: () => void
+  highlightKey: string | null
+  searchKey: string | null
+}) {
   const title = workTitle(work)
   // 진행 중인데 끝난 도구가 아직 없으면(첫 도구가 도는 중) 줄 없이 설명 글 말풍선만 보인다
   const hasLine = !work.isInProgress || work.toolCount > 0
@@ -423,7 +460,7 @@ function WorkLine({ work, isOpen, onToggle, highlightKey }: { work: Work; isOpen
           </button>
           {isOpen && (
             <div className="work-items">
-              <WorkParts work={work} highlightKey={highlightKey} />
+              <WorkParts work={work} highlightKey={highlightKey} searchKey={searchKey} />
             </div>
           )}
         </div>
@@ -434,7 +471,7 @@ function WorkLine({ work, isOpen, onToggle, highlightKey }: { work: Work; isOpen
         work.parts.map(
           (part) =>
             part.text && (
-              <div key={part.message.id} className={`msg assistant${highlightKey === part.message.id ? ' jump-highlight' : ''}`} data-jump-key={part.message.id}>
+              <div key={part.message.id} className={`msg assistant${markClasses(part.message.id, highlightKey, searchKey)}`} data-jump-key={part.message.id}>
                 <CopyButton text={part.text} />
                 <MarkdownText text={part.text} />
               </div>
@@ -845,6 +882,58 @@ function findMessageTarget(
   return { key: found.id, workKey: hidingWorkKey(rows, found) }
 }
 
+/**
+ * 대화 안 검색 대상을 화면 순서대로: 사람 쪽 글(대기 중 포함)·claude 글(답변·중간 설명 글)·팀원 쪽 지시 말풍선·system 글,
+ * 한 줄로 보이는 것(알림·압축 요약·중지 줄·팀장 쪽 지시/보고 한 줄)은 화면에 보이는 한 줄 글, Bash·PowerShell 명령.
+ * 도구 결과·다른 도구 입력·질문 카드는 뺀다. key 는 화면 요소의 data-jump-key 와 같다
+ */
+function buildSearchTargets(rows: ChatRow<Special>[], memberOf: MemberOf): SearchTarget[] {
+  const targets: SearchTarget[] = []
+  const add = (key: string, text: string, workKey: string | null = null) => {
+    if (text) targets.push({ key, text, workKey })
+  }
+  for (const row of rows) {
+    if (row.kind === 'text') {
+      add(row.message.id, row.message.text)
+    } else if (row.kind === 'work') {
+      const { work } = row
+      for (const part of work.parts) {
+        // 끝난 묶음의 설명 글은 접혀 있으면 안 그려져 펼쳐야 한다. 진행 중 묶음의 설명 글은 접혀 있어도 말풍선으로 보인다
+        if (part.text) add(part.message.id, part.text, work.isInProgress ? null : work.key)
+        for (const toolUse of part.toolUses) {
+          const command = shellCommandOf(toolUse)
+          if (command) add(`tool:${toolUse.id}`, command, work.key)
+        }
+      }
+    } else if (row.kind === 'special') {
+      if (row.special.kind === 'relay') add(`relay:${row.toolUse.id}`, relayLineText(row.special.relay))
+    } else {
+      const { message } = row
+      if (message.from) {
+        add(message.id, message.text)
+      } else if (message.isCompactSummary) {
+        add(message.id, COMPACT_SUMMARY_TITLE)
+      } else if (message.isInterrupt) {
+        add(message.id, INTERRUPT_TITLE)
+      } else {
+        const parts = message.role === 'system' ? splitNotifications(message.text) : null
+        if (!parts) {
+          add(message.id, message.text)
+          continue
+        }
+        parts.forEach((part, index) => {
+          const key = `${message.id}:${index}`
+          if (typeof part === 'string') return add(key, part)
+          const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
+          if (report) add(`relay:${key}`, relayLineText(reportRelay(report, message.timestamp, memberOf)))
+          else add(key, notificationTitle(part))
+        })
+      }
+    }
+  }
+  return targets
+}
+
 export function Chat({
   sessionId,
   isWritable,
@@ -865,6 +954,9 @@ export function Chat({
   shellRequest,
   onShellRequestHandled,
   onQueuedChange,
+  isSearchOpen,
+  searchFocusId,
+  onSearchClose,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   /** messages 가 어느 세션 것인지. 세션을 바꾼 뒤 새 대화가 오기 전까지는 앞 세션 것이 남아 있어 점프는 이것이 맞을 때만 처리한다 */
@@ -984,6 +1076,24 @@ export function Chat({
   const liveWorkKey = liveWorkRow?.kind === 'work' ? liveWorkRow.work.key : null
   /** 펼친 작업 묶음 키 (Work.key). 몇 초마다 대화를 다시 받아도 접히지 않게 여기 둔다. 세션을 바꾸면 비운다 */
   const [openWorkKeys, setOpenWorkKeys] = useState<ReadonlySet<string>>(() => new Set())
+  /** 대화 안 검색의 현재 결과 (data-jump-key). 노란 테두리를 늘 켜 둔다. 검색을 닫으면 null */
+  const [searchCurrentKey, setSearchCurrentKey] = useState<string | null>(null)
+  /** 검색이 이동한 결과. 바뀔 때마다 그 요소로 스크롤한다 (id 는 같은 결과로 다시 이동할 때도 새로 하려고) */
+  const [searchScroll, setSearchScroll] = useState<{ key: string; id: number } | null>(null)
+  const nextSearchScrollIdRef = useRef(1)
+  /** 검색 대상은 검색을 열어 둔 동안만 만든다 (대화가 길어도 평소에는 비용이 없다) */
+  const searchTargets = useMemo(() => (isSearchOpen ? buildSearchTargets(rows, memberOf) : []), [isSearchOpen, rows, memberOf])
+  /**
+   * 검색의 현재 결과가 바뀜. 사용자가 이동한 것이면(isNavigation) 접힌 작업 묶음 안이면 펼치고 그 요소로 스크롤한다.
+   * 대화가 갱신돼 위치만 다시 잡힌 것이면 테두리만 옮기고 스크롤·펼치기는 하지 않는다 (읽던 자리에서 끌려가지 않게)
+   */
+  const handleSearchCurrentChange = useCallback((target: SearchTarget | null, isNavigation: boolean) => {
+    setSearchCurrentKey(target?.key ?? null)
+    if (!target || !isNavigation) return
+    const { workKey } = target
+    if (workKey) setOpenWorkKeys((current) => (current.has(workKey) ? current : new Set(current).add(workKey)))
+    setSearchScroll({ key: target.key, id: nextSearchScrollIdRef.current++ })
+  }, [])
 
   useEffect(() => {
     let isCancelled = false
@@ -1032,6 +1142,8 @@ export function Chat({
     // 앞 세션으로 올리던 것은 그대로 끝나고(그 세션 scratchpad 에 남는다) 결과는 칩이 없어 버려진다
     setAttachments([])
     setOpenWorkKeys(new Set())
+    setSearchCurrentKey(null)
+    setSearchScroll(null)
     setHighlight(null)
     setJumpNotice(null)
     setLineNotice(null)
@@ -1095,6 +1207,21 @@ export function Chat({
     return () => clearTimeout(timer)
   }, [highlight])
 
+  // 검색 막대가 열리고 닫히면 대화 높이가 막대만큼 바뀐다 (스크롤 이벤트가 없다). 맨 아래를 보고 있었으면 맨 아래에 두고, 아니면 다시 잰다
+  useLayoutEffect(() => {
+    if (isAtBottomRef.current) scrollToBottom()
+    else onMessagesScroll()
+  }, [isSearchOpen])
+
+  // 검색이 이동한 결과를 (펼친 묶음까지 그려진 뒤) 가운데로 스크롤하고, 그 위치를 "맨 아래를 보고 있는지" 에 반영한다
+  useLayoutEffect(() => {
+    if (!searchScroll) return
+    const element = messagesRef.current?.querySelector(`[data-jump-key="${CSS.escape(searchScroll.key)}"]`)
+    if (!element) return
+    element.scrollIntoView({ block: 'center' })
+    onMessagesScroll()
+  }, [searchScroll])
+
   // 못 찾음 알림은 맨 아래에 생긴다. 맨 아래로 내려 둔 뒤 생겨 가려지지 않게 한 번 더 내린다
   useEffect(() => {
     if (!jumpNotice) return
@@ -1125,7 +1252,7 @@ export function Chat({
   function renderRelayLine(relay: Relay, rowKey: string) {
     return (
       <Fragment key={rowKey}>
-        <RelayLine relay={relay} jumpKey={rowKey} isHighlighted={highlight?.key === rowKey} onOpen={() => openRelay(relay, rowKey)} />
+        <RelayLine relay={relay} jumpKey={rowKey} markClass={highlightClass(rowKey)} onOpen={() => openRelay(relay, rowKey)} />
         {lineNotice?.rowKey === rowKey && (
           <div className="queue-notice" role="status">
             {lineNotice.text}
@@ -1137,7 +1264,7 @@ export function Chat({
 
   /** 점프로 찾아 간 말풍선이면 강조 클래스 */
   function highlightClass(key: string): string {
-    return highlight?.key === key ? ' jump-highlight' : ''
+    return markClasses(key, highlight?.key ?? null, searchCurrentKey)
   }
 
   function onMessagesScroll() {
@@ -1363,6 +1490,16 @@ export function Chat({
   return (
     <div className="chat">
       <div className="messages-pane">
+        {isSearchOpen && (
+          <ChatSearch
+            key={sessionId}
+            targets={searchTargets}
+            containerRef={messagesRef}
+            focusId={searchFocusId}
+            onClose={onSearchClose}
+            onCurrentChange={handleSearchCurrentChange}
+          />
+        )}
         <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
           {rows.map((row) => {
             if (row.kind === 'work') {
@@ -1374,6 +1511,7 @@ export function Chat({
                   isOpen={openWorkKeys.has(work.key)}
                   onToggle={() => toggleWork(work.key)}
                   highlightKey={highlight?.key ?? null}
+                  searchKey={searchCurrentKey}
                 />
               )
             }
@@ -1407,9 +1545,13 @@ export function Chat({
               )
             }
             // 대화 압축 요약: 사람 말이 아니라 한 줄. 요약 원문은 접어 둔다
-            if (message.isCompactSummary) return <NoticeLine key={message.id} title={COMPACT_SUMMARY_TITLE} raw={message.text} />
+            if (message.isCompactSummary) {
+              return <NoticeLine key={message.id} title={COMPACT_SUMMARY_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
+            }
             // 중지(Esc) 기록: 사람 말이 아니라 한 줄. 원문은 접어 둔다
-            if (message.isInterrupt) return <NoticeLine key={message.id} title={INTERRUPT_TITLE} raw={message.text} />
+            if (message.isInterrupt) {
+              return <NoticeLine key={message.id} title={INTERRUPT_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
+            }
             // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 보고 한 줄, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
             const parts = message.role === 'system' ? splitNotifications(message.text) : null
             if (parts) {
@@ -1419,13 +1561,24 @@ export function Chat({
                     const key = `${message.id}:${index}`
                     if (typeof part === 'string') {
                       return (
-                        <div key={key} className="msg system">
+                        <div key={key} className={`msg system${highlightClass(key)}`} data-jump-key={key}>
                           <div className="text">{part}</div>
                         </div>
                       )
                     }
                     const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
-                    if (!report) return <NoticeLine key={key} title={notificationTitle(part)} raw={part.raw} isFailed={part.status === 'failed'} />
+                    if (!report) {
+                      return (
+                        <NoticeLine
+                          key={key}
+                          title={notificationTitle(part)}
+                          raw={part.raw}
+                          isFailed={part.status === 'failed'}
+                          jumpKey={key}
+                          markClass={highlightClass(key)}
+                        />
+                      )
+                    }
                     return renderRelayLine(reportRelay(report, message.timestamp, memberOf), `relay:${key}`)
                   })}
                 </Fragment>
@@ -1433,7 +1586,11 @@ export function Chat({
             }
             // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다)
             return (
-              <div key={message.id} className={`msg ${message.role}${message.isQueued ? ' queued' : ''}`}>
+              <div
+                key={message.id}
+                className={`msg ${message.role}${message.isQueued ? ' queued' : ''}${highlightClass(message.id)}`}
+                data-jump-key={message.id}
+              >
                 {message.text && <div className="text">{message.text}</div>}
                 {message.isQueued && (
                   <div className="queued-label">
