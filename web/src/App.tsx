@@ -227,6 +227,8 @@ export function App() {
   const [officeFocus, setOfficeFocus] = useState<OfficeFocus | null>(null)
   const nextFocusIdRef = useRef(1)
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
+  /** 세션 ID → 곁가지 질문(btw) 문답이 바뀐 횟수 (전역 SSE btw 이벤트). 대화 탭의 카드가 바뀌면 다시 받는다 */
+  const [btwVersions, setBtwVersions] = useState<Record<string, number>>({})
   /** 목록 맨 아래 "Off Duty" 구역을 펼쳤는지. 기본 접힘 */
   const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
   /** 사무실 퇴근 거리의 "+N" 을 누른 횟수. 바뀌면 펼친 Off Duty 구역으로 목록을 스크롤한다 (펼친 뒤 그려진 다음에) */
@@ -295,6 +297,10 @@ export function App() {
     source.addEventListener('transcript', (event) => {
       const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
       setTranscriptVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
+    })
+    source.addEventListener('btw', (event) => {
+      const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
+      setBtwVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
     })
     source.onerror = () => setIsConnected(false)
     return () => source.close()
@@ -1470,6 +1476,7 @@ export function App() {
                 question={selected.question ?? null}
                 suggestion={selected.suggestion ?? null}
                 version={transcriptVersions[selected.id] ?? 0}
+                btwVersion={btwVersions[selected.id] ?? 0}
                 sessionNames={sessionNames}
                 sessionPositions={sessionPositions}
                 jump={jump?.sessionId === selected.id ? jump : null}

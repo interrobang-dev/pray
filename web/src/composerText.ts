@@ -16,3 +16,14 @@ export function withAttachmentPaths(text: string, paths: string[]): string {
   const list = ['첨부 파일:', ...paths.map((path) => `\`${path}\``)].join('\n')
   return text ? `${text}\n\n${list}` : list
 }
+
+/**
+ * 입력칸 글이 곁가지 질문 명령인지 (Claude Code `/btw` 처럼 대소문자 무시). 아니면 null, `/btw` 만이면 질문 없음(카드 다시 열기),
+ * `/btw 질문` 이면 그 질문 (앞뒤 공백을 뗀다). `/btwx` 는 명령이 아니다
+ */
+export function parseBtwCommand(text: string): { question: string | null } | null {
+  const match = /^\/btw(?:\s+([\s\S]*))?$/i.exec(text.trim())
+  if (!match) return null
+  const question = match[1]?.trim() ?? ''
+  return { question: question || null }
+}

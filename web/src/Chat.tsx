@@ -7,6 +7,7 @@ import { expandedStartIndex, resolveStartIndex, startIndexRevealing, windowStart
 import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
 import { Composer, type ComposerHandle } from './Composer'
+import { BtwCard, type BtwCardHandle } from './BtwCard'
 import { runningToolNames, shortToolName } from './runningTools'
 import { FilesButton } from './Files'
 import { CopyButton } from './CopyButton'
@@ -45,6 +46,8 @@ interface Props {
   suggestion: string | null
   /** 전역 SSE 의 transcript 이벤트로 올라가는 카운터. 바뀌면 다시 읽는다 */
   version: number
+  /** 전역 SSE 의 btw 이벤트로 올라가는 카운터. 바뀌면 곁가지 질문 카드가 문답을 다시 받는다 */
+  btwVersion: number
   /** 세션 ID → 화면 이름 (App 의 세션 목록). 팀원 이름 찾기와 지시·보고 한 줄을 눌렀을 때 그 팀원이 목록에 있는지 보는 데 쓴다 */
   sessionNames: Record<string, string>
   /** 세션 ID → 역할 (칩). 없거나 null 이면 칩 없이. 옛 서버 응답이면 이름 앞 "[역할]" 에서 읽는다 */
@@ -1091,6 +1094,7 @@ export function Chat({
   question,
   suggestion,
   version,
+  btwVersion,
   sessionNames,
   sessionPositions,
   jump,
@@ -1158,6 +1162,7 @@ export function Chat({
   const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<ComposerHandle>(null)
+  const btwRef = useRef<BtwCardHandle>(null)
   /** 사용자가 맨 아래를 보고 있는지. 스크롤 때마다 갱신한다 (내용만 길어질 때는 스크롤 이벤트가 없어 직전 값이 남는다 = "갱신 직전에 맨 아래였는지") */
   const isAtBottomRef = useRef(true)
   /** 같은 값을 "맨 아래로" 버튼을 그리는 데 쓴다 */
@@ -1513,6 +1518,23 @@ export function Chat({
     sendQueueRef.current = sendQueueRef.current.then(run)
   }
 
+  /** 입력칸의 `/btw`. 질문이면 카드에 바로 띄우고 서버 요청은 보내기 줄에 세운다 (서버가 pty 에 쓰는 명령 글이 앞 글·Enter 와 섞이지 않게) */
+  function sendBtw(question: string | null) {
+    const card = btwRef.current
+    if (!card) return
+    if (question === null) {
+      card.open()
+      return
+    }
+    const run = card.ask(question)
+    sendQueueRef.current = sendQueueRef.current.then(run)
+  }
+
+  /** 곁가지 질문 카드 높이가 바뀌면 맨 아래를 보고 있었을 때만 맨 아래에 둔다 (카드만큼 대화가 줄어 마지막 글이 가려지지 않게) */
+  const keepBottomOnBtwResize = useCallback(() => {
+    if (isAtBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [])
+
   function dismissPending(pendingId: number) {
     setPendings((current) => current.filter((pending) => pending.id !== pendingId))
   }
@@ -1722,6 +1744,7 @@ export function Chat({
           </div>
         ))
       )}
+      {isWritable && <BtwCard key={sessionId} ref={btwRef} sessionId={sessionId} version={btwVersion} onResize={keepBottomOnBtwResize} />}
       {/* 쓸 수 없는 동안에도 마운트해 두어 쓰던 글·첨부가 남는다 (그동안은 아무것도 그리지 않는다) */}
       <Composer
         ref={composerRef}
@@ -1731,6 +1754,7 @@ export function Chat({
         suggestion={isSuggestionShown ? suggestion : null}
         onEmptyChange={setIsDraftEmpty}
         onSend={send}
+        onBtw={sendBtw}
       />
       {!isWritable && (footer ?? <p className="hint">Started from a terminal or IDE, so this session is view-only</p>)}
     </div>

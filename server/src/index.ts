@@ -115,6 +115,7 @@ import { applySuggestion } from './suggestion.js'
 import { parseCharacter } from './character.js'
 import { answerBox, decideOutcome, judgeQueue, type QueueJudgement, type UnqueueProgress } from './unqueue.js'
 import { hasBusyWebSessions, switchImpact } from './switchImpact.js'
+import { BTW_TIMEOUT_MESSAGE, BTW_TIMEOUT_MS, BtwStore, parseBtwQuestion, parseBtwResult } from './btw.js'
 
 setupFileLog()
 const PORT = 4710
@@ -136,6 +137,12 @@ const suggestions = new Map<string, string>()
 const unqueues = new Map<string, UnqueueProgress>()
 /** 진행 중인 중지 (Esc 를 보내고 jsonl 결말을 기다리는 세션). 그동안 같은 세션의 중지·대기 메시지 취소를 막는다. 메모리에만 */
 const interrupts = new Set<string>()
+/** 곁가지 질문(btw) 문답 (btw.ts). 세션마다 최근 20개. 메모리에만 */
+const btw = new BtwStore()
+/** 답을 기다리는 btw 요청의 시간 초과 타이머 (요청 ID → 세션·타이머) */
+const btwTimers = new Map<string, { sessionId: string; timer: ReturnType<typeof setTimeout> }>()
+/** `/jk-btw <ID>` 를 쓰고 Enter 를 보내기 전인 세션. 그 사이 중지의 Esc·대기 취소의 ↑ 가 입력칸의 명령 글과 섞이지 않게 막는다 */
+const btwTyping = new Set<string>()
 
 const config = readConfig()
 const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
@@ -722,6 +729,11 @@ app.post('/api/sessions/:id/queue/cancel-last', async (req, res) => {
     res.status(409).json({ message: 'Stopping' })
     return
   }
+  // 입력칸에 명령 글이 있으면 ↑ 가 대기열을 꺼내지 않는다
+  if (btwTyping.has(sessionId)) {
+    res.status(409).json({ message: 'Sending a side question' })
+    return
+  }
   const queued = queuedPrompts(jsonl)
   if (queued.at(-1)?.text !== text) {
     res.status(409).json({ message: 'Not the last queued message (claude may have received it)' })
@@ -828,8 +840,90 @@ function interruptConflict(sessionId: string): string | null {
   if (heldQuestions.has(sessionId) || status === 'needs-approval') return "Can't stop while it needs approval or is asking a question (Esc would reject the tool or question)"
   if (status !== 'working') return 'Can only stop while claude is working'
   if (unqueues.has(sessionId)) return 'Cancelling a queued message'
+  if (btwTyping.has(sessionId)) return 'Sending a side question'
   return null
 }
+
+/** mod 가 실행하는 slash command (mod/hooks/register.ts 의 BTW_COMMAND) */
+const BTW_COMMAND = 'jk-btw'
+/** 명령 글을 쓰고 Enter 까지 (화면 대화 탭의 SUBMIT_ENTER_DELAY_MS 와 같다 — 이어 보내면 \r 이 줄바꿈이 된다) */
+const BTW_ENTER_DELAY_MS = 300
+
+/** 문답이 바뀌었다고 화면에 알린다. 화면은 그 세션 목록을 다시 받는다 */
+function broadcastBtw(sessionId: string): void {
+  for (const res of subscribers) sendSse(res, 'btw', { sessionId })
+}
+
+/** 그 세션의 문답과 시간 초과 타이머를 지운다 (exit·지우기). 지운 것이 있으면 true */
+function clearBtw(sessionId: string): boolean {
+  for (const [requestId, entry] of btwTimers) {
+    if (entry.sessionId !== sessionId) continue
+    clearTimeout(entry.timer)
+    btwTimers.delete(requestId)
+  }
+  return btw.clear(sessionId)
+}
+
+/** 곁가지 질문을 보낼 수 없는 이유 (409 문구). 키를 pty 에 쓰므로 승인·질문 화면이나 입력칸을 다루는 동안은 막는다 */
+function btwConflict(sessionId: string): string | null {
+  if (heldQuestions.has(sessionId) || hookStates.get(sessionId)?.status === 'needs-approval') {
+    return "Can't ask while claude needs approval or is asking a question"
+  }
+  if (unqueues.has(sessionId)) return "Can't ask while cancelling a queued message"
+  if (interrupts.has(sessionId)) return "Can't ask while stopping"
+  if (btwTyping.has(sessionId) || btw.hasPending(sessionId)) return 'Still answering the last side question'
+  return null
+}
+
+/**
+ * 곁가지 질문 `{ question }` (Claude Code /btw 와 같은 일. btw.ts). 근무 중인 웹 세션만. 작업 중에도 된다 — 명령이 immediate 라 차례를 멈추지 않는다.
+ * pty 에 `/jk-btw <요청 ID>` 를 쓰고 300ms 뒤 Enter 를 보낸 다음 `{ requestId }` 로 답한다 (화면이 Enter 까지 기다려 다음 보내기와 섞이지 않게).
+ * 답은 mod 가 `POST /api/hook/btw/:requestId` 로 보내고, BTW_TIMEOUT_MS 안에 안 오면 실패로 끝낸다. 바뀔 때마다 SSE `btw { sessionId }`
+ */
+app.post('/api/sessions/:id/btw', async (req, res) => {
+  const sessionId = req.params.id
+  const question = parseBtwQuestion(((req.body ?? {}) as { question?: unknown }).question)
+  if (question === null) {
+    res.status(400).json({ message: 'Question must be 1 to 4000 characters' })
+    return
+  }
+  if (!host.sessions.some((s) => s.sessionId === sessionId)) {
+    res.status(404).json({ message: 'Not an on-duty web session' })
+    return
+  }
+  const conflict = btwConflict(sessionId)
+  if (conflict) {
+    res.status(409).json({ message: conflict })
+    return
+  }
+  const requestId = randomUUID()
+  btw.ask(sessionId, requestId, question)
+  if (!host.send({ type: 'input', sessionId, data: `/${BTW_COMMAND} ${requestId}` })) {
+    btw.remove(sessionId, requestId)
+    res.status(503).json({ message: 'Not connected to session host' })
+    return
+  }
+  const timer = setTimeout(() => {
+    btwTimers.delete(requestId)
+    if (btw.settle(sessionId, requestId, { isAnswered: false, message: BTW_TIMEOUT_MESSAGE })) broadcastBtw(sessionId)
+  }, BTW_TIMEOUT_MS)
+  btwTimers.set(requestId, { sessionId, timer })
+  broadcastBtw(sessionId)
+  await sleep(BTW_ENTER_DELAY_MS)
+  host.send({ type: 'input', sessionId, data: '\r' })
+  res.json({ requestId })
+})
+
+/** 그 세션의 곁가지 문답 (오래된 것 먼저) */
+app.get('/api/sessions/:id/btw', (req, res) => {
+  res.json({ items: btw.list(req.params.id) })
+})
+
+/** 그 세션의 곁가지 문답을 지운다. 답을 기다리던 것도 지워 늦게 온 답은 버려진다 */
+app.delete('/api/sessions/:id/btw', (req, res) => {
+  if (clearBtw(req.params.id)) broadcastBtw(req.params.id)
+  res.json({})
+})
 
 /**
  * 근무 중인 웹 세션의 모델·effort 바꾸기 `{ model, effort }` (model = haiku·sonnet·opus·fable, effort = low…max 또는 null = 사용자 전역 설정).
@@ -1896,6 +1990,41 @@ app.post('/api/hook/prompt-box', (req, res) => {
 })
 
 /**
+ * mod 가 곁가지 질문을 받아 간다 (`/jk-btw <요청 ID>` 를 실행할 때). `?sessionId=` 의 pending 요청이면 `{ question, history }`, 아니면 404.
+ * suggestion 과 같은 이유로 인증 예외가 아니다 (mod 는 loopback 으로 통과)
+ */
+app.get('/api/hook/btw/:requestId', (req, res) => {
+  const request = btw.request(String(req.query.sessionId ?? ''), req.params.requestId)
+  if (!request) {
+    res.status(404).json({ message: 'Unknown side question' })
+    return
+  }
+  res.json(request)
+})
+
+/** mod 가 보낸 fork 결과 (ModelForkResult 그대로). pending 요청이 아니면(지움·시간 초과) 404 */
+app.post('/api/hook/btw/:requestId', (req, res) => {
+  const sessionId = String(req.query.sessionId ?? '')
+  const { requestId } = req.params
+  const result = parseBtwResult(req.body)
+  if (!result) {
+    res.status(400).end()
+    return
+  }
+  if (!btw.settle(sessionId, requestId, result)) {
+    res.status(404).json({ message: 'Unknown side question' })
+    return
+  }
+  const entry = btwTimers.get(requestId)
+  if (entry) clearTimeout(entry.timer)
+  btwTimers.delete(requestId)
+  const usage = (req.body as { usage?: { cache_read_input_tokens?: unknown } }).usage
+  console.log(`곁가지 질문 ${result.isAnswered ? '답' : `실패: ${result.message}`} (${sessionId.slice(0, 8)}, 캐시 읽기 ${usage?.cache_read_input_tokens ?? '?'})`)
+  res.status(204).end()
+  broadcastBtw(sessionId)
+})
+
+/**
  * PermissionRequest(matcher AskUserQuestion) 훅. 웹 세션이면 응답하지 않고 붙잡아 두고 답하기 API 를 기다린다
  * (훅 timeout 1시간). 외부 세션은 관찰만이라 바로 {} (결정 없음 → 터미널 화면이 받는다)
  */
@@ -1939,6 +2068,9 @@ host.on('reachable', (isReachable: boolean) => {
   if (!isReachable) {
     suggestions.clear()
     unqueues.clear()
+    for (const { timer } of btwTimers.values()) clearTimeout(timer)
+    btwTimers.clear()
+    for (const sessionId of btw.clearAll()) broadcastBtw(sessionId)
   }
   void broadcast()
 })
@@ -1948,6 +2080,7 @@ host.on('message', (message: HostMessage) => {
     lastOutputAt.delete(message.sessionId)
     suggestions.delete(message.sessionId)
     unqueues.delete(message.sessionId)
+    if (clearBtw(message.sessionId)) broadcastBtw(message.sessionId)
     tasks.markExited(message.sessionId)
     releaseQuestion(message.sessionId)
   }

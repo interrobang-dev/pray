@@ -178,6 +178,19 @@ export interface ScratchpadFile {
   modifiedAt: string
 }
 
+/** 곁가지 질문(btw) 문답 하나 (`GET /api/sessions/:id/btw` 의 items, 오래된 것 먼저). 대화 기록에는 없다 */
+export interface BtwItem {
+  id: string
+  question: string
+  status: 'pending' | 'answered' | 'failed'
+  /** answered 일 때만 */
+  answer: string | null
+  /** failed 일 때만 (서버가 만든 영어 문구) */
+  error: string | null
+  askedAt: string
+  answeredAt: string | null
+}
+
 export interface ScratchpadListing {
   files: ScratchpadFile[]
   /** 서버 상한(1000개)에서 잘렸는지. 얕은 폴더부터 모은다 */

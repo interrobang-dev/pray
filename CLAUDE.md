@@ -17,7 +17,7 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 | `host.md` | 호스트(pipe·pty·resume·퇴근 기록)·`hq.json`(`hq.ts` 전문)·트레이 앱·스케줄러 스크립트·훅 설치·그룹 할 일 저장 규칙 |
 | `team.md` | 팀·파트 판정, 팀장·파트장 지침·MCP 도구, task 상태, 팀원 이름·모델·effort, worktree 파트 |
 | `server-api.md` | 서버 API 경로 전부(`index.ts` 전문), 세션 목록·jsonl 요약·훅 상태·표시 상태 계산, shell·작업 파일·첨부, AskUserQuestion, 세션 이름·역할·인물, 폴더 신뢰, 모델·effort 바꾸기 |
-| `queue-interrupt.md` | mod(입력 제안·입력칸 알림), 보내기의 함정, 대기열·대기 메시지 취소, 작업 중지 |
+| `queue-interrupt.md` | mod(입력 제안·입력칸 알림·곁가지 질문), 보내기의 함정, 대기열·대기 메시지 취소, 작업 중지, 곁가지 질문 흐름(`btw.ts`) |
 | `accounts.md` | 사용량 조회·사용량 창, Claude 계정 보관·전환·로그인·로그아웃 (서버·화면) |
 | `flow.md` | 플로우(flow.team) 알림 서버·화면 |
 | `chat.md` | 대화 메시지(`messages.ts`)와 대화 탭 전체, 마크다운, 작업 파일, Shells, 터미널 탭 |
@@ -89,14 +89,14 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/auth.ts`·`mail.ts`·`config.ts` — 메일 인증·토큰·config.json
 - `server/src/messages.ts` — jsonl → 대화 메시지 (→ `chat.md`) · `flow.ts` — 플로우 (→ `flow.md`)
 - `server/src/messageCache.ts` — 대화 API 의 해석 캐시·버전·바뀐 뒤쪽만 보내기
-- `server/src/suggestion.ts`·`unqueue.ts`·`interrupt.ts` — 입력 제안·대기 취소·작업 중지 (→ `queue-interrupt.md`) · `mod/` — 웹 세션 전용 mod (→ 같은 파일)
+- `server/src/suggestion.ts`·`unqueue.ts`·`interrupt.ts`·`btw.ts` — 입력 제안·대기 취소·작업 중지·곁가지 질문(`/btw`) (→ `queue-interrupt.md`) · `mod/` — 웹 세션 전용 mod (→ 같은 파일)
 - `server/src/usage.ts`·`accounts.ts`·`accountStore.ts`·`accountLogin.ts`·`switchImpact.ts` — 사용량·계정 (→ `accounts.md`)
 
 웹 → `web-app.md` · `chat.md` · `office.md` · `office-art.md` · `accounts.md` · `flow.md`
 - `web/src/main.tsx` — 로그인 또는 App · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `types.ts` — 응답 타입·공통 문구 함수
 - `web/src/theme.ts` — 테마 · `Modal.tsx` — 모달·세그먼트 · `sessionMenu.ts` — 세션 줄 ⋯ 메뉴 · `sessionPosition.ts`·`PositionChip.tsx` — 역할·이름
 - `web/src/GroupTodosModal.tsx`·`groupTodos.ts` — 그룹 TODO · `ModelSettingModal.tsx`·`modelSetting.ts` — 모델·effort 변경 창
-- `web/src/Chat.tsx`·`chatRows.ts`·`runningTools.ts` — 대화 탭 · `chatWindow.ts`·`chatReuse.ts`·`chatDelta.ts` — 최근 줄만 그리기·다시 받은 대화 재사용·바뀐 뒤쪽만 받기 · `Composer.tsx`·`composerText.ts` — 대화 입력 상자(글·첨부 state) · `Markdown.tsx` — 마크다운 · `CopyButton.tsx`·`copyText.ts`·`codeText.ts` — 복사 버튼·클립보드·코드 글자 뽑기 · `Files.tsx` — 작업 파일 · `Shells.tsx` — shell 보기 · `Terminal.tsx` — xterm · `chatSearch.ts`·`ChatSearchBar.tsx`·`chatSearchPaint.ts` — 대화 탭 안 검색(찾기·막대·글자 칠하기) (→ `chat.md`)
+- `web/src/Chat.tsx`·`chatRows.ts`·`runningTools.ts` — 대화 탭 · `chatWindow.ts`·`chatReuse.ts`·`chatDelta.ts` — 최근 줄만 그리기·다시 받은 대화 재사용·바뀐 뒤쪽만 받기 · `Composer.tsx`·`composerText.ts` — 대화 입력 상자(글·첨부 state) · `BtwCard.tsx` — 곁가지 질문 카드 · `Markdown.tsx` — 마크다운 · `CopyButton.tsx`·`copyText.ts`·`codeText.ts` — 복사 버튼·클립보드·코드 글자 뽑기 · `Files.tsx` — 작업 파일 · `Shells.tsx` — shell 보기 · `Terminal.tsx` — xterm · `chatSearch.ts`·`ChatSearchBar.tsx`·`chatSearchPaint.ts` — 대화 탭 안 검색(찾기·막대·글자 칠하기) (→ `chat.md`)
 - `web/src/Office.tsx` — PixiJS 사무실 · `officeLayout.ts` — 배치 · `officeFixtures.ts` — 고정 꾸미기 · `lounge.ts` — 라운지 자리 · `dotState.ts` — 인물 상태·라운지 판정 · `offDutyStreet.ts` — 퇴근 거리 배치 (→ `office.md`)
 - `web/src/characterArt.ts`·`dotCharacter.ts`·`recolor.ts`·`CharacterPicker.tsx` — 인물 그림·고르기·색 · `tools/sprites/` — 스프라이트 파이프라인 · `web/public/office/` — 아틀라스 (→ `office-art.md`)
 - `web/src/UsagePanel.tsx`·`Accounts.tsx`·`accountLabels.ts` — 사용량·계정 (→ `accounts.md`) · `FlowPanel.tsx` — 플로우 (→ `flow.md`)

@@ -1,6 +1,6 @@
 import { useEffect, useImperativeHandle, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent, type Ref } from 'react'
 import { flushSync } from 'react-dom'
-import { composerRows, withAttachmentPaths } from './composerText'
+import { composerRows, parseBtwCommand, withAttachmentPaths } from './composerText'
 import { formatSize } from './Files'
 
 /** 터치 기기(마우스 없음). style.css 의 터치 기기 스타일과 같은 기준. 이 기기에서는 세션을 열 때 입력칸에 포커스하지 않는다 (가상 키보드가 바로 떠 대화를 가린다) */
@@ -65,13 +65,15 @@ interface Props {
   onEmptyChange: (isEmpty: boolean) => void
   /** 보낼 글 (첨부 경로를 붙인 것). 입력칸·보낸 칩은 이미 비웠다 */
   onSend: (text: string) => void
+  /** `/btw 질문` (질문) · `/btw` (null = 카드 다시 열기). claude 에게 보내지 않는다. 입력칸은 이미 비웠고 첨부 칩은 그대로 둔다 */
+  onBtw: (question: string | null) => void
 }
 
 /**
  * 대화 입력 상자: 여러 줄 입력칸·첨부 칩·보내기. 글자 state 를 여기 두어 칠 때마다 대화(Chat)가 다시 그려지지 않는다.
  * 세션을 바꿔도 쓰던 글은 남고 첨부 칩은 비운다
  */
-export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onEmptyChange, onSend }: Props) {
+export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onEmptyChange, onSend, onBtw }: Props) {
   const [draft, setDraft] = useState('')
   /** 입력 상자의 첨부 칩. 세션을 바꾸면 비운다 */
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -105,6 +107,13 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
 
   function submit(event?: FormEvent) {
     event?.preventDefault()
+    // 곁가지 질문은 첨부를 붙이지 않는다 (도구 없이 답해 파일을 못 읽는다). 올리는 중이어도 된다
+    const btw = parseBtwCommand(draft)
+    if (btw && !isAsking) {
+      changeDraft('')
+      onBtw(btw.question)
+      return
+    }
     const text = withAttachmentPaths(draft.trim(), uploaded.map((attachment) => attachment.path))
     if (!text || isAsking || isUploading) return
     changeDraft('')
@@ -230,7 +239,7 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
       <button
         type="submit"
         className="send"
-        disabled={(!draft.trim() && uploaded.length === 0) || isAsking || isUploading}
+        disabled={(!draft.trim() && uploaded.length === 0) || isAsking || (isUploading && !parseBtwCommand(draft))}
         aria-label="Send"
         title={isUploading ? "Can't send while files are uploading" : 'Send (Enter)'}
       >
