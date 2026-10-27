@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import compression from 'compression'
 import express from 'express'
@@ -60,7 +59,7 @@ import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js
 import { makeSendCode } from './mail.js'
 import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptJudgement } from './interrupt.js'
-import { findTranscript, findTranscriptAnalysis, findTranscriptSummary, isLiveSession, listSessions, projectsDir, sessionStatus } from './sessions.js'
+import { findTranscript, findTranscriptAnalysis, findTranscriptFile, findTranscriptSummary, isLiveSession, listSessions, projectsDir, sessionStatus } from './sessions.js'
 import {
   contentTypeOf,
   findScratchpad,
@@ -71,9 +70,9 @@ import {
   saveAttachment,
 } from './scratchpad.js'
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
-import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
-import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts, withoutQueued } from './messages.js'
+import { attachInstructions, queuedPrompts, withoutQueued, type ChatMessage } from './messages.js'
+import { InstructionLogCache, MessageVersions, messageJsons, TranscriptMessageCache } from './messageCache.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
 import { AccountError, accountErrorBody, makeAccountStore } from './accountStore.js'
@@ -144,6 +143,13 @@ const sendCode = makeSendCode(config.smtp)
 const COOKIE = 'jk_session'
 /** 팀원에게 보낸 지시 기록 (한 줄 = InstructionRecord). 대화 탭이 사람 입력과 구분하는 데 쓴다 */
 const instructionLogPath = join(configDir, 'instructions.jsonl')
+/**
+ * 대화 API 의 해석 캐시·보낸 버전·지시 기록 캐시 (messageCache.ts). 개수는 메모리 상한:
+ * 가장 큰 세션(jsonl 173MB·2,730 메시지)이 해석 캐시 약 12.5MB·버전 기록 약 8MB 라 8개 세션이면 최악 약 160MB
+ */
+const transcriptMessages = new TranscriptMessageCache(8)
+const messageVersions = new MessageVersions(8, 8)
+const instructionLog = new InstructionLogCache(instructionLogPath)
 /** 지휘 단위에 팀장·파트장이 없을 때 지시 말풍선에 쓰는 이름 */
 const NO_LEAD_NAME = 'Team API'
 /** 세션 역할(position) 꼴이 틀렸을 때 (parsePositionInput) */
@@ -388,8 +394,9 @@ app.post('/api/sessions', async (req, res) => {
  * (지시 말풍선의 지시자 이름은 글 하나로만 가서 화면이 역할을 따로 붙일 수 없다)
  */
 async function displayNameOf(sessionId: string, names: Record<string, string>, positions: Record<string, string>): Promise<string> {
-  const jsonl = names[sessionId] ? null : await findTranscript(sessionId)
-  const name = names[sessionId] ?? (jsonl ? summarizeTranscript(jsonl).title : null) ?? sessionId.slice(0, 8)
+  // 자동 제목은 세션 목록과 같은 요약 캐시로 (팀장 jsonl 은 크다)
+  const title = names[sessionId] ? null : ((await findTranscriptSummary(sessionId))?.title ?? null)
+  const name = names[sessionId] ?? title ?? sessionId.slice(0, 8)
   return withPosition(name, positions[sessionId] ?? null)
 }
 
@@ -397,30 +404,47 @@ async function displayNameOf(sessionId: string, names: Record<string, string>, p
  * 대화 메시지. 서버가 보낸 팀장·파트장 지시(instructions.jsonl)와 내용이 같은 user 메시지에는 from 이 붙는다.
  * 근무 중(호스트 목록·pid 기록)이 아닌 세션이면 대기 중 메시지를 뺀다 (대기열은 프로세스와 함께 사라졌다)
  */
-app.get('/api/sessions/:id/messages', async (req, res) => {
-  const sessionId = req.params.id
-  const jsonl = await findTranscript(sessionId)
-  if (!jsonl) {
-    res.json([])
-    return
-  }
-  let messages = parseMessages(jsonl)
+async function chatMessagesOf(sessionId: string): Promise<ChatMessage[]> {
+  const file = await findTranscriptFile(sessionId)
+  let messages = file ? await transcriptMessages.read(file.path, file.size, file.mtimeMs) : null
+  if (!messages) return []
   // 대기 중 메시지가 있을 때만 근무를 판정한다 (pid 기록 읽기는 호스트 목록에 없을 때만)
   if (messages.some((m) => m.isQueued)) {
     const isPresent = host.sessions.some((s) => s.sessionId === sessionId) || (await isLiveSession(sessionId))
     if (!isPresent) messages = withoutQueued(messages)
   }
-  const log = await readFile(instructionLogPath, 'utf8').catch(() => '')
-  const records = parseInstructionLog(log, sessionId)
-  if (records.length === 0) {
-    res.json(messages)
-    return
-  }
+  const records = await instructionLog.recordsOf(sessionId)
+  if (records.length === 0) return messages
   const names = listSessionNames()
   const positions = listPositions()
   const fromIds = [...new Set(records.map((r) => r.fromSessionId).filter((id): id is string => id !== null))]
   const fromNames = new Map(await Promise.all(fromIds.map(async (id) => [id, await displayNameOf(id, names, positions)] as const)))
-  res.json(attachInstructions(messages, records, (id) => (id ? (fromNames.get(id) ?? id.slice(0, 8)) : NO_LEAD_NAME)))
+  return attachInstructions(messages, records, (id) => (id ? (fromNames.get(id) ?? id.slice(0, 8)) : NO_LEAD_NAME))
+}
+
+/**
+ * 쿼리가 없으면 메시지 배열 그대로 + ETag(내용의 버전). If-None-Match 가 맞으면 304.
+ * `?since=<버전>` 이면 `{ version, fromIndex, total, messages }`: since 버전 목록과 처음 달라진 자리부터 끝까지만 (모르는 버전이면 0 부터 전부).
+ * 화면은 갖고 있던 목록의 fromIndex 앞을 그대로 두고 뒤를 바꿔 끼운다. 옛 서버는 since 를 무시하고 배열을 준다
+ */
+app.get('/api/sessions/:id/messages', async (req, res) => {
+  const sessionId = req.params.id
+  const jsons = messageJsons(await chatMessagesOf(sessionId))
+  const since = typeof req.query.since === 'string' ? req.query.since : null
+  const { version, fromIndex } = messageVersions.update(sessionId, jsons, since)
+  if (since === null) {
+    // 약한 ETag: 압축하면 바이트가 달라진다. no-cache = 브라우저가 캐시를 쓰기 전에 늘 ETag 로 물어본다
+    res.set({ 'Cache-Control': 'no-cache', ETag: `W/"${version}"` })
+    if (req.fresh) {
+      res.status(304).end()
+      return
+    }
+    res.type('json').send(`[${jsons.join(',')}]`)
+    return
+  }
+  // 주소마다 다른 응답이라 브라우저에 남기지 않는다
+  res.set('Cache-Control', 'no-store')
+  res.type('json').send(`{"version":"${version}","fromIndex":${fromIndex},"total":${jsons.length},"messages":[${jsons.slice(fromIndex).join(',')}]}`)
 })
 
 /** 세션 작업 폴더(scratchpad)의 파일 목록. 하위 폴더 포함, 상한 MAX_FILES. 폴더가 없으면 빈 목록 */

@@ -86,33 +86,127 @@ interface QueueItem {
 /** 대기열에서 빼는 queue-operation. popAll 은 빈 입력칸 ↑ 로 대기 메시지를 입력칸에 꺼낸 것(꺼낸 것마다 한 줄), popOne 은 하나만 꺼낸 것 */
 const TAKE_OPERATIONS = new Set(['remove', 'popAll', 'popOne'])
 
-/** 대기열을 바꾸는 줄 (applyQueueRecord) */
-const QUEUE_RECORD_TYPES = new Set(['queue-operation', 'cost-state'])
+/** 사람 쪽 글: 문자열 그대로이거나 text 블록만 남긴 배열 (userTextMessage·promptAfter 는 text 블록만 본다). 그 밖의 꼴은 undefined */
+type HumanContent = string | Block[] | undefined
+
+/**
+ * jsonl 한 줄에서 메시지를 만드는 데 쓰는 것만 남긴 것 (buildMessages 가 쓴다). 사이드체인·메타·빈 줄·깨진 줄·쓰지 않는 줄은 null.
+ * 줄 번호가 대기 메시지 id 가 되므로 배열은 jsonl 줄과 같은 자리다
+ */
+export type MessageLine =
+  | { type: 'queue-operation'; timestamp: string; operation: unknown; content: string | undefined }
+  | { type: 'cost-state' }
+  | { type: 'queued-command'; uuid: string | undefined; timestamp: string; prompt: HumanContent }
+  | { type: 'compact-summary'; uuid: string | undefined; timestamp: string; text: string }
+  | { type: 'user'; uuid: string | undefined; timestamp: string; content: HumanContent; toolResults: ToolResultLine[] }
+  | { type: 'assistant'; uuid: string | undefined; timestamp: string; messageId: unknown; blocks: Block[] }
+
+/** user 줄의 도구 결과. 앞서 나온 도구 호출(이름을 아는 것)에 붙는 것만 남기고 결과 글은 그 이름으로 이미 잘랐다 */
+interface ToolResultLine {
+  toolUseId: string
+  result: string
+  /** AskUserQuestion 결과일 때만 (toolUseResult.answers) */
+  answers: Record<string, string> | null
+}
+
+function humanContent(content: unknown): HumanContent {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return undefined
+  return (content as Block[]).filter((block) => block.type === 'text' && block.text)
+}
+
+/**
+ * jsonl 줄 → MessageLine. 줄마다 JSON.parse 하는 비싼 단계라 덧붙은 줄만 넣을 수 있게 앞 줄의 상태(도구 호출 ID → 이름)를 들고 있다.
+ * 도구 결과를 자를지(UNLIMITED_RESULT_PREFIX)는 그 앞에 나온 도구 호출 이름으로 정한다 (buildMessages 가 결과를 붙이는 도구 호출과 같은 것)
+ */
+export class MessageLineParser {
+  readonly lines: (MessageLine | null)[] = []
+  private readonly toolNames = new Map<string, string>()
+
+  /** 끝난 줄을 넣는다 */
+  push(line: string): void {
+    this.lines.push(this.parse(line, true))
+  }
+
+  /** 아직 덜 쓰였을 수 있는 마지막 줄을 상태를 바꾸지 않고 해석한다 (다 쓰이면 push 로 다시 넣는다) */
+  peek(line: string): MessageLine | null {
+    return this.parse(line, false)
+  }
+
+  private parse(line: string, isCommitted: boolean): MessageLine | null {
+    if (!line.trim()) return null
+    let record: Record<string, unknown>
+    try {
+      record = JSON.parse(line)
+    } catch {
+      return null
+    }
+    if (record.isSidechain || record.isMeta) return null
+    const type = record.type
+    const timestamp = typeof record.timestamp === 'string' ? record.timestamp : ''
+    const uuid = typeof record.uuid === 'string' ? record.uuid : undefined
+    if (type === 'cost-state') return { type }
+    if (type === 'queue-operation') {
+      return { type, timestamp, operation: record.operation, content: typeof record.content === 'string' ? record.content : undefined }
+    }
+    if (type === 'attachment') {
+      const attachment = record.attachment as { type?: string; prompt?: unknown } | undefined
+      if (attachment?.type !== 'queued_command') return null
+      return { type: 'queued-command', uuid, timestamp, prompt: humanContent(attachment.prompt) }
+    }
+    if (type !== 'user' && type !== 'assistant') return null
+    const message = record.message as { id?: unknown; content?: string | Block[] } | undefined
+    const content = message?.content
+
+    if (type === 'user') {
+      if (record.isCompactSummary === true) return { type: 'compact-summary', uuid, timestamp, text: resultToText(content) }
+      const toolResults: ToolResultLine[] = []
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type !== 'tool_result' || !block.tool_use_id) continue
+          const name = this.toolNames.get(block.tool_use_id)
+          if (name === undefined) continue
+          const result = resultToText(block.content)
+          toolResults.push({
+            toolUseId: block.tool_use_id,
+            result: name.startsWith(UNLIMITED_RESULT_PREFIX) ? result : result.slice(0, RESULT_LIMIT),
+            answers: name === 'AskUserQuestion' ? askAnswers(record.toolUseResult) : null,
+          })
+        }
+      }
+      return { type, uuid, timestamp, content: humanContent(content), toolResults }
+    }
+
+    if (!Array.isArray(content)) return null
+    const blocks = content.filter((block) => (block.type === 'text' && block.text) || (block.type === 'tool_use' && block.id))
+    if (isCommitted) {
+      for (const block of blocks) if (block.type === 'tool_use') this.toolNames.set(block.id!, block.name ?? '?')
+    }
+    return { type, uuid, timestamp, messageId: message?.id, blocks }
+  }
+}
+
+/** jsonl 전체 → MessageLine 배열 (jsonl.split('\n') 과 같은 자리) */
+function messageLinesOf(jsonl: string): (MessageLine | null)[] {
+  const parser = new MessageLineParser()
+  for (const line of jsonl.split('\n')) parser.push(line)
+  return parser.lines
+}
 
 /**
  * dequeue 바로 뒤에 claude 가 받은 글: 다음 queue-operation 전에 처음 나오는 사람 쪽 글(user 줄의 글·queued_command 첨부). 없으면 undefined.
  * 차례가 끝난 뒤 꺼낸 것은 바로 뒤에 같은 글의 user 줄로 남는다 (슬래시 명령·글 없는 enqueue 는 글이 달라 맞지 않는다)
  */
-function promptAfter(lines: string[], index: number): string | undefined {
+function promptAfter(lines: readonly (MessageLine | null)[], index: number): string | undefined {
   for (let next = index + 1; next < lines.length; next++) {
-    if (!lines[next].trim()) continue
-    let record: Record<string, unknown>
-    try {
-      record = JSON.parse(lines[next])
-    } catch {
-      continue
-    }
-    if (record.isSidechain || record.isMeta) continue
-    if (record.type === 'queue-operation') return undefined
-    if (record.type === 'attachment') {
-      const attachment = record.attachment as { type?: string; prompt?: unknown } | undefined
-      if (attachment?.type === 'queued_command') return typeof attachment.prompt === 'string' ? attachment.prompt : undefined
-      continue
-    }
-    if (record.type !== 'user' || record.isCompactSummary === true) continue
-    const content = (record.message as { content?: string | Block[] } | undefined)?.content
+    const line = lines[next]
+    if (!line) continue
+    if (line.type === 'queue-operation') return undefined
+    if (line.type === 'queued-command') return typeof line.prompt === 'string' ? line.prompt : undefined
+    if (line.type !== 'user') continue
+    const { content } = line
     if (typeof content === 'string') return content
-    const texts = Array.isArray(content) ? content.filter((block) => block.type === 'text' && block.text).map((block) => block.text!) : []
+    const texts = Array.isArray(content) ? content.map((block) => block.text!) : []
     if (texts.length > 0) return texts.join('\n')
   }
   return undefined
@@ -127,18 +221,23 @@ function promptAfter(lines: string[], index: number): string | undefined {
  * 안 비우면 주인 없는 항목이 맨 앞에 남아 그 뒤 dequeue 가 한 칸씩 어긋나 가장 최근에 받은 것이 늘 대기 중으로 보인다.
  * 강제 종료로 cost-state 가 없을 때도 dequeue 를 글로 맞추면 남은 항목만 남고 어긋나지 않는다
  */
-function applyQueueRecord(queue: QueueItem[], record: Record<string, unknown>, index: number, timestamp: string, lines: string[]): void {
-  if (record.type === 'cost-state') {
+function applyQueueRecord(
+  queue: QueueItem[],
+  line: Extract<MessageLine, { type: 'queue-operation' | 'cost-state' }>,
+  index: number,
+  lines: readonly (MessageLine | null)[],
+): void {
+  if (line.type === 'cost-state') {
     queue.length = 0
     return
   }
-  const content = typeof record.content === 'string' ? record.content : undefined
-  if (record.operation === 'enqueue') queue.push({ id: `queued-${index}`, timestamp, content })
-  if (TAKE_OPERATIONS.has(record.operation as string)) {
+  const { content, operation } = line
+  if (operation === 'enqueue') queue.push({ id: `queued-${index}`, timestamp: line.timestamp, content })
+  if (TAKE_OPERATIONS.has(operation as string)) {
     const position = queue.findIndex((item) => item.content === content)
     if (position >= 0) queue.splice(position, 1)
   }
-  if (record.operation === 'dequeue' && queue.length > 0) {
+  if (operation === 'dequeue' && queue.length > 0) {
     const prompt = promptAfter(lines, index)
     const position = prompt === undefined ? -1 : queue.findIndex((item) => item.content === prompt)
     queue.splice(Math.max(position, 0), 1)
@@ -165,78 +264,61 @@ function userTextMessage(id: string, timestamp: string, content: unknown): ChatM
  * 아직 대기 중인 것(지금 프로세스가 넣은 것만. applyQueueRecord)은 맨 끝에 isQueued 로 붙인다
  */
 export function parseMessages(jsonl: string): ChatMessage[] {
+  return buildMessages(messageLinesOf(jsonl))
+}
+
+/**
+ * MessageLine 배열 → 채팅 메시지 배열 (parseMessages 의 뒷단계). 매번 새 객체를 만들고 lines 는 바꾸지 않는다.
+ * 앞 메시지도 뒤 줄에 따라 바뀐다: 도구 결과는 앞의 도구 호출에, 같은 message.id 의 assistant 줄은 앞 메시지에 붙고, 대기열은 맨 끝에 붙는다
+ */
+export function buildMessages(lines: readonly (MessageLine | null)[]): ChatMessage[] {
   const messages: ChatMessage[] = []
   const toolUseById = new Map<string, ToolUse>()
-  const assistantByMessageId = new Map<string, ChatMessage>()
+  const assistantByMessageId = new Map<unknown, ChatMessage>()
   /** 대기열 (enqueue 순). 글이 없는 enqueue 도 dequeue 순서를 맞추려고 넣고 화면에는 안 낸다 */
   const queue: QueueItem[] = []
-  const lines = jsonl.split('\n')
 
   for (const [index, line] of lines.entries()) {
-    if (!line.trim()) continue
-    let record: Record<string, unknown>
-    try {
-      record = JSON.parse(line)
-    } catch {
+    if (!line) continue
+    if (line.type === 'queue-operation' || line.type === 'cost-state') {
+      applyQueueRecord(queue, line, index, lines)
       continue
     }
-    if (record.isSidechain || record.isMeta) continue
-    const type = record.type
-    const timestamp = typeof record.timestamp === 'string' ? record.timestamp : ''
-    const uuid = typeof record.uuid === 'string' ? record.uuid : `${messages.length}`
+    const { timestamp } = line
+    const uuid = line.uuid ?? `${messages.length}`
 
-    if (QUEUE_RECORD_TYPES.has(type as string)) {
-      applyQueueRecord(queue, record, index, timestamp, lines)
-      continue
-    }
-    if (type === 'attachment') {
-      const attachment = record.attachment as { type?: string; prompt?: unknown } | undefined
-      if (attachment?.type !== 'queued_command') continue
-      const queued = userTextMessage(uuid, timestamp, attachment.prompt)
+    if (line.type === 'queued-command') {
+      const queued = userTextMessage(uuid, timestamp, line.prompt)
       if (queued) messages.push(queued)
       continue
     }
-    if (type !== 'user' && type !== 'assistant') continue
-    const message = record.message as { id?: string; content?: string | Block[] } | undefined
-    const content = message?.content
-
-    if (type === 'user') {
-      // 압축 요약은 type user 줄이지만 사람 말이 아니다. 붙여넣기 풀기 없이 원문 그대로 system 으로 낸다
-      if (record.isCompactSummary === true) {
-        const text = resultToText(content)
-        if (text) messages.push({ id: uuid, role: 'system', timestamp, text, toolUses: [], isCompactSummary: true })
-        continue
+    // 압축 요약은 type user 줄이지만 사람 말이 아니다. 붙여넣기 풀기 없이 원문 그대로 system 으로 낸다
+    if (line.type === 'compact-summary') {
+      if (line.text) messages.push({ id: uuid, role: 'system', timestamp, text: line.text, toolUses: [], isCompactSummary: true })
+      continue
+    }
+    if (line.type === 'user') {
+      for (const { toolUseId, result, answers } of line.toolResults) {
+        const toolUse = toolUseById.get(toolUseId)
+        if (!toolUse) continue
+        toolUse.result = result
+        if (answers) toolUse.answers = answers
       }
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block.type === 'tool_result' && block.tool_use_id) {
-            const toolUse = toolUseById.get(block.tool_use_id)
-            if (!toolUse) continue
-            const result = resultToText(block.content)
-            toolUse.result = toolUse.name.startsWith(UNLIMITED_RESULT_PREFIX) ? result : result.slice(0, RESULT_LIMIT)
-            if (toolUse.name === 'AskUserQuestion') {
-              const answers = askAnswers(record.toolUseResult)
-              if (answers) toolUse.answers = answers
-            }
-          }
-        }
-      }
-      const user = userTextMessage(uuid, timestamp, content)
+      const user = userTextMessage(uuid, timestamp, line.content)
       // 중지 기록은 사람 쪽 글 줄로 남지만 사람 말이 아니다
       if (user && isInterruptText(user.text)) messages.push({ ...user, role: 'system', isInterrupt: true })
       else if (user) messages.push(user)
       continue
     }
 
-    if (!Array.isArray(content)) continue
-    const messageId = message?.id ?? uuid
+    const messageId = line.messageId ?? uuid
     let target = assistantByMessageId.get(messageId)
     if (!target) {
       target = { id: uuid, role: 'assistant', timestamp, text: '', toolUses: [] }
       assistantByMessageId.set(messageId, target)
       messages.push(target)
     }
-    for (const block of content) {
+    for (const block of line.blocks) {
       if (block.type === 'text' && block.text) {
         target.text = target.text ? `${target.text}\n${block.text}` : block.text
       }
@@ -274,17 +356,9 @@ export interface QueuedPrompt {
  */
 export function queuedPrompts(jsonl: string): QueuedPrompt[] {
   const queue: QueueItem[] = []
-  const lines = jsonl.split('\n')
+  const lines = messageLinesOf(jsonl)
   for (const [index, line] of lines.entries()) {
-    if (!line.trim()) continue
-    let record: Record<string, unknown>
-    try {
-      record = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (record.isSidechain || record.isMeta || !QUEUE_RECORD_TYPES.has(record.type as string)) continue
-    applyQueueRecord(queue, record, index, '', lines)
+    if (line?.type === 'queue-operation' || line?.type === 'cost-state') applyQueueRecord(queue, line, index, lines)
   }
   return queue.flatMap(({ content }) => (content === undefined || content.startsWith('<') ? [] : [{ raw: content, text: unwrapPastes(content) }]))
 }

@@ -55,6 +55,12 @@ export class TranscriptCache {
     }
   }
 
+  /** jsonl 경로와 지금 크기·수정 시각 (내용은 읽지 않는다). 없으면 null */
+  async file(sessionId: string): Promise<{ path: string; size: number; mtimeMs: number } | null> {
+    const found = await this.locate(sessionId)
+    return found && { path: found.path, size: found.stats.size, mtimeMs: found.stats.mtimeMs }
+  }
+
   async summarize(sessionId: string): Promise<TranscriptSummary | null> {
     return (await this.analyze(sessionId))?.summary ?? null
   }
@@ -132,6 +138,11 @@ const transcripts = new TranscriptCache(projectsDir)
 
 export async function findTranscript(sessionId: string): Promise<string | null> {
   return transcripts.read(sessionId)
+}
+
+/** jsonl 경로와 크기·수정 시각 (같은 경로 캐시로 찾는다). 없으면 null */
+export async function findTranscriptFile(sessionId: string): Promise<{ path: string; size: number; mtimeMs: number } | null> {
+  return transcripts.file(sessionId)
 }
 
 /** 세션 목록과 같은 캐시의 요약 (stat 이 같으면 다시 읽지 않는다). jsonl 이 없으면 null */

@@ -2,6 +2,7 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { flushSync } from 'react-dom'
 import { buildChatRows, hidingWorkKey, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
 import { reuseMessages, reuseRows } from './chatReuse'
+import { loadMessages, type HeldMessages } from './chatDelta'
 import { expandedStartIndex, resolveStartIndex, startIndexRevealing, windowStartAt, type WindowStart } from './chatWindow'
 import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
@@ -1260,16 +1261,17 @@ export function Chat({
     setSearchScroll({ key: target.key, id: nextSearchScrollIdRef.current++ })
   }, [revealRow])
 
+  /** 마지막으로 받은 대화와 그 서버 버전. 같은 세션을 다시 받을 때 바뀐 뒤쪽만 받는다 (chatDelta.ts). 세션을 열거나 바꾸면 전체를 받는다 */
+  const heldRef = useRef<HeldMessages | null>(null)
   useEffect(() => {
     let isCancelled = false
-    fetch(`/api/sessions/${sessionId}/messages`)
-      .then((r) => r.json())
-      .then((data: ChatMessage[]) => {
-        if (isCancelled) return
-        // 그대로인 메시지는 이전 객체를 쓴다 (줄마다 memo 가 걸려 새·바뀐 줄만 다시 그린다). 하나도 안 바뀌었으면 다시 그리지 않는다
-        setMessages((current) => reuseMessages(current, data))
-        setLoadedSessionId(sessionId)
-      })
+    loadMessages(sessionId, heldRef.current).then(({ messages: data, version: loadedVersion }) => {
+      if (isCancelled) return
+      heldRef.current = loadedVersion ? { sessionId, version: loadedVersion, messages: data } : null
+      // 그대로인 메시지는 이전 객체를 쓴다 (줄마다 memo 가 걸려 새·바뀐 줄만 다시 그린다). 하나도 안 바뀌었으면 다시 그리지 않는다
+      setMessages((current) => reuseMessages(current, data))
+      setLoadedSessionId(sessionId)
+    })
     return () => {
       isCancelled = true
     }
