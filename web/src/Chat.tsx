@@ -15,6 +15,7 @@ import { flushSync } from 'react-dom'
 import { buildChatRows, hidingWorkKey, type ChatRow, type Work } from './chatRows'
 import { runningToolNames, shortToolName } from './runningTools'
 import { FilesButton, formatSize } from './Files'
+import { CopyButton } from './CopyButton'
 import { MarkdownText } from './Markdown'
 import { PositionChip } from './PositionChip'
 import { memberOf as memberDisplay } from './sessionPosition'
@@ -290,10 +291,20 @@ function RelayLine({ relay, jumpKey, isHighlighted, onOpen }: { relay: Relay; ju
   )
 }
 
+/** 셸 도구(Bash·PowerShell)의 복사할 명령. 그 밖의 도구·문자열이 아닌 command 는 null */
+const SHELL_TOOLS = new Set(['Bash', 'PowerShell'])
+function shellCommandOf(toolUse: ToolUse): string | null {
+  if (!SHELL_TOOLS.has(toolUse.name)) return null
+  const { command } = (toolUse.input ?? {}) as { command?: unknown }
+  return typeof command === 'string' ? command : null
+}
+
 function ToolBlock({ toolUse }: { toolUse: ToolUse }) {
+  const command = shellCommandOf(toolUse)
   return (
     <details className="tool">
       <summary>
+        {command !== null && <CopyButton text={command} label="Copy command" />}
         <code>{toolUse.name}</code> {summarizeInput(toolUse.name, toolUse.input)}
       </summary>
       <pre>{JSON.stringify(toolUse.input, null, 2)}</pre>
@@ -379,7 +390,12 @@ function WorkParts({ work, highlightKey }: { work: Work; highlightKey: string | 
           className={`msg assistant${part.text && highlightKey === part.message.id ? ' jump-highlight' : ''}`}
           data-jump-key={part.text ? part.message.id : undefined}
         >
-          {part.text && <MarkdownText text={part.text} />}
+          {part.text && (
+            <>
+              <CopyButton text={part.text} />
+              <MarkdownText text={part.text} />
+            </>
+          )}
           {part.toolUses.map((toolUse) => (
             <ToolBlock key={toolUse.id} toolUse={toolUse} />
           ))}
@@ -419,6 +435,7 @@ function WorkLine({ work, isOpen, onToggle, highlightKey }: { work: Work; isOpen
           (part) =>
             part.text && (
               <div key={part.message.id} className={`msg assistant${highlightKey === part.message.id ? ' jump-highlight' : ''}`} data-jump-key={part.message.id}>
+                <CopyButton text={part.text} />
                 <MarkdownText text={part.text} />
               </div>
             ),
@@ -1364,6 +1381,7 @@ export function Chat({
             if (row.kind === 'text') {
               return (
                 <div key={row.message.id} className={`msg assistant${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
+                  <CopyButton text={row.message.text} />
                   <MarkdownText text={row.message.text} />
                 </div>
               )
@@ -1382,6 +1400,7 @@ export function Chat({
             if (message.from) {
               return (
                 <div key={message.id} className={`msg user relay${highlightClass(message.id)}`} data-jump-key={message.id}>
+                  <CopyButton text={message.text} />
                   <div className="relay-label">Instruction from {message.from.name}</div>
                   <MarkdownText text={message.text} />
                 </div>

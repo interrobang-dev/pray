@@ -3,6 +3,8 @@ import Markdown, { type Components, type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github.css'
+import { CopyButton } from './CopyButton'
+import { codeBlockText, type HastNode } from './codeText'
 
 const REMARK_PLUGINS: Options['remarkPlugins'] = [remarkGfm]
 // 언어가 표시된 코드 블록만 칠한다. 자동 추측(detect)은 엉뚱한 언어로 칠하기 쉬워 끈다
@@ -12,6 +14,13 @@ const MARKDOWN_COMPONENTS: Components = {
     <a href={href} title={title} target="_blank" rel="noreferrer">
       {children}
     </a>
+  ),
+  // 복사 버튼은 스크롤하는 pre 가 아니라 그것을 감싼 상자에 둔다 — 가로 스크롤 중에도 제자리
+  pre: ({ node, children }) => (
+    <div className="code-block">
+      <CopyButton text={codeBlockText(node as HastNode | undefined)} label="Copy code" />
+      <pre>{children}</pre>
+    </div>
   ),
 }
 
