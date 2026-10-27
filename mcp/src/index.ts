@@ -82,22 +82,42 @@ server.registerTool(
   },
 )
 
+/**
+ * jk_wait 가 기다리는 동안 진행 알림을 보내는 간격. Claude Code 는 stdio MCP 호출이 응답·진행 알림 없이 30분
+ * (CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT 기본값) 지나면 끊으므로 그보다 충분히 짧게
+ */
+const WAIT_PROGRESS_MS = 60_000
+
 server.registerTool(
   'jk_wait',
   {
     description:
-      'task 가 끝날 때까지 기다린다. taskId 를 생략하면 팀의 아무 task 든 먼저 끝나는 것 하나. 시간 안에 안 끝나면 task 가 null 로 돌아오니 다시 호출하면 된다. 결과는 result 필드 (팀원의 마지막 응답).',
+      'task 가 끝날 때까지(done·failed) 기다린다. 결과는 task.result (팀원의 마지막 응답), pendingTaskIds 는 아직 결과를 안 받은 task. 여러 팀원에게 일을 나눠 줬으면 하나씩 기다리지 말고 taskIds 로 한 번에 불러 먼저 끝난 것부터 받고, 남은 pendingTaskIds 로 다시 부른다. taskId·taskIds 를 다 빼면 지휘 단위의 아무 task 하나. 시간 안에 안 끝나면 task 가 null 로 돌아오니 다시 호출하면 된다.',
     inputSchema: {
-      taskId: z.string().optional().describe('기다릴 task ID. 생략하면 아무 task'),
-      // fetch(undici)가 응답 헤더를 300초(headersTimeout)까지만 기다려서 그 아래로 막는다
-      timeoutSec: z.number().int().min(1).max(280).optional().describe('최대 대기 초. 기본 120, 최대 280'),
+      taskId: z.string().optional().describe('기다릴 task ID 하나'),
+      taskIds: z.array(z.string()).optional().describe('여러 task 를 한꺼번에 기다릴 때 ID 목록. 그중 먼저 끝난 하나를 돌려준다'),
+      timeoutSec: z.number().int().min(1).max(3600).optional().describe('최대 대기 초. 기본 1800, 최대 3600'),
     },
   },
-  async ({ taskId, timeoutSec }) => {
+  async ({ taskId, taskIds, timeoutSec }, extra) => {
+    const ids = [...new Set([...(taskId ? [taskId] : []), ...(taskIds ?? [])])]
+    const progressToken = extra._meta?.progressToken
+    let progress = 0
+    const progressTimer =
+      progressToken === undefined
+        ? null
+        : setInterval(() => {
+            progress += 1
+            extra
+              .sendNotification({ method: 'notifications/progress', params: { progressToken, progress, message: '팀원 task 기다리는 중' } })
+              .catch(() => {})
+          }, WAIT_PROGRESS_MS)
     try {
-      return text(await api.wait(taskId ?? null, timeoutSec ?? 120))
+      return text(await api.wait(ids, timeoutSec ?? 1800, extra.signal))
     } catch (error) {
       return failure(error)
+    } finally {
+      if (progressTimer) clearInterval(progressTimer)
     }
   },
 )

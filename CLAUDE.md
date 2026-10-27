@@ -75,7 +75,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 팀 → `team.md`
 - `host/src/team.ts` — Team·Part 타입, cwd → 팀·파트·역할 판정
-- `server/src/lead.ts` — 팀장·파트장 지침·spawn 인자·`--mcp-config` · `server/src/teamState.ts` — task 상태 기계
+- `server/src/lead.ts` — 팀장·파트장 지침·spawn 인자·`--mcp-config` · `server/src/teamState.ts` — task 상태 기계 · `server/src/taskWait.ts` — jk_wait 롱폴링(대기 시간·헤더 먼저 보내고 공백 흘리기)
 - `server/src/memberModel.ts` — 팀원 모델·effort 값, extraArgs 의 `--model`·`--effort` 읽고 바꾸기 · `server/src/memberName.ts` — 팀원 이름 뽑기·역할 검증
 - `server/src/worktree.ts` — 파트 worktree 만들기·지우기, `~/.claude.json` 폴더 신뢰 기록
 - `mcp/src/index.ts`·`teamApi.ts` — 팀장·파트장 claude 에 붙는 stdio MCP 서버 (`jk_spawn_member`·`jk_assign`·`jk_wait`·`jk_status`·`jk_dismiss`)

@@ -21,8 +21,16 @@ export class TeamApi {
     } catch (error) {
       throw new Error(`jk-corp 서버(${this.baseUrl})에 연결 실패: ${(error as Error).message}`)
     }
-    const body = (await response.json().catch(() => ({}))) as { message?: string }
-    if (!response.ok) throw new Error(body.message ?? `HTTP ${response.status}`)
+    let raw: string
+    try {
+      raw = await response.text()
+    } catch (error) {
+      // wait 는 헤더를 먼저 받고 본문을 오래 기다리므로 서버 재시작 등으로 그 사이에 끊길 수 있다
+      throw new Error(`jk-corp 서버 응답을 받는 중 연결이 끊김: ${(error as Error).message}`)
+    }
+    const body = parseBody(raw)
+    if (!response.ok) throw new Error((body as { message?: string } | null)?.message ?? `HTTP ${response.status}`)
+    if (body === null) throw new Error(`jk-corp 서버 응답을 해석하지 못함: ${raw.trim().slice(0, 200)}`)
     return body
   }
 
@@ -38,8 +46,14 @@ export class TeamApi {
     return this.call(`/api/team/${this.teamId}/tasks${this.unitQuery('?')}`, { method: 'POST', body: JSON.stringify({ sessionId, instruction }) })
   }
 
-  wait(taskId: string | null, timeoutSec: number): Promise<unknown> {
-    return this.call(`/api/team/${this.teamId}/tasks/${taskId ?? 'any'}/wait?timeoutSec=${timeoutSec}${this.unitQuery('&')}`)
+  /**
+   * taskIds 가 비면 지휘 단위의 아무 task, 하나면 그 task, 여럿이면 그중 먼저 끝나는 것. 서버는 헤더를 바로 보내고 끝날 때까지
+   * 공백을 흘려서 fetch(undici)의 headersTimeout·bodyTimeout(300초)에 걸리지 않는다. signal 이 abort 되면 연결을 끊어 서버도 기다림을 접는다
+   */
+  wait(taskIds: readonly string[], timeoutSec: number, signal?: AbortSignal): Promise<unknown> {
+    const pathTaskId = taskIds.length === 1 ? encodeURIComponent(taskIds[0]) : 'any'
+    const listQuery = taskIds.length > 1 ? `&taskIds=${taskIds.map(encodeURIComponent).join(',')}` : ''
+    return this.call(`/api/team/${this.teamId}/tasks/${pathTaskId}/wait?timeoutSec=${timeoutSec}${listQuery}${this.unitQuery('&')}`, { signal })
   }
 
   status(): Promise<unknown> {
@@ -48,5 +62,16 @@ export class TeamApi {
 
   dismiss(sessionId: string): Promise<unknown> {
     return this.call(`/api/team/${this.teamId}/members/${sessionId}${this.unitQuery('?')}`, { method: 'DELETE' })
+  }
+}
+
+/** 응답 본문 해석. 앞뒤 공백(wait 가 기다리는 동안 흘린 것)은 무시하고, 비면 {}, JSON 이 아니면 null */
+function parseBody(raw: string): unknown {
+  const trimmed = raw.trim()
+  if (trimmed === '') return {}
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return null
   }
 }

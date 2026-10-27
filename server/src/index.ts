@@ -80,6 +80,7 @@ import { AccountError, accountErrorBody, makeAccountStore } from './accountStore
 import { makeLoginManager, runClaudeAuth } from './accountLogin.js'
 import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
+import { parseWaitRequest, respondJsonAfter } from './taskWait.js'
 import { leadExtraArgs } from './lead.js'
 import {
   givenNameOf,
@@ -1109,7 +1110,6 @@ app.post('/api/flow/alarms/:alarmId/read', async (req, res) => {
 
 // ---------- 팀 (같은 폴더의 세션 묶음. 팀장 세션이 MCP 도구로도 호출) ----------
 
-const MAX_WAIT_SECONDS = 600
 const MEMBER_FIRST_INPUT_DELAY_MS = 4_000
 /** 지시문 전송 뒤 pty 출력이 이 시간 동안 없으면 "붙여넣기 처리가 끝났다" 로 보고 Enter 를 보낸다 */
 const SUBMIT_QUIET_MS = 700
@@ -1420,16 +1420,20 @@ app.post('/api/team/:teamId/tasks', async (req, res) => {
   await assignTask(unit.team, unit.part, sessionId, instruction.trim(), res)
 })
 
-/** task 완료까지 롱폴링. taskId 가 'any' 면 지휘 단위의 아무 task 하나. 타임아웃·모르는 task 는 { task: null } */
+/**
+ * task 완료까지 롱폴링 → { task, pendingTaskIds }. taskId 가 'any' 면 지휘 단위의 아무 task 하나, `?taskIds=a,b` 면 그중 먼저 끝나는 것.
+ * 타임아웃·모르는 task 는 task null. 헤더를 바로 보내고 공백을 흘리며 기다린다 (taskWait.ts)
+ */
 app.get('/api/team/:teamId/tasks/:taskId/wait', async (req, res) => {
   const unit = findUnit(req.params.teamId, req.query.partId, res)
   if (!unit) return
-  const requested = Number(req.query.timeoutSec ?? MAX_WAIT_SECONDS)
-  const timeoutSec = Math.min(MAX_WAIT_SECONDS, Math.max(1, Number.isFinite(requested) ? requested : MAX_WAIT_SECONDS))
+  const { taskIds, timeoutSec } = parseWaitRequest(req.params.taskId, req.query)
+  const partId = unit.part?.id ?? null
   req.socket.setTimeout(0)
-  const taskId = req.params.taskId === 'any' ? null : req.params.taskId
-  const task = await tasks.wait(unit.team.id, taskId, timeoutSec * 1000, unit.part?.id ?? null)
-  res.json({ task })
+  await respondJsonAfter(res, async (signal) => {
+    const task = await tasks.wait(unit.team.id, taskIds, timeoutSec * 1000, partId, signal)
+    return { task, pendingTaskIds: tasks.pendingIds(unit.team.id, taskIds, partId) }
+  })
 })
 
 // ---------- 파트 (팀 안의 선택적 지휘 단위) ----------

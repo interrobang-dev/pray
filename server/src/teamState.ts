@@ -18,7 +18,7 @@ export interface Task {
   error: string | null
   createdAt: string
   finishedAt: string | null
-  /** taskId 없는 wait 가 이 task 를 한 번 돌려줬는지 (같은 결과를 두 번 주지 않게) */
+  /** wait 가 이 task 를 한 번 돌려줬는지. taskId 없는 wait·여러 task wait 가 같은 결과를 두 번 주지 않게 */
   isDelivered: boolean
 }
 
@@ -31,7 +31,14 @@ export const ACK_TIMEOUT_MS = 13_000
 /** 사람이 중지한 task 의 error. 지시자가 jk_wait 결과로 본다 */
 export const INTERRUPTED_ERROR = '사람이 웹 화면에서 팀원의 작업을 중지함'
 
-type Waiter = { taskId: string | null; teamId: string; partId: string | null; resolve: (task: Task | null) => void }
+type Waiter = {
+  /** 기다리는 task. null 이면 지휘 단위의 아무 task */
+  taskIds: ReadonlySet<string> | null
+  teamId: string
+  partId: string | null
+  resolve: (task: Task | null) => void
+  timer: ReturnType<typeof setTimeout>
+}
 
 /**
  * 팀장이 팀원에게 준 task 의 상태 기계. 서버 메모리에만 있다 (훅 상태와 같은 수명).
@@ -111,30 +118,60 @@ export class TaskStore {
   }
 
   /**
-   * task 가 끝날 때까지 기다린다. taskId 가 없으면 지휘 단위의 아무 task 든 끝나는 것 하나.
-   * 이미 끝난 task 는 즉시, 모르는 task·다른 단위의 task 는 null 즉시, 타임아웃이면 null
+   * task 가 끝날 때까지 기다린다. taskIds 가 null 이면 지휘 단위의 아무 task, 목록이면 그중 먼저 끝나는 것 하나.
+   * 끝났는데 아직 안 가져간(isDelivered false) 것이 있으면 즉시 그것을 주고 가져간 것으로 표시한다.
+   * 다 끝났고 다 가져갔으면: task 하나를 콕 집어 물었으면 그것을 다시 주고, 아니면 null.
+   * 모르는 task·다른 단위의 task 는 없는 것으로 보고 남는 게 없으면 null 즉시, 타임아웃·signal abort 면 null
    */
-  wait(teamId: string, taskId: string | null, timeoutMs: number, partId: string | null = null): Promise<Task | null> {
-    if (taskId) {
-      const task = this.tasks.get(taskId)
-      if (!task || task.teamId !== teamId || task.partId !== partId) return Promise.resolve(null)
-      if (task.status !== 'running') return Promise.resolve(task)
-    } else {
-      const unitTasks = this.listByUnit(teamId, partId)
-      const finished = unitTasks.find((t) => t.status !== 'running' && !t.isDelivered)
-      if (finished) {
-        finished.isDelivered = true
-        return Promise.resolve(finished)
-      }
-      if (!unitTasks.some((t) => t.status === 'running')) return Promise.resolve(null)
+  wait(
+    teamId: string,
+    taskIds: string | readonly string[] | null,
+    timeoutMs: number,
+    partId: string | null = null,
+    signal?: AbortSignal,
+  ): Promise<Task | null> {
+    const ids = taskIds === null ? null : new Set(typeof taskIds === 'string' ? [taskIds] : taskIds)
+    const candidates = this.candidatesOf(teamId, partId, ids)
+    const finished = candidates.find((t) => t.status !== 'running' && !t.isDelivered)
+    if (finished) {
+      finished.isDelivered = true
+      return Promise.resolve(finished)
     }
+    if (!candidates.some((t) => t.status === 'running')) {
+      return Promise.resolve(ids?.size === 1 && candidates.length === 1 ? candidates[0] : null)
+    }
+    if (signal?.aborted) return Promise.resolve(null)
     return new Promise((resolve) => {
-      const waiter: Waiter = { taskId, teamId, partId, resolve }
-      this.waiters.add(waiter)
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (this.waiters.delete(waiter)) resolve(null)
-      }, timeoutMs).unref?.()
+      }, timeoutMs)
+      timer.unref?.()
+      const waiter: Waiter = { taskIds: ids, teamId, partId, resolve, timer }
+      this.waiters.add(waiter)
+      signal?.addEventListener(
+        'abort',
+        () => {
+          if (!this.waiters.delete(waiter)) return
+          clearTimeout(timer)
+          resolve(null)
+        },
+        { once: true },
+      )
     })
+  }
+
+  /** 아직 결과를 안 가져간 task ID (진행 중 + 끝났지만 안 가져간 것). taskIds 는 wait 와 같다. 지시자가 다음 wait 에 쓴다 */
+  pendingIds(teamId: string, taskIds: string | readonly string[] | null, partId: string | null = null): string[] {
+    const ids = taskIds === null ? null : new Set(typeof taskIds === 'string' ? [taskIds] : taskIds)
+    return this.candidatesOf(teamId, partId, ids)
+      .filter((t) => t.status === 'running' || !t.isDelivered)
+      .map((t) => t.id)
+  }
+
+  /** 지휘 단위의 task 중 ids 에 든 것 (ids 가 null 이면 전부). 넣은 순서(오래된 것 먼저) */
+  private candidatesOf(teamId: string, partId: string | null, ids: ReadonlySet<string> | null): Task[] {
+    const unitTasks = this.listByUnit(teamId, partId)
+    return ids === null ? unitTasks : unitTasks.filter((t) => ids.has(t.id))
   }
 
   private runningOf(sessionId: string): Task | undefined {
@@ -148,9 +185,10 @@ export class TaskStore {
     task.finishedAt = this.now().toISOString()
     for (const waiter of this.waiters) {
       if (waiter.teamId !== task.teamId || waiter.partId !== task.partId) continue
-      if (waiter.taskId !== null && waiter.taskId !== task.id) continue
+      if (waiter.taskIds !== null && !waiter.taskIds.has(task.id)) continue
       this.waiters.delete(waiter)
-      if (waiter.taskId === null) task.isDelivered = true
+      clearTimeout(waiter.timer)
+      task.isDelivered = true
       waiter.resolve(task)
     }
   }

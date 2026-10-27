@@ -5,7 +5,7 @@ function fakeFetch(status: number, body: unknown) {
   const calls: { url: string; init?: RequestInit }[] = []
   const fetchImpl = (async (url: string, init?: RequestInit) => {
     calls.push({ url, init })
-    return { ok: status < 400, status, json: async () => body } as Response
+    return new Response(JSON.stringify(body), { status })
   }) as unknown as typeof fetch
   return { calls, fetchImpl }
 }
@@ -15,8 +15,8 @@ describe('TeamApi', () => {
     const { calls, fetchImpl } = fakeFetch(200, { ok: true })
     const api = new TeamApi('http://x', 'T1', null, fetchImpl)
     await api.assign('S1', '해라')
-    await api.wait(null, 30)
-    await api.wait('K1', 5)
+    await api.wait([], 30)
+    await api.wait(['K1'], 5)
     await api.dismiss('S1')
     expect(calls.map((c) => c.url)).toEqual([
       'http://x/api/team/T1/tasks',
@@ -33,7 +33,7 @@ describe('TeamApi', () => {
     const api = new TeamApi('http://x', 'T1', 'P1', fetchImpl)
     await api.spawnMember({ role: 'FE' })
     await api.assign('S1', '해라')
-    await api.wait(null, 30)
+    await api.wait([], 30)
     await api.status()
     await api.dismiss('S1')
     expect(calls.map((c) => c.url)).toEqual([
@@ -67,6 +67,34 @@ describe('TeamApi', () => {
       ['http://x/api/team/T1/members?partId=P1', { role: 'Ops', model: 'haiku' }],
       ['http://x/api/team/T1/members?partId=P1', { role: 'BE', effort: 'low' }],
     ])
+  })
+
+  it('waits on several tasks through any + taskIds and passes the abort signal', async () => {
+    const { calls, fetchImpl } = fakeFetch(200, { task: null, pendingTaskIds: [] })
+    const api = new TeamApi('http://x', 'T1', 'P1', fetchImpl)
+    const controller = new AbortController()
+    await api.wait(['K1', 'K2'], 1800, controller.signal)
+    expect(calls[0].url).toBe('http://x/api/team/T1/tasks/any/wait?timeoutSec=1800&taskIds=K1,K2&partId=P1')
+    expect(calls[0].init?.signal).toBe(controller.signal)
+  })
+
+  it('reads a wait body that starts with keep-alive spaces', async () => {
+    const api = new TeamApi('http://x', 'T1', null, (async () =>
+      new Response('   \n {"task":{"id":"K1","status":"done"},"pendingTaskIds":["K2"]}')) as unknown as typeof fetch)
+    expect(await api.wait(['K1', 'K2'], 60)).toEqual({ task: { id: 'K1', status: 'done' }, pendingTaskIds: ['K2'] })
+  })
+
+  it('throws when the body is cut off or is not JSON', async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('   '))
+        controller.error(new Error('terminated'))
+      },
+    })
+    const cutApi = new TeamApi('http://x', 'T1', null, (async () => new Response(cut)) as unknown as typeof fetch)
+    await expect(cutApi.wait([], 60)).rejects.toThrow('연결이 끊김')
+    const halfApi = new TeamApi('http://x', 'T1', null, (async () => new Response('   {"task":')) as unknown as typeof fetch)
+    await expect(halfApi.wait([], 60)).rejects.toThrow('해석하지 못함')
   })
 
   it('throws the server message on error status', async () => {
