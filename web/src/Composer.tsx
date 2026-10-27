@@ -47,9 +47,11 @@ function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRe
   )
 }
 
-/** Chat 이 입력 상자에 시키는 것: 제안 버튼을 누르면 입력칸에 채운다 */
+/** Chat 이 입력 상자에 시키는 것: 제안 버튼을 누르면 입력칸에 채운다, 포커스 */
 export interface ComposerHandle {
   fill: (text: string) => void
+  /** 입력칸에 포커스한다 (곁가지 질문 카드를 Esc 로 닫았을 때) */
+  focus: () => void
 }
 
 interface Props {
@@ -67,13 +69,15 @@ interface Props {
   onSend: (text: string) => void
   /** `/btw 질문` (질문) · `/btw` (null = 카드 다시 열기). claude 에게 보내지 않는다. 입력칸은 이미 비웠고 첨부 칩은 그대로 둔다 */
   onBtw: (question: string | null) => void
+  /** 곁가지 질문 버튼: 카드를 열고 카드 입력칸에 포커스한다. 이 입력칸의 글은 건드리지 않는다 */
+  onOpenBtw: () => void
 }
 
 /**
  * 대화 입력 상자: 여러 줄 입력칸·첨부 칩·보내기. 글자 state 를 여기 두어 칠 때마다 대화(Chat)가 다시 그려지지 않는다.
  * 세션을 바꿔도 쓰던 글은 남고 첨부 칩은 비운다
  */
-export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onEmptyChange, onSend, onBtw }: Props) {
+export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw }: Props) {
   const [draft, setDraft] = useState('')
   /** 입력 상자의 첨부 칩. 세션을 바꾸면 비운다 */
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -103,7 +107,7 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
     textarea?.focus()
     textarea?.setSelectionRange(text.length, text.length)
   }
-  useImperativeHandle(ref, () => ({ fill }))
+  useImperativeHandle(ref, () => ({ fill, focus: () => composerRef.current?.focus() }))
 
   function submit(event?: FormEvent) {
     event?.preventDefault()
@@ -223,6 +227,19 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
             strokeLinecap="round"
             strokeLinejoin="round"
           />
+        </svg>
+      </button>
+      <button type="button" className="btw-open" onClick={onOpenBtw} aria-label="Side question (/btw)" title="Side question (/btw)">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path
+            d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-4.5 3.5V17H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+          <path d="M9.7 8.6a2.4 2.4 0 1 1 3.4 2.2c-.7.4-1.1.8-1.1 1.6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+          <circle cx="12" cy="14.6" r="0.9" fill="currentColor" />
         </svg>
       </button>
       <textarea

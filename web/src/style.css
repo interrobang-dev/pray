@@ -2525,12 +2525,15 @@ li.group.drop-after::after {
   border-color: var(--green-active);
 }
 .composer .send:focus-visible,
-.composer .attach:focus-visible {
+.composer .attach:focus-visible,
+.composer .btw-open:focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 2px;
 }
-/* 첨부 버튼: 보내기와 같은 크기의 테두리 없는 클립 아이콘. 질문 중에는 막힌다 */
-.composer .attach {
+/* 첨부 버튼: 보내기와 같은 크기의 테두리 없는 클립 아이콘. 질문 중에는 막힌다.
+   곁가지 질문 버튼(btw-open)은 그 옆에 같은 크기·같은 모양 */
+.composer .attach,
+.composer .btw-open {
   flex-shrink: 0;
   width: calc(1.4em + 12px);
   height: calc(1.4em + 12px);
@@ -2543,7 +2546,8 @@ li.group.drop-after::after {
   background: transparent;
   color: var(--muted);
 }
-.composer .attach:hover:not(:disabled) {
+.composer .attach:hover:not(:disabled),
+.composer .btw-open:hover:not(:disabled) {
   border-color: transparent;
   background: var(--chip-bg);
   color: var(--text);
@@ -2748,6 +2752,59 @@ li.group.drop-after::after {
 .btw-empty {
   color: var(--muted);
   font-size: 13px;
+}
+/* 카드 자신의 입력칸: 카드 아래쪽. 대화 입력 상자와 같은 모양의 한 줄(4줄까지 자란다) + 보내기 */
+.btw-input {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin: 0 8px 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.btw-input:has(textarea:focus) {
+  border-color: var(--green);
+}
+.btw-input textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  line-height: 1.4;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.btw-send {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(1.4em + 8px);
+  height: calc(1.4em + 8px);
+  padding: 0;
+  border-radius: 7px;
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--on-accent);
+}
+.btw-send svg {
+  transform: translateX(1px);
+}
+.btw-send:hover:not(:disabled) {
+  background: var(--green-hover);
+  border-color: var(--green-hover);
+}
+.btw-send:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+.btw-note {
+  margin: -4px 14px 8px;
+  font-size: 12px;
+  color: var(--muted);
 }
 /* 퇴근 세션의 입력칸 자리 (App.tsx OffDutyBar): 퇴근 이유 · [다시 출근] [기록 지우기], 실패 문구는 아랫줄 */
 .off-duty {
@@ -3909,8 +3966,30 @@ li.group.drop-after::after {
   .composer .send {
     font-size: 16px;
   }
+  /* 곁가지 질문 카드: 주소창이 보여도 화면을 다 덮지 않게 dvh, 본문만 스크롤. 입력칸 글자 16px(아이폰 확대 방지)이라 보내기도 em 을 맞춘다 */
+  .btw-card {
+    max-height: 55dvh;
+  }
+  .btw-input textarea {
+    font-size: 16px;
+  }
+  .btw-send {
+    font-size: 16px;
+    width: 40px;
+    height: calc(1.4em + 8px);
+  }
+  .btw-input textarea::placeholder {
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .btw-nav button,
+  .btw-clear,
+  .btw-close {
+    min-height: 32px;
+  }
   /* 첨부 버튼은 보내기와 같은 높이에 손가락 폭 40px. 칩은 36px 높이에 × 를 32px 로 */
-  .composer .attach {
+  .composer .attach,
+  .composer .btw-open {
     font-size: 16px;
     width: 40px;
   }

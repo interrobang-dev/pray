@@ -1,7 +1,49 @@
 import { describe, expect, it } from 'vitest'
-import { composerRows, parseBtwCommand, withAttachmentPaths } from './composerText'
+import { btwBlockReason, composerRows, isBtwShortcut, MAX_BTW_ROWS, parseBtwCommand, withAttachmentPaths } from './composerText'
+
+describe('btwBlockReason', () => {
+  const free = { isAsking: false, isApprovalNeeded: false, isPending: false }
+
+  it('막는 것이 없으면 null', () => {
+    expect(btwBlockReason(free)).toBeNull()
+  })
+
+  it('질문 중·승인 대기는 서버 409 문구와 같다', () => {
+    expect(btwBlockReason({ ...free, isAsking: true })).toBe("Can't ask while claude needs approval or is asking a question")
+    expect(btwBlockReason({ ...free, isApprovalNeeded: true })).toBe("Can't ask while claude needs approval or is asking a question")
+  })
+
+  it('답하는 중이면 기다리라고 한다', () => {
+    expect(btwBlockReason({ ...free, isPending: true })).toBe('Wait for the answer before asking again')
+  })
+})
+
+describe('isBtwShortcut', () => {
+  const key = { code: 'KeyB', key: 'B', ctrlKey: true, metaKey: false, shiftKey: true, altKey: false }
+
+  it('Ctrl+Shift+B 와 Meta+Shift+B', () => {
+    expect(isBtwShortcut(key)).toBe(true)
+    expect(isBtwShortcut({ ...key, ctrlKey: false, metaKey: true })).toBe(true)
+  })
+
+  it('한글 자판(key 가 ㅠ)도 code 로 알아본다', () => {
+    expect(isBtwShortcut({ ...key, key: 'ㅠ' })).toBe(true)
+  })
+
+  it('Shift·Ctrl 이 없거나 Alt 가 있거나 다른 키면 아니다', () => {
+    expect(isBtwShortcut({ ...key, shiftKey: false })).toBe(false)
+    expect(isBtwShortcut({ ...key, ctrlKey: false })).toBe(false)
+    expect(isBtwShortcut({ ...key, altKey: true })).toBe(false)
+    expect(isBtwShortcut({ ...key, code: 'KeyF', key: 'F' })).toBe(false)
+  })
+})
 
 describe('composerRows', () => {
+  it('최대 줄 수를 줄 수 있다 (곁가지 질문 카드)', () => {
+    expect(composerRows('\n'.repeat(10), MAX_BTW_ROWS)).toBe(MAX_BTW_ROWS)
+    expect(composerRows('a\nb', MAX_BTW_ROWS)).toBe(2)
+  })
+
   it('줄바꿈 수만큼, 빈 글은 한 줄', () => {
     expect(composerRows('')).toBe(1)
     expect(composerRows('한 줄')).toBe(1)

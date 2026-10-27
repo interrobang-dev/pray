@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { Terminal } from './Terminal'
 import { Chat, type Jump, type JumpTarget } from './Chat'
+import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
@@ -211,6 +212,8 @@ export function App() {
   const [isChatSearchOpen, setIsChatSearchOpen] = useState(false)
   /** 바뀔 때마다 열려 있는 검색 막대의 입력칸에 포커스한다 (Ctrl+F 를 다시 누름) */
   const [chatSearchFocusId, setChatSearchFocusId] = useState(0)
+  /** Ctrl+Shift+B 를 누른 횟수. 바뀔 때마다 대화 탭이 곁가지 질문 카드를 열고 카드 입력칸에 포커스한다 */
+  const [btwOpenId, setBtwOpenId] = useState(0)
   /** 모델·effort 변경 창을 연 세션 ID. 패널 모델 칩과 목록 ⋯ 메뉴가 같이 연다 (패널이 안 열린 세션도 된다) */
   const [modelModalSessionId, setModelModalSessionId] = useState<string | null>(null)
   /** Chat 이 알려 준 "대화 맨 끝에 대기 메시지가 있는" 세션 ID (없으면 null) */
@@ -372,6 +375,19 @@ export function App() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isChatSearchAvailable])
+
+  // Ctrl+Shift+B (맥 Meta+Shift+B): 근무 중인 웹 세션의 대화 탭이 열려 있고 모달이 없을 때만 가로채 곁가지 질문 카드를 연다.
+  // 브라우저의 북마크 막대 토글과 겹쳐서 preventDefault 로 막는다. 그 밖에서는 브라우저 기본 그대로
+  useEffect(() => {
+    if (!isSelectedLiveWeb || shownTab !== 'chat') return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isBtwShortcut(event) || document.querySelector('.modal-overlay')) return
+      event.preventDefault()
+      setBtwOpenId((id) => id + 1)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isSelectedLiveWeb, shownTab])
 
   function toggleChatSearch() {
     if (isChatSearchOpen) {
@@ -1490,6 +1506,7 @@ export function App() {
                 isSearchOpen={isChatSearchOpen}
                 searchFocusId={chatSearchFocusId}
                 onSearchClose={() => setIsChatSearchOpen(false)}
+                btwOpenId={btwOpenId}
               />
             )}
           </section>

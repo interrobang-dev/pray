@@ -69,6 +69,8 @@ interface Props {
   /** 바뀔 때마다 이미 열려 있는 검색 막대의 입력칸에 포커스한다 */
   searchFocusId: number
   onSearchClose: () => void
+  /** App 의 Ctrl+Shift+B 가 올리는 카운터. 바뀔 때마다 곁가지 질문 카드를 열고 카드 입력칸에 포커스한다 */
+  btwOpenId: number
 }
 
 function summarizeInput(name: string, input: unknown): string {
@@ -1107,6 +1109,7 @@ export function Chat({
   isSearchOpen,
   searchFocusId,
   onSearchClose,
+  btwOpenId,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   /** messages 가 어느 세션 것인지. 세션을 바꾼 뒤 새 대화가 오기 전까지는 앞 세션 것이 남아 있어 점프는 이것이 맞을 때만 처리한다 */
@@ -1530,6 +1533,24 @@ export function Chat({
     sendQueueRef.current = sendQueueRef.current.then(run)
   }
 
+  /** 곁가지 질문 카드를 열고 카드 입력칸에 포커스한다 (입력 상자 버튼·App 의 Ctrl+Shift+B) */
+  function openBtwForInput() {
+    btwRef.current?.openForInput()
+  }
+
+  /** 카드를 Esc 로 닫으면 대화 입력칸으로 돌아간다 (터치 기기는 가상 키보드가 뜨지 않게 그대로) */
+  function focusComposer() {
+    if (!window.matchMedia('(hover: none)').matches) composerRef.current?.focus()
+  }
+
+  // App 의 단축키가 올리는 카운터가 바뀔 때만 연다 (세션을 바꾸거나 Chat 이 처음 뜰 때는 열지 않는다)
+  const handledBtwOpenIdRef = useRef(btwOpenId)
+  useEffect(() => {
+    if (btwOpenId === handledBtwOpenIdRef.current) return
+    handledBtwOpenIdRef.current = btwOpenId
+    openBtwForInput()
+  }, [btwOpenId])
+
   /** 곁가지 질문 카드 높이가 바뀌면 맨 아래를 보고 있었을 때만 맨 아래에 둔다 (카드만큼 대화가 줄어 마지막 글이 가려지지 않게) */
   const keepBottomOnBtwResize = useCallback(() => {
     if (isAtBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -1744,7 +1765,19 @@ export function Chat({
           </div>
         ))
       )}
-      {isWritable && <BtwCard key={sessionId} ref={btwRef} sessionId={sessionId} version={btwVersion} onResize={keepBottomOnBtwResize} />}
+      {isWritable && (
+        <BtwCard
+          key={sessionId}
+          ref={btwRef}
+          sessionId={sessionId}
+          version={btwVersion}
+          isAsking={isAsking}
+          isApprovalNeeded={isApprovalNeeded}
+          onAsk={sendBtw}
+          onEscClosed={focusComposer}
+          onResize={keepBottomOnBtwResize}
+        />
+      )}
       {/* 쓸 수 없는 동안에도 마운트해 두어 쓰던 글·첨부가 남는다 (그동안은 아무것도 그리지 않는다) */}
       <Composer
         ref={composerRef}
@@ -1755,6 +1788,7 @@ export function Chat({
         onEmptyChange={setIsDraftEmpty}
         onSend={send}
         onBtw={sendBtw}
+        onOpenBtw={openBtwForInput}
       />
       {!isWritable && (footer ?? <p className="hint">Started from a terminal or IDE, so this session is view-only</p>)}
     </div>
