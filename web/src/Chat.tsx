@@ -1,23 +1,11 @@
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type ClipboardEvent,
-  type FormEvent,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { buildChatRows, hidingWorkKey, type ChatRow, type Work } from './chatRows'
 import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
+import { Composer, type ComposerHandle } from './Composer'
 import { runningToolNames, shortToolName } from './runningTools'
-import { FilesButton, formatSize } from './Files'
+import { FilesButton } from './Files'
 import { CopyButton } from './CopyButton'
 import { MarkdownText } from './Markdown'
 import { PositionChip } from './PositionChip'
@@ -732,9 +720,6 @@ function WorkingIndicator({
 /** 맨 아래에서 이만큼 안쪽이면 "맨 아래를 보고 있다" 로 본다 */
 const BOTTOM_SLACK_PX = 40
 
-/** 터치 기기(마우스 없음). style.css 의 터치 기기 스타일과 같은 기준. 이 기기에서는 세션을 열 때 입력칸에 포커스하지 않는다 (가상 키보드가 바로 떠 대화를 가린다) */
-const TOUCH_QUERY = '(hover: none)'
-
 /** 보냈지만 아직 jsonl 에서 안 보인 내 말. 진짜 user 메시지가 오면 없앤다 */
 interface PendingMessage {
   id: number
@@ -749,58 +734,6 @@ const PENDING_TIMEOUT_MS = 15_000
 
 /** 보낼 글을 쓴 뒤 Enter(`\r`) 를 보내기까지. 짧으면 글과 `\r` 이 한 덩어리로 읽혀 제출 대신 줄바꿈이 된다 */
 const SUBMIT_ENTER_DELAY_MS = 300
-
-/** 첨부 한도. 서버 첨부 API(server/src/index.ts MAX_ATTACHMENT_BYTES)와 같다. 넘으면 올리지 않고 칩에 알린다 */
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
-
-/** 입력 상자에 붙인 파일. 고르거나 붙여 넣으면 바로 세션 작업 폴더(scratchpad)에 올리고, 보낼 때 그 경로를 글 끝에 붙인다 */
-interface Attachment {
-  id: number
-  file: File
-  /** × 로 빼면 올리기를 멈춘다 */
-  controller: AbortController
-  /** 올라간 곳 (claude 에게 그대로 넘길 Windows 절대 경로). 올리는 중·실패면 null */
-  path: string | null
-  /** 실패 이유 (서버 message 등). 있으면 실패 */
-  error: string | null
-}
-
-/**
- * 보낼 글: 입력한 글 + 빈 줄 + "첨부 파일:" + 경로 한 줄씩. 글 없이 첨부만이면 목록만.
- * claude 는 자기 세션 scratchpad 파일을 확인 창 없이 읽으므로 경로만 주면 Read 한다.
- * 경로는 백틱으로 감싼다: 글이 800자를 넘으면 Claude Code 가 붙여넣기로 보고 그림 경로를 `[Image #N]` 으로 바꾸는데 백틱이면 안 바뀐다
- */
-function withAttachmentPaths(text: string, paths: string[]): string {
-  if (paths.length === 0) return text
-  const list = ['첨부 파일:', ...paths.map((path) => `\`${path}\``)].join('\n')
-  return text ? `${text}\n\n${list}` : list
-}
-
-/** 입력 상자 위쪽의 첨부 칩: (그림이면 작은 미리보기) 파일 이름 · 크기, 올리는 중·실패 이유, × 로 빼기 */
-function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRemove: () => void }) {
-  const { file, path, error } = attachment
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  // 미리보기 URL 은 칩이 사라질 때(× · 보냄 · 세션 바꿈) 놓는다
-  useEffect(() => {
-    if (!file.type.startsWith('image/')) return
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [file])
-  const stateClass = error ? ' failed' : path ? '' : ' uploading'
-  return (
-    <div className={`attachment${stateClass}`} title={error ? `${file.name}\n${error}` : (path ?? file.name)}>
-      {previewUrl && <img className="attachment-thumb" src={previewUrl} alt="" />}
-      <span className="attachment-name">{file.name}</span>
-      <span className="attachment-status" role={error ? 'alert' : undefined}>
-        {error ?? (path ? formatSize(file.size) : 'Uploading…')}
-      </span>
-      <button type="button" className="attachment-remove" onClick={onRemove} title="Remove" aria-label={`Remove ${file.name}`}>
-        ×
-      </button>
-    </div>
-  )
-}
 
 /** 대기 메시지 취소 결과 (서버 outcome) → 대화 맨 아래 한 줄 */
 const CANCEL_OUTCOME_LABELS: Record<string, string> = {
@@ -934,6 +867,171 @@ function buildSearchTargets(rows: ChatRow<Special>[], memberOf: MemberOf): Searc
   return targets
 }
 
+/**
+ * 대화 말풍선 목록 (rows 의 줄들). memo 라 props 가 그대로면 Chat 이 다시 그려져도(입력칸이 비었는지·임시 말풍선·알림·"맨 아래" 버튼 등)
+ * 말풍선을 다시 그리지 않는다. 그래서 함수 props 는 Chat 이 useCallback 으로 고정해 넘긴다
+ */
+const MessageRows = memo(function MessageRows({
+  rows,
+  memberOf,
+  openWorkKeys,
+  highlightKey,
+  searchKey,
+  lineNotice,
+  lastQueuedId,
+  canCancelQueued,
+  cancellingId,
+  onToggleWork,
+  onOpenRelay,
+  onCancelQueued,
+}: {
+  rows: ChatRow<Special>[]
+  memberOf: MemberOf
+  openWorkKeys: ReadonlySet<string>
+  /** 점프로 찾아 간 줄의 data-jump-key */
+  highlightKey: string | null
+  /** 대화 안 검색의 현재 결과 data-jump-key */
+  searchKey: string | null
+  /** 지시·보고 한 줄 바로 아래 알림 (그 팀원이 세션 목록에 없을 때) */
+  lineNotice: { rowKey: string; text: string } | null
+  lastQueuedId: string | null
+  canCancelQueued: boolean
+  cancellingId: string | null
+  onToggleWork: (key: string) => void
+  onOpenRelay: (relay: Relay, rowKey: string) => void
+  onCancelQueued: (message: ChatMessage) => void
+}) {
+  /** 점프로 찾아 간 말풍선이면 강조 클래스 */
+  function highlightClass(key: string): string {
+    return markClasses(key, highlightKey, searchKey)
+  }
+
+  /** 지시·보고 한 줄과 그 아래 알림 */
+  function renderRelayLine(relay: Relay, rowKey: string) {
+    return (
+      <Fragment key={rowKey}>
+        <RelayLine relay={relay} jumpKey={rowKey} markClass={highlightClass(rowKey)} onOpen={() => onOpenRelay(relay, rowKey)} />
+        {lineNotice?.rowKey === rowKey && (
+          <div className="queue-notice" role="status">
+            {lineNotice.text}
+          </div>
+        )}
+      </Fragment>
+    )
+  }
+
+  return rows.map((row) => {
+    if (row.kind === 'work') {
+      const { work } = row
+      return (
+        <WorkLine
+          key={`work:${work.key}`}
+          work={work}
+          isOpen={openWorkKeys.has(work.key)}
+          onToggle={() => onToggleWork(work.key)}
+          highlightKey={highlightKey}
+          searchKey={searchKey}
+        />
+      )
+    }
+    // claude 답변 (구간의 마지막 글. 도구 없는 구간이면 글마다)
+    if (row.kind === 'text') {
+      return (
+        <div key={row.message.id} className={`msg assistant${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
+          <CopyButton text={row.message.text} />
+          <MarkdownText text={row.message.text} />
+        </div>
+      )
+    }
+    // 팀장 대화의 지시·보고 도구 호출은 한 줄로 (내용은 팀원 대화에서 본다), AskUserQuestion 은 질문 → 답 카드로 (원래 도구 블록은 그 안에 접어 둔다)
+    if (row.kind === 'special') {
+      const { toolUse, special } = row
+      return special.kind === 'relay' ? (
+        renderRelayLine(special.relay, `relay:${toolUse.id}`)
+      ) : (
+        <AskedCard key={toolUse.id} toolUse={toolUse} asked={special.asked} />
+      )
+    }
+    const { message } = row
+    // 팀원 대화: 서버가 보낸 팀장·파트장 지시 (전문)
+    if (message.from) {
+      return (
+        <div key={message.id} className={`msg user relay${highlightClass(message.id)}`} data-jump-key={message.id}>
+          <CopyButton text={message.text} />
+          <div className="relay-label">Instruction from {message.from.name}</div>
+          <MarkdownText text={message.text} />
+        </div>
+      )
+    }
+    // 대화 압축 요약: 사람 말이 아니라 한 줄. 요약 원문은 접어 둔다
+    if (message.isCompactSummary) {
+      return <NoticeLine key={message.id} title={COMPACT_SUMMARY_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
+    }
+    // 중지(Esc) 기록: 사람 말이 아니라 한 줄. 원문은 접어 둔다
+    if (message.isInterrupt) {
+      return <NoticeLine key={message.id} title={INTERRUPT_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
+    }
+    // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 보고 한 줄, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
+    const parts = message.role === 'system' ? splitNotifications(message.text) : null
+    if (parts) {
+      return (
+        <Fragment key={message.id}>
+          {parts.map((part, index) => {
+            const key = `${message.id}:${index}`
+            if (typeof part === 'string') {
+              return (
+                <div key={key} className={`msg system${highlightClass(key)}`} data-jump-key={key}>
+                  <div className="text">{part}</div>
+                </div>
+              )
+            }
+            const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
+            if (!report) {
+              return (
+                <NoticeLine
+                  key={key}
+                  title={notificationTitle(part)}
+                  raw={part.raw}
+                  isFailed={part.status === 'failed'}
+                  jumpKey={key}
+                  markClass={highlightClass(key)}
+                />
+              )
+            }
+            return renderRelayLine(reportRelay(report, message.timestamp, memberOf), `relay:${key}`)
+          })}
+        </Fragment>
+      )
+    }
+    // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다)
+    return (
+      <div
+        key={message.id}
+        className={`msg ${message.role}${message.isQueued ? ' queued' : ''}${highlightClass(message.id)}`}
+        data-jump-key={message.id}
+      >
+        {message.text && <div className="text">{message.text}</div>}
+        {message.isQueued && (
+          <div className="queued-label">
+            Queued
+            {message.id === lastQueuedId && canCancelQueued && (
+              <button
+                type="button"
+                className="queued-cancel"
+                disabled={cancellingId !== null}
+                onClick={() => onCancelQueued(message)}
+                title="Take this message out of the queue before claude gets it"
+              >
+                {cancellingId === message.id ? 'Cancelling…' : 'Cancel'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  })
+})
+
 export function Chat({
   sessionId,
   isWritable,
@@ -967,14 +1065,9 @@ export function Chat({
   const [jumpNotice, setJumpNotice] = useState<string | null>(null)
   /** 지시·보고 한 줄 바로 아래 알림 (그 팀원이 세션 목록에 없을 때) */
   const [lineNotice, setLineNotice] = useState<{ rowKey: string; text: string } | null>(null)
-  const [draft, setDraft] = useState('')
+  /** 입력칸이 비었는지 (제안 표시 조건). 글은 입력 상자(Composer) 안 state 라 글자를 칠 때 대화가 다시 그려지지 않는다 */
+  const [isDraftEmpty, setIsDraftEmpty] = useState(true)
   const [pendings, setPendings] = useState<PendingMessage[]>([])
-  /** 입력 상자의 첨부 칩. 세션을 바꾸면 비운다 */
-  const [attachments, setAttachments] = useState<Attachment[]>([])
-  /** 올리는 중인 첨부가 있으면 보내지 않는다 (경로가 빠진 채 가지 않게) */
-  const isUploading = attachments.some((attachment) => !attachment.path && !attachment.error)
-  /** 다 올라간 첨부. 보낼 때 경로를 글 끝에 붙인다 (실패한 칩은 붙이지 않고 남겨 둔다) */
-  const uploaded = attachments.flatMap((attachment) => (attachment.path ? [{ id: attachment.id, path: attachment.path }] : []))
   /** 질문 중에는 입력칸을 막는다. 키 입력이 터미널의 질문 화면에 들어가면 Enter 가 1번 선택지로 답해 버린다. 쓰던 글은 남긴다 */
   const isAsking = Boolean(question) || pendingTool === ASK_TOOL
   /**
@@ -987,7 +1080,7 @@ export function Chat({
     !isWorking &&
     !isApprovalNeeded &&
     !isAsking &&
-    draft === '' &&
+    isDraftEmpty &&
     pendings.every((pending) => pending.isFailed)
   /** [취소] 를 누른 대기 메시지 ID. 서버가 결과를 줄 때까지 버튼이 "취소 중…" */
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -1014,11 +1107,9 @@ export function Chat({
   const [interruptNotice, setInterruptNotice] = useState<string | null>(null)
   const nextPendingIdRef = useRef(1)
   const sendQueueRef = useRef<Promise<void>>(Promise.resolve())
-  const nextAttachmentIdRef = useRef(1)
   const messagesRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const composerRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const composerRef = useRef<ComposerHandle>(null)
   /** 사용자가 맨 아래를 보고 있는지. 스크롤 때마다 갱신한다 (내용만 길어질 때는 스크롤 이벤트가 없어 직전 값이 남는다 = "갱신 직전에 맨 아래였는지") */
   const isAtBottomRef = useRef(true)
   /** 같은 값을 "맨 아래로" 버튼을 그리는 데 쓴다 */
@@ -1139,8 +1230,6 @@ export function Chat({
     setIsInterrupting(false)
     setInterruptNotice(null)
     setPendings([])
-    // 앞 세션으로 올리던 것은 그대로 끝나고(그 세션 scratchpad 에 남는다) 결과는 칩이 없어 버려진다
-    setAttachments([])
     setOpenWorkKeys(new Set())
     setSearchCurrentKey(null)
     setSearchScroll(null)
@@ -1237,56 +1326,43 @@ export function Chat({
   }, [lineNotice])
 
   /** 지시·보고 한 줄을 눌렀다: 그 팀원 세션이 목록에 있으면(퇴근 포함) App 이 연다. 없으면(퇴근 기록까지 지워짐) 열지 않고 줄 아래에 알린다 */
-  function openRelay(relay: Relay, rowKey: string) {
-    const { memberSessionId } = relay
-    if (!memberSessionId) return
-    if (!Object.hasOwn(sessionNames, memberSessionId)) {
-      setLineNotice({ rowKey, text: "Can't open: no session record" })
-      return
-    }
-    setLineNotice(null)
-    onOpenRelay(memberSessionId, { kind: relay.kind, text: relay.text, at: relay.at }, rowKey)
-  }
+  const openRelay = useCallback(
+    (relay: Relay, rowKey: string) => {
+      const { memberSessionId } = relay
+      if (!memberSessionId) return
+      if (!Object.hasOwn(sessionNames, memberSessionId)) {
+        setLineNotice({ rowKey, text: "Can't open: no session record" })
+        return
+      }
+      setLineNotice(null)
+      onOpenRelay(memberSessionId, { kind: relay.kind, text: relay.text, at: relay.at }, rowKey)
+    },
+    [sessionNames, onOpenRelay],
+  )
 
-  /** 지시·보고 한 줄과 그 아래 알림 */
-  function renderRelayLine(relay: Relay, rowKey: string) {
-    return (
-      <Fragment key={rowKey}>
-        <RelayLine relay={relay} jumpKey={rowKey} markClass={highlightClass(rowKey)} onOpen={() => openRelay(relay, rowKey)} />
-        {lineNotice?.rowKey === rowKey && (
-          <div className="queue-notice" role="status">
-            {lineNotice.text}
-          </div>
-        )}
-      </Fragment>
-    )
-  }
-
-  /** 점프로 찾아 간 말풍선이면 강조 클래스 */
-  function highlightClass(key: string): string {
-    return markClasses(key, highlight?.key ?? null, searchCurrentKey)
-  }
-
-  function onMessagesScroll() {
+  const onMessagesScroll = useCallback(() => {
     const element = messagesRef.current
     if (!element) return
     const isNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_SLACK_PX
     isAtBottomRef.current = isNearBottom
     setIsAtBottom(isNearBottom)
     if (isNearBottom) setHasUnread(false)
-  }
+  }, [])
 
-  function toggleWork(key: string) {
-    flushSync(() =>
-      setOpenWorkKeys((current) => {
-        const next = new Set(current)
-        if (!next.delete(key)) next.add(key)
-        return next
-      }),
-    )
-    // 펼치면 내용만 길어지고 스크롤 이벤트가 없어 "맨 아래를 보고 있다" 가 남는다. 다음 갱신 때 펼친 것을 읽다 끌려 내려가지 않게 다시 잰다
-    onMessagesScroll()
-  }
+  const toggleWork = useCallback(
+    (key: string) => {
+      flushSync(() =>
+        setOpenWorkKeys((current) => {
+          const next = new Set(current)
+          if (!next.delete(key)) next.add(key)
+          return next
+        }),
+      )
+      // 펼치면 내용만 길어지고 스크롤 이벤트가 없어 "맨 아래를 보고 있다" 가 남는다. 다음 갱신 때 펼친 것을 읽다 끌려 내려가지 않게 다시 잰다
+      onMessagesScroll()
+    },
+    [onMessagesScroll],
+  )
 
   function onToBottomClick() {
     const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -1300,13 +1376,8 @@ export function Chat({
       body: JSON.stringify({ data }),
     })
 
-  async function submit(event?: FormEvent) {
-    event?.preventDefault()
-    const text = withAttachmentPaths(draft.trim(), uploaded.map((attachment) => attachment.path))
-    if (!text || isAsking || isUploading) return
-    setDraft('')
-    const sentIds = new Set(uploaded.map((attachment) => attachment.id))
-    setAttachments((current) => current.filter((attachment) => !sentIds.has(attachment.id)))
+  /** 입력 상자가 보낸 글 (입력칸·보낸 첨부 칩은 입력 상자가 이미 비웠다) */
+  function send(text: string) {
     // jsonl 에 남기까지(transcript 갱신 → 대화 전체 다시 받기) 기다리지 않고 내 말풍선을 바로 띄운다
     const pendingId = nextPendingIdRef.current++
     const knownIds = new Set(messages.map((message) => message.id))
@@ -1331,62 +1402,6 @@ export function Chat({
 
   function dismissPending(pendingId: number) {
     setPendings((current) => current.filter((pending) => pending.id !== pendingId))
-  }
-
-  /** 고르거나 붙여 넣은 파일을 칩으로 붙이고 바로 올린다. 20MB 를 넘으면 올리지 않고 칩에 알린다 */
-  function attachFiles(files: File[]) {
-    if (files.length === 0 || isAsking) return
-    const added = files.map(
-      (file): Attachment => ({
-        id: nextAttachmentIdRef.current++,
-        file,
-        controller: new AbortController(),
-        path: null,
-        error: file.size > MAX_ATTACHMENT_BYTES ? 'Over 20MB, not uploaded' : null,
-      }),
-    )
-    setAttachments((current) => [...current, ...added])
-    for (const attachment of added) if (!attachment.error) void uploadAttachment(attachment)
-  }
-
-  /** 세션 작업 폴더에 올린다. 그 사이 칩이 없어졌으면(× · 세션 바꿈) id 로 못 찾아 결과가 버려진다 */
-  async function uploadAttachment(attachment: Attachment) {
-    const settle = (result: Pick<Attachment, 'path' | 'error'>) =>
-      setAttachments((current) => current.map((item) => (item.id === attachment.id ? { ...item, ...result } : item)))
-    const { file } = attachment
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}/attachments?name=${encodeURIComponent(file.name)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: file,
-        signal: attachment.controller.signal,
-      })
-      const body = (await response.json().catch(() => ({}))) as { path?: unknown; message?: unknown }
-      if (response.ok && typeof body.path === 'string') settle({ path: body.path, error: null })
-      else settle({ path: null, error: typeof body.message === 'string' ? body.message : `HTTP ${response.status}` })
-    } catch {
-      settle({ path: null, error: 'Network error' })
-    }
-  }
-
-  function removeAttachment(attachment: Attachment) {
-    attachment.controller.abort()
-    setAttachments((current) => current.filter((item) => item.id !== attachment.id))
-  }
-
-  function onFileInputChange(event: ChangeEvent<HTMLInputElement>) {
-    attachFiles(Array.from(event.target.files ?? []))
-    // 같은 파일을 다시 고를 수 있게 비운다
-    event.target.value = ''
-    if (!window.matchMedia(TOUCH_QUERY).matches) composerRef.current?.focus()
-  }
-
-  /** 클립보드에 파일·그림만 있으면 첨부로 받는다. 글자가 함께 있으면(엑셀·워드 복사는 글자와 그림을 같이 싣는다) 지금처럼 글자로 붙인다 */
-  function onComposerPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const files = Array.from(event.clipboardData.files)
-    if (files.length === 0 || event.clipboardData.getData('text/plain')) return
-    event.preventDefault()
-    attachFiles(files)
   }
 
   useEffect(() => {
@@ -1439,7 +1454,7 @@ export function Chat({
   }
 
   /** 마지막 대기 메시지를 Claude Code 대기열에서 뺀다. 서버가 ↑ 로 전부 꺼내고 나머지를 다시 넣은 뒤 결과를 준다 (몇 초 걸린다) */
-  async function cancelQueued(message: ChatMessage) {
+  const cancelQueued = useCallback(async (message: ChatMessage) => {
     const requestSessionId = sessionId
     setCancellingId(message.id)
     setCancelNotice(null)
@@ -1460,31 +1475,12 @@ export function Chat({
     if (sessionIdRef.current !== requestSessionId) return
     setCancellingId(null)
     setCancelNotice(notice)
-  }
+  }, [sessionId])
 
   /** 제안을 입력칸에 채우고 커서를 끝에 둔다. 보내지 않는다 (사람이 확인하고 Enter) */
   function fillSuggestion() {
     if (!suggestion) return
-    flushSync(() => setDraft(suggestion))
-    const textarea = composerRef.current
-    textarea?.focus()
-    textarea?.setSelectionRange(suggestion.length, suggestion.length)
-  }
-
-  /**
-   * Enter = 보내기, Shift+Enter = 줄바꿈. 한글 조합 중 Enter 는 조합 확정이라 보내지 않는다.
-   * 제안이 보이면 (= 빈 입력칸) Tab = 제안 채우기. 그 밖의 Tab 은 기본 동작(포커스 이동)
-   */
-  function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    const isPlainTab = event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey
-    if (isPlainTab && isSuggestionShown && !event.nativeEvent.isComposing) {
-      event.preventDefault()
-      fillSuggestion()
-      return
-    }
-    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
-    event.preventDefault()
-    void submit()
+    composerRef.current?.fill(suggestion)
   }
 
   return (
@@ -1501,116 +1497,20 @@ export function Chat({
           />
         )}
         <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
-          {rows.map((row) => {
-            if (row.kind === 'work') {
-              const { work } = row
-              return (
-                <WorkLine
-                  key={`work:${work.key}`}
-                  work={work}
-                  isOpen={openWorkKeys.has(work.key)}
-                  onToggle={() => toggleWork(work.key)}
-                  highlightKey={highlight?.key ?? null}
-                  searchKey={searchCurrentKey}
-                />
-              )
-            }
-            // claude 답변 (구간의 마지막 글. 도구 없는 구간이면 글마다)
-            if (row.kind === 'text') {
-              return (
-                <div key={row.message.id} className={`msg assistant${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
-                  <CopyButton text={row.message.text} />
-                  <MarkdownText text={row.message.text} />
-                </div>
-              )
-            }
-            // 팀장 대화의 지시·보고 도구 호출은 한 줄로 (내용은 팀원 대화에서 본다), AskUserQuestion 은 질문 → 답 카드로 (원래 도구 블록은 그 안에 접어 둔다)
-            if (row.kind === 'special') {
-              const { toolUse, special } = row
-              return special.kind === 'relay' ? (
-                renderRelayLine(special.relay, `relay:${toolUse.id}`)
-              ) : (
-                <AskedCard key={toolUse.id} toolUse={toolUse} asked={special.asked} />
-              )
-            }
-            const { message } = row
-            // 팀원 대화: 서버가 보낸 팀장·파트장 지시 (전문)
-            if (message.from) {
-              return (
-                <div key={message.id} className={`msg user relay${highlightClass(message.id)}`} data-jump-key={message.id}>
-                  <CopyButton text={message.text} />
-                  <div className="relay-label">Instruction from {message.from.name}</div>
-                  <MarkdownText text={message.text} />
-                </div>
-              )
-            }
-            // 대화 압축 요약: 사람 말이 아니라 한 줄. 요약 원문은 접어 둔다
-            if (message.isCompactSummary) {
-              return <NoticeLine key={message.id} title={COMPACT_SUMMARY_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
-            }
-            // 중지(Esc) 기록: 사람 말이 아니라 한 줄. 원문은 접어 둔다
-            if (message.isInterrupt) {
-              return <NoticeLine key={message.id} title={INTERRUPT_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
-            }
-            // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 보고 한 줄, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
-            const parts = message.role === 'system' ? splitNotifications(message.text) : null
-            if (parts) {
-              return (
-                <Fragment key={message.id}>
-                  {parts.map((part, index) => {
-                    const key = `${message.id}:${index}`
-                    if (typeof part === 'string') {
-                      return (
-                        <div key={key} className={`msg system${highlightClass(key)}`} data-jump-key={key}>
-                          <div className="text">{part}</div>
-                        </div>
-                      )
-                    }
-                    const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
-                    if (!report) {
-                      return (
-                        <NoticeLine
-                          key={key}
-                          title={notificationTitle(part)}
-                          raw={part.raw}
-                          isFailed={part.status === 'failed'}
-                          jumpKey={key}
-                          markClass={highlightClass(key)}
-                        />
-                      )
-                    }
-                    return renderRelayLine(reportRelay(report, message.timestamp, memberOf), `relay:${key}`)
-                  })}
-                </Fragment>
-              )
-            }
-            // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다)
-            return (
-              <div
-                key={message.id}
-                className={`msg ${message.role}${message.isQueued ? ' queued' : ''}${highlightClass(message.id)}`}
-                data-jump-key={message.id}
-              >
-                {message.text && <div className="text">{message.text}</div>}
-                {message.isQueued && (
-                  <div className="queued-label">
-                    Queued
-                    {message.id === lastQueuedId && canCancelQueued && (
-                      <button
-                        type="button"
-                        className="queued-cancel"
-                        disabled={cancellingId !== null}
-                        onClick={() => void cancelQueued(message)}
-                        title="Take this message out of the queue before claude gets it"
-                      >
-                        {cancellingId === message.id ? 'Cancelling…' : 'Cancel'}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          <MessageRows
+            rows={rows}
+            memberOf={memberOf}
+            openWorkKeys={openWorkKeys}
+            highlightKey={highlight?.key ?? null}
+            searchKey={searchCurrentKey}
+            lineNotice={lineNotice}
+            lastQueuedId={lastQueuedId}
+            canCancelQueued={canCancelQueued}
+            cancellingId={cancellingId}
+            onToggleWork={toggleWork}
+            onOpenRelay={openRelay}
+            onCancelQueued={cancelQueued}
+          />
           {pendings.map((pending) => (
             <div key={`pending-${pending.id}`} className={`msg user pending${pending.isFailed ? ' failed' : ''}`}>
               <div className="text">{pending.text}</div>
@@ -1703,68 +1603,17 @@ export function Chat({
           </div>
         ))
       )}
-      {isWritable ? (
-        <form className="composer" onSubmit={submit}>
-          {attachments.length > 0 && (
-            <div className="attachments" aria-label="Attachments">
-              {attachments.map((attachment) => (
-                <AttachmentChip key={attachment.id} attachment={attachment} onRemove={() => removeAttachment(attachment)} />
-              ))}
-              {isUploading && <span className="attachments-note">You can send once uploads finish</span>}
-            </div>
-          )}
-          <input ref={fileInputRef} type="file" multiple hidden onChange={onFileInputChange} />
-          <button
-            type="button"
-            className="attach"
-            disabled={isAsking}
-            onClick={() => fileInputRef.current?.click()}
-            aria-label="Attach files"
-            title="Attach files"
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path
-                d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-          <textarea
-            ref={composerRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={onComposerKeyDown}
-            onPaste={onComposerPaste}
-            placeholder={isAsking ? 'Answer the question above first' : 'Type an instruction (Shift+Enter for a new line)'}
-            rows={Math.min(Math.max(draft.split('\n').length, 1), 8)}
-            disabled={isAsking}
-            autoFocus={!window.matchMedia(TOUCH_QUERY).matches}
-          />
-          <button
-            type="submit"
-            className="send"
-            disabled={(!draft.trim() && uploaded.length === 0) || isAsking || isUploading}
-            aria-label="Send"
-            title={isUploading ? "Can't send while files are uploading" : 'Send (Enter)'}
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path
-                d="M3 3.5 21.5 12 3 20.5 3 13.6 14 12 3 10.4Z"
-                fill="currentColor"
-                stroke="currentColor"
-                strokeWidth="1"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-        </form>
-      ) : (
-        (footer ?? <p className="hint">Started from a terminal or IDE, so this session is view-only</p>)
-      )}
+      {/* 쓸 수 없는 동안에도 마운트해 두어 쓰던 글·첨부가 남는다 (그동안은 아무것도 그리지 않는다) */}
+      <Composer
+        ref={composerRef}
+        sessionId={sessionId}
+        isWritable={isWritable}
+        isAsking={isAsking}
+        suggestion={isSuggestionShown ? suggestion : null}
+        onEmptyChange={setIsDraftEmpty}
+        onSend={send}
+      />
+      {!isWritable && (footer ?? <p className="hint">Started from a terminal or IDE, so this session is view-only</p>)}
     </div>
   )
 }

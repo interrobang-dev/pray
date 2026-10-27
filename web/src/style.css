@@ -1197,8 +1197,10 @@ li.group.drop-after::after {
   display: flex;
   flex-direction: column;
 }
+/* 기준 크기는 0px (flex: 1 의 0% 가 아니라). 0% 는 정해지지 않은 높이로 풀려 브라우저가 대화 내용 높이를 재는데,
+   입력칸에 글자를 칠 때마다(입력 상자 레이아웃이 바뀔 때마다) 긴 대화 전체를 다시 재서 느려진다. 늘어난 크기는 같다 */
 .messages {
-  flex: 1;
+  flex: 1 1 0px;
   overflow-y: auto;
   padding: 12px 16px;
   display: flex;
