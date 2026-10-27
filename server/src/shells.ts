@@ -189,6 +189,14 @@ export function runningBackgroundTasks(jsonl: string): BackgroundTask[] {
   return [...scanBackground(jsonl).tasks.values()].filter((task) => task.isRunning)
 }
 
+/**
+ * 표시 상태 waiting 인지: 끝나면 결과를 들고 claude 를 깨우는 작업(MCP 호출·에이전트)이 도는지.
+ * shell 은 뺀다 — dev 서버처럼 끝나지 않는 shell 이 많아 세션이 내내 waiting 으로 보였다 (shell 은 Shells 표시로 본다)
+ */
+export function hasWakingTask(tasks: BackgroundTask[]): boolean {
+  return tasks.some((task) => task.kind !== 'shell')
+}
+
 /** 끝에서 이만큼씩 늘려 읽는다. 최대까지 읽어도 줄이 모자라면 그만큼만 준다 (한 줄이 아주 긴 출력) */
 const TAIL_CHUNK_BYTES = 64 * 1024
 const TAIL_MAX_BYTES = 1024 * 1024

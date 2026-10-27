@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
+import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 
 const TASKS = 'C:\\Users\\me\\AppData\\Local\\Temp\\claude\\D--x\\a56abbde-182b-475e-ab39-c3cf9c7933a7\\tasks'
 
@@ -312,5 +312,14 @@ describe('background tasks (shell, MCP, agent) from jsonl', () => {
       ...agentLaunched('t4', 'a2').map((record) => ({ ...record, isSidechain: true })),
     ]
     expect(runningBackgroundTasks(jsonl(...records))).toEqual([])
+  })
+})
+
+describe('hasWakingTask', () => {
+  it('shell 만 돌면 false, MCP·에이전트가 하나라도 돌면 true', () => {
+    expect(hasWakingTask([])).toBe(false)
+    expect(hasWakingTask([{ id: 's1', kind: 'shell', isRunning: true }])).toBe(false)
+    expect(hasWakingTask([{ id: 's1', kind: 'shell', isRunning: true }, { id: 'm1', kind: 'mcp', isRunning: true }])).toBe(true)
+    expect(hasWakingTask([{ id: 'a1', kind: 'agent', isRunning: true }])).toBe(true)
   })
 })

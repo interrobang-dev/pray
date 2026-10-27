@@ -70,7 +70,7 @@ import {
   resolveSessionTempFile,
   saveAttachment,
 } from './scratchpad.js'
-import { parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
+import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
 import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts, withoutQueued } from './messages.js'
@@ -1035,7 +1035,7 @@ app.post('/api/accounts/:id/switch', async (req, res) => {
           hook,
           'present',
           () => ({
-            hasRunningBackground: (analysis?.backgroundTasks.length ?? 0) > 0,
+            hasRunningBackground: hasWakingTask(analysis?.backgroundTasks ?? []),
             latestTask: null,
             lastAssistantText: hook?.lastAssistantText ?? analysis?.summary.lastAssistantText ?? null,
           }),

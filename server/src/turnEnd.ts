@@ -6,7 +6,7 @@ import type { TaskStatus } from './teamState.js'
  */
 
 export interface TurnEndFacts {
-  /** jsonl 에 아직 끝나지 않은 백그라운드 작업(shell·MCP 호출·에이전트)이 있다 (shells.ts runningBackgroundTasks) */
+  /** jsonl 에 끝나면 claude 를 깨울 백그라운드 작업(MCP 호출·에이전트. shell 은 뺀다)이 돈다 (shells.ts hasWakingTask) */
   hasRunningBackground: boolean
   /** 팀원 세션이면 그 팀원의 가장 최근 task (teamState). 팀원이 아니거나 task 가 없으면 null */
   latestTask: { status: TaskStatus; finishedAt: string | null } | null

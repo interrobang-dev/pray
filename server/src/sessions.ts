@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import type { AskQuestion, HookStatus, Session, SessionStatus, Shell } from './types.js'
 import type { HookState } from './hookState.js'
 import { summarizeTranscript, type TranscriptSummary, type TurnOutcome } from './transcript.js'
-import { runningBackgroundTasks, runningShells, type BackgroundTask } from './shells.js'
+import { hasWakingTask, runningBackgroundTasks, runningShells, type BackgroundTask } from './shells.js'
 import { turnEndStatus, type TurnEndFacts } from './turnEnd.js'
 import { readLiveSessions } from './liveSessions.js'
 import { modelSettingOf } from './memberModel.js'
@@ -251,7 +251,7 @@ export async function listSessions(
         title: transcript?.title ?? null,
         createdAt: record?.createdAt || (transcript?.startedAt ?? null),
         status: sessionStatus(hook, attendance, () => ({
-          hasRunningBackground: (analysis?.backgroundTasks.length ?? 0) > 0,
+          hasRunningBackground: hasWakingTask(analysis?.backgroundTasks ?? []),
           latestTask: role === 'member' ? latestTaskOf(id) : null,
           lastAssistantText,
         }), transcript?.turn ?? null),
