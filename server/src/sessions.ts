@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { AskQuestion, HookStatus, Session, SessionStatus, Shell } from './types.js'
 import type { HookState } from './hookState.js'
-import { summarizeTranscript, type TranscriptSummary } from './transcript.js'
+import { summarizeTranscript, type TranscriptSummary, type TurnOutcome } from './transcript.js'
 import { runningBackgroundTasks, runningShells, type BackgroundTask } from './shells.js'
 import { turnEndStatus, type TurnEndFacts } from './turnEnd.js'
 import { readLiveSessions } from './liveSessions.js'
@@ -139,9 +139,9 @@ export async function findTranscriptSummary(sessionId: string): Promise<Transcri
   return transcripts.summarize(sessionId)
 }
 
-/** jsonl 에 아직 끝나지 않은 백그라운드 작업(shell·MCP 호출·에이전트)이 있는지 (세션 목록과 같은 캐시). 근무 중인 세션에만 뜻이 있다 */
-export async function hasRunningBackground(sessionId: string): Promise<boolean> {
-  return ((await transcripts.analyze(sessionId))?.backgroundTasks.length ?? 0) > 0
+/** 세션 목록과 같은 캐시의 분석 (요약·shell·백그라운드 작업). jsonl 이 없으면 null */
+export async function findTranscriptAnalysis(sessionId: string): Promise<TranscriptAnalysis | null> {
+  return transcripts.analyze(sessionId)
 }
 
 /** pid 기록이 살아 있는 세션인지. 근무 판정은 이것 또는 호스트 목록 (listSessions 의 attendance 와 같은 기준) */
@@ -162,13 +162,28 @@ export function displayStatus(hook: HookState | undefined, attendance: Session['
 
 /**
  * 세션 목록의 표시 상태 (Session.status). displayStatus 가 my-turn 인 근무 중 세션만 waiting·done·my-turn 으로 가른다 (turnEnd.ts).
- * 휴식·퇴근과 그 밖의 상태는 displayStatus 그대로
+ * 휴식·퇴근과 그 밖의 상태는 displayStatus 그대로.
+ * 근무 중인데 훅 상태로 차례를 알 수 없으면(훅 없음·unknown, 또는 ended 인데 끝나기 직전이 my-turn 이 아님 — 서버·호스트 재시작) jsonl 의 마지막 차례(turn)로 다시 만든다:
+ * ended → 마지막 말로 turnEnd 규칙, interrupted·cut → my-turn, in-progress → 훅을 모르면 working(프로세스가 살아 있다. 다음 훅이 고친다)·재시작 뒤 ended 면 my-turn(프로세스가 죽었다 다시 떠 차례가 끊겼다),
+ * none → 지금대로(unknown·idle). 훅 상태가 있는 평소 경우는 그대로다
  */
 export function sessionStatus(
   hook: HookState | undefined,
   attendance: Session['attendance'],
   facts: () => Omit<TurnEndFacts, 'lastPromptAt' | 'isInterrupted'>,
+  turn: TurnOutcome | null = null,
 ): SessionStatus {
+  if (attendance === 'present' && turn && turn.kind !== 'none') {
+    const isHookUnknown = !hook || hook.status === 'unknown'
+    const isRestarted = hook?.status === 'ended' && hook.statusBeforeEnd !== 'my-turn'
+    if (isHookUnknown || isRestarted) {
+      if (turn.kind === 'ended') {
+        return turnEndStatus({ ...facts(), lastAssistantText: turn.text, lastPromptAt: hook?.lastPromptAt ?? null, isInterrupted: false })
+      }
+      if (turn.kind === 'in-progress' && isHookUnknown) return 'working'
+      return 'my-turn'
+    }
+  }
   const status = displayStatus(hook, attendance)
   if (status !== 'my-turn' || attendance !== 'present' || !hook) return status
   return turnEndStatus({ ...facts(), lastPromptAt: hook.lastPromptAt, isInterrupted: hook.isInterrupted })
@@ -239,7 +254,7 @@ export async function listSessions(
           hasRunningBackground: (analysis?.backgroundTasks.length ?? 0) > 0,
           latestTask: role === 'member' ? latestTaskOf(id) : null,
           lastAssistantText,
-        })),
+        }), transcript?.turn ?? null),
         kind: isWeb ? 'web' : 'external',
         attendance,
         isAlive: attendance === 'present',

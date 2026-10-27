@@ -2,6 +2,9 @@ import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { isBusy } from './switchImpact.js'
+import type { TurnEndFacts } from './turnEnd.js'
+import type { TurnOutcome } from './transcript.js'
 import { compareByCreatedAt, displayStatus, sessionStatus, TranscriptCache } from './sessions.js'
 import type { HookState } from './hookState.js'
 
@@ -172,6 +175,92 @@ describe('sessionStatus', () => {
     expect(sessionStatus(hook('my-turn'), 'break', noFacts)).toBe('my-turn')
     expect(sessionStatus(hook('ended', 'my-turn'), 'off', noFacts)).toBe('ended')
     expect(sessionStatus(undefined, 'present', noFacts)).toBe('unknown')
+  })
+})
+
+describe('sessionStatus from the transcript turn', () => {
+  const hook = (status: HookState['status'], statusBeforeEnd: HookState['statusBeforeEnd'] = null): HookState => ({
+    status,
+    cwd: 'D:/x',
+    lastAssistantText: '훅의 말',
+    pendingTool: null,
+    updatedAt: '2026-10-22T00:00:00.000Z',
+    workingSince: null,
+    statusBeforeEnd,
+    lastPromptAt: null,
+    isInterrupted: false,
+  })
+  const facts = (overrides: { hasRunningBackground?: boolean; latestTask?: TurnEndFacts['latestTask'] } = {}) => () => ({
+    hasRunningBackground: false,
+    latestTask: null,
+    lastAssistantText: '훅의 말',
+    ...overrides,
+  })
+  const turn = (kind: TurnOutcome['kind'], text: string | null = null): TurnOutcome => ({ kind, text })
+  const ended = turn('ended', '끝냈습니다.')
+  const status = (h: HookState | undefined, t: TurnOutcome | null, f = facts()) => sessionStatus(h, 'present', f, t)
+
+  describe.each([
+    ['no hook state', undefined],
+    ['unknown', hook('unknown')],
+  ])('%s', (_name, h) => {
+    it('applies the turnEnd rules to the transcript text when the turn ended', () => {
+      expect(status(h, ended)).toBe('done')
+      expect(status(h, turn('ended', '어느 쪽으로 할까요?'))).toBe('my-turn')
+      expect(status(h, turn('ended', null))).toBe('my-turn')
+      expect(status(h, ended, facts({ hasRunningBackground: true }))).toBe('waiting')
+      expect(status(h, ended, facts({ latestTask: { status: 'done', finishedAt: '2026-10-22T00:00:00.000Z' } }))).toBe('done')
+    })
+
+    it('shows interrupted and cut turns as my-turn, a turn in progress as working, no conversation as before', () => {
+      expect(status(h, turn('interrupted'))).toBe('my-turn')
+      expect(status(h, turn('cut'))).toBe('my-turn')
+      expect(status(h, turn('in-progress'))).toBe('working')
+      expect(status(h, turn('none'))).toBe('unknown')
+      expect(status(h, null)).toBe('unknown')
+    })
+  })
+
+  describe.each([
+    ['null', null],
+    ['unknown', 'unknown'],
+    ['idle', 'idle'],
+    ['working', 'working'],
+    ['needs-approval', 'needs-approval'],
+  ] as const)('ended after a restart, statusBeforeEnd %s', (_name, before) => {
+    const h = hook('ended', before)
+    it('applies the turnEnd rules when the turn ended', () => {
+      expect(status(h, ended)).toBe('done')
+      expect(status(h, turn('ended', '진행할까요?'))).toBe('my-turn')
+      expect(status(h, ended, facts({ hasRunningBackground: true }))).toBe('waiting')
+    })
+
+    it('shows a turn the restart cut off as my-turn, and no conversation as idle', () => {
+      expect(status(h, turn('interrupted'))).toBe('my-turn')
+      expect(status(h, turn('cut'))).toBe('my-turn')
+      expect(status(h, turn('in-progress'))).toBe('my-turn')
+      expect(status(h, turn('none'))).toBe('idle')
+      expect(status(h, null)).toBe('idle')
+    })
+  })
+
+  it('keeps the existing path for ended with statusBeforeEnd my-turn (hook text, not the transcript)', () => {
+    expect(status(hook('ended', 'my-turn'), turn('cut'))).toBe('done')
+    expect(status(hook('ended', 'my-turn'), ended, facts())).toBe('done')
+  })
+
+  it('does not use the transcript when the hook state is a normal one, nor for break and off sessions', () => {
+    expect(status(hook('working'), turn('ended', '끝'))).toBe('working')
+    expect(status(hook('idle'), turn('cut'))).toBe('idle')
+    expect(status(hook('needs-approval'), ended)).toBe('needs-approval')
+    expect(status(hook('my-turn'), turn('cut'))).toBe('done')
+    expect(sessionStatus(undefined, 'break', facts(), turn('cut'))).toBe('unknown')
+    expect(sessionStatus(hook('ended'), 'off', facts(), turn('cut'))).toBe('ended')
+  })
+
+  it('makes a session whose transcript says it is working busy', () => {
+    expect(isBusy({ attendance: 'present', status: status(undefined, turn('in-progress')) })).toBe(true)
+    expect(isBusy({ attendance: 'present', status: status(hook('ended'), turn('in-progress')) })).toBe(false)
   })
 })
 

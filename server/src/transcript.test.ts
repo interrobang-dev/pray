@@ -23,6 +23,7 @@ describe('summarizeTranscript', () => {
       model: null,
       effort: null,
       contextTokens: null,
+      turn: { kind: 'in-progress', text: null },
     })
   })
 
@@ -36,6 +37,7 @@ describe('summarizeTranscript', () => {
       model: null,
       effort: null,
       contextTokens: null,
+      turn: { kind: 'none', text: null },
     })
   })
 

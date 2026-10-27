@@ -60,7 +60,7 @@ import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js
 import { makeSendCode } from './mail.js'
 import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptJudgement } from './interrupt.js'
-import { displayStatus, findTranscript, findTranscriptSummary, hasRunningBackground, isLiveSession, listSessions, projectsDir } from './sessions.js'
+import { findTranscript, findTranscriptAnalysis, findTranscriptSummary, isLiveSession, listSessions, projectsDir, sessionStatus } from './sessions.js'
 import {
   contentTypeOf,
   findScratchpad,
@@ -1025,12 +1025,23 @@ app.post('/api/accounts/:id/switch', async (req, res) => {
   try {
     const account = await accountStore.switchTo(req.params.id)
     // 전환을 마친 뒤 다시 센다. 근무 중인 웹 세션 = 호스트 목록 (hq.json 을 읽지 않아 전환 뒤에 실패하지 않는다)
-    // 백그라운드 작업을 기다리는(waiting) 세션도 바쁘다. 차례가 끝난 세션만 jsonl 캐시를 본다 (done·my-turn 의 구분은 여기서 필요 없다)
+    // 목록과 같은 표시 상태로 센다: 백그라운드 작업을 기다리는(waiting) 세션과 jsonl 로 일하는 중이라 본 세션(훅을 모를 때)도 바쁘다.
+    // done·my-turn 의 구분은 여기서 필요 없어 팀원 task 는 보지 않는다
     const webSessions = await Promise.all(
       host.sessions.map(async (s) => {
-        const status = displayStatus(hookStates.get(s.sessionId), 'present')
-        const isWaiting = status === 'my-turn' && (await hasRunningBackground(s.sessionId))
-        return { kind: 'web' as const, attendance: 'present' as const, status: isWaiting ? ('waiting' as const) : status }
+        const hook = hookStates.get(s.sessionId)
+        const analysis = await findTranscriptAnalysis(s.sessionId)
+        const status = sessionStatus(
+          hook,
+          'present',
+          () => ({
+            hasRunningBackground: (analysis?.backgroundTasks.length ?? 0) > 0,
+            latestTask: null,
+            lastAssistantText: hook?.lastAssistantText ?? analysis?.summary.lastAssistantText ?? null,
+          }),
+          analysis?.summary.turn ?? null,
+        )
+        return { kind: 'web' as const, attendance: 'present' as const, status }
       }),
     )
     res.json({ account, hasBusyWebSessions: hasBusyWebSessions(webSessions) })
