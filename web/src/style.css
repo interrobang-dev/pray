@@ -1518,9 +1518,8 @@ li.group.drop-after::after {
   font-size: 11px;
   color: var(--muted);
 }
-/* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 제안 → 작업 파일 폴더(Files.tsx) → 실행 중인 shell(Shells.tsx) → 맨 아래가 아닐 때 뜨는 "↓".
-   아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않는다. 자주 뜨고 숨는 것이 위라 "↓" 는 아래 버튼을 움직이지 않고, 제안이 뜨고 사라지면 그 위 버튼들이 한 칸씩 오르내린다.
-   묶음이 대화 폭을 다 덮는 것은 제안 말풍선 최대 폭을 대화 폭 기준으로 정하려고다. 빈 자리는 클릭이 대화로 지나간다.
+/* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 작업 파일 폴더(Files.tsx) → 실행 중인 shell(Shells.tsx) → 맨 아래가 아닐 때 뜨는 "↓".
+   아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않는다. 자주 뜨고 숨는 것이 위라 "↓" 는 아래 버튼을 움직이지 않는다. 빈 자리는 클릭이 대화로 지나간다.
    z-index 를 주지 않는다: 폴더·shell 버튼의 모달이 이 안에 렌더돼 묶음의 쌓임 맥락에 갇힌다 */
 .pane-buttons {
   position: absolute;
@@ -1537,11 +1536,10 @@ li.group.drop-after::after {
 .pane-buttons > * {
   pointer-events: auto;
 }
-/* 원 버튼 모양 (제안은 말풍선을 뺀 원 부분) */
+/* 원 버튼 모양 */
 .to-bottom,
 .files-button,
-.shells-button,
-.suggestion-icon {
+.shells-button {
   position: relative;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -2838,80 +2836,49 @@ li.group.drop-after::after {
   font-size: 12px;
   color: var(--red);
 }
-/* Claude Code 의 다음 입력 제안 (Chat.tsx). 오른쪽 아래 버튼 묶음의 원 버튼 ✦ + 바로 왼쪽 말풍선 한 줄 (길면 말줄임, 전체는 툴팁).
-   둘이 한 버튼이라 어디를 누르든, 빈 입력칸에서 Tab 이든 = 입력칸에 채우기 (보내지 않는다). 말풍선 최대 폭은 대화 폭의 약 70% (+ 원 버튼·간격 48px) */
-.suggestion {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: calc(70% + 48px);
-  padding: 0;
-  border: 0;
-  border-radius: 20px;
-  background: transparent;
-}
-.suggestion-bubble {
+/* Claude Code 의 다음 입력 제안 (Composer.tsx): 빈 입력칸에 흐린 글(.composer-ghost, 입력칸과 같은 글꼴·padding 이라 첫 글자 자리가 같다.
+   한 줄 말줄임, 전체는 툴팁)을 겹쳐 그리고 보내기 앞에 작은 "Tab" 칩. 칩을 누르거나 빈 입력칸에서 Tab = 채우기 (보내지 않는다).
+   글이 겹친 요소라 클릭은 입력칸으로 지나간다 */
+.composer-field {
   position: relative;
+  flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-  font-size: 13px;
-  box-shadow: 0 2px 6px rgba(20, 24, 40, 0.15);
 }
-/* 말풍선 꼬리: 원 버튼을 가리킨다 */
-.suggestion-bubble::after {
-  content: '';
+.composer-field textarea {
+  width: 100%;
+}
+.composer-ghost {
   position: absolute;
-  top: 50%;
-  right: -5px;
-  width: 8px;
-  height: 8px;
-  border-top: 1px solid var(--line);
-  border-right: 1px solid var(--line);
-  background: var(--panel);
-  transform: translateY(-50%) rotate(45deg);
-}
-.suggestion-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--green);
-}
-/* 겉 버튼은 테두리가 없어 기본 hover 대신 말풍선·원에 */
-.suggestion:hover .suggestion-bubble,
-.suggestion:hover .suggestion-bubble::after,
-.suggestion:hover .suggestion-icon {
-  border-color: var(--green);
-}
-/* 제안이 보일 때 대화 끝에 비워 두는 자리 (Chat.tsx). 맨 아래로 내렸을 때 마지막 글 끝이 말풍선 위에 온다.
-   빈 div 라 flex-shrink 를 막지 않으면 대화가 길 때 0 으로 줄어든다 */
-.suggestion-space {
-  flex-shrink: 0;
-  height: 40px;
-}
-.suggestion-text {
-  min-width: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 6px;
+  line-height: 1.4;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  color: var(--muted);
+  pointer-events: none;
+}
+.composer .suggestion-tab {
+  flex-shrink: 0;
+  align-self: flex-end;
+  height: calc(1.4em + 12px);
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11px;
+}
+.composer .suggestion-tab:hover {
+  border-color: var(--green);
   color: var(--text);
 }
-.suggestion-key {
-  flex-shrink: 0;
-  padding: 0 4px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg);
-  font: inherit;
-  font-size: 10px;
-  line-height: 14px;
+.composer .suggestion-tab:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
 }
 .login {
   max-width: 360px;
@@ -3948,6 +3915,10 @@ li.group.drop-after::after {
     white-space: nowrap;
     overflow: hidden;
   }
+  /* 흐린 제안 글은 입력칸과 같은 16px 이어야 높이·첫 글자 자리가 맞는다 */
+  .composer-ghost {
+    font-size: 16px;
+  }
   /* 질문 카드: 손가락으로 누르기 쉽게 버튼을 40px 안팎으로. 주소창이 보여도 카드가 화면을 다 덮지 않게 dvh */
   .question-card {
     max-height: 60dvh;
@@ -4142,12 +4113,10 @@ li.group.drop-after::after {
   .files-preview-body {
     padding: 8px 0;
   }
-  /* 제안 말풍선: 화면이 좁아 원 버튼 왼쪽 폭을 다 쓴다. 폰 키보드에는 Tab 이 없어 힌트를 숨긴다 */
-  .suggestion {
-    max-width: 100%;
-  }
-  .suggestion-key {
-    display: none;
+  /* 제안 Tab 칩: 폰에서는 손가락 폭 40px 에 보내기와 같은 높이 */
+  .composer .suggestion-tab {
+    min-width: 40px;
+    font-size: 12px;
   }
   /* 퇴근 막대: 이유는 한 줄을 다 쓰고 아래에 버튼 둘을 반씩, 손가락으로 누르기 쉽게 40px */
   .off-duty .off-duty-reason {

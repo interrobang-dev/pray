@@ -46,3 +46,28 @@ export function parseBtwCommand(text: string): { question: string | null } | nul
   const question = match[1]?.trim() ?? ''
   return { question: question || null }
 }
+
+/**
+ * 입력 제안(흐린 글)을 보일지. Claude Code 가 빈 입력칸에 제안을 그리는 때와 같게:
+ * 제안이 있고, 근무 중인 웹 세션이고, 작업·승인 대기·질문 중이 아니고, 입력칸이 비었고, 확인 전인 임시 말풍선이 없을 때.
+ * 막 보낸 말이 확인 전이면 mod 가 보낸 null 이 반영되기 전일 수 있어 숨긴다 (전송 실패한 것은 입력이 안 갔으니 그대로)
+ */
+export function isSuggestionVisible(state: {
+  suggestion: string | null | undefined
+  isWritable: boolean
+  isWorking: boolean
+  isApprovalNeeded: boolean
+  isAsking: boolean
+  isDraftEmpty: boolean
+  hasUnconfirmedPending: boolean
+}): boolean {
+  return (
+    Boolean(state.suggestion) &&
+    state.isWritable &&
+    !state.isWorking &&
+    !state.isApprovalNeeded &&
+    !state.isAsking &&
+    state.isDraftEmpty &&
+    !state.hasUnconfirmedPending
+  )
+}

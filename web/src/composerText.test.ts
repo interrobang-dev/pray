@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { btwBlockReason, composerRows, isBtwShortcut, MAX_BTW_ROWS, parseBtwCommand, withAttachmentPaths } from './composerText'
+import { btwBlockReason, composerRows, isBtwShortcut, isSuggestionVisible, MAX_BTW_ROWS, parseBtwCommand, withAttachmentPaths } from './composerText'
 
 describe('btwBlockReason', () => {
   const free = { isAsking: false, isApprovalNeeded: false, isPending: false }
@@ -82,5 +82,25 @@ describe('parseBtwCommand', () => {
 
   it('다른 글·다른 명령은 아니다', () => {
     for (const text of ['/btwx 질문', 'btw 질문', '질문 /btw', '/help', '/jk-btw abc', '']) expect(parseBtwCommand(text)).toBeNull()
+  })
+})
+
+describe('isSuggestionVisible', () => {
+  const shown = { suggestion: '테스트 돌려줘', isWritable: true, isWorking: false, isApprovalNeeded: false, isAsking: false, isDraftEmpty: true, hasUnconfirmedPending: false }
+
+  it('조건이 모두 맞으면 보인다', () => {
+    expect(isSuggestionVisible(shown)).toBe(true)
+  })
+
+  it('제안이 없거나 비면 안 보인다', () => {
+    expect(isSuggestionVisible({ ...shown, suggestion: null })).toBe(false)
+    expect(isSuggestionVisible({ ...shown, suggestion: undefined })).toBe(false)
+    expect(isSuggestionVisible({ ...shown, suggestion: '' })).toBe(false)
+  })
+
+  it('하나라도 어긋나면 안 보인다', () => {
+    for (const override of [{ isWritable: false }, { isWorking: true }, { isApprovalNeeded: true }, { isAsking: true }, { isDraftEmpty: false }, { hasUnconfirmedPending: true }]) {
+      expect(isSuggestionVisible({ ...shown, ...override })).toBe(false)
+    }
   })
 })

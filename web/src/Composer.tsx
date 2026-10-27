@@ -47,7 +47,7 @@ function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRe
   )
 }
 
-/** Chat 이 입력 상자에 시키는 것: 제안 버튼을 누르면 입력칸에 채운다, 포커스 */
+/** Chat 이 입력 상자에 시키는 것: 제안을 채운다, 포커스 */
 export interface ComposerHandle {
   fill: (text: string) => void
   /** 입력칸에 포커스한다 (곁가지 질문 카드를 Esc 로 닫았을 때) */
@@ -61,7 +61,7 @@ interface Props {
   isWritable: boolean
   /** 질문 중에는 입력칸을 막는다. 키 입력이 터미널의 질문 화면에 들어가면 Enter 가 1번 선택지로 답해 버린다. 쓰던 글은 남긴다 */
   isAsking: boolean
-  /** 보이는 제안 (빈 입력칸에서 Tab 으로 채운다). 제안 버튼이 안 보이면 null */
+  /** 보이는 제안 (빈 입력칸에 흐리게 보이고 Tab 또는 Tab 칩으로 채운다). 안 보일 때는 null */
   suggestion: string | null
   /** 입력칸이 비었는지 바뀔 때 (제안 표시 조건). 글자마다 부르지 않는다 */
   onEmptyChange: (isEmpty: boolean) => void
@@ -242,17 +242,35 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
           <circle cx="12" cy="14.6" r="0.9" fill="currentColor" />
         </svg>
       </button>
-      <textarea
-        ref={composerRef}
-        value={draft}
-        onChange={(e) => changeDraft(e.target.value)}
-        onKeyDown={onComposerKeyDown}
-        onPaste={onComposerPaste}
-        placeholder={isAsking ? 'Answer the question above first' : 'Type an instruction (Shift+Enter for a new line)'}
-        rows={composerRows(draft)}
-        disabled={isAsking}
-        autoFocus={!window.matchMedia(TOUCH_QUERY).matches}
-      />
+      <div className="composer-field" title={suggestion ?? undefined}>
+        <textarea
+          ref={composerRef}
+          value={draft}
+          onChange={(e) => changeDraft(e.target.value)}
+          onKeyDown={onComposerKeyDown}
+          onPaste={onComposerPaste}
+          placeholder={suggestion ? '' : isAsking ? 'Answer the question above first' : 'Type an instruction (Shift+Enter for a new line)'}
+          rows={composerRows(draft)}
+          disabled={isAsking}
+          autoFocus={!window.matchMedia(TOUCH_QUERY).matches}
+        />
+        {suggestion && (
+          <span className="composer-ghost" aria-hidden="true">
+            {suggestion}
+          </span>
+        )}
+      </div>
+      {suggestion && (
+        <button
+          type="button"
+          className="suggestion-tab"
+          onClick={() => fill(suggestion)}
+          title={`Fill the input with the suggestion: ${suggestion}`}
+          aria-label={`Fill the input with the suggestion: ${suggestion}`}
+        >
+          Tab
+        </button>
+      )}
       <button
         type="submit"
         className="send"

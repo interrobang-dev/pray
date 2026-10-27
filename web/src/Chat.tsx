@@ -7,6 +7,7 @@ import { expandedStartIndex, resolveStartIndex, startIndexRevealing, windowStart
 import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
 import { Composer, type ComposerHandle } from './Composer'
+import { isSuggestionVisible } from './composerText'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
 import { runningToolNames, shortToolName } from './runningTools'
 import { FilesButton } from './Files'
@@ -42,7 +43,7 @@ interface Props {
   pendingTool: string | null
   /** 서버가 붙잡고 있는 AskUserQuestion. 있으면 승인 막대 대신 질문 카드 */
   question: { questions: AskQuestion[] } | null
-  /** 입력칸에 그려진 Claude Code 다음 입력 제안. 있으면 대화 오른쪽 아래 제안 버튼 + 말풍선 */
+  /** 입력칸에 그려진 Claude Code 다음 입력 제안. 있으면 입력 상자의 빈 입력칸에 흐린 글 + Tab 칩 */
   suggestion: string | null
   /** 전역 SSE 의 transcript 이벤트로 올라가는 카운터. 바뀌면 다시 읽는다 */
   version: number
@@ -1125,18 +1126,16 @@ export function Chat({
   const [pendings, setPendings] = useState<PendingMessage[]>([])
   /** 질문 중에는 입력칸을 막는다. 키 입력이 터미널의 질문 화면에 들어가면 Enter 가 1번 선택지로 답해 버린다. 쓰던 글은 남긴다 */
   const isAsking = Boolean(question) || pendingTool === ASK_TOOL
-  /**
-   * 제안 버튼·말풍선: Claude Code 가 빈 입력칸에 제안을 그리는 때와 같게 (작업·승인 대기·질문 중이 아니고 입력칸이 비었을 때).
-   * 막 보낸 말이 아직 확인 전이면 mod 가 보낸 null 이 반영되기 전일 수 있어 숨긴다 (전송 실패는 입력이 안 갔으니 그대로)
-   */
-  const isSuggestionShown =
-    Boolean(suggestion) &&
-    isWritable &&
-    !isWorking &&
-    !isApprovalNeeded &&
-    !isAsking &&
-    isDraftEmpty &&
-    pendings.every((pending) => pending.isFailed)
+  /** 입력 상자의 흐린 제안 글 (조건은 composerText.ts isSuggestionVisible) */
+  const isSuggestionShown = isSuggestionVisible({
+    suggestion,
+    isWritable,
+    isWorking,
+    isApprovalNeeded,
+    isAsking,
+    isDraftEmpty,
+    hasUnconfirmedPending: pendings.some((pending) => !pending.isFailed),
+  })
   /** [취소] 를 누른 대기 메시지 ID. 서버가 결과를 줄 때까지 버튼이 "취소 중…" */
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   /** 대기 메시지 취소 결과 한 줄. CANCEL_NOTICE_MS 뒤 사라진다 */
@@ -1347,11 +1346,6 @@ export function Chat({
     if (isAtBottomRef.current) scrollToBottom()
     else onMessagesScroll()
   }, [liveWorkKey])
-
-  // 제안이 뜨면 대화 끝에 말풍선 자리(suggestion-space)가 생긴다. 맨 아래를 보고 있었으면 그 자리까지 내려 방금 끝난 응답 끝이 말풍선에 가리지 않게
-  useEffect(() => {
-    if (isSuggestionShown && isAtBottomRef.current) scrollToBottom()
-  }, [isSuggestionShown])
 
   /** 점프한 곳을 못 찾으면 세션만 연 것으로 하고 맨 아래에서 알린다 */
   function showJumpMissing() {
@@ -1633,12 +1627,6 @@ export function Chat({
     setCancelNotice(notice)
   }, [sessionId])
 
-  /** 제안을 입력칸에 채우고 커서를 끝에 둔다. 보내지 않는다 (사람이 확인하고 Enter) */
-  function fillSuggestion() {
-    if (!suggestion) return
-    composerRef.current?.fill(suggestion)
-  }
-
   return (
     <div className="chat">
       <div className="messages-pane">
@@ -1710,11 +1698,9 @@ export function Chat({
               isInterrupting={isInterrupting}
             />
           )}
-          {/* 맨 아래로 내렸을 때 마지막 글이 제안 말풍선 위에 오게 비워 두는 자리. bottomRef 앞이라 scrollToBottom 이 여기까지 보여 준다 */}
-          {isSuggestionShown && <div className="suggestion-space" aria-hidden="true" />}
           <div ref={bottomRef} />
         </div>
-        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 제안 → 폴더 → shell → "↓" 로 쌓인다.
+        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 폴더 → shell → "↓" 로 쌓인다.
             자주 뜨고 숨는 것일수록 위에 둔다: "↓" 가 스크롤마다 바뀌어도 아래 버튼은 그대로이고, shell 이 뜨고 끝나도 폴더는 그대로다 */}
         <div className="pane-buttons">
           {!isAtBottom && (
@@ -1730,17 +1716,6 @@ export function Chat({
           )}
           <ShellsButton key={`shells:${sessionId}`} sessionId={sessionId} shells={shells} request={shellRequest} onRequestHandled={onShellRequestHandled} />
           <FilesButton key={sessionId} sessionId={sessionId} version={version} />
-          {isSuggestionShown && (
-            <button type="button" className="suggestion" onClick={fillSuggestion} title={suggestion ?? undefined} aria-label={`Fill the input with the suggestion: ${suggestion}`}>
-              <span className="suggestion-bubble">
-                <span className="suggestion-text">{suggestion}</span>
-                <kbd className="suggestion-key">Tab</kbd>
-              </span>
-              <span className="suggestion-icon" aria-hidden="true">
-                ✦
-              </span>
-            </button>
-          )}
         </div>
       </div>
       {isWritable && question?.questions.length ? (
