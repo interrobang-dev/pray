@@ -1,0 +1,46 @@
+---
+paths:
+  - "host/**"
+  - "desktop/**"
+  - "scripts/**"
+  - "hooks/**"
+---
+
+# 호스트·hq.json·트레이 앱
+
+호스트(named pipe·pty·`hq.json`)와 트레이 앱(Electron)·작업 스케줄러 스크립트·훅 설치 스크립트를 다룬다. 그룹 할 일의 저장 규칙(서버 쪽)도 `hq.ts` 에 있어 여기 둔다.
+
+원래 루트 `CLAUDE.md` 한 파일이던 내용을 옮긴 것이다. 본문의 "위·아래 …"·"핵심 개념 …" 은 그때의 말이라 가리키는 항목이 다른 파일에 있을 수 있다. 어디서나 지킬 규칙·근무·휴식·퇴근·표시 상태·실행 방법은 루트 `CLAUDE.md`, 다른 영역은 루트의 문서 지도를 본다. 이 영역을 고치면 이 파일의 그 줄을 고쳐 쓴다.
+
+다른 파일에 있는 항목:
+- 핵심 개념 "모델·effort 바꾸기" → server-api.md
+- 핵심 개념 "세션 이름은…" → server-api.md
+- mod → queue-interrupt.md
+- 호스트 쪽 모델·effort 바꾸기(`restart-session`)의 서버 규칙 → server-api.md
+
+## 구조
+
+- `host/src/index.ts` — named pipe `\\.\pipe\jk-corp-host` 서버. 연결된 모든 클라이언트에 모든 세션 출력을 보낸다 (구독 관리 없음). `restart` 메시지를 받으면 종료 코드 2 로 나가고 트레이 앱이 다시 띄운다 (0 은 "의도한 중지" 라 안 살린다). `resume` 은 퇴근 기록의 cwd·extraArgs 그대로 `--resume` 한 뒤 기록을 webSessions 로 되돌리고, `forget` 은 퇴근 기록과 이름을 지운 뒤 `sessions` 를 다시 보내 서버가 목록을 다시 읽게 한다. `kill` 에 `isReleased` 가 있으면(팀원 정리) released 퇴근이 된다. `restart-session` `{ sessionId, extraArgs }` 은 근무 중인 웹 세션을 그 인자로 다시 띄운다 (`PtyPool.restart`, 아래 핵심 개념 "모델·effort 바꾸기") — 프로세스·기록이 없거나 kill 로 끝나는 중이거나 hq.json 을 못 쓰면 그 클라이언트에 `error` 만 보내고 아무것도 바꾸지 않는다. 시작 때와 1분마다 보관 기간이 지난 퇴근 기록을 지우고, 지운 것이 있으면 `sessions` 를 다시 보낸다 (hq.json 을 못 읽으면 로그는 실패·복구로 바뀔 때만)
+- `host/src/ptyPool.ts` — node-pty로 `claude.exe --session-id <uuid> [첫 지시] ...extraArgs` 실행, 세션별 200KB 링버퍼. `spawn.extraArgs` 로 `--name`·`--permission-mode`·`--mcp-config` 등 추가 인자를 넘기고 `webSessions` 에 같이 저장해 resume 때도 넘긴다. **첫 지시는 extraArgs 앞에 둔다** — `--mcp-config` 는 값을 여러 개 받아서, 뒤에 두면 첫 지시를 설정 파일 이름으로 읽고 claude 가 바로 종료된다(종료 코드 1). claude 경로는 `--claude=` 인자 (스케줄러 환경엔 사용자 PATH 가 없어 설치 스크립트가 넘김). 자식 env(`childEnv`, spawn·resume 모두)에 `CLAUDE_CODE_PLUGIN_DIRS=<저장소 절대 경로>\mod`(`import.meta.dirname` 기준)를 넣어 웹 세션에만 아래 mod 를 불러온다 — `CLAUDE*` 를 지운 뒤에 넣어야 남는다. claude 가 끝나면(onExit) webSessions 기록을 퇴근 기록으로 옮긴다: 이유는 `offDutyReason` — kill 요청이면 그 kill 의 이유(`isReleased` 면 released, 아니면 dismissed. kill 은 종료 코드 1 로 끝나서(실측) 코드로는 못 가린다), 0 이면 exit(`/exit` 는 0), 그 밖은 error. `~/.claude/projects/<프로젝트>/<id>.jsonl` 이 없으면 다시 출근할 수 없어 기록·이름을 지운다(`discardWebSession`). 끝날 때마다 보관 기간 정리도 한다. 프로세스 없이 기록만 남은 세션에 kill 이 오면 바로 그 kill 의 이유로 퇴근시킨다. `restart(sessionId, extraArgs)`(모델·effort 바꾸기)는 webSessions 기록의 extraArgs 를 먼저 바꾸고(`setWebSessionArgs`. 못 바꾸면 던지고 끄지 않는다 — 옛 인자인 채 끄면 다음 호스트가 옛 인자로 resume 한다) claude 를 kill 한다. entry 에 `restartArgs` 가 있으면 onExit 는 퇴근으로 옮기지 않고 같은 폴더·앞 pty 크기(`cols`·`rows` — 화면 터미널 탭은 자기 크기가 바뀌기 전엔 resize 를 다시 보내지 않는다)·새 인자로 바로 `--resume` 한다. 새 프로세스를 먼저 넣고 `exit` 를 알리므로 호스트 목록에서 빠지는 순간이 없고, 서버는 `exit` 로 평소처럼 제안·붙잡은 질문·running task 를 정리한다 (화면 터미널 탭에는 "[Session ended: …]" 뒤에 새 화면이 그려진다). 다시 띄우는 중에 kill 이 오면 kill 이 이기고(퇴근), restart 가 또 오면 기록·인자만 새것으로 바꾼다. 다시 띄우기(spawn)가 던지면 claude 가 오류로 끝난 것과 같게 퇴근 error(종료 코드 null)
+- `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=<path>` 면 console 을 파일로 (스케줄러는 환경변수를 못 넘기므로 전부 인자)
+- `scripts/install-startup.ps1` · `stop.ps1` · `uninstall-startup.ps1` — 작업 스케줄러 등록·중지·제거. UTF-8 BOM 필수 (Windows PowerShell 5.1 이 BOM 없는 .ps1 을 ANSI 로 읽어 한글이 깨짐)
+- `desktop/src/main.ts` — Electron 트레이 앱. 호스트·서버를 `node --import tsx src/index.ts` 로 자식 실행(tsx CLI 는 자식 node 를 하나 더 만들어 kill 때 고아가 남으므로 쓰지 않음), 5초마다 `/api/sessions` 로 상태 폴링해 아이콘·툴팁 갱신. `node`·`claude` 경로는 `where` 로 찾고 자식 env 에서 `CLAUDE*`·`ELECTRON_*` 를 지운다
+- `desktop/src/children.ts` — 자식 프로세스 재시작 정책. `desktop/src/icon.ts` — 이미지 파일 없이 PNG 를 코드로 만든 트레이·창 아이콘: 로고 마크 16×16 격자(`MARK` 문자열 + 기호→색 `MARK_COLORS`)를 2배로 찍은 32×32, 승인 대기면 오른쪽 위에 빨간 점(흰 10×10 안에 빨강 8×8)
+- `desktop/tsconfig.json` 은 CommonJS 출력 (Electron main 을 단순하게). 빌드 결과 `desktop/dist/` 는 git 무시
+- `host/src/protocol.ts` — pipe 메시지 타입과 줄 단위 JSON 프레이밍. 서버가 `@jk-corp/host/protocol`로 import
+- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기/쓰기. 호스트는 `webSessions`(spawn 시 추가. 모델·effort 바꾸기 때 extraArgs 만 바꾸기 `setWebSessionArgs`)와 `offDuty`(퇴근 기록 = webSessions 기록 + `endedAt`·`reason`·`exitCode`. 옮기기 `moveToOffDuty`·되돌리기 `returnFromOffDuty`·지우기 `removeOffDuty`·보관 기간 지난 것 정리 `pruneOffDuty`(`retentionOf`: released 6시간, 나머지·모르는 이유 7일. 경계 시각은 남긴다). 퇴근 기록을 지우면 `sessionNames` 의 그 이름과 `characters` 의 고른 인물, `genders` 의 성별, `positions` 의 역할도 같이 지운다), 서버는 `groups`·`teams`·`sessionNames`·`characters`(세션 ID → 고른 도트 인물 `{ id, hair, top }`. 색은 `#rrggbb`, null 이면 그 인물 기본색)·`genders`(세션 ID → 서버가 지은 이름의 성별)·`positions`(세션 ID → 역할 FE·Lead 등. 꼴 검사 `parsePosition`: trim 1~12자, `[`·`]`·줄바꿈 없음. 이름에는 넣지 않는다 — 아래 핵심 개념 "세션 이름은…". 옛 꼴 이름 나누기 `splitPositionName` 은 순수 함수, 한 번 옮기기는 `migratePositionNames`) 를 쓴다 (`seats` 와 기본 그룹 `lobby` 는 없어졌다. `teams[].desks`(예전 책상 끌기 기록)와 `groups[].w·h` 는 남아 있지만 화면은 쓰지 않는다). 그룹 할 일 `groups[].todos`(`GroupTodo { id, text, isDone, createdAt, doneAt }`, 없는 옛 기록은 읽을 때 [])는 `addTodo`·`updateTodo`·`removeTodo`·`reorderTodos`(그룹이 없으면 null, 할 일이 없으면 `TodoNotFoundError`, 순서 집합이 틀리면 `OrderMismatchError`)로만 바꾸고, 글 검증 `parseTodoText`·예전 대기 메모 나누기 `splitWaitingNote` 는 순수 함수, 한 번 옮기기는 `migrateWaitingNotes` 다 (규칙은 아래 핵심 개념 "그룹 할 일"). 목록 순서 바꾸기 `reorderGroups(ids)`·`reorderTeams(groupId, ids)` 는 지금 있는 것과 정확히 같은 ID 집합만 받고(아니면 `OrderMismatchError`, 그룹이 없으면 null), 팀은 그 그룹 팀들이 차지한 배열 자리끼리만 섞는다. 새 그룹 `addGroup(name, { x, y })`·새 팀 `addTeam({ …, x, y })` 은 화면이 찾아 준 타일 좌표를 그대로 쓰고 (없거나 타일 좌표가 아니면 그룹은 기존 그룹들 오른쪽 끝, 팀은 같은 그룹 팀들 아래), `updateGroup` 은 x·y 가 바뀌면 그 그룹 팀들의 앵커도 같은 만큼 옮긴다 (팀 앵커가 0 밑으로 가면 그만큼 덜 옮겨 팀들 배치를 지킨다). 같은 파일을 두 프로세스가 read-modify-write 하지만 쓰기가 드물어 허용. **`readHq` 는 모르는 키를 보존한다** — 한쪽 프로세스만 새 코드로 돌 때 다른 쪽 데이터(예: `teams`)가 지워진 적이 있다. **쓰기는 같은 폴더 임시 파일(`hq.json.<pid>.tmp`)에 다 쓴 뒤 `renameSync` 로 바꿔 끼우고**(Windows 의 EPERM·EBUSY·EACCES 는 50ms 간격 5번까지 재시도), **파일이 있는데 읽기·해석에 실패하면 던져서 읽기·쓰기를 모두 막는다**(파일이 없을 때만 기본값) — 직접 덮어쓰기와 "해석 실패 = 빈 파일" 이 겹쳐 파일이 통째로 비워진 적이 있다. 호스트(`ptyPool`·`index.ts`)는 이 예외를 잡아 로그만 남긴다. 서버는 API 에서는 안 잡고 Express 5 가 500 으로 끝낸다. 요청 처리 밖인 `broadcast()`(5초 주기·SSE 접속·훅·호스트 이벤트)는 잡아서 그 회차 갱신만 건너뛰고(로그는 실패·복구로 상태가 바뀔 때만 한 줄), **한 번에 하나만 돌며 도는 중에 온 요청은 끝난 뒤 한 번으로 합쳐 최신 상태로 다시 돈다**(`serialRunner`) — 겹쳐 돌면 먼저 시작한 옛 스냅숏이 나중에 끝나 새 것을 덮어쓴다(질문을 붙잡았는데 `question: null` 이 마지막에 온다). 요청 처리 밖에서 hq 를 부르는 곳을 새로 만들면 같이 잡아야 한다 — 안 잡으면 서버가 죽고 트레이가 재시작을 반복하다 포기한다. 서버가 `@jk-corp/host/hq` 로 import
+- `hooks/install.mjs` — settings.json 훅 설치 스크립트
+
+## 핵심 개념
+
+- 호스트 자체가 죽으면 웹 세션도 죽는다. 허용한 설계. `hq.json.webSessions` = "호스트가 살려 둘 세션". 호스트가 죽을 때(트레이 kill·재시작 exit)는 pty onExit 가 돌지 않아 기록이 남고(휴식) 다음 호스트가 시작할 때 `--resume` 한다 (폴더가 없으면 건너뛰며 지운다). 호스트가 살아 있는데 claude 가 나가면(exit·오류·kill) 퇴근 기록으로 옮기고, 다시 출근하면 저장된 extraArgs(팀장 지침·`--mcp-config`·권한 모드)가 그대로 넘어간다 — 터미널에서 직접 `claude --resume` 하면 이 인자가 빠진다
+- **한 번도 대화하지 않은 세션은 resume 이 안 된다** (jsonl 이 없다. `/exit` 로 끝내도 생기지 않는다(실측)). 그래서 끝날 때 jsonl 이 없으면 퇴근 기록 없이 지운다 (resume 의 "No conversation found" 종료도 여기로 빠진다). 정상
+- **그룹 할 일 (`groups[].todos`, 서버 쪽).** 예전 대기 메모(`waitingNote`)를 대신한다. 배열 순서 = 표시 순서이고 `hq.ts` 가 늘 [할 일(사용자가 정한 순서)…, 완료(완료한 순서, 오래된 것 먼저)…] 로 나눠 둔다: 추가는 할 일 구역 맨 끝(첫 완료 앞), 완료가 되면 doneAt = 지금이고 맨 끝으로, 되돌리면 doneAt null 이고 할 일 구역 맨 끝으로, 완료 값이 그대로면 자리·doneAt 그대로, 순서 바꾸기는 할 일 구역만(완료 구역은 그대로). 글은 문자열이고 줄바꿈(`\r\n`·`\n`·`\r`) 하나마다 공백 하나, 앞뒤 trim, 1~500자(JS 문자열 길이 = UTF-16). ID 는 그룹·팀처럼 `randomUUID` 앞 8자리. `waitingNote` 는 타입·`updateGroup` 에서 없어졌고, **서버가 시작할 때 한 번 할 일로 옮기고 키를 지운 뒤 쓴다** (`migrateWaitingNotes`. 읽을 때 바꾸지 않는 것은 할 일 ID 가 읽을 때마다 바뀌지 않게다): `- ` 로 시작하면 맨 앞·줄바꿈 뒤·쉼표 뒤의 `- ` 마다 한 항목(항목 끝 쉼표·공백은 뺀다. 항목 안의 ` - ` 는 나누지 않는다), 아니면 글 전체가 한 항목, 빈 메모는 키만 지운다. 옮긴 항목은 미완료·createdAt = 옮긴 시각으로 기존 할 일 구역 끝(완료 앞)에 붙는다. 옮길 것이 없으면 쓰지 않는다. 옮기기 전의 `waitingNote` 는 모르는 키처럼 보존돼 호스트(새·옛 코드)가 써도 남고, hq 를 못 읽어 옮기지 못하면 로그만 남기고 다음 시작 때 다시 한다. 옮길 때 500자 제한은 적용하지 않는다 (예전 메모는 `prompt()` 한 줄이라 짧다)
+
+## 확인하지 못한 것
+
+- 그룹 할 일 서버 쪽은 단위 테스트와 시험 서버(임시 홈에 실제 hq.json 의 groups 만 복사, 가짜 호스트 pipe, 포트 4791)로만 확인했다: 시작 때 실제 메모가 할 일 5개로 옮겨지고 다시 시작해도 ID 가 그대로, 깨진 hq.json 이면 서버가 죽지 않고 로그만(API 는 500), 추가·글 수정·완료·완료 해제·같은 값·삭제·순서와 400·404, 성공 때 `office` SSE, 그룹 PATCH 의 `waitingNote` 무시. 실행 중인 서버(트레이)에서 실제 hq.json 이 옮겨지는 것, 화면(FE)과 붙인 흐름, 옮기는 순간 호스트가 같은 파일을 쓰는 경쟁은 보지 못했다
+- 서버 ↻ 를 실제 트레이 앱으로는 확인하지 못했다. 시험 서버에서 `POST /api/server/restart` 가 200 `{}` 를 준 뒤 종료 코드 2 로 끝나는 것과, 가짜 API 화면에서 확인 창 → POST·실패 alert·끊김 때 비활성까지만 봤다 (트레이가 다시 띄우고 화면 SSE 가 다시 붙는 것은 미확인)
+- 팀장 정리(released) 퇴근과 1분 정리는 시험 호스트·서버(임시 홈·가짜 pipe·cmd.exe 대역)로만 확인했다: 팀원 정리 API → released(근무 중·휴식 둘 다), 종료 버튼 API → dismissed, 6시간 1분 지난 released 만 다음 1분 정리에서 이름·성별과 같이 지워지고 서버 목록에서 빠짐. 실제 팀장의 jk_dismiss·실제 화면의 "Released by lead" 문구는 보지 못했다
+- 실제 claude 로 퇴근 → 다시 출근 전체 흐름. 실제 호스트 코드에 claude 대신 `cmd.exe` 를 띄워(`--claude=` 는 백슬래시 경로로 줘야 한다 — `C:/…/cmd.exe` 는 cmd 가 `/cmd.exe` 를 `/c md.exe` 로 읽어 `md` 를 실행한다) 퇴근 기록의 extraArgs 그대로 `--resume`, 종료 코드 0·5·kill 별 퇴근 이유, 대화 없는 세션 삭제, 호스트 restart 뒤 휴식 → 다시 뜬 호스트가 resume 하는 것까지 확인했다. 실제 claude 의 종료 코드(`/exit` 0, kill 1)는 따로 쟀다
+- 호스트가 죽을 때(트레이 kill·재시작 exit) 실제 claude 도 같이 끝나는지 (`cmd.exe` 대역은 5초 안에 끝났다). 남으면 다음 호스트가 같은 세션을 또 resume 한다
