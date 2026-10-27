@@ -114,10 +114,12 @@ describe('switchImpact', () => {
 })
 
 describe('isBusy', () => {
-  it('is true only for on-duty working or needs-approval', () => {
+  it('is true only for on-duty working, needs-approval or waiting for background tasks', () => {
     expect(isBusy({ attendance: 'present', status: 'working' })).toBe(true)
     expect(isBusy({ attendance: 'present', status: 'needs-approval' })).toBe(true)
+    expect(isBusy({ attendance: 'present', status: 'waiting' })).toBe(true)
     expect(isBusy({ attendance: 'present', status: 'my-turn' })).toBe(false)
+    expect(isBusy({ attendance: 'present', status: 'done' })).toBe(false)
     expect(isBusy({ attendance: 'break', status: 'working' })).toBe(false)
   })
 })

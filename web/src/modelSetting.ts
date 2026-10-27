@@ -84,6 +84,7 @@ export function blockReason(
 ): string | null {
   const isAsking = Boolean(session.question?.questions.length) || session.pendingTool === 'AskUserQuestion'
   if (session.status === 'working' || session.status === 'needs-approval' || isAsking) return 'Wait until claude finishes'
+  if (session.status === 'waiting') return 'Wait until background tasks finish'
   if (hasQueuedMessage) return 'Cancel or wait for the queued message'
   if ((session.shells ?? []).length > 0) return 'Wait for the running shells to finish'
   return null

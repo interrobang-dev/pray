@@ -2,10 +2,11 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import type { Stats } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import type { AskQuestion, Session, SessionStatus, Shell } from './types.js'
+import type { AskQuestion, HookStatus, Session, SessionStatus, Shell } from './types.js'
 import type { HookState } from './hookState.js'
 import { summarizeTranscript, type TranscriptSummary } from './transcript.js'
-import { runningShells } from './shells.js'
+import { runningBackgroundTasks, runningShells, type BackgroundTask } from './shells.js'
+import { turnEndStatus, type TurnEndFacts } from './turnEnd.js'
 import { readLiveSessions } from './liveSessions.js'
 import { modelSettingOf } from './memberModel.js'
 import { partOfSession, roleOf, teamOf, type Team } from '@jk-corp/host/team'
@@ -15,10 +16,11 @@ const claudeDir = join(homedir(), '.claude')
 export const projectsDir = join(claudeDir, 'projects')
 const sessionsDir = join(claudeDir, 'sessions')
 
-/** jsonl 한 번 읽어 세션 목록에 쓰는 것: 요약과 지금 도는 백그라운드 shell */
+/** jsonl 한 번 읽어 세션 목록에 쓰는 것: 요약, 지금 도는 백그라운드 shell(Session.shells)과 백그라운드 작업 전부(shell·MCP·에이전트, waiting 판정) */
 export interface TranscriptAnalysis {
   summary: TranscriptSummary
   shells: Shell[]
+  backgroundTasks: BackgroundTask[]
 }
 
 interface CachedSummary extends TranscriptAnalysis {
@@ -71,7 +73,13 @@ export class TranscriptCache {
       return null
     }
     // stat 을 읽기 전에 했으므로 그 사이 덧붙은 내용은 다음 번에 크기가 달라 다시 읽는다
-    const analysis: CachedSummary = { size, mtimeMs, summary: summarizeTranscript(jsonl), shells: runningShells(jsonl) }
+    const analysis: CachedSummary = {
+      size,
+      mtimeMs,
+      summary: summarizeTranscript(jsonl),
+      shells: runningShells(jsonl),
+      backgroundTasks: runningBackgroundTasks(jsonl),
+    }
     this.summaries.set(found.path, analysis)
     return analysis
   }
@@ -131,20 +139,39 @@ export async function findTranscriptSummary(sessionId: string): Promise<Transcri
   return transcripts.summarize(sessionId)
 }
 
+/** jsonl 에 아직 끝나지 않은 백그라운드 작업(shell·MCP 호출·에이전트)이 있는지 (세션 목록과 같은 캐시). 근무 중인 세션에만 뜻이 있다 */
+export async function hasRunningBackground(sessionId: string): Promise<boolean> {
+  return ((await transcripts.analyze(sessionId))?.backgroundTasks.length ?? 0) > 0
+}
+
 /** pid 기록이 살아 있는 세션인지. 근무 판정은 이것 또는 호스트 목록 (listSessions 의 attendance 와 같은 기준) */
 export async function isLiveSession(sessionId: string): Promise<boolean> {
   return (await readLiveSessions(sessionsDir)).some((s) => s.sessionId === sessionId)
 }
 
 /**
- * 화면에 보일 상태. 호스트 재시작 때 claude 가 끝나며 SessionEnd 가 오는데 --resume 으로 다시 떠도 SessionStart 훅이 오지 않아
+ * 훅 상태로 본 상태. 호스트 재시작 때 claude 가 끝나며 SessionEnd 가 오는데 --resume 으로 다시 떠도 SessionStart 훅이 오지 않아
  * 근무 중인데 ended 로 남는다. 그래서 근무 중인 ended 는 끝나기 직전이 my-turn 이면 my-turn, 아니면 idle 로 보인다
  * (working·needs-approval 은 프로세스와 함께 사라졌다). 휴식·퇴근은 훅 상태 그대로
  */
-export function displayStatus(hook: HookState | undefined, attendance: Session['attendance']): SessionStatus {
+export function displayStatus(hook: HookState | undefined, attendance: Session['attendance']): HookStatus {
   if (!hook) return 'unknown'
   if (attendance !== 'present' || hook.status !== 'ended') return hook.status
   return hook.statusBeforeEnd === 'my-turn' ? 'my-turn' : 'idle'
+}
+
+/**
+ * 세션 목록의 표시 상태 (Session.status). displayStatus 가 my-turn 인 근무 중 세션만 waiting·done·my-turn 으로 가른다 (turnEnd.ts).
+ * 휴식·퇴근과 그 밖의 상태는 displayStatus 그대로
+ */
+export function sessionStatus(
+  hook: HookState | undefined,
+  attendance: Session['attendance'],
+  facts: () => Omit<TurnEndFacts, 'lastPromptAt' | 'isInterrupted'>,
+): SessionStatus {
+  const status = displayStatus(hook, attendance)
+  if (status !== 'my-turn' || attendance !== 'present' || !hook) return status
+  return turnEndStatus({ ...facts(), lastPromptAt: hook.lastPromptAt, isInterrupted: hook.isInterrupted })
 }
 
 export async function listSessions(
@@ -166,6 +193,8 @@ export async function listSessions(
   genders: Record<string, SessionGender> = {},
   /** hq.json positions (세션 역할) */
   positions: Record<string, string> = {},
+  /** 팀원 세션의 가장 최근 task (teamState). 표시 상태 done 판정용 */
+  latestTaskOf: (sessionId: string) => TurnEndFacts['latestTask'] = () => null,
 ): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
   const recordedById = new Map(recorded.map((r) => [r.sessionId, r]))
@@ -195,6 +224,8 @@ export async function listSessions(
       const team = teamOf(cwd, teams)
       const part = partOfSession(id, cwd, team)
       const heldQuestions = questions.get(id)
+      const role = roleOf(id, isWeb, team, part)
+      const lastAssistantText = hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null
       return {
         id,
         cwd,
@@ -204,14 +235,18 @@ export async function listSessions(
         gender: genders[id] ?? null,
         title: transcript?.title ?? null,
         createdAt: record?.createdAt || (transcript?.startedAt ?? null),
-        status: displayStatus(hook, attendance),
+        status: sessionStatus(hook, attendance, () => ({
+          hasRunningBackground: (analysis?.backgroundTasks.length ?? 0) > 0,
+          latestTask: role === 'member' ? latestTaskOf(id) : null,
+          lastAssistantText,
+        })),
         kind: isWeb ? 'web' : 'external',
         attendance,
         isAlive: attendance === 'present',
         offDuty: off ? { endedAt: off.endedAt, reason: off.reason, exitCode: off.exitCode } : null,
         lastAt: transcript?.lastAt ?? hook?.updatedAt ?? null,
         turnEndedAt: transcript?.turnEndedAt ?? null,
-        lastAssistantText: hook?.lastAssistantText ?? transcript?.lastAssistantText ?? null,
+        lastAssistantText,
         model: transcript?.model ?? null,
         effort: transcript?.effort ?? null,
         modelSetting: isWeb ? modelSettingOf(record?.extraArgs ?? []) : null,
@@ -220,7 +255,7 @@ export async function listSessions(
         workingSince: hook?.workingSince ?? null,
         teamId: team?.id ?? null,
         partId: part?.id ?? null,
-        role: roleOf(id, isWeb, team, part),
+        role,
         question: heldQuestions ? { questions: heldQuestions } : null,
         suggestion: isWeb ? (suggestions.get(id) ?? null) : null,
         // 프로세스가 없으면(휴식·퇴근) 그 프로세스가 띄운 shell 도 없다

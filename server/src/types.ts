@@ -1,13 +1,25 @@
 import type { SessionCharacter, SessionGender } from '@jk-corp/host/hq'
 import type { ModelSetting } from './memberModel.js'
 
-export type SessionStatus =
+/**
+ * 훅 이벤트로 정하는 상태 (hookState.ts). 서버의 다른 판정(대기 취소·중지·모델 변경 409 등)은 이것을 본다.
+ * working = 차례 진행 중(UserPromptSubmit·PostToolUse), needs-approval = 승인·질문 대기(PermissionRequest), my-turn = 차례가 끝남(Stop·웹 중지),
+ * idle = 세션 시작(SessionStart)·근무 중인데 ended 이고 끝나기 직전이 my-turn 이 아님, ended = 세션 끝(SessionEnd), unknown = 훅을 못 받음
+ */
+export type HookStatus =
   | 'working'
   | 'my-turn'
   | 'needs-approval'
   | 'idle'
   | 'ended'
   | 'unknown'
+
+/**
+ * 세션 목록이 내보내는 표시 상태 (Session.status). 근무 중 세션의 차례가 끝난 상태(훅 my-turn)만 셋으로 가른다 (turnEnd.ts):
+ * waiting = 백그라운드 작업(shell·MCP 호출·에이전트)이 끝나기를 기다림, my-turn = 사람의 답이 필요함(물음으로 끝남·중지됨·마지막 말 없음),
+ * done = 할 일을 마침 (팀원이 받은 지시를 끝냄 포함). 휴식·퇴근 세션은 훅 상태 그대로다
+ */
+export type SessionStatus = HookStatus | 'waiting' | 'done'
 
 export interface Session {
   id: string

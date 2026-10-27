@@ -60,7 +60,7 @@ import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js
 import { makeSendCode } from './mail.js'
 import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptJudgement } from './interrupt.js'
-import { displayStatus, findTranscript, findTranscriptSummary, isLiveSession, listSessions, projectsDir } from './sessions.js'
+import { displayStatus, findTranscript, findTranscriptSummary, hasRunningBackground, isLiveSession, listSessions, projectsDir } from './sessions.js'
 import {
   contentTypeOf,
   findScratchpad,
@@ -70,7 +70,7 @@ import {
   resolveSessionTempFile,
   saveAttachment,
 } from './scratchpad.js'
-import { parseShells, readTail, runningShells } from './shells.js'
+import { parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 import { summarizeTranscript } from './transcript.js'
 import { HostClient } from './hostClient.js'
 import { attachInstructions, parseInstructionLog, parseMessages, queuedPrompts, withoutQueued } from './messages.js'
@@ -251,6 +251,7 @@ async function snapshotPayload() {
       listCharacters(),
       listGenders(),
       listPositions(),
+      (sessionId) => tasks.latestOf(sessionId) ?? null,
     ),
   }
 }
@@ -809,7 +810,7 @@ function interruptConflict(sessionId: string): string | null {
  * 근무 중인 웹 세션의 모델·effort 바꾸기 `{ model, effort }` (model = haiku·sonnet·opus·fable, effort = low…max 또는 null = 사용자 전역 설정).
  * 세션 안에서 /model·/effort 를 보내면 사용자 전역 설정(~/.claude/settings.json)의 기본값까지 바뀌어서, 호스트가 hq 기록의 extraArgs 를
  * 바꿔 claude 를 --resume 으로 다시 띄운다 (restart-session). 지금 기록 값과 같으면 아무것도 안 하고 { isRestarted: false },
- * 다르면 다시 뜨기를 기다리지 않고 { isRestarted: true }. 끄면 사라지는 것(진행 중인 차례·대기 메시지·백그라운드 shell)이 있으면 409
+ * 다르면 다시 뜨기를 기다리지 않고 { isRestarted: true }. 끄면 사라지는 것(진행 중인 차례·대기 메시지·백그라운드 shell·MCP 호출·에이전트)이 있으면 409
  */
 app.put('/api/sessions/:id/model', async (req, res) => {
   const sessionId = req.params.id
@@ -859,7 +860,7 @@ app.put('/api/sessions/:id/model', async (req, res) => {
 
 /**
  * 모델·effort 를 바꾸려고 claude 를 끌 수 없는 이유 (409 문구, 화면이 그대로 보인다). 없으면 null.
- * 끄면 진행 중인 차례·붙잡은 질문·대기 메시지(프로세스 메모리에만 있다)·백그라운드 shell 이 사라진다
+ * 끄면 진행 중인 차례·붙잡은 질문·대기 메시지(프로세스 메모리에만 있다)·백그라운드 작업(shell·MCP 호출·에이전트)이 사라진다
  */
 function modelChangeConflict(sessionId: string, jsonl: string | null): string | null {
   const status = hookStates.get(sessionId)?.status
@@ -872,6 +873,8 @@ function modelChangeConflict(sessionId: string, jsonl: string | null): string | 
   if (!jsonl) return "Can't change the model before the first message"
   if (queuedPrompts(jsonl).length) return "Can't change the model while messages are queued"
   if (runningShells(jsonl).length) return "Can't change the model while background shells are running"
+  // 백그라운드로 넘어간 MCP 호출(팀장의 jk_wait 등)·백그라운드 에이전트도 프로세스와 같이 끝난다
+  if (runningBackgroundTasks(jsonl).length) return "Can't change the model while background tasks are running"
   return null
 }
 
@@ -1021,11 +1024,14 @@ app.post('/api/accounts/:id/switch', async (req, res) => {
   try {
     const account = await accountStore.switchTo(req.params.id)
     // 전환을 마친 뒤 다시 센다. 근무 중인 웹 세션 = 호스트 목록 (hq.json 을 읽지 않아 전환 뒤에 실패하지 않는다)
-    const webSessions = host.sessions.map((s) => ({
-      kind: 'web' as const,
-      attendance: 'present' as const,
-      status: displayStatus(hookStates.get(s.sessionId), 'present'),
-    }))
+    // 백그라운드 작업을 기다리는(waiting) 세션도 바쁘다. 차례가 끝난 세션만 jsonl 캐시를 본다 (done·my-turn 의 구분은 여기서 필요 없다)
+    const webSessions = await Promise.all(
+      host.sessions.map(async (s) => {
+        const status = displayStatus(hookStates.get(s.sessionId), 'present')
+        const isWaiting = status === 'my-turn' && (await hasRunningBackground(s.sessionId))
+        return { kind: 'web' as const, attendance: 'present' as const, status: isWaiting ? ('waiting' as const) : status }
+      }),
+    )
     res.json({ account, hasBusyWebSessions: hasBusyWebSessions(webSessions) })
   } catch (error) {
     sendAccountError(res, error)

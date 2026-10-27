@@ -21,11 +21,11 @@ export interface ImpactSession {
 }
 
 export interface SwitchImpact {
-  /** 캐시가 깨질 세션: 근무 중이고 작업 중·승인 대기이거나 차례가 끝난 지 60분 안 */
+  /** 캐시가 깨질 세션: 근무 중이고 바쁘거나(isBusy) 차례가 끝난 지 60분 안 */
   recentSessions: ImpactSession[]
   /** recentSessions 의 contextTokens 합 (null 은 0) */
   totalContextTokens: number
-  /** 근무 중이고 작업 중·승인 대기인 세션 (웹·외부) */
+  /** 근무 중이고 바쁜(작업 중·승인 대기·백그라운드 작업 대기) 세션 (웹·외부) */
   busySessions: ImpactSession[]
 }
 
@@ -33,9 +33,13 @@ export type ImpactCandidate = Pick<Session, 'id' | 'name' | 'title' | 'kind' | '
   contextTokens: number | null
 }
 
-/** 근무 중이고 차례가 진행 중(작업 중·승인 대기)인지 */
+/**
+ * 근무 중이고 바쁜지: 차례가 진행 중(작업 중·승인 대기)이거나 백그라운드 작업을 기다린다(waiting). 전환하면 다음 걸음에 문맥을 다시 읽고,
+ * 호스트를 재시작하면 claude 와 같이 백그라운드 작업도 끊긴다
+ */
 export function isBusy(session: Pick<Session, 'attendance' | 'status'>): boolean {
-  return session.attendance === 'present' && (session.status === 'working' || session.status === 'needs-approval')
+  const { status } = session
+  return session.attendance === 'present' && (status === 'working' || status === 'needs-approval' || status === 'waiting')
 }
 
 /** 전환 응답의 hasBusyWebSessions */

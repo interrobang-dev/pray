@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { compareByCreatedAt, displayStatus, TranscriptCache } from './sessions.js'
+import { compareByCreatedAt, displayStatus, sessionStatus, TranscriptCache } from './sessions.js'
 import type { HookState } from './hookState.js'
 
 const SESSION = 'a56abbde-182b-475e-ab39-c3cf9c7933a7'
@@ -100,9 +100,11 @@ describe('TranscriptCache', () => {
     }
     writeFileSync(path, `${JSON.stringify(call)}\n${JSON.stringify(result)}\n`)
     expect((await cache.analyze(SESSION))?.shells.map((s) => s.id)).toEqual(['b1'])
+    expect((await cache.analyze(SESSION))?.backgroundTasks.map((t) => [t.id, t.kind])).toEqual([['b1', 'shell']])
     const done = '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>'
     appendFileSync(path, `${JSON.stringify({ type: 'user', message: { content: done } })}\n`)
     expect((await cache.analyze(SESSION))?.shells).toEqual([])
+    expect((await cache.analyze(SESSION))?.backgroundTasks).toEqual([])
   })
 })
 
@@ -115,6 +117,8 @@ describe('displayStatus', () => {
     updatedAt: '2026-10-22T00:00:00.000Z',
     workingSince: null,
     statusBeforeEnd,
+    lastPromptAt: null,
+    isInterrupted: false,
   })
 
   it('shows a present session that ended before resume as my-turn or idle', () => {
@@ -129,6 +133,45 @@ describe('displayStatus', () => {
     expect(displayStatus(hook('ended', 'my-turn'), 'off')).toBe('ended')
     expect(displayStatus(hook('working'), 'present')).toBe('working')
     expect(displayStatus(undefined, 'present')).toBe('unknown')
+  })
+})
+
+describe('sessionStatus', () => {
+  const hook = (status: HookState['status'], statusBeforeEnd: HookState['statusBeforeEnd'] = null): HookState => ({
+    status,
+    cwd: 'D:/x',
+    lastAssistantText: '끝냈습니다.',
+    pendingTool: null,
+    updatedAt: '2026-10-22T00:00:00.000Z',
+    workingSince: null,
+    statusBeforeEnd,
+    lastPromptAt: null,
+    isInterrupted: false,
+  })
+  const facts = (overrides: { hasRunningBackground?: boolean; lastAssistantText?: string | null } = {}) => () => ({
+    hasRunningBackground: false,
+    latestTask: null,
+    lastAssistantText: '끝냈습니다.',
+    ...overrides,
+  })
+
+  it('splits a present my-turn session, including one that ended before resume', () => {
+    expect(sessionStatus(hook('my-turn'), 'present', facts())).toBe('done')
+    expect(sessionStatus(hook('my-turn'), 'present', facts({ hasRunningBackground: true }))).toBe('waiting')
+    expect(sessionStatus(hook('my-turn'), 'present', facts({ lastAssistantText: '어느 쪽으로 할까요?' }))).toBe('my-turn')
+    expect(sessionStatus(hook('ended', 'my-turn'), 'present', facts())).toBe('done')
+    expect(sessionStatus({ ...hook('my-turn'), isInterrupted: true }, 'present', facts())).toBe('my-turn')
+  })
+
+  it('leaves other statuses, break and off sessions as displayStatus shows them', () => {
+    const noFacts = () => {
+      throw new Error('should not be called')
+    }
+    expect(sessionStatus(hook('working'), 'present', noFacts)).toBe('working')
+    expect(sessionStatus(hook('ended', 'working'), 'present', noFacts)).toBe('idle')
+    expect(sessionStatus(hook('my-turn'), 'break', noFacts)).toBe('my-turn')
+    expect(sessionStatus(hook('ended', 'my-turn'), 'off', noFacts)).toBe('ended')
+    expect(sessionStatus(undefined, 'present', noFacts)).toBe('unknown')
   })
 })
 

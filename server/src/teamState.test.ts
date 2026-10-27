@@ -24,6 +24,17 @@ describe('TaskStore', () => {
     expect(await store.wait('t1', task.id, 10)).toMatchObject({ id: task.id, status: 'done' })
   })
 
+  it('latestOf gives the newest task of that member across units', () => {
+    const { store } = makeStore()
+    expect(store.latestOf('m1')).toBeUndefined()
+    const first = store.assign('t1', 'm1', '하나')
+    store.applyHook(hook('m1', 'Stop', '끝'))
+    store.assign('t1', 'm2', '다른 팀원')
+    const second = store.assign('t1', 'm1', '둘', 'p1')
+    expect(store.latestOf('m1')?.id).toBe(second.id)
+    expect(store.get(first.id)?.status).toBe('done')
+  })
+
   it('rejects a second assignment while one is running', () => {
     const { store } = makeStore()
     store.assign('t1', 'm1', 'a')

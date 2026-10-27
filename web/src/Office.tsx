@@ -1285,7 +1285,7 @@ function SeatCard({ session, teamName, placeLabel }: { session: Session; teamNam
       <div className="office-card-facts">{facts.join(' · ')}</div>
       {lounge && <div className="office-card-facts">{lounge}</div>}
       {!isOnBreak && session.status === 'needs-approval' && <div className="office-card-tool">Tool: {session.pendingTool ?? '?'}</div>}
-      {!isOnBreak && session.status === 'my-turn' && text && (
+      {!isOnBreak && (session.status === 'my-turn' || session.status === 'done') && text && (
         <p className="office-card-text">{text.length > CARD_TEXT_MAX_CHARS ? `${text.slice(0, CARD_TEXT_MAX_CHARS).trimEnd()}…` : text}</p>
       )}
     </>

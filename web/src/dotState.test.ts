@@ -38,7 +38,7 @@ describe('seatPlaceOf', () => {
   })
 
   it('my-turn·idle·unknown·ended 는 같은 시간 규칙 (ended 도 책상에서 졸지 않는다)', () => {
-    for (const status of ['my-turn', 'idle', 'unknown', 'ended'] as const) {
+    for (const status of ['my-turn', 'done', 'idle', 'unknown', 'ended'] as const) {
       expect(seatPlaceOf(session({ status, turnEndedAt: ago(LOUNGE_AFTER_MS - 1) }), NOW)).toBe('desk')
       expect(seatPlaceOf(session({ status, turnEndedAt: ago(LOUNGE_AFTER_MS) }), NOW)).toBe('lounge')
       expect(seatPlaceOf(session({ status, turnEndedAt: ago(LOUNGE_DOZE_AFTER_MS) }), NOW)).toBe('lounge-doze')
@@ -46,7 +46,7 @@ describe('seatPlaceOf', () => {
   })
 
   it('작업 중·승인 대기는 오래됐어도 늘 책상', () => {
-    for (const status of ['working', 'needs-approval'] as const) {
+    for (const status of ['working', 'waiting', 'needs-approval'] as const) {
       expect(seatPlaceOf(session({ status, turnEndedAt: ago(LOUNGE_DOZE_AFTER_MS * 2) }), NOW)).toBe('desk')
     }
   })
@@ -80,7 +80,7 @@ describe('dotStateOf', () => {
   })
 
   it('책상·라운지에 깨어 있으면 idle, 라운지 졸기만 doze (ended 도 마찬가지)', () => {
-    for (const status of ['my-turn', 'idle', 'unknown', 'ended'] as const) {
+    for (const status of ['my-turn', 'done', 'idle', 'unknown', 'ended'] as const) {
       expect(dotStateOf(session({ status }), NOW)).toBe('idle')
       expect(dotStateOf(session({ status, turnEndedAt: ago(LOUNGE_AFTER_MS) }), NOW)).toBe('idle')
       expect(dotStateOf(session({ status, turnEndedAt: ago(LOUNGE_DOZE_AFTER_MS - 1) }), NOW)).toBe('idle')

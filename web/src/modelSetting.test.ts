@@ -49,6 +49,8 @@ describe('blockReason', () => {
   })
   it('작업 중·승인 대기·질문 중', () => {
     expect(blockReason({ ...idle, status: 'working' }, false)).toBe('Wait until claude finishes')
+    expect(blockReason({ ...idle, status: 'waiting' }, false)).toBe('Wait until background tasks finish')
+    expect(blockReason({ ...idle, status: 'done' }, false)).toBeNull()
     expect(blockReason({ ...idle, status: 'needs-approval' }, false)).toBe('Wait until claude finishes')
     expect(blockReason({ ...idle, pendingTool: 'AskUserQuestion' }, false)).toBe('Wait until claude finishes')
   })

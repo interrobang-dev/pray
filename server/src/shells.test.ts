@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { parseShells, readTail, runningShells } from './shells.js'
+import { parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 
 const TASKS = 'C:\\Users\\me\\AppData\\Local\\Temp\\claude\\D--x\\a56abbde-182b-475e-ab39-c3cf9c7933a7\\tasks'
 
@@ -219,5 +219,98 @@ describe('output tail', () => {
     expect(tail.lines[0].endsWith('END')).toBe(true)
     expect(tail.lines[0].length).toBe(1024 * 1024)
     expect(tail.isTruncated).toBe(true)
+  })
+})
+
+describe('background tasks (shell, MCP, agent) from jsonl', () => {
+  /** MCP 호출이 120초를 넘어 백그라운드로 넘어간 두 줄 (실측 꼴: 팀장의 jk_wait) */
+  function mcpMoved(toolUseId: string, id: string, tool = 'mcp__jk-corp__jk_wait') {
+    const text = `MCP tool "jk-corp/jk_wait" is still running after 120s. It was moved to the background as task ${id} and keeps running; you'll receive a notification with the result when it completes. You can keep working in the meantime. To stop it, use TaskStop with task_id "${id}". Note: it does not survive exiting this session.`
+    return [
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: toolUseId, name: tool, input: { timeoutSeconds: 280 } }] } },
+      {
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text }] }] },
+        toolUseResult: [{ type: 'text', text }],
+      },
+    ]
+  }
+  /** 백그라운드 에이전트 시작 두 줄 (실측 꼴: Agent run_in_background) */
+  function agentLaunched(toolUseId: string, agentId: string) {
+    const text = `Async agent launched successfully.\nagentId: ${agentId} (internal ID - do not mention to user.)\nThe agent is working in the background.`
+    return [
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: toolUseId, name: 'Agent', input: { prompt: 'x', run_in_background: true } }] } },
+      {
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text }] }] },
+        toolUseResult: { isAsync: true, status: 'async_launched', agentId, description: 'x' },
+      },
+    ]
+  }
+  /** SendMessage 로 멈춘 에이전트를 다시 깨운 두 줄 (실측 꼴) */
+  function agentResumed(toolUseId: string, agentId: string) {
+    const result = { success: true, message: `Resuming agent ${agentId.slice(0, 7)}`, resumedAgentId: agentId }
+    return [
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: toolUseId, name: 'SendMessage', input: { to: agentId, message: 'go' } }] } },
+      {
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text: JSON.stringify(result) }] }] },
+        toolUseResult: { ...result, revivedAgentId: agentId },
+      },
+    ]
+  }
+
+  it('lists running shells, MCP calls moved to the background and background agents in start order', () => {
+    const records = [...start('t1', 'b1'), ...mcpMoved('t2', 'k86jcz9un'), ...agentLaunched('t3', 'a6fa83b72fd040812')]
+    expect(runningBackgroundTasks(jsonl(...records))).toEqual([
+      { id: 'b1', kind: 'shell', isRunning: true },
+      { id: 'k86jcz9un', kind: 'mcp', isRunning: true },
+      { id: 'a6fa83b72fd040812', kind: 'agent', isRunning: true },
+    ])
+    // Session.shells 쪽은 shell 만
+    expect(runningShells(jsonl(...records)).map((shell) => shell.id)).toEqual(['b1'])
+  })
+
+  it('ends MCP calls and agents like shells: notification with a status, TaskStop, cost-state', () => {
+    const records = [
+      ...mcpMoved('t1', 'k1'),
+      ...mcpMoved('t2', 'k2'),
+      ...agentLaunched('t3', 'a1'),
+      ...agentLaunched('t4', 'a2'),
+      { type: 'queue-operation', operation: 'enqueue', content: notification('k1', 'failed') },
+      { type: 'user', message: { content: notification('a1', 'completed') } },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 's1', name: 'TaskStop', input: { task_id: 'k2' } }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 's1', content: '{"message":"Successfully stopped task: k2"}' }] } },
+    ]
+    expect(runningBackgroundTasks(jsonl(...records)).map((task) => task.id)).toEqual(['a2'])
+    expect(runningBackgroundTasks(jsonl(...records, { type: 'cost-state' }))).toEqual([])
+  })
+
+  it('a status-less monitor event does not end an MCP call', () => {
+    const records = [...mcpMoved('t1', 'k1'), { type: 'user', message: { content: notification('k1', null) } }]
+    expect(runningBackgroundTasks(jsonl(...records)).map((task) => task.id)).toEqual(['k1'])
+  })
+
+  it('an agent woken again with SendMessage runs again until its next notification', () => {
+    const records = [...agentLaunched('t1', 'a1'), { type: 'user', message: { content: notification('a1', 'completed') } }, ...agentResumed('t2', 'a1')]
+    expect(runningBackgroundTasks(jsonl(...records))).toEqual([{ id: 'a1', kind: 'agent', isRunning: true }])
+    const finished = [...records, { type: 'user', message: { content: notification('a1', 'completed') } }]
+    expect(runningBackgroundTasks(jsonl(...finished))).toEqual([])
+  })
+
+  it('ignores the background sentence from non-MCP tools, MCP results that only quote it, foreground agents and sidechains', () => {
+    const [mcpCall, mcpResult] = mcpMoved('t1', 'k1')
+    const quote = 'Found: It was moved to the background as task k9 and keeps running'
+    const records = [
+      // MCP 도구가 아닌 도구 결과에 같은 글이 있어도(파일 읽기 등) 시작이 아니다
+      { ...mcpCall, message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: {} }] } },
+      mcpResult,
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't2', name: 'mcp__x__grep', input: {} }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't2', content: quote }] } },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't3', name: 'Agent', input: { prompt: 'x' } }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't3', content: 'done' }] }, toolUseResult: { status: 'completed', agentId: 'a1' } },
+      ...agentLaunched('t4', 'a2').map((record) => ({ ...record, isSidechain: true })),
+    ]
+    expect(runningBackgroundTasks(jsonl(...records))).toEqual([])
   })
 })

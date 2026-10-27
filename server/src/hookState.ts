@@ -1,4 +1,4 @@
-import type { SessionStatus } from './types.js'
+import type { HookStatus } from './types.js'
 
 export interface HookPayload {
   session_id: string
@@ -9,7 +9,7 @@ export interface HookPayload {
 }
 
 export interface HookState {
-  status: SessionStatus
+  status: HookStatus
   cwd: string
   lastAssistantText: string | null
   pendingTool: string | null
@@ -17,10 +17,14 @@ export interface HookState {
   /** 이번 차례(UserPromptSubmit)를 시작한 시각. updatedAt 은 도구를 쓸 때마다 바뀌어 이걸 따로 둔다. 시작을 못 봤으면 null */
   workingSince: string | null
   /** SessionEnd 직전 상태. 호스트 재시작으로 끝났다가 --resume 으로 다시 뜬 세션을 ended 대신 보여 줄 때 쓴다. ended 가 아니면 null */
-  statusBeforeEnd: SessionStatus | null
+  statusBeforeEnd: HookStatus | null
+  /** 마지막 UserPromptSubmit 시각. 차례가 끝나도 남는다 — 팀원 task 가 끝난 뒤 새 차례가 있었는지 본다 (turnEnd.ts). 못 봤으면 null */
+  lastPromptAt: string | null
+  /** 웹 중지(applyInterrupted)로 my-turn 이 됐는지. 다음 훅에서 지운다 (SessionEnd 는 끝나기 직전 값을 남긴다 — statusBeforeEnd 와 같이 쓴다) */
+  isInterrupted: boolean
 }
 
-const statusByEvent: Record<string, SessionStatus> = {
+const statusByEvent: Record<string, HookStatus> = {
   SessionStart: 'idle',
   UserPromptSubmit: 'working',
   PermissionRequest: 'needs-approval',
@@ -46,7 +50,7 @@ export function applyQuestionDenied(previous: HookState | undefined, now: Date =
  */
 export function applyInterrupted(previous: HookState | undefined, turnStartedAt: string | null, now: Date = new Date()): HookState | undefined {
   if (previous?.status !== 'working' || previous.workingSince !== turnStartedAt) return previous
-  return { ...previous, status: 'my-turn', pendingTool: null, updatedAt: now.toISOString(), workingSince: null }
+  return { ...previous, status: 'my-turn', pendingTool: null, updatedAt: now.toISOString(), workingSince: null, isInterrupted: true }
 }
 
 export function applyHook(
@@ -77,5 +81,7 @@ export function applyHook(
           ? previous?.workingSince ?? null
           : null,
     statusBeforeEnd: payload.hook_event_name === 'SessionEnd' ? previous?.status ?? null : null,
+    lastPromptAt: payload.hook_event_name === 'UserPromptSubmit' ? now.toISOString() : previous?.lastPromptAt ?? null,
+    isInterrupted: payload.hook_event_name === 'SessionEnd' ? previous?.isInterrupted ?? false : false,
   }
 }

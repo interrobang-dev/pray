@@ -1104,7 +1104,7 @@ export function App() {
   const offDutySessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'off')
   /** footer 집계는 근무 세션만. 휴식·퇴근 세션은 훅 상태가 남아 있어도 세지 않는다 */
   const presentSessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'present')
-  const workingCount = presentSessions.filter((s) => s.status === 'working').length
+  const workingCount = presentSessions.filter((s) => s.status === 'working' || s.status === 'waiting').length
   const approvalSessions = presentSessions.filter((s) => s.status === 'needs-approval')
   /** 오른쪽 패널 자리에 무엇이든 열려 있는지 (세션 또는 플로우) */
   const hasPanel = selected !== null || isFlowOpen

@@ -57,19 +57,44 @@ function deliveredText(record: Record<string, unknown>): string {
 }
 
 /**
- * jsonl → 이 세션에서 백그라운드로 돈 shell 들 (시작 순). Bash·PowerShell 결과의 toolUseResult.backgroundTaskId 로 시작을 안다:
- * run_in_background 로 띄운 것과, 시간 초과로 백그라운드로 넘어간 것("moved to the background") 둘 다 이것이 있다.
- * 끝: 상태가 있는 task-notification(completed·failed·killed·stopped), 성공한 TaskStop·KillShell, 프로세스 경계 cost-state
- * (Claude Code 프로세스가 세션을 떠날 때 남긴다. 그 프로세스가 띄운 shell 은 같이 죽었다 — messages.ts 의 대기열 규칙과 같은 이유).
- * 사이드체인·메타 줄은 뺀다. 백그라운드 에이전트·모니터·백그라운드로 넘어간 MCP 호출은 shell 도구가 아니라 저절로 빠진다
+ * 백그라운드 작업 하나 (판정용). shell = Bash·PowerShell(Session.shells 에도 나간다), mcp = 시간이 오래 걸려 백그라운드로 넘어간 MCP 호출
+ * (예: 팀장의 jk_wait), agent = 백그라운드 에이전트 (Agent run_in_background, SendMessage 로 다시 깨운 것)
  */
-export function parseShells(jsonl: string): ShellRecord[] {
+export interface BackgroundTask {
+  id: string
+  kind: 'shell' | 'mcp' | 'agent'
+  isRunning: boolean
+}
+
+/** MCP 호출이 백그라운드로 넘어갔을 때 Claude Code 가 그 도구 결과 글로 넣는 꼴 (실측 2.1.305: 120초 넘게 걸린 jk_wait) */
+const MCP_BACKGROUND = /^MCP tool "[^"]+" is still running after \d+s\. It was moved to the background as task ([A-Za-z0-9_-]+) /
+
+/**
+ * jsonl → 이 세션에서 백그라운드로 돈 작업들 (시작 순). shell 은 ShellRecord(명령·출력 경로 포함)를 같이 둔다.
+ * 시작: shell 은 Bash·PowerShell 결과의 toolUseResult.backgroundTaskId (run_in_background 로 띄운 것과 시간 초과로 백그라운드로 넘어간 것
+ * "moved to the background" 둘 다), MCP 는 mcp__ 도구 결과 글 "MCP tool "<서버>/<도구>" is still running after Ns. It was moved to the background as task <id> …",
+ * 에이전트는 toolUseResult 의 isAsync·status async_launched·agentId 와 SendMessage 결과의 resumedAgentId (멈춘 에이전트를 다시 깨운다).
+ * 끝: 상태가 있는 task-notification(completed·failed·killed·stopped. task-id 가 위 ID 들과 같다), 성공한 TaskStop·KillShell,
+ * 프로세스 경계 cost-state (Claude Code 프로세스가 세션을 떠날 때 남긴다. 그 프로세스가 띄운 작업은 같이 죽었다 — messages.ts 의 대기열 규칙과 같은 이유).
+ * 사이드체인·메타 줄은 뺀다. 모니터(Monitor)는 끝 알림에 상태가 없어(만료도 상태 없는 이벤트) 넣지 않는다
+ */
+function scanBackground(jsonl: string): { tasks: Map<string, BackgroundTask>; shells: Map<string, ShellRecord> } {
+  const tasks = new Map<string, BackgroundTask>()
   const shells = new Map<string, ShellRecord>()
   /** shell 도구 호출 (tool_use ID → 시작 정보). 결과가 백그라운드 시작이면 shell 이 된다 */
   const shellCalls = new Map<string, Omit<Shell, 'id'>>()
+  /** MCP 도구 호출 (tool_use ID). 결과가 백그라운드로 넘어간 글이면 작업이 된다 */
+  const mcpCalls = new Set<string>()
   /** 멈추기 도구 호출 (tool_use ID → 멈출 작업 ID) */
   const stopCalls = new Map<string, string>()
+  const begin = (id: string, kind: BackgroundTask['kind']) => {
+    // 같은 ID 로 다시 시작하면(에이전트 다시 깨우기) 시작 순서를 새로 한다
+    tasks.delete(id)
+    tasks.set(id, { id, kind, isRunning: true })
+  }
   const end = (id: string) => {
+    const task = tasks.get(id)
+    if (task) task.isRunning = false
     const shell = shells.get(id)
     if (shell) shell.isRunning = false
   }
@@ -85,8 +110,9 @@ export function parseShells(jsonl: string): ShellRecord[] {
     if (record.isSidechain || record.isMeta) continue
     const timestamp = typeof record.timestamp === 'string' ? record.timestamp : ''
     if (record.type === 'cost-state') {
-      for (const id of shells.keys()) end(id)
+      for (const id of tasks.keys()) end(id)
       shellCalls.clear()
+      mcpCalls.clear()
       stopCalls.clear()
       continue
     }
@@ -101,20 +127,34 @@ export function parseShells(jsonl: string): ShellRecord[] {
           const description = typeof input.description === 'string' && input.description.trim() ? input.description : null
           shellCalls.set(block.id, { command: input.command, description, startedAt: timestamp })
         }
+        if (block.name.startsWith('mcp__')) mcpCalls.add(block.id)
         const stopId = input.task_id ?? input.shell_id
         if (STOP_TOOLS.has(block.name) && typeof stopId === 'string') stopCalls.set(block.id, stopId)
       }
       if (record.type !== 'user' || block.type !== 'tool_result' || !block.tool_use_id) continue
       const text = resultText(block.content)
+      const toolUseResult = record.toolUseResult as Record<string, unknown> | undefined
       const call = shellCalls.get(block.tool_use_id)
       if (call) {
         shellCalls.delete(block.tool_use_id)
-        const id = (record.toolUseResult as { backgroundTaskId?: unknown } | undefined)?.backgroundTaskId
+        const id = toolUseResult?.backgroundTaskId
         // 한 줄에 결과가 여럿이어도 이 결과의 것인지 글로 한 번 더 맞춘다
         if (typeof id !== 'string' || !id || !text.includes(id)) continue
         const outputPath = text.match(new RegExp(`Output is being written to: (.+?[\\\\/]${escapeRegExp(id)}\\.output)`))?.[1] ?? null
+        begin(id, 'shell')
         shells.set(id, { ...call, id, outputPath, isRunning: true })
       }
+      if (mcpCalls.delete(block.tool_use_id)) {
+        const id = text.match(MCP_BACKGROUND)?.[1]
+        if (id) begin(id, 'mcp')
+      }
+      // 에이전트 결과는 한 줄에 하나뿐이지만 shell 처럼 글로 한 번 더 맞춘다
+      const agentId = toolUseResult?.agentId
+      if (toolUseResult?.isAsync === true && toolUseResult.status === 'async_launched' && typeof agentId === 'string' && agentId && text.includes(agentId)) {
+        begin(agentId, 'agent')
+      }
+      const resumedId = toolUseResult?.resumedAgentId
+      if (typeof resumedId === 'string' && resumedId && text.includes(resumedId)) begin(resumedId, 'agent')
       const stopId = stopCalls.get(block.tool_use_id)
       if (stopId !== undefined) {
         stopCalls.delete(block.tool_use_id)
@@ -122,7 +162,12 @@ export function parseShells(jsonl: string): ShellRecord[] {
       }
     }
   }
-  return [...shells.values()]
+  return { tasks, shells }
+}
+
+/** jsonl → 이 세션에서 백그라운드로 돈 shell 들 (시작 순). 규칙은 scanBackground. 백그라운드 에이전트·모니터·MCP 호출은 shell 이 아니라 빠진다 */
+export function parseShells(jsonl: string): ShellRecord[] {
+  return [...scanBackground(jsonl).shells.values()]
 }
 
 /** 지금 도는 shell (Session.shells 꼴). 근무 중인 세션에만 쓴다 — 프로세스가 없으면 shell 도 없다 */
@@ -132,6 +177,16 @@ export function runningShells(jsonl: string): Shell[] {
   return parseShells(jsonl)
     .filter((shell) => shell.isRunning)
     .map(({ id, command, description, startedAt }) => ({ id, command, description, startedAt }))
+}
+
+/**
+ * 지금 도는 백그라운드 작업 전부 (shell·MCP·에이전트, 시작 순). 표시 상태 waiting 판정과 모델 변경 409 에 쓴다.
+ * 근무 중인 세션에만 쓴다 — 프로세스가 없으면 작업도 없다
+ */
+export function runningBackgroundTasks(jsonl: string): BackgroundTask[] {
+  // 백그라운드 작업이 한 번도 없던 jsonl 은 다시 해석하지 않는다
+  if (!/backgroundTaskId|moved to the background as task|async_launched|resumedAgentId/.test(jsonl)) return []
+  return [...scanBackground(jsonl).tasks.values()].filter((task) => task.isRunning)
 }
 
 /** 끝에서 이만큼씩 늘려 읽는다. 최대까지 읽어도 줄이 모자라면 그만큼만 준다 (한 줄이 아주 긴 출력) */

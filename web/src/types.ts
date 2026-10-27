@@ -1,4 +1,4 @@
-export type SessionStatus = 'working' | 'my-turn' | 'needs-approval' | 'idle' | 'ended' | 'unknown'
+export type SessionStatus = 'working' | 'waiting' | 'my-turn' | 'done' | 'needs-approval' | 'idle' | 'ended' | 'unknown'
 
 /** 근무 = 살아 있는 세션. 휴식 = 호스트·트레이 재시작 중이라 잠깐 꺼진 웹 세션(호스트가 다시 띄운다). 퇴근 = 끝난 웹 세션(다시 출근할 수 있다) */
 export type Attendance = 'present' | 'break' | 'off'
@@ -191,7 +191,9 @@ export function attendanceOf(session: Session): Attendance {
 
 export const statusLabel: Record<SessionStatus, string> = {
   working: 'Working',
+  waiting: 'Waiting',
   'my-turn': 'Your turn',
+  done: 'Done',
   'needs-approval': 'Needs approval',
   idle: 'Idle',
   ended: 'Ended',

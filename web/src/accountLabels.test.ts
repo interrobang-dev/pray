@@ -124,6 +124,8 @@ describe('turnLabel', () => {
   it('says working or needs approval for a running turn, whatever the minutes', () => {
     expect(turnLabel({ status: 'working', minutesSinceTurn: 30 })).toBe('working')
     expect(turnLabel({ status: 'needs-approval', minutesSinceTurn: null })).toBe('needs approval')
+    expect(turnLabel({ status: 'waiting', minutesSinceTurn: 5 })).toBe('waiting')
+    expect(turnLabel({ status: 'done', minutesSinceTurn: 5 })).toBe('5m ago')
   })
 
   it('shows how long ago the turn ended', () => {

@@ -98,6 +98,8 @@ describe('applyQuestionDenied', () => {
       updatedAt: '2026-10-21T00:00:20.000Z',
       workingSince: '2026-10-21T00:00:00.000Z',
       statusBeforeEnd: null,
+      lastPromptAt: '2026-10-21T00:00:00.000Z',
+      isInterrupted: false,
     })
   })
 
@@ -133,6 +135,8 @@ describe('applyInterrupted', () => {
       updatedAt: '2026-10-21T00:00:20.000Z',
       workingSince: null,
       statusBeforeEnd: null,
+      lastPromptAt: '2026-10-21T00:00:00.000Z',
+      isInterrupted: true,
     })
   })
 
@@ -147,5 +151,30 @@ describe('applyInterrupted', () => {
   it('matches a turn whose start was not seen (server restarted mid-turn)', () => {
     const resumed = applyHook(undefined, { ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, now)
     expect(applyInterrupted(resumed, null, now)?.status).toBe('my-turn')
+  })
+})
+
+describe('applyHook lastPromptAt and isInterrupted', () => {
+  const at = (iso: string) => new Date(iso)
+
+  it('keeps the last prompt time after the turn ends and updates it on the next prompt', () => {
+    const started = applyHook(undefined, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:00Z'))
+    const stopped = applyHook(started, { ...base, hook_event_name: 'Stop' }, at('2026-10-21T00:01:00Z'))
+    expect(stopped?.lastPromptAt).toBe('2026-10-21T00:00:00.000Z')
+    const ended = applyHook(stopped, { ...base, hook_event_name: 'SessionEnd' }, at('2026-10-21T00:02:00Z'))
+    expect(ended?.lastPromptAt).toBe('2026-10-21T00:00:00.000Z')
+    const next = applyHook(ended, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:03:00Z'))
+    expect(next?.lastPromptAt).toBe('2026-10-21T00:03:00.000Z')
+    expect(applyHook(undefined, { ...base, hook_event_name: 'Stop' }, now)?.lastPromptAt).toBeNull()
+  })
+
+  it('marks a web stop and clears it on the next hook, keeping it through SessionEnd', () => {
+    const started = applyHook(undefined, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:00Z'))
+    const stopped = applyInterrupted(started, '2026-10-21T00:00:00.000Z', at('2026-10-21T00:00:05Z'))
+    expect(stopped?.isInterrupted).toBe(true)
+    const ended = applyHook(stopped, { ...base, hook_event_name: 'SessionEnd' }, at('2026-10-21T00:01:00Z'))
+    expect(ended).toMatchObject({ status: 'ended', statusBeforeEnd: 'my-turn', isInterrupted: true })
+    expect(applyHook(stopped, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:01:00Z'))?.isInterrupted).toBe(false)
+    expect(applyHook(ended, { ...base, hook_event_name: 'SessionStart' }, at('2026-10-21T00:02:00Z'))?.isInterrupted).toBe(false)
   })
 })

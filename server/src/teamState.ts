@@ -52,6 +52,14 @@ export class TaskStore {
     return [...this.tasks.values()].filter((t) => t.teamId === teamId && t.partId === partId)
   }
 
+  /** 그 팀원이 받은 가장 최근 task (지휘 단위와 무관). 없으면 undefined. 표시 상태 done 판정에 쓴다 (turnEnd.ts) */
+  latestOf(memberSessionId: string): Task | undefined {
+    let latest: Task | undefined
+    // Map 은 넣은 순서라 마지막 것이 가장 최근이다
+    for (const task of this.tasks.values()) if (task.memberSessionId === memberSessionId) latest = task
+    return latest
+  }
+
   /** 같은 팀원에게 running task 가 있으면 거부한다. 지시자가 순서를 지키게 강제 */
   assign(teamId: string, memberSessionId: string, instruction: string, partId: string | null = null): Task {
     const isBusy = [...this.tasks.values()].some((t) => t.memberSessionId === memberSessionId && t.status === 'running')

@@ -82,10 +82,11 @@ export function tokenLabel(tokens: number): string {
   return `${oneDecimal(rounded / 1_000_000)}M`
 }
 
-/** 전환 확인 창 세션 줄의 차례: "working"·"needs approval", 아니면 차례가 끝난 뒤 "just now"·"12m ago"·"2h ago". 모르면 null */
+/** 전환 확인 창 세션 줄의 차례: "working"·"needs approval"·"waiting", 아니면 차례가 끝난 뒤 "just now"·"12m ago"·"2h ago". 모르면 null */
 export function turnLabel(session: Pick<ImpactSession, 'status' | 'minutesSinceTurn'>): string | null {
   if (session.status === 'working') return 'working'
   if (session.status === 'needs-approval') return 'needs approval'
+  if (session.status === 'waiting') return 'waiting'
   const minutes = session.minutesSinceTurn
   if (minutes === null) return null
   if (minutes < 1) return 'just now'
