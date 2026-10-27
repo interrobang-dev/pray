@@ -1,6 +1,8 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { buildChatRows, hidingWorkKey, type ChatRow, type Work } from './chatRows'
+import { buildChatRows, hidingWorkKey, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
+import { reuseMessages, reuseRows } from './chatReuse'
+import { expandedStartIndex, resolveStartIndex, startIndexRevealing, windowStartAt, type WindowStart } from './chatWindow'
 import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
 import { Composer, type ComposerHandle } from './Composer'
@@ -278,15 +280,17 @@ function relayLineText(relay: Relay): string {
  * 팀장 대화의 지시·보고 한 줄 "→ Assigned to (FE 칩) Park · 10:12"·"← Report from (FE 칩) Park · 10:30". 내용은 툴팁(앞부분)만.
  * 누르면 그 팀원 대화의 그 메시지로 간다. 팀원 세션이 아직 없으면(spawn 결과 전) 누를 수 없다
  */
-function RelayLine({ relay, jumpKey, markClass, onOpen }: { relay: Relay; jumpKey: string; markClass: string; onOpen: () => void }) {
+const RelayLine = memo(function RelayLine({ relay, jumpKey, markClass, onOpen }: { relay: Relay; jumpKey: string; markClass: string; onOpen: () => void }) {
   const label = relayLabel(relay)
   const clock = formatClock(relay.at)
+  // 툴팁 글은 지시·보고 전문을 줄로 나눠 자르므로 글이 바뀔 때만 다시 만든다
+  const preview = useMemo(() => relayPreview(relay.text), [relay.text])
   return (
     <button
       type="button"
       className={`relay-line${markClass}`}
       data-jump-key={jumpKey}
-      title={relay.memberSessionId ? relayPreview(relay.text) : 'Creating member session'}
+      title={relay.memberSessionId ? preview : 'Creating member session'}
       disabled={!relay.memberSessionId}
       onClick={onOpen}
     >
@@ -295,7 +299,7 @@ function RelayLine({ relay, jumpKey, markClass, onOpen }: { relay: Relay; jumpKe
       {clock ? ` · ${clock}` : ''}
     </button>
   )
-}
+})
 
 /** 셸 도구(Bash·PowerShell)의 복사할 명령. 그 밖의 도구·문자열이 아닌 command 는 null */
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell'])
@@ -719,6 +723,8 @@ function WorkingIndicator({
 
 /** 맨 아래에서 이만큼 안쪽이면 "맨 아래를 보고 있다" 로 본다 */
 const BOTTOM_SLACK_PX = 40
+/** 맨 위에서 이만큼 안쪽까지 스크롤하면 이전 줄을 더 그린다 */
+const EXPAND_TOP_PX = 400
 
 /** 보냈지만 아직 jsonl 에서 안 보인 내 말. 진짜 user 메시지가 오면 없앤다 */
 interface PendingMessage {
@@ -867,9 +873,157 @@ function buildSearchTargets(rows: ChatRow<Special>[], memberOf: MemberOf): Searc
   return targets
 }
 
+/** 줄 하나에 넘기는 것. 그 줄에 해당할 때만 값이 있고 아니면 null·false 라, 바뀐 줄만 다시 그린다 */
+interface ChatRowViewProps {
+  row: ChatRow<Special>
+  /** 작업 묶음이 펼쳐졌는지 */
+  isOpen: boolean
+  /** 점프로 찾아 간 키 (이 줄 안에 있을 때만) */
+  highlightKey: string | null
+  /** 대화 안 검색의 현재 결과 키 (이 줄 안에 있을 때만) */
+  searchKey: string | null
+  /** 지시·보고 한 줄 바로 아래 알림 (이 줄 안에 있을 때만) */
+  lineNotice: { rowKey: string; text: string } | null
+  /** system 글 안 jk_wait 보고의 팀원 이름 (사람 쪽·system 줄만) */
+  memberOf: MemberOf | null
+  /** 이 대기 메시지에 [Cancel] 을 보이는지 (맨 마지막 대기 메시지·취소할 수 있을 때) */
+  canCancelQueued: boolean
+  /** [Cancel] 을 누른 대기 메시지 ID (대기 메시지 줄만) */
+  cancellingId: string | null
+  onToggleWork: (key: string) => void
+  onOpenRelay: (relay: Relay, rowKey: string) => void
+  onCancelQueued: (message: ChatMessage) => void
+}
+
+/** 대화 줄 하나. memo 라 대화를 다시 받아도 줄 객체(chatReuse 가 바뀌지 않은 줄은 이전 객체를 쓴다)와 넘긴 값이 그대로면 다시 그리지 않는다 */
+const ChatRowView = memo(function ChatRowView({
+  row,
+  isOpen,
+  highlightKey,
+  searchKey,
+  lineNotice,
+  memberOf,
+  canCancelQueued,
+  cancellingId,
+  onToggleWork,
+  onOpenRelay,
+  onCancelQueued,
+}: ChatRowViewProps) {
+  /** 점프로 찾아 간 말풍선이면 강조 클래스 */
+  function highlightClass(key: string): string {
+    return markClasses(key, highlightKey, searchKey)
+  }
+
+  /** 지시·보고 한 줄과 그 아래 알림 */
+  function renderRelayLine(relay: Relay, rowKey: string) {
+    return (
+      <Fragment key={rowKey}>
+        <RelayLine relay={relay} jumpKey={rowKey} markClass={highlightClass(rowKey)} onOpen={() => onOpenRelay(relay, rowKey)} />
+        {lineNotice?.rowKey === rowKey && (
+          <div className="queue-notice" role="status">
+            {lineNotice.text}
+          </div>
+        )}
+      </Fragment>
+    )
+  }
+
+  if (row.kind === 'work') {
+    const { work } = row
+    return <WorkLine work={work} isOpen={isOpen} onToggle={() => onToggleWork(work.key)} highlightKey={highlightKey} searchKey={searchKey} />
+  }
+  // claude 답변 (구간의 마지막 글. 도구 없는 구간이면 글마다)
+  if (row.kind === 'text') {
+    return (
+      <div className={`msg assistant${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
+        <CopyButton text={row.message.text} />
+        <MarkdownText text={row.message.text} />
+      </div>
+    )
+  }
+  // 팀장 대화의 지시·보고 도구 호출은 한 줄로 (내용은 팀원 대화에서 본다), AskUserQuestion 은 질문 → 답 카드로 (원래 도구 블록은 그 안에 접어 둔다)
+  if (row.kind === 'special') {
+    const { toolUse, special } = row
+    return special.kind === 'relay' ? renderRelayLine(special.relay, `relay:${toolUse.id}`) : <AskedCard toolUse={toolUse} asked={special.asked} />
+  }
+  const { message } = row
+  // 팀원 대화: 서버가 보낸 팀장·파트장 지시 (전문)
+  if (message.from) {
+    return (
+      <div className={`msg user relay${highlightClass(message.id)}`} data-jump-key={message.id}>
+        <CopyButton text={message.text} />
+        <div className="relay-label">Instruction from {message.from.name}</div>
+        <MarkdownText text={message.text} />
+      </div>
+    )
+  }
+  // 대화 압축 요약: 사람 말이 아니라 한 줄. 요약 원문은 접어 둔다
+  if (message.isCompactSummary) {
+    return <NoticeLine title={COMPACT_SUMMARY_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
+  }
+  // 중지(Esc) 기록: 사람 말이 아니라 한 줄. 원문은 접어 둔다
+  if (message.isInterrupt) {
+    return <NoticeLine title={INTERRUPT_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
+  }
+  // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 보고 한 줄, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
+  const parts = message.role === 'system' ? splitNotifications(message.text) : null
+  if (parts) {
+    return (
+      <>
+        {parts.map((part, index) => {
+          const key = `${message.id}:${index}`
+          if (typeof part === 'string') {
+            return (
+              <div key={key} className={`msg system${highlightClass(key)}`} data-jump-key={key}>
+                <div className="text">{part}</div>
+              </div>
+            )
+          }
+          const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
+          if (!report || !memberOf) {
+            return (
+              <NoticeLine
+                key={key}
+                title={notificationTitle(part)}
+                raw={part.raw}
+                isFailed={part.status === 'failed'}
+                jumpKey={key}
+                markClass={highlightClass(key)}
+              />
+            )
+          }
+          return renderRelayLine(reportRelay(report, message.timestamp, memberOf), `relay:${key}`)
+        })}
+      </>
+    )
+  }
+  // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다)
+  return (
+    <div className={`msg ${message.role}${message.isQueued ? ' queued' : ''}${highlightClass(message.id)}`} data-jump-key={message.id}>
+      {message.text && <div className="text">{message.text}</div>}
+      {message.isQueued && (
+        <div className="queued-label">
+          Queued
+          {canCancelQueued && (
+            <button
+              type="button"
+              className="queued-cancel"
+              disabled={cancellingId !== null}
+              onClick={() => onCancelQueued(message)}
+              title="Take this message out of the queue before claude gets it"
+            >
+              {cancellingId === message.id ? 'Cancelling…' : 'Cancel'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+})
+
 /**
- * 대화 말풍선 목록 (rows 의 줄들). memo 라 props 가 그대로면 Chat 이 다시 그려져도(입력칸이 비었는지·임시 말풍선·알림·"맨 아래" 버튼 등)
- * 말풍선을 다시 그리지 않는다. 그래서 함수 props 는 Chat 이 useCallback 으로 고정해 넘긴다
+ * 대화 말풍선 목록 (그리는 범위의 줄들). memo 라 props 가 그대로면 Chat 이 다시 그려져도(입력칸이 비었는지·임시 말풍선·알림·"맨 아래" 버튼 등)
+ * 목록을 다시 훑지 않는다. 그래서 함수 props 는 Chat 이 useCallback 으로 고정해 넘긴다. 줄마다 그 줄에 해당하는 값만 넘겨 바뀐 줄만 다시 그린다
  */
 const MessageRows = memo(function MessageRows({
   rows,
@@ -901,133 +1055,26 @@ const MessageRows = memo(function MessageRows({
   onOpenRelay: (relay: Relay, rowKey: string) => void
   onCancelQueued: (message: ChatMessage) => void
 }) {
-  /** 점프로 찾아 간 말풍선이면 강조 클래스 */
-  function highlightClass(key: string): string {
-    return markClasses(key, highlightKey, searchKey)
-  }
-
-  /** 지시·보고 한 줄과 그 아래 알림 */
-  function renderRelayLine(relay: Relay, rowKey: string) {
+  const highlightRow = highlightKey === null ? -1 : rowIndexOfJumpKey(rows, highlightKey)
+  const searchRow = searchKey === null ? -1 : rowIndexOfJumpKey(rows, searchKey)
+  const noticeRow = lineNotice === null ? -1 : rowIndexOfJumpKey(rows, lineNotice.rowKey)
+  return rows.map((row, index) => {
+    const isQueuedRow = row.kind === 'message' && Boolean(row.message.isQueued)
     return (
-      <Fragment key={rowKey}>
-        <RelayLine relay={relay} jumpKey={rowKey} markClass={highlightClass(rowKey)} onOpen={() => onOpenRelay(relay, rowKey)} />
-        {lineNotice?.rowKey === rowKey && (
-          <div className="queue-notice" role="status">
-            {lineNotice.text}
-          </div>
-        )}
-      </Fragment>
-    )
-  }
-
-  return rows.map((row) => {
-    if (row.kind === 'work') {
-      const { work } = row
-      return (
-        <WorkLine
-          key={`work:${work.key}`}
-          work={work}
-          isOpen={openWorkKeys.has(work.key)}
-          onToggle={() => onToggleWork(work.key)}
-          highlightKey={highlightKey}
-          searchKey={searchKey}
-        />
-      )
-    }
-    // claude 답변 (구간의 마지막 글. 도구 없는 구간이면 글마다)
-    if (row.kind === 'text') {
-      return (
-        <div key={row.message.id} className={`msg assistant${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
-          <CopyButton text={row.message.text} />
-          <MarkdownText text={row.message.text} />
-        </div>
-      )
-    }
-    // 팀장 대화의 지시·보고 도구 호출은 한 줄로 (내용은 팀원 대화에서 본다), AskUserQuestion 은 질문 → 답 카드로 (원래 도구 블록은 그 안에 접어 둔다)
-    if (row.kind === 'special') {
-      const { toolUse, special } = row
-      return special.kind === 'relay' ? (
-        renderRelayLine(special.relay, `relay:${toolUse.id}`)
-      ) : (
-        <AskedCard key={toolUse.id} toolUse={toolUse} asked={special.asked} />
-      )
-    }
-    const { message } = row
-    // 팀원 대화: 서버가 보낸 팀장·파트장 지시 (전문)
-    if (message.from) {
-      return (
-        <div key={message.id} className={`msg user relay${highlightClass(message.id)}`} data-jump-key={message.id}>
-          <CopyButton text={message.text} />
-          <div className="relay-label">Instruction from {message.from.name}</div>
-          <MarkdownText text={message.text} />
-        </div>
-      )
-    }
-    // 대화 압축 요약: 사람 말이 아니라 한 줄. 요약 원문은 접어 둔다
-    if (message.isCompactSummary) {
-      return <NoticeLine key={message.id} title={COMPACT_SUMMARY_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
-    }
-    // 중지(Esc) 기록: 사람 말이 아니라 한 줄. 원문은 접어 둔다
-    if (message.isInterrupt) {
-      return <NoticeLine key={message.id} title={INTERRUPT_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
-    }
-    // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 보고 한 줄, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
-    const parts = message.role === 'system' ? splitNotifications(message.text) : null
-    if (parts) {
-      return (
-        <Fragment key={message.id}>
-          {parts.map((part, index) => {
-            const key = `${message.id}:${index}`
-            if (typeof part === 'string') {
-              return (
-                <div key={key} className={`msg system${highlightClass(key)}`} data-jump-key={key}>
-                  <div className="text">{part}</div>
-                </div>
-              )
-            }
-            const report = isWaitNotification(part) ? waitReport(part.result ?? '') : null
-            if (!report) {
-              return (
-                <NoticeLine
-                  key={key}
-                  title={notificationTitle(part)}
-                  raw={part.raw}
-                  isFailed={part.status === 'failed'}
-                  jumpKey={key}
-                  markClass={highlightClass(key)}
-                />
-              )
-            }
-            return renderRelayLine(reportRelay(report, message.timestamp, memberOf), `relay:${key}`)
-          })}
-        </Fragment>
-      )
-    }
-    // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다)
-    return (
-      <div
-        key={message.id}
-        className={`msg ${message.role}${message.isQueued ? ' queued' : ''}${highlightClass(message.id)}`}
-        data-jump-key={message.id}
-      >
-        {message.text && <div className="text">{message.text}</div>}
-        {message.isQueued && (
-          <div className="queued-label">
-            Queued
-            {message.id === lastQueuedId && canCancelQueued && (
-              <button
-                type="button"
-                className="queued-cancel"
-                disabled={cancellingId !== null}
-                onClick={() => onCancelQueued(message)}
-                title="Take this message out of the queue before claude gets it"
-              >
-                {cancellingId === message.id ? 'Cancelling…' : 'Cancel'}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <ChatRowView
+        key={rowKeyOf(row)}
+        row={row}
+        isOpen={row.kind === 'work' && openWorkKeys.has(row.work.key)}
+        highlightKey={index === highlightRow ? highlightKey : null}
+        searchKey={index === searchRow ? searchKey : null}
+        lineNotice={index === noticeRow ? lineNotice : null}
+        memberOf={row.kind === 'message' ? memberOf : null}
+        canCancelQueued={isQueuedRow && row.kind === 'message' && row.message.id === lastQueuedId && canCancelQueued}
+        cancellingId={isQueuedRow ? cancellingId : null}
+        onToggleWork={onToggleWork}
+        onOpenRelay={onOpenRelay}
+        onCancelQueued={onCancelQueued}
+      />
     )
   })
 })
@@ -1120,18 +1167,26 @@ export function Chat({
   const isFirstLoadRef = useRef(true)
   const lastMessageIdRef = useRef<string | null>(null)
 
-  /** 팀원 이름·역할: jk_spawn_member 때 붙은 것(서버가 붙인 member.name·member.position, 없으면 팀장이 준 name) → 세션 목록 이름·역할 → ID 앞 8자리 */
-  const memberOf = useMemo<MemberOf>(() => {
-    const spawned = new Map<string, { name: string; position: string | null }>()
+  /**
+   * jk_spawn_member 때 붙은 팀원 이름·역할 [세션 ID, 이름·역할] 목록을 글로. 글이라 대화를 다시 받아도 내용이 같으면 memberOf 가 그대로다
+   * (memberOf 가 바뀌면 지시·보고 줄이 모두 다시 만들어진다)
+   */
+  const spawnedJson = useMemo(() => {
+    const spawned: [string, { name: string; position: string | null }][] = []
     for (const message of messages) {
       for (const toolUse of message.toolUses) {
         if (toolUse.name !== SPAWN_TOOL) continue
         const inputName = (toolUse.input as { name?: unknown } | null)?.name
         const member = spawnedMember(toolUse)
         const name = member?.name ?? (typeof inputName === 'string' ? inputName : null)
-        if (member && name) spawned.set(member.sessionId, memberDisplay(name, member.position))
+        if (member && name) spawned.push([member.sessionId, memberDisplay(name, member.position)])
       }
     }
+    return JSON.stringify(spawned)
+  }, [messages])
+  /** 팀원 이름·역할: jk_spawn_member 때 붙은 것(서버가 붙인 member.name·member.position, 없으면 팀장이 준 name) → 세션 목록 이름·역할 → ID 앞 8자리 */
+  const memberOf = useMemo<MemberOf>(() => {
+    const spawned = new Map<string, { name: string; position: string | null }>(JSON.parse(spawnedJson))
     return (id: string) => {
       const own = spawned.get(id)
       if (own) return own
@@ -1139,7 +1194,7 @@ export function Chat({
       // 목록 이름은 세션 목록의 이름이라 옛 꼴 "[역할] 이름" 일 수 있다. 목록에 역할이 따로 있으면 그것이 먼저
       return listed ? memberDisplay(listed, sessionPositions?.[id]) : { name: id.slice(0, 8), position: null }
     }
-  }, [messages, sessionNames, sessionPositions])
+  }, [spawnedJson, sessionNames, sessionPositions])
 
   /**
    * 화면 줄: 구간마다 claude 의 중간 설명 글·일반 도구 호출을 작업 묶음으로 접고, relay 한 줄·질문 카드는 그 자리에 둔다.
@@ -1148,20 +1203,37 @@ export function Chat({
   const isTurnInProgress = isWorking || isApprovalNeeded
   /** 작업 중 표시기의 실행 중인 도구. 메시지가 바뀔 때만 다시 찾는다 (표시기의 1초 타이머와 무관) */
   const runningTools = useMemo(() => runningToolNames(messages), [messages])
-  const rows = useMemo(
-    () =>
-      buildChatRows<Special>(
-        messages,
-        (toolUse, message) => {
-          const relay = relayOf(toolUse, message, memberOf)
-          if (relay) return { kind: 'relay', relay }
-          const asked = askedOf(toolUse)
-          return asked ? { kind: 'asked', asked } : null
-        },
-        isTurnInProgress,
-      ),
-    [messages, memberOf, isTurnInProgress],
-  )
+  /** 바로 앞의 줄. 다시 만든 줄 중 그대로인 것은 이 객체를 다시 써서 줄마다 memo 가 걸린다 */
+  const rowsRef = useRef<ChatRow<Special>[]>([])
+  const rows = useMemo(() => {
+    const built = buildChatRows<Special>(
+      messages,
+      (toolUse, message) => {
+        const relay = relayOf(toolUse, message, memberOf)
+        if (relay) return { kind: 'relay', relay }
+        const asked = askedOf(toolUse)
+        return asked ? { kind: 'asked', asked } : null
+      },
+      isTurnInProgress,
+    )
+    const reused = reuseRows(rowsRef.current, built, (a, b) => JSON.stringify(a) === JSON.stringify(b))
+    rowsRef.current = reused
+    return reused
+  }, [messages, memberOf, isTurnInProgress])
+  /** 그리는 범위의 시작 줄 (줄 키). null = 아직 정하지 않음(최근 RENDER_STEP 줄). 세션을 바꾸면 null */
+  const [windowStart, setWindowStart] = useState<WindowStart | null>(null)
+  const startIndex = resolveStartIndex(rows, windowStart)
+  const startIndexRef = useRef(startIndex)
+  startIndexRef.current = startIndex
+  const visibleRows = useMemo(() => rows.slice(startIndex), [rows, startIndex])
+  /** 위로 더 그리기 직전 첫 줄 요소와 그 화면 위치. 그린 뒤 같은 자리에 오게 scrollTop 을 보정한다 */
+  const expandAnchorRef = useRef<{ element: Element; top: number } | null>(null)
+  const earlierRef = useRef<HTMLDivElement>(null)
+  /** target 줄이 안 그린 범위면 거기까지 그리는 범위를 넓힌다 (점프·검색 이동) */
+  const revealRow = useCallback((targetIndex: number) => {
+    const next = startIndexRevealing(startIndexRef.current, targetIndex)
+    if (next !== startIndexRef.current) setWindowStart(windowStartAt(rowsRef.current, next))
+  }, [])
   /** 설명 글이 말풍선으로 보이는 진행 중 묶음. 이게 바뀌면(끝남) 중간 설명 글이 줄 안으로 들어가 대화 길이가 갑자기 줄어든다 */
   const liveWorkRow = rows.find((row) => row.kind === 'work' && row.work.isInProgress)
   const liveWorkKey = liveWorkRow?.kind === 'work' ? liveWorkRow.work.key : null
@@ -1183,8 +1255,10 @@ export function Chat({
     if (!target || !isNavigation) return
     const { workKey } = target
     if (workKey) setOpenWorkKeys((current) => (current.has(workKey) ? current : new Set(current).add(workKey)))
+    // 안 그린 범위의 결과면 거기까지 그린다 (개수에는 처음부터 든다)
+    revealRow(rowIndexOfJumpKey(rowsRef.current, target.key))
     setSearchScroll({ key: target.key, id: nextSearchScrollIdRef.current++ })
-  }, [])
+  }, [revealRow])
 
   useEffect(() => {
     let isCancelled = false
@@ -1192,7 +1266,8 @@ export function Chat({
       .then((r) => r.json())
       .then((data: ChatMessage[]) => {
         if (isCancelled) return
-        setMessages(data)
+        // 그대로인 메시지는 이전 객체를 쓴다 (줄마다 memo 가 걸려 새·바뀐 줄만 다시 그린다). 하나도 안 바뀌었으면 다시 그리지 않는다
+        setMessages((current) => reuseMessages(current, data))
         setLoadedSessionId(sessionId)
       })
     return () => {
@@ -1231,6 +1306,8 @@ export function Chat({
     setInterruptNotice(null)
     setPendings([])
     setOpenWorkKeys(new Set())
+    setWindowStart(null)
+    expandAnchorRef.current = null
     setSearchCurrentKey(null)
     setSearchScroll(null)
     setHighlight(null)
@@ -1241,6 +1318,12 @@ export function Chat({
     setIsAtBottom(true)
     setHasUnread(false)
   }, [sessionId])
+
+  // 이 세션 대화를 처음 받으면 최근 RENDER_STEP 줄의 첫 줄을 시작으로 정한다. 그 뒤로 새 메시지가 와도 시작 줄은 그대로라 아래쪽만 늘어난다
+  useEffect(() => {
+    if (windowStart || loadedSessionId !== sessionId || rows.length === 0) return
+    setWindowStart(windowStartAt(rows, resolveStartIndex(rows, null)))
+  }, [windowStart, loadedSessionId, sessionId, rows])
 
   // 작업 중 표시기도 같은 규칙: 맨 아래를 보고 있었을 때만 따라 내려간다
   useEffect(() => {
@@ -1278,8 +1361,10 @@ export function Chat({
     }
     const { workKey } = found
     if (workKey) setOpenWorkKeys((current) => new Set(current).add(workKey))
+    // 안 그린 범위면 거기까지 그린 뒤 스크롤한다 (같은 렌더에 묶인다)
+    revealRow(rowIndexOfJumpKey(rows, found.key))
     setHighlight({ key: found.key, id: jump.id })
-  }, [jump, loadedSessionId, sessionId, messages, rows, onJumpHandled])
+  }, [jump, loadedSessionId, sessionId, messages, rows, onJumpHandled, revealRow])
 
   // 강조할 줄이 정해지면 (펼친 묶음까지 그려진 뒤) 가운데로 스크롤하고, 그 위치를 "맨 아래를 보고 있는지" 에 반영한다 (다음 갱신에 끌려 내려가지 않게)
   useLayoutEffect(() => {
@@ -1326,19 +1411,19 @@ export function Chat({
   }, [lineNotice])
 
   /** 지시·보고 한 줄을 눌렀다: 그 팀원 세션이 목록에 있으면(퇴근 포함) App 이 연다. 없으면(퇴근 기록까지 지워짐) 열지 않고 줄 아래에 알린다 */
-  const openRelay = useCallback(
-    (relay: Relay, rowKey: string) => {
-      const { memberSessionId } = relay
-      if (!memberSessionId) return
-      if (!Object.hasOwn(sessionNames, memberSessionId)) {
-        setLineNotice({ rowKey, text: "Can't open: no session record" })
-        return
-      }
-      setLineNotice(null)
-      onOpenRelay(memberSessionId, { kind: relay.kind, text: relay.text, at: relay.at }, rowKey)
-    },
-    [sessionNames, onOpenRelay],
-  )
+  // 줄마다 넘기는 함수가 App 이 다시 그릴 때마다 바뀌지 않게 최신 값을 ref 로 읽는다
+  const relayContextRef = useRef({ sessionNames, onOpenRelay })
+  relayContextRef.current = { sessionNames, onOpenRelay }
+  const openRelay = useCallback((relay: Relay, rowKey: string) => {
+    const { memberSessionId } = relay
+    if (!memberSessionId) return
+    if (!Object.hasOwn(relayContextRef.current.sessionNames, memberSessionId)) {
+      setLineNotice({ rowKey, text: "Can't open: no session record" })
+      return
+    }
+    setLineNotice(null)
+    relayContextRef.current.onOpenRelay(memberSessionId, { kind: relay.kind, text: relay.text, at: relay.at }, rowKey)
+  }, [])
 
   const onMessagesScroll = useCallback(() => {
     const element = messagesRef.current
@@ -1348,6 +1433,32 @@ export function Chat({
     setIsAtBottom(isNearBottom)
     if (isNearBottom) setHasUnread(false)
   }, [])
+
+  /** 맨 위 가까이(EXPAND_TOP_PX 안) 스크롤했고 안 그린 이전 줄이 있으면 RENDER_STEP 줄 더 그린다. 지금 첫 줄의 화면 위치를 기억해 그린 뒤 보정한다 */
+  const expandIfNearTop = useCallback(() => {
+    const element = messagesRef.current
+    const firstRow = earlierRef.current?.nextElementSibling
+    if (!element || !firstRow || expandAnchorRef.current || startIndexRef.current === 0 || element.scrollTop >= EXPAND_TOP_PX) return
+    expandAnchorRef.current = { element: firstRow, top: firstRow.getBoundingClientRect().top }
+    setWindowStart(windowStartAt(rowsRef.current, expandedStartIndex(startIndexRef.current)))
+  }, [])
+
+  const onMessagesScrollEvent = useCallback(() => {
+    onMessagesScroll()
+    expandIfNearTop()
+  }, [onMessagesScroll, expandIfNearTop])
+
+  // 위로 더 그렸으면 그리기 전 첫 줄이 화면에서 같은 자리에 오게 scrollTop 을 보정한다 (브라우저가 이미 맞췄으면 0).
+  // 보정한 뒤에도 맨 위 가까이면(줄이 작아서) 한 번 더 늘린다
+  useLayoutEffect(() => {
+    const anchor = expandAnchorRef.current
+    const element = messagesRef.current
+    if (!anchor || !element) return
+    expandAnchorRef.current = null
+    if (anchor.element.isConnected) element.scrollTop += anchor.element.getBoundingClientRect().top - anchor.top
+    onMessagesScroll()
+    expandIfNearTop()
+  }, [startIndex, onMessagesScroll, expandIfNearTop])
 
   const toggleWork = useCallback(
     (key: string) => {
@@ -1496,9 +1607,15 @@ export function Chat({
             onCurrentChange={handleSearchCurrentChange}
           />
         )}
-        <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
+        <div className="messages" ref={messagesRef} onScroll={onMessagesScrollEvent}>
+          {/* 그리는 범위 밖 이전 줄이 있다는 표시. 바로 다음 요소가 첫 줄이라 위로 더 그릴 때 위치 보정의 기준이 된다 */}
+          {startIndex > 0 && (
+            <div ref={earlierRef} className="earlier-rows">
+              Earlier messages · scroll up
+            </div>
+          )}
           <MessageRows
-            rows={rows}
+            rows={visibleRows}
             memberOf={memberOf}
             openWorkKeys={openWorkKeys}
             highlightKey={highlight?.key ?? null}

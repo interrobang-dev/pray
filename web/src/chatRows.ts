@@ -135,6 +135,50 @@ export function buildChatRows<S>(
 }
 
 /**
+ * 줄의 키 (React key·그리는 범위의 시작 위치). 대화를 다시 받아도 같은 줄이면 같다.
+ * 종류마다 앞말을 붙여 같은 메시지에서 나온 줄(묶음과 그 답변 등)이 겹치지 않는다
+ */
+export function rowKeyOf<S>(row: ChatRow<S>): string {
+  switch (row.kind) {
+    case 'message':
+      return `m:${row.message.id}`
+    case 'text':
+      return `t:${row.message.id}`
+    case 'work':
+      return `w:${row.work.key}`
+    case 'special':
+      return `s:${row.toolUse.id}`
+  }
+}
+
+/**
+ * 화면 요소의 data-jump-key 가 든 줄의 번호. 없으면 -1. 키 꼴은 Chat 이 다는 것과 같다: 메시지 ID(말풍선·사람 쪽·system 글·
+ * 묶음 안 설명 글), `<메시지 ID>:<순번>`(system 글 안 알림), `relay:<도구 ID>`·`relay:<메시지 ID>:<순번>`(지시·보고 한 줄),
+ * `tool:<도구 ID>`(묶음 안 명령 줄)
+ */
+export function rowIndexOfJumpKey<S>(rows: ChatRow<S>[], jumpKey: string): number {
+  if (jumpKey.startsWith('tool:')) {
+    const toolId = jumpKey.slice('tool:'.length)
+    return rows.findIndex((row) => row.kind === 'work' && row.work.parts.some((part) => part.toolUses.some((toolUse) => toolUse.id === toolId)))
+  }
+  const isRelay = jumpKey.startsWith('relay:')
+  const id = isRelay ? jumpKey.slice('relay:'.length) : jumpKey
+  return rows.findIndex((row) => {
+    switch (row.kind) {
+      case 'special':
+        return isRelay && row.toolUse.id === id
+      case 'message':
+        return id === row.message.id || id.startsWith(`${row.message.id}:`)
+      case 'text':
+        return !isRelay && id === row.message.id
+      case 'work':
+        // 묶음 안에서 키가 붙는 것은 설명 글이 있는 말풍선뿐이다
+        return !isRelay && row.work.parts.some((part) => part.message.id === id && part.text !== null)
+    }
+  })
+}
+
+/**
  * 접혀 있으면 이 메시지의 설명 글을 감추는 작업 묶음의 키 (점프가 찾은 글을 보이게 펼치려고). 끝난 묶음 안 설명 글이면 그 묶음,
  * 진행 중 묶음은 접혀 있어도 설명 글이 말풍선으로 보이므로 null. 답변·묶음 밖 메시지도 null
  */

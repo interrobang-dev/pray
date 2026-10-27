@@ -1512,6 +1512,12 @@ li.group.drop-after::after {
   font-size: 11px;
   color: var(--muted);
 }
+/* 대화 맨 위: 그리는 범위 밖에 이전 줄이 있다 (Chat.tsx. 위로 스크롤하면 더 그린다) */
+.earlier-rows {
+  align-self: center;
+  font-size: 11px;
+  color: var(--muted);
+}
 /* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 제안 → 작업 파일 폴더(Files.tsx) → 실행 중인 shell(Shells.tsx) → 맨 아래가 아닐 때 뜨는 "↓".
    아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않는다. 자주 뜨고 숨는 것이 위라 "↓" 는 아래 버튼을 움직이지 않고, 제안이 뜨고 사라지면 그 위 버튼들이 한 칸씩 오르내린다.
    묶음이 대화 폭을 다 덮는 것은 제안 말풍선 최대 폭을 대화 폭 기준으로 정하려고다. 빈 자리는 클릭이 대화로 지나간다.

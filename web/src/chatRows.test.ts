@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildChatRows, hidingWorkKey, type ChatRow, type Work } from './chatRows'
+import { buildChatRows, hidingWorkKey, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
 import type { ChatMessage, ToolUse } from './types'
 
 let nextId = 0
@@ -150,5 +150,56 @@ describe('hidingWorkKey', () => {
     const explain = message('assistant', '찾아본다', [tool('Read')])
     const rows = build([message('user', '고쳐 줘'), explain, message('assistant', '', [tool('Bash', null)])], true)
     expect(hidingWorkKey(rows, explain)).toBeNull()
+  })
+})
+
+describe('rowKeyOf', () => {
+  it('종류마다 앞말이 달라 같은 메시지에서 나온 묶음과 답변이 겹치지 않는다', () => {
+    const answer = message('assistant', '고쳤다', [tool('Bash')])
+    const rows = build([message('user', '고쳐 줘'), answer], false)
+    const keys = rows.map(rowKeyOf)
+    expect(keys).toEqual([`m:${rows[0].kind === 'message' ? rows[0].message.id : ''}`, `w:${answer.id}`, `t:${answer.id}`])
+  })
+
+  it('대화를 다시 만들어도 같은 줄은 같은 키', () => {
+    const messages = [message('user', '고쳐 줘'), message('assistant', '찾아본다', [tool('Read')]), message('assistant', '', [tool('Relay')]), message('assistant', '고쳤다')]
+    const keys = build(messages, false).map(rowKeyOf)
+    expect(keys).toEqual(build(messages, false).map(rowKeyOf))
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+})
+
+describe('rowIndexOfJumpKey', () => {
+  const relay = tool('Relay')
+  const bash = tool('Bash')
+  const middle = message('assistant', '찾아본다', [bash])
+  const silent = message('assistant', '', [tool('Read')])
+  const answer = message('assistant', '고쳤다', [relay])
+  const notice = message('system', '알림')
+  const messages = [message('user', '고쳐 줘'), middle, silent, answer, notice]
+  const rows = build(messages, false)
+
+  it('메시지 ID: 사람 쪽·system 글·묶음 안 설명 글', () => {
+    expect(rowIndexOfJumpKey(rows, messages[0].id)).toBe(0)
+    expect(rows[rowIndexOfJumpKey(rows, middle.id)].kind).toBe('work')
+    expect(rowIndexOfJumpKey(rows, notice.id)).toBe(rows.length - 1)
+  })
+
+  it('글 없는 묶음 안 메시지는 키가 없다', () => {
+    expect(rowIndexOfJumpKey(rows, silent.id)).toBe(-1)
+  })
+
+  it('system 글 안 알림·지시/보고 한 줄·명령 줄', () => {
+    expect(rowIndexOfJumpKey(rows, `${notice.id}:1`)).toBe(rows.length - 1)
+    expect(rowIndexOfJumpKey(rows, `relay:${notice.id}:0`)).toBe(rows.length - 1)
+    expect(rows[rowIndexOfJumpKey(rows, `relay:${relay.id}`)].kind).toBe('special')
+    expect(rows[rowIndexOfJumpKey(rows, `tool:${bash.id}`)].kind).toBe('work')
+    expect(rowIndexOfJumpKey(rows, 'relay:없음')).toBe(-1)
+  })
+
+  it('답변 말풍선은 그 답변 줄', () => {
+    const plain = message('assistant', '끝')
+    const plainRows = build([message('user', '해 줘'), message('assistant', '', [tool('Read')]), plain], false)
+    expect(plainRows[rowIndexOfJumpKey(plainRows, plain.id)].kind).toBe('text')
   })
 })

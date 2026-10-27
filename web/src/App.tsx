@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -332,6 +333,12 @@ export function App() {
     [],
   )
   const { restartingIds, beginRestart } = useRestartingSessions()
+  // 대화 탭에 넘기는 세션 이름·역할. 세션 목록 SSE 는 몇 초마다 새 배열을 주므로 글로 비교해 내용이 바뀔 때만 새 객체를 만든다
+  // (새 객체면 대화 탭이 지시·보고 줄을 모두 다시 만든다)
+  const sessionNamesJson = JSON.stringify(snapshot.sessions.map((s) => [s.id, displayName(s)]))
+  const sessionPositionsJson = JSON.stringify(snapshot.sessions.map((s) => [s.id, positionOf(s)]))
+  const sessionNames = useMemo<Record<string, string>>(() => Object.fromEntries(JSON.parse(sessionNamesJson)), [sessionNamesJson])
+  const sessionPositions = useMemo<Record<string, string | null>>(() => Object.fromEntries(JSON.parse(sessionPositionsJson)), [sessionPositionsJson])
   const selected = snapshot.sessions.find((s) => s.id === selectedId) ?? null
   const modelModalSession = snapshot.sessions.find((s) => s.id === modelModalSessionId) ?? null
   const isSelectedPresent = selected !== null && attendanceOf(selected) === 'present'
@@ -1463,8 +1470,8 @@ export function App() {
                 question={selected.question ?? null}
                 suggestion={selected.suggestion ?? null}
                 version={transcriptVersions[selected.id] ?? 0}
-                sessionNames={Object.fromEntries(snapshot.sessions.map((s) => [s.id, displayName(s)]))}
-                sessionPositions={Object.fromEntries(snapshot.sessions.map((s) => [s.id, positionOf(s)]))}
+                sessionNames={sessionNames}
+                sessionPositions={sessionPositions}
                 jump={jump?.sessionId === selected.id ? jump : null}
                 onJumpHandled={() => setJump(null)}
                 onOpenRelay={openRelay}
