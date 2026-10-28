@@ -74,7 +74,7 @@ function AppTab() {
   }
 
   return (
-    <>
+    <div className="appearance-scroll">
       <section className="appearance-section">
         <span className="appearance-label">Mode</span>
         <Segmented value={choice} options={MODE_OPTIONS} onChange={setThemeChoice} />
@@ -170,6 +170,6 @@ function AppTab() {
           Reset to defaults
         </button>
       </div>
-    </>
+    </div>
   )
 }

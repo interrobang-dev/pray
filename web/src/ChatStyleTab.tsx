@@ -61,6 +61,7 @@ export function ChatStyleTab() {
   return (
     <>
       <ChatPreview isWorkOpen={chat.workBundles === 'expanded'} />
+      <div className="appearance-scroll">
       <section className="appearance-section">
         {CHAT_SEGMENT_KEYS.map((key) => {
           const { label, options } = CHAT_OPTIONS[key]
@@ -92,6 +93,7 @@ export function ChatStyleTab() {
         <button type="button" onClick={reset}>
           Reset chat style
         </button>
+      </div>
       </div>
     </>
   )

@@ -1126,10 +1126,24 @@ li.group.drop-after::after {
   padding-right: 4px;
 }
 /* Appearance 설정 창 (AppearanceModal.tsx). 견본·강조색 칩의 색은 인라인 style 이다 — 지금 화면 변수가 아니라 고를 팔레트·강조색의 실제 값 */
+/* 창 위아래에 48px 씩 여유. border-box 라야 padding·테두리까지 그 높이 안에 든다.
+   창은 스크롤하지 않는다 — 머리·탭·Chat 탭 미리보기는 고정이고 옵션(.appearance-scroll)만 스크롤한다 */
 .modal.appearance-modal {
-  width: 440px;
-  max-height: calc(100vh - 32px);
+  width: 520px;
+  box-sizing: border-box;
+  max-height: calc(100vh - 96px);
+  overflow: hidden;
+}
+.appearance-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* 스크롤바가 내용에 붙지 않게 오른쪽 여유 (창 안쪽 여백 안에서) */
+  margin-right: -8px;
+  padding-right: 8px;
 }
 .appearance-section {
   display: flex;
@@ -1274,11 +1288,8 @@ li.group.drop-after::after {
   color: var(--text);
 }
 /* Chat 탭 미리보기: 대화 목록과 같은 .chat-scope 라 대화 모양이 그대로 걸린다. 누를 수 없다. 데스크톱은 스크롤해도 위에 붙어 있다 */
+/* 창 위쪽에 고정 (옵션만 .appearance-scroll 이 스크롤한다). 줄어들지 않는다 */
 .chat-preview {
-  position: sticky;
-  top: -16px;
-  z-index: 1;
-  /* 창(.modal 은 세로 flex)이 화면보다 길면 줄어들지 않고 창이 스크롤된다 */
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -4513,7 +4524,7 @@ li.group.drop-after::after {
   }
   /* Appearance 창: 화면 높이 안에서 스크롤, 세그먼트·버튼 40px, 강조색 칩 손가락 크기 */
   .modal.appearance-modal {
-    max-height: calc(100dvh - 32px);
+    max-height: calc(100dvh - 48px);
   }
   .appearance-modal .segmented button,
   .appearance-actions button {
@@ -4532,8 +4543,9 @@ li.group.drop-after::after {
     height: 40px;
   }
   /* Chat 탭: 라벨을 위로, 미리보기는 붙이지 않는다 (화면 절반을 가려서) */
+  /* 폰은 화면이 낮아 고정 미리보기가 옵션 칸을 너무 줄이지 않게 */
   .chat-preview {
-    position: static;
+    max-height: 30dvh;
   }
   .appearance-row {
     grid-template-columns: minmax(0, 1fr);
