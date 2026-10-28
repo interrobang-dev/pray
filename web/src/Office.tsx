@@ -2530,9 +2530,9 @@ export function Office(props: Props) {
       </div>
     )
   }
-  const cardSessionId = hoveredCard ? (hoveredCard.kind === 'session' ? hoveredCard.sessionId : null) : selectedId
+  // 카드는 마우스를 올렸을 때만 (고른 세션은 패널에 같은 정보가 있어 띄워 두지 않는다)
+  const cardSessionId = hoveredCard?.kind === 'session' ? hoveredCard.sessionId : null
   const cardSession = cardSessionId ? sessions.find((session) => session.id === cardSessionId) : undefined
-  // 고른 세션 카드는 세션 ID 키 = 라운지에 앉아 보이면 그 사람 옆, 아니면 자리 옆
   const cardKey = hoveredCard?.kind === 'session' ? hoveredCard.rectKey : cardSessionId
   const streetPlaces = streetPlacesRef.current
   const placeLabel =
