@@ -17,7 +17,7 @@ import {
   type SpritesheetData,
 } from 'pixi.js'
 import { attendanceOf, offDutyLabel, statusLabel, type Office as OfficeData, type Session, type Team } from './types'
-import { remainingCount } from './groupTodos'
+import { remainingCount } from './teamTodos'
 import { dotLookOf, type DotCharacter, type DotLook } from './dotCharacter'
 import { dotStateOf, loungeLabel, seatPlaceKey, seatPlaceOf, turnEndedAtOf, type DotState } from './dotState'
 import { overflowNames, planLounge, type LoungeDirection, type LoungeMeta, type LoungePerson, type LoungePlan } from './lounge'
@@ -109,9 +109,9 @@ const COLOR = {
   spaceLabelOnNavy: 0xd9dff0,
   /** 팀 명판 테두리 */
   plateLine: 0xc3c7d1,
-  /** 팀 명판 인원 수·파트 worktree 브랜치·남은 것이 없는 그룹 TODO 아이콘 */
+  /** 팀 명판 인원 수·파트 worktree 브랜치·남은 것이 없는 팀 TODO 아이콘 */
   labelMuted: 0x7a7f8e,
-  /** 그룹 TODO 버튼의 남은(미완료) 개수 배지 */
+  /** 팀 TODO 버튼의 남은(미완료) 개수 배지 */
   todoBadge: 0xe8620c,
   partLabel: 0x5f6573,
   /** 끌 수 있는 라벨에 마우스를 올렸을 때의 테두리 */
@@ -150,8 +150,8 @@ interface Props {
   /** 팀 섬을 끌어 놓음 */
   onMoveTeam: (teamId: string, anchor: { groupId: string; x: number; y: number }) => void
   onEditTeam: (team: Team) => void
-  /** 그룹 이름표 옆 TODO 버튼을 누름: 그 그룹의 TODO 모달을 연다 */
-  onOpenGroupTodos: (groupId: string) => void
+  /** 팀 명판 옆 TODO 버튼을 누름: 그 팀의 TODO 모달을 연다 */
+  onOpenTeamTodos: (teamId: string) => void
 }
 
 /** world 아트 픽셀 단위 글자(승인 화살표 배지·툴팁)의 해상도 = world 가 가장 크게 커질 때의 배율 9 (3배 × DOT_SCALE). 그래야 흐리지 않다 */
@@ -195,13 +195,13 @@ interface DragLabel {
 
 interface GroupParts extends DragLabel {
   container: Container
-  /** 이름표 오른쪽 TODO 버튼과 마우스를 올렸을 때의 테두리 */
-  todoButton: Container
-  todoHover: Graphics
 }
 
 interface IslandParts extends DragLabel {
   container: Container
+  /** 명판 오른쪽 TODO 버튼과 마우스를 올렸을 때의 테두리 */
+  todoButton: Container
+  todoHover: Graphics
 }
 
 // ---------- 자리 단위 ----------
@@ -645,8 +645,8 @@ const WORKTREE_ICON = [
 ]
 
 /**
- * 그룹 이름표 옆 TODO 버튼 아이콘 (목록 App.tsx TodoIcon 과 같은 모양: 체크한 줄 둘 + 빈 상자 줄 하나, 줄마다 오른쪽에 가로선).
- * 그룹 글자(18 도트 px)의 대문자 높이쯤
+ * 팀 명판 옆 TODO 버튼 아이콘 (목록 App.tsx TodoIcon 과 같은 모양: 체크한 줄 둘 + 빈 상자 줄 하나, 줄마다 오른쪽에 가로선).
+ * 팀 명판 글자(14 도트 px)보다 조금 큰 높이
  */
 const TODO_ICON = [
   '.....#.........',
@@ -696,7 +696,7 @@ function spaceLabelText(content: string, color: number): Text {
   return dotLabelText(content, DOT_FONT.space, color, 'bold', 1)
 }
 
-/** TODO 버튼과 그룹 이름표 손잡이 사이 (도트 px). 둘의 마우스 올림 테두리(3px 밖)가 닿지 않게 */
+/** TODO 버튼과 팀 명판 손잡이 사이 (도트 px). 둘의 마우스 올림 테두리(3px 밖)가 닿지 않게 */
 const TODO_BUTTON_GAP = 8
 /** TODO 버튼 흰 판의 아이콘 양옆 (테두리 2 포함, 도트 px) */
 const TODO_PLATE_PAD_X = 7
@@ -704,6 +704,8 @@ const TODO_PLATE_PAD_X = 7
 const TODO_BADGE_INSET = [5, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 5]
 /** 배지 왼쪽 끝 = 판 오른쪽 끝 − 이 값 (도트 px). 판 오른쪽 여백·테두리에만 걸쳐 아이콘(판 오른쪽 끝 − 8 까지)을 덮지 않는다. 두 자리 이상은 오른쪽으로 늘어난다 */
 const TODO_BADGE_OVERLAP = 6
+/** 배지 위 끝이 판 위 끝보다 올라오는 높이 (도트 px) */
+const TODO_BADGE_RISE = 4
 
 /** 남은 개수 배지: 주황 도트 원(한 자리)·알약(두 자리 이상) + 흰 굵은 숫자. 이벤트는 받지 않는다. w = 배지 폭 (도트 px) */
 function dotCountBadge(count: number): { badge: Container; w: number } {
@@ -721,10 +723,8 @@ function dotCountBadge(count: number): { badge: Container; w: number } {
 }
 
 /**
- * 도트 그룹(데스크존): 밝은 회색 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽, 아래는 회색 걸레받이) + 위 이름표 줄의 이름표·TODO 버튼·큰 화분(고정 꾸미기).
- * 크기는 저장된 w·h 가 아니라 그려지는 영역(섬이 있으면 섬들 + 위 이름표 줄, 없으면 저장 위치의 최소 크기).
- * TODO 버튼은 팀 명판과 같은 흰 둥근 판(높이 = 이름표 손잡이) 안의 체크리스트 도트 아이콘. 남은(미완료) 것이 있으면 아이콘은 진회색이고
- * 판 오른쪽 위 모서리에 주황 개수 배지, 0 이면 흐린 아이콘만 (캔버스는 마우스 올림 때만 보이기가 어려워 늘 그린다). 누르기는 redraw 가 묶는다
+ * 도트 그룹(데스크존): 밝은 회색 카펫 + 낮은 흰 파티션(위·왼쪽·오른쪽, 아래는 회색 걸레받이) + 위 이름표 줄의 이름표·큰 화분(고정 꾸미기).
+ * 크기는 저장된 w·h 가 아니라 그려지는 영역(섬이 있으면 섬들 + 위 이름표 줄, 없으면 저장 위치의 최소 크기)
  */
 function drawDotGroup(area: GroupArea, art: DotArt): GroupParts {
   const { group } = area
@@ -743,46 +743,22 @@ function drawDotGroup(area: GroupArea, art: DotArt): GroupParts {
   name.position.set(6, 3)
   sign.addChild(name)
 
-  // TODO 버튼: 흰 판 + 아이콘 + 배지. 마우스 올림 테두리는 판 둘레 3px 밖, 클릭 영역은 배지까지
-  const remaining = remainingCount(group)
-  const plateW = TODO_ICON[0].length + 2 * TODO_PLATE_PAD_X
-  const todoButton = new Container()
-  todoButton.position.set(sign.x + signW + TODO_BUTTON_GAP, sign.y)
-  todoButton.eventMode = 'static'
-  todoButton.cursor = 'pointer'
-  const todoHover = dotRoundRect(new Graphics(), -3, -3, plateW + 6, signH + 6, COLOR.labelHover, { color: 0xffffff, alpha: 0.45 })
-  todoHover.visible = false
-  const plate = dotRoundRect(new Graphics(), 0, 0, plateW, signH, COLOR.plateLine, { color: 0xffffff, alpha: 1 })
-  plate.eventMode = 'none'
-  const icon = dotPixelIcon(TODO_ICON, remaining > 0 ? COLOR.spaceLabel : COLOR.labelMuted)
-  icon.position.set(TODO_PLATE_PAD_X, Math.round((signH - TODO_ICON.length) / 2))
-  todoButton.addChild(todoHover, plate, icon)
-  let buttonRight = plateW
-  let buttonTop = 0
-  if (remaining > 0) {
-    const { badge, w: badgeW } = dotCountBadge(remaining)
-    // 위 끝 = 그룹 위 파티션 바로 아래: 판 위로 나오되 흰 파티션은 덮지 않고 그 아래 그늘(3)만 덮는다
-    badge.position.set(plateW - TODO_BADGE_OVERLAP, PARTITION_W - todoButton.y)
-    todoButton.addChild(badge)
-    buttonRight = Math.max(plateW, badge.x + badgeW)
-    buttonTop = badge.y
-  }
-  todoButton.hitArea = new Rectangle(0, buttonTop, buttonRight, signH - buttonTop)
-
   dot.addChild(dotTiling(art, 'desk-carpet', w, h), dotPartitions(w, h))
-  // 큰 화분은 이름표·TODO 버튼(배지까지)과 겹치면(좁은 그룹·긴 이름) 두지 않는다
-  for (const item of groupFixtures(area, todoButton.x + buttonRight)) dot.addChild(fixtureSprite(art, item))
-  dot.addChild(sign, todoButton)
+  // 큰 화분은 이름표와 겹치면(좁은 그룹·긴 이름) 두지 않는다
+  for (const item of groupFixtures(area, sign.x + signW)) dot.addChild(fixtureSprite(art, item))
+  dot.addChild(sign)
 
   container.eventMode = 'static'
   container.cursor = 'grab'
-  return { container, sign, hover, todoButton, todoHover }
+  return { container, sign, hover }
 }
 
 /**
  * 도트 팀 섬: 테두리 안쪽에 데스크존 카펫보다 한 단 진한 회색 받침(참고 그림의 블록 받침) + 블록 줄마다 오른쪽 화분 +
- * 파트 구역(옅은 바탕 + 회색 테두리 + 회색 글자 라벨) + 팀 명판. 칸막이 블록(책상·사람)은 drawBlockRow 가 섬 위에 따로 그린다.
- * memberCount = 명판의 인원 수 (목록 팀 카드 배지와 같은 수)
+ * 파트 구역(옅은 바탕 + 회색 테두리 + 회색 글자 라벨) + 팀 명판 + 그 오른쪽 TODO 버튼. 칸막이 블록(책상·사람)은 drawBlockRow 가 섬 위에 따로 그린다.
+ * memberCount = 명판의 인원 수 (목록 팀 카드 배지와 같은 수).
+ * TODO 버튼은 명판과 같은 흰 둥근 판(높이 = 명판) 안의 체크리스트 도트 아이콘. 남은(미완료) 것이 있으면 아이콘은 진회색이고
+ * 판 오른쪽 위 모서리에 주황 개수 배지, 0 이면 흐린 아이콘만 (캔버스는 마우스 올림 때만 보이기가 어려워 늘 그린다). 누르기는 redraw 가 묶는다
  */
 function drawDotIsland(island: Island, memberCount: number, onEdit: () => void, art: DotArt): IslandParts {
   const container = new Container()
@@ -834,12 +810,39 @@ function drawDotIsland(island: Island, memberCount: number, onEdit: () => void, 
   count?.position.set(8 + Math.ceil(name.width), 2)
   sign.addChild(dotRoundRect(new Graphics(), 0, 0, plateW, plateH, COLOR.plateLine, { color: 0xffffff, alpha: 1 }), name, ...(count ? [count] : []))
   dot.addChild(sign)
+
+  // TODO 버튼: 명판 오른쪽의 흰 판 + 아이콘 + 배지. 마우스 올림 테두리는 판 둘레 3px 밖, 클릭 영역은 배지까지
+  const remaining = remainingCount(island.team)
+  const todoPlateW = TODO_ICON[0].length + 2 * TODO_PLATE_PAD_X
+  const todoButton = new Container()
+  todoButton.position.set(sign.x + plateW + TODO_BUTTON_GAP, sign.y)
+  todoButton.eventMode = 'static'
+  todoButton.cursor = 'pointer'
+  const todoHover = dotRoundRect(new Graphics(), -3, -3, todoPlateW + 6, plateH + 6, COLOR.labelHover, { color: 0xffffff, alpha: 0.45 })
+  todoHover.visible = false
+  const todoPlate = dotRoundRect(new Graphics(), 0, 0, todoPlateW, plateH, COLOR.plateLine, { color: 0xffffff, alpha: 1 })
+  todoPlate.eventMode = 'none'
+  const icon = dotPixelIcon(TODO_ICON, remaining > 0 ? COLOR.spaceLabel : COLOR.labelMuted)
+  icon.position.set(TODO_PLATE_PAD_X, Math.round((plateH - TODO_ICON.length) / 2))
+  todoButton.addChild(todoHover, todoPlate, icon)
+  let buttonRight = todoPlateW
+  let buttonTop = 0
+  if (remaining > 0) {
+    const { badge, w: badgeW } = dotCountBadge(remaining)
+    badge.position.set(todoPlateW - TODO_BADGE_OVERLAP, -TODO_BADGE_RISE)
+    todoButton.addChild(badge)
+    buttonRight = Math.max(todoPlateW, badge.x + badgeW)
+    buttonTop = badge.y
+  }
+  todoButton.hitArea = new Rectangle(0, buttonTop, buttonRight, plateH - buttonTop)
+  dot.addChild(todoButton)
+
   container.eventMode = 'static'
   container.cursor = 'grab'
   container.on('pointertap', (event: FederatedPointerEvent) => {
     if (event.detail === 2) onEdit()
   })
-  return { container, sign, hover }
+  return { container, sign, hover, todoButton, todoHover }
 }
 
 /**
@@ -2108,15 +2111,6 @@ export function Office(props: Props) {
           for (const area of layout.groupAreas) {
             const parts = drawDotGroup(area, art)
             bindDragLabel(parts)
-            // TODO 버튼: 누르면 모달. 누르거나 끌어도 그룹 이름표 끌기·맵 이동이 시작되지 않게 pointerdown 을 여기서 멈춘다
-            parts.todoButton.on('pointerdown', (event: FederatedPointerEvent) => event.stopPropagation())
-            parts.todoButton.on('pointertap', () => latest.current.onOpenGroupTodos(area.group.id))
-            parts.todoButton.on('pointerover', () => {
-              if (!pan?.isMoved && !signDrag) parts.todoHover.visible = true
-            })
-            parts.todoButton.on('pointerout', () => {
-              parts.todoHover.visible = false
-            })
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               const teamIds = new Set(layout.islands.filter((i) => i.team.groupId === area.group.id).map((i) => i.team.id))
               beginSignDrag(event, parts, {
@@ -2146,6 +2140,18 @@ export function Office(props: Props) {
             const memberCount = sessions.filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off').length
             const parts = drawDotIsland(island, memberCount, onEdit, art)
             bindDragLabel(parts)
+            // TODO 버튼: 누르면 모달. 누르거나 끌어도 팀 명판 끌기·맵 이동이 시작되지 않게 pointerdown 을, 더블클릭 이름 변경이 되지 않게 pointertap 을 여기서 멈춘다
+            parts.todoButton.on('pointerdown', (event: FederatedPointerEvent) => event.stopPropagation())
+            parts.todoButton.on('pointertap', (event: FederatedPointerEvent) => {
+              event.stopPropagation()
+              if (!isDragged) latest.current.onOpenTeamTodos(team.id)
+            })
+            parts.todoButton.on('pointerover', () => {
+              if (!pan?.isMoved && !signDrag) parts.todoHover.visible = true
+            })
+            parts.todoButton.on('pointerout', () => {
+              parts.todoHover.visible = false
+            })
             parts.sign.on('pointerdown', (event: FederatedPointerEvent) => {
               beginSignDrag(event, parts, {
                 // 섬과 그 위 그룹 이름표 줄까지 맵 안에 남게

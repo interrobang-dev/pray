@@ -682,9 +682,10 @@ li.group.drop-after::after {
 .team.drop-after::after {
   bottom: -5px;
 }
-/* 그룹 라벨의 TODO 버튼 (App.tsx renderTodoButton): 체크리스트 아이콘 + 남은 개수. 남은 것이 있으면 늘 보이고,
-   0 이면 "+"·"⋯" 처럼 라벨에 마우스를 올렸을 때만 (터치 기기는 아래 hover: none 블록에서 늘) */
+/* 팀 머리줄의 TODO 버튼 (App.tsx renderTodoButton): 체크리스트 아이콘 + 남은 개수. 남은 것이 있으면 늘 보이고,
+   0 이면 "+"·"⋯" 처럼 머리줄에 마우스를 올렸을 때만 (터치 기기는 아래 hover: none 블록에서 늘) */
 .todo-button {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -698,7 +699,7 @@ li.group.drop-after::after {
   transition: opacity 0.12s;
 }
 .todo-button.has-todos,
-.group-label:hover .todo-button,
+.team-head:hover .todo-button,
 .todo-button:focus-visible {
   opacity: 1;
 }
@@ -4047,7 +4048,7 @@ li.group.drop-after::after {
   border-bottom: 1px solid var(--line);
 }
 
-/* 그룹 TODO 모달 (GroupTodosModal.tsx): 입력칸 · 오류 줄 · 할 일 목록 · 완료 "Done (N)". 목록이 길면 모달 안에서 스크롤한다 */
+/* 팀 TODO 모달 (TeamTodosModal.tsx): 입력칸 · 오류 줄 · 할 일 목록 · 완료 "Done (N)". 목록이 길면 모달 안에서 스크롤한다 */
 .todo-modal {
   width: 440px;
   max-height: calc(100vh - 64px);
@@ -4238,7 +4239,7 @@ li.group.drop-after::after {
     padding: 3px 10px;
     font-size: calc(15px * var(--font-scale));
   }
-  /* 그룹 TODO 버튼과 TODO 모달의 삭제·끌기 손잡이도 늘 보이고 손가락으로 누를 수 있게 키운다 */
+  /* 팀 TODO 버튼과 TODO 모달의 삭제·끌기 손잡이도 늘 보이고 손가락으로 누를 수 있게 키운다 */
   .todo-button {
     opacity: 1;
     padding: 3px 8px;

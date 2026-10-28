@@ -282,8 +282,8 @@ describe('맵 왼쪽 위 코너', () => {
 })
 
 describe('데스크존 이름표 줄', () => {
-  /** 짧은 이름표 + TODO 버튼이 차지하는 오른쪽 끝 (도트 px) */
-  const SHORT_LABEL_RIGHT = 120
+  /** 짧은 이름표가 차지하는 오른쪽 끝 (도트 px) */
+  const SHORT_LABEL_RIGHT = 100
 
   it('큰 화분 하나만 위 이름표 줄(1타일) 오른쪽 끝에 놓여 오른쪽 파티션 안이고, 어느 섬(밀린 것·오른쪽 끝에 닿은 것 포함)과도 겹치지 않는다', () => {
     const cases: [Office, Session[]][] = [
@@ -314,7 +314,7 @@ describe('데스크존 이름표 줄', () => {
     }
   })
 
-  it('이름표·TODO 버튼이 화분 자리에 닿으면(좁은 그룹·긴 이름) 화분을 두지 않고, 둘 때는 버튼 오른쪽 끝과 겹치지 않는다', () => {
+  it('이름표가 화분 자리에 닿으면(좁은 그룹·긴 이름) 화분을 두지 않고, 둘 때는 이름표 오른쪽 끝과 겹치지 않는다', () => {
     const area = (w: number): Rect => ({ x: 0, y: 0, w, h: 7 })
     for (const w of [5, 7, 9, 14]) {
       for (let labelRight = 60; labelRight <= w * 48; labelRight += 6) {

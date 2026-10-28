@@ -1,7 +1,7 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Modal } from './Modal'
-import { applyTodo, moveTo, removeTodo, reorderOpen, splitTodos, todosOf } from './groupTodos'
-import type { Group, GroupTodo } from './types'
+import { applyTodo, moveTo, removeTodo, reorderOpen, splitTodos, todosOf } from './teamTodos'
+import type { Team, TeamTodo } from './types'
 
 /** 끌기로 보는 최소 이동 (px) — App.tsx 목록 끌어 놓기와 같은 값 */
 const DRAG_THRESHOLD_PX = 5
@@ -12,21 +12,21 @@ const AUTO_SCROLL_MAX_PX = 14
 const TOUCH_QUERY = '(hover: none)'
 
 interface Props {
-  group: Group
+  team: Team
   onClose: () => void
   /** 화면의 todos 를 먼저 바꾼다 (App 의 office 상태). 사무실 SSE 가 오면 서버 것으로 바뀐다 */
-  onChangeTodos: (groupId: string, update: (todos: GroupTodo[]) => GroupTodo[]) => void
+  onChangeTodos: (teamId: string, update: (todos: TeamTodo[]) => TeamTodo[]) => void
 }
 
 /** 응답 본문과 실패 문구 (서버 message, 없으면 HTTP 코드, 닿지 못하면 "Network error") */
-async function requestTodo(url: string, method: string, body?: unknown): Promise<{ todo?: GroupTodo; failure: string | null }> {
+async function requestTodo(url: string, method: string, body?: unknown): Promise<{ todo?: TeamTodo; failure: string | null }> {
   try {
     const response = await fetch(url, {
       method,
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
-    const data = (await response.json().catch(() => ({}))) as { todo?: GroupTodo; message?: string }
+    const data = (await response.json().catch(() => ({}))) as { todo?: TeamTodo; message?: string }
     return response.ok ? { todo: data.todo, failure: null } : { failure: data.message ?? `HTTP ${response.status}` }
   } catch {
     return { failure: 'Network error' }
@@ -34,11 +34,11 @@ async function requestTodo(url: string, method: string, body?: unknown): Promise
 }
 
 /**
- * 그룹 TODO 모달: 맨 위 입력칸(Enter 로 추가), 할 일(체크 · 글 · × · ⠿, 글을 누르면 그 자리에서 고치기, ⠿ 로 끌어 순서 바꾸기),
- * 그 아래 완료 "Done (N)"(줄 긋고 흐리게, 최근 완료부터, 체크를 풀면 할 일로). 목록은 props 의 group.todos 그대로라 열린 동안 SSE 를 따라간다
+ * 팀 TODO 모달: 맨 위 입력칸(Enter 로 추가), 할 일(체크 · 글 · × · ⠿, 글을 누르면 그 자리에서 고치기, ⠿ 로 끌어 순서 바꾸기),
+ * 그 아래 완료 "Done (N)"(줄 긋고 흐리게, 최근 완료부터, 체크를 풀면 할 일로). 목록은 props 의 team.todos 그대로라 열린 동안 SSE 를 따라간다
  */
-export function GroupTodosModal({ group, onClose, onChangeTodos }: Props) {
-  const { open, done } = splitTodos(todosOf(group))
+export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
+  const { open, done } = splitTodos(todosOf(team))
   const [draft, setDraft] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -47,7 +47,7 @@ export function GroupTodosModal({ group, onClose, onChangeTodos }: Props) {
   const [isTouch] = useState(() => window.matchMedia(TOUCH_QUERY).matches)
   const listRef = useRef<HTMLUListElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const baseUrl = `/api/groups/${encodeURIComponent(group.id)}/todos`
+  const baseUrl = `/api/team/${encodeURIComponent(team.id)}/todos`
 
   /** 요청을 보내고 실패하면 빨간 줄. 성공하면 응답 본문 */
   async function send(url: string, method: string, body?: unknown) {
@@ -65,7 +65,7 @@ export function GroupTodosModal({ group, onClose, onChangeTodos }: Props) {
     setIsAdding(false)
     if (!result) return
     const added = result.todo
-    if (added) onChangeTodos(group.id, (todos) => applyTodo(todos, added))
+    if (added) onChangeTodos(team.id, (todos) => applyTodo(todos, added))
     // 기다리는 사이 더 친 글은 남긴다
     setDraft((current) => (current === draft ? '' : current))
   }
@@ -76,19 +76,19 @@ export function GroupTodosModal({ group, onClose, onChangeTodos }: Props) {
     void add()
   }
 
-  async function update(todo: GroupTodo, patch: { text?: string; isDone?: boolean }) {
+  async function update(todo: TeamTodo, patch: { text?: string; isDone?: boolean }) {
     const result = await send(`${baseUrl}/${encodeURIComponent(todo.id)}`, 'PATCH', patch)
     const updated = result?.todo
-    if (updated) onChangeTodos(group.id, (todos) => applyTodo(todos, updated))
+    if (updated) onChangeTodos(team.id, (todos) => applyTodo(todos, updated))
   }
 
-  async function remove(todo: GroupTodo) {
+  async function remove(todo: TeamTodo) {
     const result = await send(`${baseUrl}/${encodeURIComponent(todo.id)}`, 'DELETE')
-    if (result) onChangeTodos(group.id, (todos) => removeTodo(todos, todo.id))
+    if (result) onChangeTodos(team.id, (todos) => removeTodo(todos, todo.id))
   }
 
   /** 고친 글 저장: 빈 글이면 저장하지 않고 되돌리고, 그대로면 보내지 않는다 */
-  function saveEdit(todo: GroupTodo, text: string) {
+  function saveEdit(todo: TeamTodo, text: string) {
     setEditingId(null)
     const trimmed = text.trim()
     if (trimmed && trimmed !== todo.text) void update(todo, { text: trimmed })
@@ -96,11 +96,11 @@ export function GroupTodosModal({ group, onClose, onChangeTodos }: Props) {
 
   /** 화면 순서를 먼저 바꾸고 저장한다. 실패하면 원래 순서로 되돌리고 빨간 줄로 알린다 */
   async function saveOrder(previousIds: string[], ids: string[]) {
-    onChangeTodos(group.id, (todos) => reorderOpen(todos, ids))
+    onChangeTodos(team.id, (todos) => reorderOpen(todos, ids))
     setErrorMessage(null)
     const result = await requestTodo(`${baseUrl}/order`, 'PUT', { ids })
     if (result.failure === null) return
-    onChangeTodos(group.id, (todos) => reorderOpen(todos, previousIds))
+    onChangeTodos(team.id, (todos) => reorderOpen(todos, previousIds))
     setErrorMessage(`Couldn't change the order: ${result.failure}`)
   }
 
@@ -185,7 +185,7 @@ export function GroupTodosModal({ group, onClose, onChangeTodos }: Props) {
   }
 
   return (
-    <Modal title={`TODO · ${group.name}`} onClose={onClose} className="todo-modal" hasCloseButton>
+    <Modal title={`TODO · ${team.name}`} onClose={onClose} className="todo-modal" hasCloseButton>
       {/* 글 길이(trim 뒤 1~500자)는 서버가 보고 넘으면 400 빨간 줄. maxLength 를 두면 붙여 넣은 긴 글 끝이 알림 없이 잘려 저장된다 */}
       <input
         className="todo-add"

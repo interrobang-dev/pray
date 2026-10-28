@@ -14,14 +14,14 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 
 | 파일 | 다루는 것 |
 |---|---|
-| `host.md` | 호스트(pipe·pty·resume·퇴근 기록)·`hq.json`(`hq.ts` 전문)·트레이 앱·스케줄러 스크립트·훅 설치·그룹 할 일 저장 규칙 |
+| `host.md` | 호스트(pipe·pty·resume·퇴근 기록)·`hq.json`(`hq.ts` 전문)·트레이 앱·스케줄러 스크립트·훅 설치·팀 할 일 저장 규칙 |
 | `team.md` | 팀·파트 판정, 팀장·파트장 지침·MCP 도구, task 상태, 팀원 이름·모델·effort, worktree 파트 |
 | `server-api.md` | 서버 API 경로 전부(`index.ts` 전문), 세션 목록·jsonl 요약·훅 상태·표시 상태 계산, shell·작업 파일·첨부, AskUserQuestion, 세션 이름·역할·인물, 폴더 신뢰, 모델·effort 바꾸기 |
 | `queue-interrupt.md` | mod(입력 제안·입력칸 알림·곁가지 질문), 보내기의 함정, 대기열·대기 메시지 취소, 작업 중지, 곁가지 질문 흐름(`btw.ts`) |
 | `accounts.md` | 사용량 조회·사용량 창, Claude 계정 보관·전환·로그인·로그아웃 (서버·화면) |
 | `flow.md` | 플로우(flow.team) 알림 서버·화면 |
 | `chat.md` | 대화 메시지(`messages.ts`)와 대화 탭 전체, 마크다운, 작업 파일, Shells, 터미널 탭 |
-| `web-app.md` | App.tsx(목록·패널·상태 표시줄·폰·사무실 숨기기), 응답 타입·공통 문구, 테마·스크롤바·로고, 모달·메뉴, 그룹 할 일 화면, 역할 칩, 모델 변경 창 |
+| `web-app.md` | App.tsx(목록·패널·상태 표시줄·폰·사무실 숨기기), 응답 타입·공통 문구, 테마·스크롤바·로고, 모달·메뉴, 팀 할 일 화면, 역할 칩, 모델 변경 창 |
 | `office.md` | 사무실 캔버스(Office.tsx 전문), 배치·섬 밀기·그룹 크기, 고정 꾸미기, 라운지·라운지 휴식, 퇴근 거리 |
 | `office-art.md` | 목록 아바타·인물 고르기·색 바꾸기, 스프라이트 파이프라인·아틀라스 |
 
@@ -68,7 +68,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 호스트·트레이 → `host.md`
 - `host/src/index.ts` — named pipe `\\.\pipe\jk-corp-host` 서버. spawn·resume·forget·kill·restart·restart-session 처리, 퇴근 기록 보관 기간 정리
 - `host/src/ptyPool.ts` — node-pty 로 `claude.exe` 실행·세션별 링버퍼, extraArgs 저장, 끝나면 퇴근 기록, 모델 바꾸기 재시작, 웹 세션에 mod 불러오기
-- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기·쓰기 (웹 세션·퇴근 기록·그룹·팀·이름·인물·성별·역할·그룹 할 일·목록 순서)
+- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기·쓰기 (웹 세션·퇴근 기록·그룹·팀·이름·인물·성별·역할·팀 할 일·목록 순서)
 - `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=` 파일 로그 · `host/src/protocol.ts` — pipe 메시지 타입·줄 단위 JSON
 - `desktop/src/main.ts`·`children.ts`·`icon.ts` — Electron 트레이 앱, 자식 재시작 정책, 코드로 만든 트레이·창 아이콘
 - `scripts/*.ps1` — 작업 스케줄러 등록·중지·제거 · `hooks/install.mjs` — settings.json 훅 설치
@@ -96,7 +96,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 웹 → `web-app.md` · `chat.md` · `office.md` · `office-art.md` · `accounts.md` · `flow.md`
 - `web/src/main.tsx` — 로그인 또는 App · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `types.ts` — 응답 타입·공통 문구 함수
 - `web/src/theme.ts` — 테마·스타일 적용 · `appearance.ts`·`palettes.ts`·`AppearanceModal.tsx`·`ChatStyleTab.tsx` — 스타일 설정(팔레트·강조색·글자 크기·대화 모양) 계산·값·창 · `Modal.tsx` — 모달·세그먼트 · `sessionMenu.ts` — 세션 줄 ⋯ 메뉴 · `sessionPosition.ts`·`PositionChip.tsx` — 역할·이름
-- `web/src/GroupTodosModal.tsx`·`groupTodos.ts` — 그룹 TODO · `ModelSettingModal.tsx`·`modelSetting.ts` — 모델·effort 변경 창
+- `web/src/TeamTodosModal.tsx`·`teamTodos.ts` — 팀 TODO · `ModelSettingModal.tsx`·`modelSetting.ts` — 모델·effort 변경 창
 - `web/src/Chat.tsx`·`chatRows.ts`·`runningTools.ts` — 대화 탭 · `chatWindow.ts`·`chatReuse.ts`·`chatDelta.ts` — 최근 줄만 그리기·다시 받은 대화 재사용·바뀐 뒤쪽만 받기 · `Composer.tsx`·`composerText.ts` — 대화 입력 상자(글·첨부 state) · `BtwCard.tsx` — 곁가지 질문 카드 · `Markdown.tsx` — 마크다운 · `markdownHighlight.ts` — 대화 마크다운 숫자·경로 강조 · `CopyButton.tsx`·`copyText.ts`·`codeText.ts` — 복사 버튼·클립보드·코드 글자 뽑기 · `Files.tsx` — 작업 파일 · `Shells.tsx` — shell 보기 · `Terminal.tsx` — xterm · `chatSearch.ts`·`ChatSearchBar.tsx`·`chatSearchPaint.ts` — 대화 탭 안 검색(찾기·막대·글자 칠하기) (→ `chat.md`)
 - `web/src/Office.tsx` — PixiJS 사무실 · `officeLayout.ts` — 배치 · `officeFixtures.ts` — 고정 꾸미기 · `lounge.ts` — 라운지 자리 · `dotState.ts` — 인물 상태·라운지 판정 · `offDutyStreet.ts` — 퇴근 거리 배치 (→ `office.md`)
 - `web/src/characterArt.ts`·`dotCharacter.ts`·`recolor.ts`·`CharacterPicker.tsx` — 인물 그림·고르기·색 · `tools/sprites/` — 스프라이트 파이프라인 · `web/public/office/` — 아틀라스 (→ `office-art.md`)

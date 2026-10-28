@@ -99,12 +99,10 @@ export interface Group {
   /** 화면은 쓰지 않는다 (그룹 크기는 안의 팀 섬으로 정한다) */
   w: number
   h: number
-  /** 그룹 TODO. 서버 순서 = [할 일(사용자가 정한 순서)…, 완료(완료한 순서, 오래된 것 먼저)…]. 서버를 재시작하기 전 옛 응답은 없다 (groupTodos.ts todosOf) */
-  todos?: GroupTodo[]
 }
 
-/** 그룹 TODO 한 줄. 시각은 ISO */
-export interface GroupTodo {
+/** 팀 TODO 한 줄. 시각은 ISO */
+export interface TeamTodo {
   id: string
   text: string
   isDone: boolean
@@ -139,6 +137,8 @@ export interface Team {
   createdAt: string
   /** 팀 폴더의 형상관리 (서버가 판정해 주는 파생값. 옛 서버 응답에는 없다) */
   vcs?: { kind: 'git' | 'svn'; root: string } | null
+  /** 팀 TODO. 서버 순서 = [할 일(사용자가 정한 순서)…, 완료(완료한 순서, 오래된 것 먼저)…]. 옛 서버 응답은 없다 (teamTodos.ts todosOf) */
+  todos?: TeamTodo[]
 }
 
 export interface Office {

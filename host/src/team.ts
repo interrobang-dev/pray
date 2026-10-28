@@ -9,6 +9,16 @@ export interface Part {
   createdAt: string
 }
 
+/** 팀 할 일 한 줄. 시각은 ISO */
+export interface Todo {
+  id: string
+  text: string
+  isDone: boolean
+  createdAt: string
+  /** 완료한 시각. 할 일이면 null */
+  doneAt: string | null
+}
+
 /** 팀 = 같은 작업 폴더를 쓰는 세션 묶음. 그룹 안의 책상 섬. 세션의 소속은 저장하지 않고 cwd 로 판정한다 */
 export interface Team {
   id: string
@@ -26,6 +36,8 @@ export interface Team {
   parts: Part[]
   /** 팀 폴더 세션의 파트 소속 (sessionId → partId). worktree 파트 소속은 폴더로 정해져 저장하지 않는다 */
   partOf: Record<string, string>
+  /** 배열 순서 = 표시 순서. 늘 [할 일(사용자가 정한 순서)…, 완료(완료한 순서, 오래된 것 먼저)…] 로 나뉘어 있다 */
+  todos: Todo[]
   createdAt: string
 }
 

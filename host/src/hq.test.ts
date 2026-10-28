@@ -9,6 +9,7 @@ import {
   addWebSession,
   discardWebSession,
   MAX_TODO_LENGTH,
+  migrateGroupTodosToTeams,
   migrateWaitingNotes,
   parseTodoText,
   removeTodo,
@@ -16,7 +17,7 @@ import {
   splitWaitingNote,
   TodoNotFoundError,
   updateTodo,
-  type GroupTodo,
+  type Todo,
   listCharacters,
   listGenders,
   listOffDuty,
@@ -414,94 +415,101 @@ describe('group todo text', () => {
   })
 })
 
-describe('group todos', () => {
+describe('team todos', () => {
   beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
   afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
 
   const at = (iso: string) => new Date(iso)
+  /** 새 팀 하나 */
+  const newTeam = () => addTeam({ name: '팀', cwd: 'D:/repo', groupId: addGroup('가').id })
   /** 완료 항목은 끝에 ✓ */
-  const texts = (groupId: string) =>
+  const texts = (teamId: string) =>
     readOffice()
-      .groups.find((g) => g.id === groupId)
+      .teams.find((t) => t.id === teamId)
       ?.todos.map((t) => `${t.text}${t.isDone ? '✓' : ''}`)
 
-  it('starts a new group and an old group record without todos with an empty list', () => {
-    expect(addGroup('가').todos).toEqual([])
+  it('starts a new team and an old team record without todos with an empty list, and groups carry none', () => {
+    expect(newTeam().todos).toEqual([])
     mkdirSync(hqDir, { recursive: true })
-    writeFileSync(hqPath, JSON.stringify({ groups: [{ id: 'g', name: '가', x: 0, y: 0, w: 10, h: 8 }] }))
-    expect(readOffice().groups[0].todos).toEqual([])
+    writeFileSync(
+      hqPath,
+      JSON.stringify({ groups: [{ id: 'g', name: '가', x: 0, y: 0, w: 10, h: 8 }], teams: [{ id: 't', name: '팀', cwd: 'D:/x' }] }),
+    )
+    const office = readOffice()
+    expect(office.teams[0].todos).toEqual([])
+    expect(office.groups[0]).not.toHaveProperty('todos')
   })
 
   it('adds to the end of the open section, before the done ones', () => {
-    const group = addGroup('가')
-    const first = addTodo(group.id, '가', at('2026-10-25T01:00:00.000Z'))
+    const team = newTeam()
+    const first = addTodo(team.id, '가', at('2026-10-25T01:00:00.000Z'))
     expect(first).toEqual({ id: first?.id, text: '가', isDone: false, createdAt: '2026-10-25T01:00:00.000Z', doneAt: null })
     expect(first?.id).toMatch(/^[0-9a-f]{8}$/)
-    addTodo(group.id, '나')
-    updateTodo(group.id, first!.id, { isDone: true })
-    addTodo(group.id, '다')
-    expect(texts(group.id)).toEqual(['나', '다', '가✓'])
+    addTodo(team.id, '나')
+    updateTodo(team.id, first!.id, { isDone: true })
+    addTodo(team.id, '다')
+    expect(texts(team.id)).toEqual(['나', '다', '가✓'])
   })
 
   it('moves a todo to the very end when done and to the end of the open section when undone', () => {
-    const group = addGroup('가')
-    const [a, b, , d] = ['가', '나', '다', '라'].map((text) => addTodo(group.id, text)!)
-    expect(updateTodo(group.id, b.id, { isDone: true }, at('2026-10-25T02:00:00.000Z'))).toMatchObject({
+    const team = newTeam()
+    const [a, b, , d] = ['가', '나', '다', '라'].map((text) => addTodo(team.id, text)!)
+    expect(updateTodo(team.id, b.id, { isDone: true }, at('2026-10-25T02:00:00.000Z'))).toMatchObject({
       isDone: true,
       doneAt: '2026-10-25T02:00:00.000Z',
     })
-    updateTodo(group.id, d.id, { isDone: true })
-    updateTodo(group.id, a.id, { isDone: true })
-    expect(texts(group.id)).toEqual(['다', '나✓', '라✓', '가✓'])
-    expect(updateTodo(group.id, d.id, { isDone: false })).toMatchObject({ isDone: false, doneAt: null })
-    expect(texts(group.id)).toEqual(['다', '라', '나✓', '가✓'])
+    updateTodo(team.id, d.id, { isDone: true })
+    updateTodo(team.id, a.id, { isDone: true })
+    expect(texts(team.id)).toEqual(['다', '나✓', '라✓', '가✓'])
+    expect(updateTodo(team.id, d.id, { isDone: false })).toMatchObject({ isDone: false, doneAt: null })
+    expect(texts(team.id)).toEqual(['다', '라', '나✓', '가✓'])
   })
 
   it('keeps the place and done time when the done value stays and changes only the text', () => {
-    const group = addGroup('가')
-    const [a, b, c] = ['가', '나', '다'].map((text) => addTodo(group.id, text)!)
-    updateTodo(group.id, a.id, { isDone: true }, at('2026-10-25T02:00:00.000Z'))
-    updateTodo(group.id, c.id, { isDone: true })
-    updateTodo(group.id, a.id, { isDone: true, text: '가2' }, at('2026-10-25T03:00:00.000Z'))
-    updateTodo(group.id, b.id, { isDone: false })
-    expect(texts(group.id)).toEqual(['나', '가2✓', '다✓'])
-    expect(readOffice().groups[0].todos[1].doneAt).toBe('2026-10-25T02:00:00.000Z')
-    expect(updateTodo(group.id, b.id, { text: '나2' })).toMatchObject({ text: '나2', isDone: false })
-    expect(texts(group.id)).toEqual(['나2', '가2✓', '다✓'])
+    const team = newTeam()
+    const [a, b, c] = ['가', '나', '다'].map((text) => addTodo(team.id, text)!)
+    updateTodo(team.id, a.id, { isDone: true }, at('2026-10-25T02:00:00.000Z'))
+    updateTodo(team.id, c.id, { isDone: true })
+    updateTodo(team.id, a.id, { isDone: true, text: '가2' }, at('2026-10-25T03:00:00.000Z'))
+    updateTodo(team.id, b.id, { isDone: false })
+    expect(texts(team.id)).toEqual(['나', '가2✓', '다✓'])
+    expect(readOffice().teams[0].todos[1].doneAt).toBe('2026-10-25T02:00:00.000Z')
+    expect(updateTodo(team.id, b.id, { text: '나2' })).toMatchObject({ text: '나2', isDone: false })
+    expect(texts(team.id)).toEqual(['나2', '가2✓', '다✓'])
   })
 
   it('removes a todo', () => {
-    const group = addGroup('가')
-    const [a, b] = ['가', '나'].map((text) => addTodo(group.id, text)!)
-    updateTodo(group.id, a.id, { isDone: true })
-    expect(removeTodo(group.id, a.id)?.map((t) => t.text)).toEqual(['나'])
-    expect(removeTodo(group.id, b.id)).toEqual([])
-    expect(texts(group.id)).toEqual([])
+    const team = newTeam()
+    const [a, b] = ['가', '나'].map((text) => addTodo(team.id, text)!)
+    updateTodo(team.id, a.id, { isDone: true })
+    expect(removeTodo(team.id, a.id)?.map((t) => t.text)).toEqual(['나'])
+    expect(removeTodo(team.id, b.id)).toEqual([])
+    expect(texts(team.id)).toEqual([])
   })
 
   it('reorders only the open section and refuses anything but exactly the open IDs', () => {
-    const group = addGroup('가')
-    const [a, b, c, d] = ['가', '나', '다', '라'].map((text) => addTodo(group.id, text)!)
-    updateTodo(group.id, b.id, { isDone: true })
-    expect(reorderTodos(group.id, [d.id, a.id, c.id])?.map((t) => t.text)).toEqual(['라', '가', '다', '나'])
-    expect(texts(group.id)).toEqual(['라', '가', '다', '나✓'])
+    const team = newTeam()
+    const [a, b, c, d] = ['가', '나', '다', '라'].map((text) => addTodo(team.id, text)!)
+    updateTodo(team.id, b.id, { isDone: true })
+    expect(reorderTodos(team.id, [d.id, a.id, c.id])?.map((t) => t.text)).toEqual(['라', '가', '다', '나'])
+    expect(texts(team.id)).toEqual(['라', '가', '다', '나✓'])
     const before = readFileSync(hqPath, 'utf8')
     for (const ids of [[d.id, a.id], [d.id, a.id, c.id, b.id], [d.id, a.id, a.id], [d.id, a.id, 'zzz']]) {
-      expect(() => reorderTodos(group.id, ids)).toThrow(OrderMismatchError)
+      expect(() => reorderTodos(team.id, ids)).toThrow(OrderMismatchError)
     }
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
   })
 
-  it('returns null for a missing group and throws for a missing todo without writing', () => {
-    const group = addGroup('가')
-    const todo = addTodo(group.id, '가')!
+  it('returns null for a missing team and throws for a missing todo without writing', () => {
+    const team = newTeam()
+    const todo = addTodo(team.id, '가')!
     const before = readFileSync(hqPath, 'utf8')
     expect(addTodo('nope', '나')).toBeNull()
     expect(updateTodo('nope', todo.id, { isDone: true })).toBeNull()
     expect(removeTodo('nope', todo.id)).toBeNull()
     expect(reorderTodos('nope', [todo.id])).toBeNull()
-    expect(() => updateTodo(group.id, 'nope', { isDone: true })).toThrow(TodoNotFoundError)
-    expect(() => removeTodo(group.id, 'nope')).toThrow(TodoNotFoundError)
+    expect(() => updateTodo(team.id, 'nope', { isDone: true })).toThrow(TodoNotFoundError)
+    expect(() => removeTodo(team.id, 'nope')).toThrow(TodoNotFoundError)
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
   })
 
@@ -509,8 +517,9 @@ describe('group todos', () => {
     const group = addGroup('가')
     updateGroup(group.id, { name: '나', waitingNote: '메모' } as Parameters<typeof updateGroup>[1])
     const [saved] = JSON.parse(readFileSync(hqPath, 'utf8')).groups
-    expect(saved).toMatchObject({ name: '나', todos: [] })
+    expect(saved).toMatchObject({ name: '나' })
     expect(saved).not.toHaveProperty('waitingNote')
+    expect(saved).not.toHaveProperty('todos')
   })
 })
 
@@ -519,8 +528,8 @@ describe('waiting note migration', () => {
   afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
 
   const box = { x: 0, y: 0, w: 10, h: 8 }
-  const openTodo: GroupTodo = { id: 'o1', text: '있던 할 일', isDone: false, createdAt: '2026-10-01T00:00:00.000Z', doneAt: null }
-  const doneTodo: GroupTodo = {
+  const openTodo: Todo = { id: 'o1', text: '있던 할 일', isDone: false, createdAt: '2026-10-01T00:00:00.000Z', doneAt: null }
+  const doneTodo: Todo = {
     id: 'd1',
     text: '끝난 일',
     isDone: true,
@@ -531,7 +540,7 @@ describe('waiting note migration', () => {
     mkdirSync(hqDir, { recursive: true })
     writeFileSync(hqPath, JSON.stringify({ groups, decor: { kept: true } }))
   }
-  const savedGroups = () => JSON.parse(readFileSync(hqPath, 'utf8')).groups as (Record<string, unknown> & { todos: GroupTodo[] })[]
+  const savedGroups = () => JSON.parse(readFileSync(hqPath, 'utf8')).groups as (Record<string, unknown> & { todos: Todo[] })[]
 
   it('moves the real note into five open todos once and removes the key', () => {
     writeGroups([
@@ -547,7 +556,7 @@ describe('waiting note migration', () => {
       expect(todo).toEqual({ id: todo.id, text: todo.text, isDone: false, createdAt: '2026-10-25T04:00:00.000Z', doneAt: null })
     }
     expect(new Set(ade.todos.map((t) => t.id)).size).toBe(5)
-    expect(other.todos).toEqual([])
+    expect(other).not.toHaveProperty('todos')
     expect(JSON.parse(readFileSync(hqPath, 'utf8')).decor).toEqual({ kept: true })
     const before = readFileSync(hqPath, 'utf8')
     expect(migrateWaitingNotes()).toBe(0)
@@ -595,7 +604,106 @@ describe('waiting note migration', () => {
     pruneOffDuty(Date.parse('2026-10-25T00:00:00.000Z'))
     setSessionName('s', '이름')
     expect(savedGroups()[0]).toMatchObject({ waitingNote: '- 가', todos: [openTodo, doneTodo] })
-    expect(readOffice().groups[0].todos).toEqual([openTodo, doneTodo])
+  })
+})
+
+describe('group todo migration to teams', () => {
+  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
+  afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
+
+  const box = { x: 0, y: 0, w: 10, h: 8 }
+  const todo = (id: string, text: string, isDone = false): Todo => ({
+    id,
+    text,
+    isDone,
+    createdAt: '2026-10-01T00:00:00.000Z',
+    doneAt: isDone ? '2026-10-02T00:00:00.000Z' : null,
+  })
+  const team = (id: string, name: string, groupId: string, todos: Todo[] = []) => ({ id, name, cwd: `D:/${id}`, groupId, todos })
+  const write = (groups: unknown[], teams: unknown[]) => {
+    mkdirSync(hqDir, { recursive: true })
+    writeFileSync(hqPath, JSON.stringify({ groups, teams, decor: { kept: true } }))
+  }
+  const saved = () => JSON.parse(readFileSync(hqPath, 'utf8'))
+  const teamTexts = (teamId: string) =>
+    (saved().teams as { id: string; todos: Todo[] }[]).find((t) => t.id === teamId)?.todos.map((t) => `${t.text}${t.isDone ? '✓' : ''}`)
+
+  it('moves every todo of a group with one team as is, in order, keeping ids and times', () => {
+    const items = [todo('a', 'Shinanui - 접두어도 그대로'), todo('b', '둘째'), todo('c', '끝난 일', true)]
+    write([{ id: 'g', name: 'ADE', ...box, todos: items }, { id: 'h', name: 'H', ...box }], [team('t', 'JK Corp.', 'g')])
+    expect(migrateGroupTodosToTeams()).toEqual({ moves: [{ groupId: 'g', teamId: 't', count: 3 }], leftBehind: [] })
+    expect(saved().teams[0].todos).toEqual(items)
+    expect(saved().groups[0]).not.toHaveProperty('todos')
+    expect(saved().decor).toEqual({ kept: true })
+  })
+
+  it('sends a "<name> - " item to the team whose name contains the name and strips the prefix, the rest to the first team', () => {
+    write(
+      [{ id: 'g', name: 'ENGSOFT', ...box, todos: [todo('a', 'Shinanui - tracking 정리'), todo('b', '그냥 일'), todo('c', 'nakwol - 낙월 일', true), todo('d', '모르는 - 일')] }],
+      [team('t1', 'OCMS Shinanui', 'g'), team('t2', 'Nakwol', 'g'), team('t3', 'OCMS2', 'g')],
+    )
+    const result = migrateGroupTodosToTeams()
+    expect(result.moves).toEqual([
+      { groupId: 'g', teamId: 't1', count: 3 },
+      { groupId: 'g', teamId: 't2', count: 1 },
+    ])
+    expect(teamTexts('t1')).toEqual(['tracking 정리', '그냥 일', '모르는 - 일'])
+    expect(teamTexts('t2')).toEqual(['낙월 일✓'])
+    expect(teamTexts('t3')).toEqual([])
+  })
+
+  it('picks the team with the closest (shortest) name when several contain it, and the earlier one on a tie', () => {
+    write(
+      [{ id: 'g', name: 'G', ...box, todos: [todo('a', 'ocms - 가'), todo('b', 'x - 나')] }],
+      [team('t1', 'OCMS Shinanui', 'g'), team('t2', 'OCMS', 'g'), team('t3', 'ABX', 'g'), team('t4', 'XYZ', 'g')],
+    )
+    migrateGroupTodosToTeams()
+    expect(teamTexts('t2')).toEqual(['가'])
+    expect(teamTexts('t3')).toEqual(['나'])
+    expect(teamTexts('t1')).toEqual([])
+  })
+
+  it('does not strip a prefix with nothing after it or an empty name', () => {
+    write([{ id: 'g', name: 'G', ...box, todos: [todo('a', 'T1 - '), todo('b', ' - 글')] }], [team('t1', 'T1', 'g'), team('t2', 'T2', 'g')])
+    migrateGroupTodosToTeams()
+    expect(teamTexts('t1')).toEqual(['T1 - ', ' - 글'])
+  })
+
+  it('appends open todos before the done ones of the receiving team and done ones at the very end', () => {
+    write(
+      [{ id: 'g', name: 'G', ...box, todos: [todo('n1', '새 일'), todo('n2', '새 완료', true)] }],
+      [team('t', 'T', 'g', [todo('o1', '있던 일'), todo('o2', '있던 완료', true)])],
+    )
+    migrateGroupTodosToTeams()
+    expect(teamTexts('t')).toEqual(['있던 일', '새 일', '있던 완료✓', '새 완료✓'])
+  })
+
+  it('leaves a group without teams as is and reports it, and moves nothing twice', () => {
+    const orphan = [todo('x', '고아 일')]
+    write([{ id: 'g', name: 'G', ...box, todos: [todo('a', '가')] }, { id: 'o', name: 'O', ...box, todos: orphan }], [team('t', 'T', 'g')])
+    expect(migrateGroupTodosToTeams()).toEqual({
+      moves: [{ groupId: 'g', teamId: 't', count: 1 }],
+      leftBehind: [{ groupId: 'o', count: 1 }],
+    })
+    expect(saved().groups[1].todos).toEqual(orphan)
+    expect(readOffice().groups[1]).not.toHaveProperty('todos')
+    const before = readFileSync(hqPath, 'utf8')
+    expect(migrateGroupTodosToTeams()).toEqual({ moves: [], leftBehind: [{ groupId: 'o', count: 1 }] })
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+    expect(teamTexts('t')).toEqual(['가'])
+  })
+
+  it('writes nothing when there is no file or nothing to move, and refuses a broken file', () => {
+    expect(migrateGroupTodosToTeams()).toEqual({ moves: [], leftBehind: [] })
+    expect(existsSync(hqPath)).toBe(false)
+    write([{ id: 'g', name: 'G', ...box, todos: [] }], [team('t', 'T', 'g')])
+    const before = readFileSync(hqPath, 'utf8')
+    expect(migrateGroupTodosToTeams().moves).toEqual([])
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+    const broken = '{"groups": [{"id": "g", "todos": [{'
+    writeFileSync(hqPath, broken)
+    expect(() => migrateGroupTodosToTeams()).toThrow(/읽을 수 없어/)
+    expect(readFileSync(hqPath, 'utf8')).toBe(broken)
   })
 })
 

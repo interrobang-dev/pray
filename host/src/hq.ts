@@ -2,9 +2,9 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
-import { normalizeCwd, type Part, type Team } from './team.js'
+import { normalizeCwd, type Part, type Team, type Todo } from './team.js'
 
-export type { Part, Team } from './team.js'
+export type { Part, Team, Todo } from './team.js'
 
 export interface WebSessionRecord {
   sessionId: string
@@ -34,16 +34,6 @@ export function retentionOf(reason: OffDutyReason): number {
   return reason === 'released' ? RELEASED_RETENTION_MS : OFF_DUTY_RETENTION_MS
 }
 
-/** 그룹 할 일 한 줄. 시각은 ISO */
-export interface GroupTodo {
-  id: string
-  text: string
-  isDone: boolean
-  createdAt: string
-  /** 완료한 시각. 할 일이면 null */
-  doneAt: string | null
-}
-
 /** 그룹 = 그래픽 공간. 좌표·크기는 타일 단위. 화면은 w·h 를 쓰지 않는다 (그룹 크기는 안의 팀 섬으로 정한다) */
 export interface Group {
   id: string
@@ -52,9 +42,10 @@ export interface Group {
   y: number
   w: number
   h: number
-  /** 배열 순서 = 표시 순서. 늘 [할 일(사용자가 정한 순서)…, 완료(완료한 순서, 오래된 것 먼저)…] 로 나뉘어 있다 */
-  todos: GroupTodo[]
 }
+
+/** 예전 기록의 그룹. 할 일은 팀으로 옮겨졌다 (migrateGroupTodosToTeams). 팀이 없는 그룹의 것만 남을 수 있다 */
+type LegacyGroup = Group & { todos?: Todo[]; waitingNote?: unknown }
 
 export interface Office {
   groups: Group[]
@@ -100,10 +91,10 @@ function readHq(): HqFile {
   const { rooms: legacyGroups, seats: _legacySeats, ...rest } = parsed as Partial<HqFile> & { rooms?: Group[]; seats?: unknown }
   const teams = (rest.teams ?? []).map(withDefaults)
   // 예전 기본 그룹 "로비"(id lobby) 는 없어졌다. 로비 = 팀 없는 세션이 모이는 고정 구역. 팀이 안 들어 있으면 읽을 때 지운다
-  // 할 일이 생기기 전 기록은 todos 가 없다. 예전 대기 메모(waitingNote)는 여기서 바꾸지 않는다 (migrateWaitingNotes 가 한 번 옮긴다)
-  const groups = (rest.groups?.length ? rest.groups : (legacyGroups ?? []))
-    .filter((g) => g.id !== 'lobby' || teams.some((t) => t.groupId === 'lobby'))
-    .map((g) => ({ ...g, todos: g.todos ?? [] }))
+  // 그룹의 옛 todos·waitingNote 는 읽을 때 바꾸지 않고 그대로 둔다 (migrateWaitingNotes·migrateGroupTodosToTeams 가 한 번 옮긴다)
+  const groups = (rest.groups?.length ? rest.groups : (legacyGroups ?? [])).filter(
+    (g) => g.id !== 'lobby' || teams.some((t) => t.groupId === 'lobby'),
+  )
   // 모르는 키도 보존한다. 호스트·서버가 같은 파일을 쓰므로 한쪽이 구버전이어도 다른 쪽 데이터를 지우지 않게
   return {
     ...rest,
@@ -118,10 +109,10 @@ function readHq(): HqFile {
   }
 }
 
-/** 구버전 기록(desks·parts·partOf 없음, roomId 등)을 읽어도 터지지 않게 */
+/** 구버전 기록(desks·parts·partOf·todos 없음, roomId 등)을 읽어도 터지지 않게 */
 function withDefaults(team: Partial<Team> & Pick<Team, 'id' | 'name' | 'cwd'> & { roomId?: string }): Team {
   const { roomId, ...rest } = team
-  return { groupId: roomId ?? 'lobby', x: 1, y: 1, desks: {}, parts: [], partOf: {}, createdAt: '', ...rest }
+  return { groupId: roomId ?? 'lobby', x: 1, y: 1, desks: {}, parts: [], partOf: {}, todos: [], createdAt: '', ...rest }
 }
 
 function unreadable(cause: unknown): Error {
@@ -349,9 +340,10 @@ export function migratePositionNames(): number {
   return migratedCount
 }
 
+/** 화면용. 팀이 없어 못 옮긴 그룹의 옛 todos 는 싣지 않는다 */
 export function readOffice(): Office {
   const { groups, teams } = readHq()
-  return { groups, teams }
+  return { groups: groups.map(({ todos: _legacyTodos, ...group }: LegacyGroup) => group), teams }
 }
 
 export class OrderMismatchError extends Error {
@@ -382,7 +374,7 @@ export function addGroup(name: string, position: { x?: unknown; y?: unknown } = 
   const hq = readHq()
   const rightEdge = hq.groups.length ? Math.max(...hq.groups.map((r) => r.x + r.w)) + 1 : 0
   const { x, y } = isTile(position.x) && isTile(position.y) ? { x: position.x, y: position.y } : { x: rightEdge, y: 0 }
-  const group: Group = { id: randomUUID().slice(0, 8), name, x, y, w: 10, h: 8, todos: [] }
+  const group: Group = { id: randomUUID().slice(0, 8), name, x, y, w: 10, h: 8 }
   hq.groups.push(group)
   writeHq(hq)
   return group
@@ -400,10 +392,10 @@ function limitShift(delta: number, anchors: number[]): number {
 }
 
 /**
- * 이름·위치·크기 변경. 위치는 0 이상, 크기는 MIN_GROUP_SIZE 이상 타일 정수만 받는다. 할 일은 아래 할 일 함수로만 바꾼다.
+ * 이름·위치·크기 변경. 위치는 0 이상, 크기는 MIN_GROUP_SIZE 이상 타일 정수만 받는다.
  * 위치가 바뀌면 그 그룹 팀들의 앵커도 같은 만큼 옮긴다 (그룹을 끌면 안의 섬이 같이 움직인다)
  */
-export function updateGroup(id: string, patch: Partial<Omit<Group, 'id' | 'todos'>>): Group | null {
+export function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>): Group | null {
   const hq = readHq()
   const group = hq.groups.find((r) => r.id === id)
   if (!group) return null
@@ -448,7 +440,7 @@ export function reorderGroups(ids: string[]): Group[] {
   return hq.groups
 }
 
-// ---------- 그룹 할 일 ----------
+// ---------- 팀 할 일 ----------
 
 export const MAX_TODO_LENGTH = 500
 
@@ -483,23 +475,23 @@ export class TodoNotFoundError extends Error {
   }
 }
 
-function newTodo(text: string, now: Date): GroupTodo {
+function newTodo(text: string, now: Date): Todo {
   return { id: randomUUID().slice(0, 8), text, isDone: false, createdAt: now.toISOString(), doneAt: null }
 }
 
 /** 할 일 구역과 완료 구역 (각 구역 안 순서 그대로) */
-function splitTodos(todos: GroupTodo[]): { open: GroupTodo[]; done: GroupTodo[] } {
+function splitTodos(todos: Todo[]): { open: Todo[]; done: Todo[] } {
   return { open: todos.filter((t) => !t.isDone), done: todos.filter((t) => t.isDone) }
 }
 
-/** 할 일 구역 맨 끝(첫 완료 앞)에 넣는다. 글은 부른 쪽이 parseTodoText 로 거른다. 그룹이 없으면 null */
-export function addTodo(groupId: string, text: string, now = new Date()): GroupTodo | null {
+/** 할 일 구역 맨 끝(첫 완료 앞)에 넣는다. 글은 부른 쪽이 parseTodoText 로 거른다. 팀이 없으면 null */
+export function addTodo(teamId: string, text: string, now = new Date()): Todo | null {
   const hq = readHq()
-  const group = hq.groups.find((g) => g.id === groupId)
-  if (!group) return null
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team) return null
   const todo = newTodo(text, now)
-  const { open, done } = splitTodos(group.todos)
-  group.todos = [...open, todo, ...done]
+  const { open, done } = splitTodos(team.todos)
+  team.todos = [...open, todo, ...done]
   writeHq(hq)
   return todo
 }
@@ -508,44 +500,44 @@ export type TodoPatch = { text?: string; isDone?: boolean }
 
 /**
  * 글·완료 변경. 완료가 되면 doneAt = now 이고 맨 끝(완료한 순서)으로, 할 일로 되돌리면 doneAt null 이고 할 일 구역 맨 끝으로.
- * 완료 값이 그대로면 자리를 안 바꾼다. 그룹이 없으면 null, 할 일이 없으면 TodoNotFoundError
+ * 완료 값이 그대로면 자리를 안 바꾼다. 팀이 없으면 null, 할 일이 없으면 TodoNotFoundError
  */
-export function updateTodo(groupId: string, todoId: string, patch: TodoPatch, now = new Date()): GroupTodo | null {
+export function updateTodo(teamId: string, todoId: string, patch: TodoPatch, now = new Date()): Todo | null {
   const hq = readHq()
-  const group = hq.groups.find((g) => g.id === groupId)
-  if (!group) return null
-  const todo = group.todos.find((t) => t.id === todoId)
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team) return null
+  const todo = team.todos.find((t) => t.id === todoId)
   if (!todo) throw new TodoNotFoundError()
   if (patch.text !== undefined) todo.text = patch.text
   if (patch.isDone !== undefined && patch.isDone !== todo.isDone) {
     todo.isDone = patch.isDone
     todo.doneAt = patch.isDone ? now.toISOString() : null
-    const { open, done } = splitTodos(group.todos.filter((t) => t.id !== todoId))
-    group.todos = patch.isDone ? [...open, ...done, todo] : [...open, todo, ...done]
+    const { open, done } = splitTodos(team.todos.filter((t) => t.id !== todoId))
+    team.todos = patch.isDone ? [...open, ...done, todo] : [...open, todo, ...done]
   }
   writeHq(hq)
   return todo
 }
 
-/** 남은 할 일 목록. 그룹이 없으면 null, 할 일이 없으면 TodoNotFoundError */
-export function removeTodo(groupId: string, todoId: string): GroupTodo[] | null {
+/** 남은 할 일 목록. 팀이 없으면 null, 할 일이 없으면 TodoNotFoundError */
+export function removeTodo(teamId: string, todoId: string): Todo[] | null {
   const hq = readHq()
-  const group = hq.groups.find((g) => g.id === groupId)
-  if (!group) return null
-  if (!group.todos.some((t) => t.id === todoId)) throw new TodoNotFoundError()
-  group.todos = group.todos.filter((t) => t.id !== todoId)
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team) return null
+  if (!team.todos.some((t) => t.id === todoId)) throw new TodoNotFoundError()
+  team.todos = team.todos.filter((t) => t.id !== todoId)
   writeHq(hq)
-  return group.todos
+  return team.todos
 }
 
-/** 할 일(미완료) 구역 순서를 통째로 바꾼다. ids 는 그 구역 전부여야 한다. 완료 구역은 그대로. 그룹이 없으면 null */
-export function reorderTodos(groupId: string, ids: string[]): GroupTodo[] | null {
+/** 할 일(미완료) 구역 순서를 통째로 바꾼다. ids 는 그 구역 전부여야 한다. 완료 구역은 그대로. 팀이 없으면 null */
+export function reorderTodos(teamId: string, ids: string[]): Todo[] | null {
   const hq = readHq()
-  const group = hq.groups.find((g) => g.id === groupId)
-  if (!group) return null
-  group.todos = reorderSlots(group.todos, ids, (t) => !t.isDone)
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team) return null
+  team.todos = reorderSlots(team.todos, ids, (t) => !t.isDone)
   writeHq(hq)
-  return group.todos
+  return team.todos
 }
 
 /**
@@ -556,15 +548,74 @@ export function reorderTodos(groupId: string, ids: string[]): GroupTodo[] | null
 export function migrateWaitingNotes(now = new Date()): number {
   const hq = readHq()
   let migratedCount = 0
-  for (const group of hq.groups as (Group & { waitingNote?: unknown })[]) {
+  for (const group of hq.groups as LegacyGroup[]) {
     if (typeof group.waitingNote !== 'string') continue
-    const { open, done } = splitTodos(group.todos)
+    const { open, done } = splitTodos(group.todos ?? [])
     group.todos = [...open, ...splitWaitingNote(group.waitingNote).map((text) => newTodo(text, now)), ...done]
     delete group.waitingNote
     migratedCount++
   }
   if (migratedCount > 0) writeHq(hq)
   return migratedCount
+}
+
+/** 항목 글이 "<이름> - <글>" 꼴이고 그 이름이 팀 이름에 (대소문자 무시) 포함되면 그 팀과 접두어를 뗀 글. 여러 팀이면 이름이 가장 비슷한(가장 짧은) 팀, 같으면 앞선 팀 */
+function teamByTodoPrefix(text: string, teams: Team[]): { team: Team; text: string } | null {
+  const separatorIndex = text.indexOf(' - ')
+  if (separatorIndex < 0) return null
+  const prefix = text.slice(0, separatorIndex).trim().toLowerCase()
+  const rest = text.slice(separatorIndex + 3).trim()
+  if (!prefix || !rest) return null
+  let best: Team | null = null
+  for (const team of teams) {
+    if (!team.name.toLowerCase().includes(prefix)) continue
+    if (!best || team.name.length < best.name.length) best = team
+  }
+  return best ? { team: best, text: rest } : null
+}
+
+export interface GroupTodoMigration {
+  /** 할 일을 받은 팀과 받은 개수 (옮긴 그룹의 팀 순서) */
+  moves: { groupId: string; teamId: string; count: number }[]
+  /** 팀이 없어 옮기지 못하고 그룹 기록에 둔 그룹과 그 개수 */
+  leftBehind: { groupId: string; count: number }[]
+}
+
+/**
+ * 그룹 할 일(`groups[].todos`, 예전 기록)을 팀 할 일로 한 번 옮기고 그 키를 지운다 (서버가 시작할 때 부른다).
+ * 그 그룹(groupId)의 팀이 하나면 전부 그 팀으로(순서·id·시각 그대로). 여럿이면 글이 "<이름> - " 로 시작하고 그 이름이 팀 이름에 들어 있는 항목은
+ * 그 팀으로 옮기며 접두어를 떼고, 나머지는 그 그룹의 첫 팀(teams 배열 순서)으로. 팀이 없는 그룹은 옮기지 않고 그대로 둔다.
+ * 옮긴 항목은 받는 팀의 구역 규칙대로 붙는다 (할 일은 할 일 구역 끝, 완료는 완료 구역 끝). 옮길 것이 없으면 쓰지 않는다
+ */
+export function migrateGroupTodosToTeams(): GroupTodoMigration {
+  const hq = readHq()
+  const result: GroupTodoMigration = { moves: [], leftBehind: [] }
+  let isChanged = false
+  for (const group of hq.groups as LegacyGroup[]) {
+    const todos = group.todos ?? []
+    if (todos.length === 0) continue
+    const teams = hq.teams.filter((t) => t.groupId === group.id)
+    if (teams.length === 0) {
+      result.leftBehind.push({ groupId: group.id, count: todos.length })
+      continue
+    }
+    const received = new Map<Team, Todo[]>()
+    for (const todo of todos) {
+      const byPrefix = teams.length > 1 ? teamByTodoPrefix(todo.text, teams) : null
+      const target = byPrefix?.team ?? teams[0]
+      received.set(target, [...(received.get(target) ?? []), byPrefix ? { ...todo, text: byPrefix.text } : todo])
+    }
+    for (const [team, moved] of received) {
+      const current = splitTodos(team.todos)
+      const incoming = splitTodos(moved)
+      team.todos = [...current.open, ...incoming.open, ...current.done, ...incoming.done]
+      result.moves.push({ groupId: group.id, teamId: team.id, count: moved.length })
+    }
+    delete group.todos
+    isChanged = true
+  }
+  if (isChanged) writeHq(hq)
+  return result
 }
 
 // ---------- 팀 ----------
@@ -606,6 +657,7 @@ export function addTeam(input: { name: string; cwd: string; groupId: string; x?:
     desks: {},
     parts: [],
     partOf: {},
+    todos: [],
     createdAt: new Date().toISOString(),
   }
   hq.teams.push(team)

@@ -1,25 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { applyTodo, moveTo, remainingCount, removeTodo, reorderOpen, splitTodos, todosOf } from './groupTodos'
-import type { Group, GroupTodo } from './types'
+import { applyTodo, moveTo, remainingCount, removeTodo, reorderOpen, splitTodos, todosOf } from './teamTodos'
+import type { Team, TeamTodo } from './types'
 
-const todo = (id: string, isDone = false): GroupTodo => ({
+const todo = (id: string, isDone = false): TeamTodo => ({
   id,
   text: id,
   isDone,
   createdAt: '2026-10-25T00:00:00.000Z',
   doneAt: isDone ? '2026-10-25T01:00:00.000Z' : null,
 })
-const group = (todos?: GroupTodo[]): Group => ({ id: 'g', name: 'g', x: 0, y: 0, w: 9, h: 7, ...(todos ? { todos } : {}) })
-const ids = (todos: GroupTodo[]) => todos.map((item) => item.id)
+const team = (todos?: TeamTodo[]): Team => ({ id: 't', name: 't', cwd: 'd:/t', groupId: 'g', x: 0, y: 0, desks: {}, parts: [], partOf: {}, createdAt: '2026-10-25T00:00:00.000Z', ...(todos ? { todos } : {}) })
+const ids = (todos: TeamTodo[]) => todos.map((item) => item.id)
 
 /** 서버 순서: 할 일 a·b·c, 완료 x(먼저 완료)·y */
 const sample = () => [todo('a'), todo('b'), todo('c'), todo('x', true), todo('y', true)]
 
 describe('todosOf·remainingCount', () => {
   it('필드가 없는 옛 응답은 빈 목록, 남은 개수는 미완료만', () => {
-    expect(todosOf(group())).toEqual([])
-    expect(remainingCount(group())).toBe(0)
-    expect(remainingCount(group(sample()))).toBe(3)
+    expect(todosOf(team())).toEqual([])
+    expect(remainingCount(team())).toBe(0)
+    expect(remainingCount(team(sample()))).toBe(3)
   })
 })
 

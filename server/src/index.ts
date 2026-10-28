@@ -35,6 +35,7 @@ import {
   TeamConflictError,
   WorktreePartError,
   addTodo,
+  migrateGroupTodosToTeams,
   migratePositionNames,
   migrateWaitingNotes,
   parseTodoText,
@@ -1396,7 +1397,9 @@ app.get('/api/team/:teamId', async (req, res) => {
       lastAssistantText: s.lastAssistantText,
       pendingTool: s.pendingTool,
     }))
-  res.json({ ...team, vcs: vcsOf(team.cwd), part, members, tasks: tasks.listByUnit(team.id, part?.id ?? null) })
+  // 할 일은 싣지 않는다 (팀장 토큰 절약)
+  const { todos: _todos, ...teamWithoutTodos } = team
+  res.json({ ...teamWithoutTodos, vcs: vcsOf(team.cwd), part, members, tasks: tasks.listByUnit(team.id, part?.id ?? null) })
 })
 
 app.patch('/api/team/:teamId', (req, res) => {
@@ -1848,28 +1851,51 @@ app.patch('/api/groups/:id', (req, res) => {
   broadcastOffice()
 })
 
-// ---------- 그룹 할 일 (배열 순서 = 표시 순서. hq 가 늘 [할 일…, 완료…] 로 나눠 둔다) ----------
+// ---------- 팀 할 일 (배열 순서 = 표시 순서. hq 가 늘 [할 일…, 완료…] 로 나눠 둔다) ----------
 
 const TODO_TEXT_MESSAGE = 'Text must be 1 to 500 characters'
 
 /** 할 일 구역 맨 끝(첫 완료 앞)에 넣는다 */
-app.post('/api/groups/:groupId/todos', (req, res) => {
+app.post('/api/team/:teamId/todos', (req, res) => {
   const text = parseTodoText(((req.body ?? {}) as { text?: unknown }).text)
   if (text === null) {
     res.status(400).json({ message: TODO_TEXT_MESSAGE })
     return
   }
-  const todo = addTodo(req.params.groupId, text)
+  const todo = addTodo(req.params.teamId, text)
   if (!todo) {
-    res.status(404).json({ message: 'Group not found' })
+    res.status(404).json({ message: 'Team not found' })
     return
   }
   res.json({ todo })
   broadcastOffice()
 })
 
+/** 할 일(미완료) 구역 순서. ids 는 지금 할 일 전부 (다르면 400). 완료 구역은 그대로. `:todoId` 라우트보다 앞에 둔다 */
+app.put('/api/team/:teamId/todos/order', (req, res) => {
+  const { ids } = (req.body ?? {}) as { ids?: unknown }
+  if (!isIdList(ids)) {
+    res.status(400).json({ message: 'ids (array of strings) required' })
+    return
+  }
+  try {
+    if (!reorderTodos(req.params.teamId, ids)) {
+      res.status(404).json({ message: 'Team not found' })
+      return
+    }
+  } catch (error) {
+    if (error instanceof OrderMismatchError) {
+      res.status(400).json({ message: "IDs don't match the current list (missing, unknown or duplicate). Reload and try again" })
+      return
+    }
+    throw error
+  }
+  res.json({})
+  broadcastOffice()
+})
+
 /** 글·완료 변경. 완료가 되면 맨 끝, 되돌리면 할 일 구역 맨 끝으로 (hq updateTodo) */
-app.patch('/api/groups/:groupId/todos/:todoId', (req, res) => {
+app.patch('/api/team/:teamId/todos/:todoId', (req, res) => {
   const body = (req.body ?? {}) as { text?: unknown; isDone?: unknown }
   if (body.text === undefined && body.isDone === undefined) {
     res.status(400).json({ message: 'text or isDone required' })
@@ -1885,12 +1911,12 @@ app.patch('/api/groups/:groupId/todos/:todoId', (req, res) => {
     return
   }
   try {
-    const todo = updateTodo(req.params.groupId, req.params.todoId, {
+    const todo = updateTodo(req.params.teamId, req.params.todoId, {
       text,
       isDone: typeof body.isDone === 'boolean' ? body.isDone : undefined,
     })
     if (!todo) {
-      res.status(404).json({ message: 'Group not found' })
+      res.status(404).json({ message: 'Team not found' })
       return
     }
     res.json({ todo })
@@ -1904,38 +1930,15 @@ app.patch('/api/groups/:groupId/todos/:todoId', (req, res) => {
   broadcastOffice()
 })
 
-app.delete('/api/groups/:groupId/todos/:todoId', (req, res) => {
+app.delete('/api/team/:teamId/todos/:todoId', (req, res) => {
   try {
-    if (!removeTodo(req.params.groupId, req.params.todoId)) {
-      res.status(404).json({ message: 'Group not found' })
+    if (!removeTodo(req.params.teamId, req.params.todoId)) {
+      res.status(404).json({ message: 'Team not found' })
       return
     }
   } catch (error) {
     if (error instanceof TodoNotFoundError) {
       res.status(404).json({ message: 'To-do not found' })
-      return
-    }
-    throw error
-  }
-  res.json({})
-  broadcastOffice()
-})
-
-/** 할 일(미완료) 구역 순서. ids 는 지금 할 일 전부 (다르면 400). 완료 구역은 그대로 */
-app.put('/api/groups/:groupId/todos/order', (req, res) => {
-  const { ids } = (req.body ?? {}) as { ids?: unknown }
-  if (!isIdList(ids)) {
-    res.status(400).json({ message: 'ids (array of strings) required' })
-    return
-  }
-  try {
-    if (!reorderTodos(req.params.groupId, ids)) {
-      res.status(404).json({ message: 'Group not found' })
-      return
-    }
-  } catch (error) {
-    if (error instanceof OrderMismatchError) {
-      res.status(400).json({ message: "IDs don't match the current list (missing, unknown or duplicate). Reload and try again" })
       return
     }
     throw error
@@ -2113,6 +2116,14 @@ try {
   if (migratedCount > 0) console.log(`그룹 대기 메모 ${migratedCount}개를 할 일로 옮김`)
 } catch (error) {
   console.error(`그룹 대기 메모 옮기기 실패: ${error}`)
+}
+// 그룹 할 일을 팀 할 일로 한 번 옮긴다. 위와 같이 실패는 로그만 (다음 시작 때 다시 한다)
+try {
+  const { moves, leftBehind } = migrateGroupTodosToTeams()
+  for (const move of moves) console.log(`그룹 ${move.groupId} 의 할 일 ${move.count}개를 팀 ${move.teamId} 로 옮김`)
+  for (const left of leftBehind) console.log(`팀이 없는 그룹 ${left.groupId} 의 할 일 ${left.count}개는 옮기지 않고 둠`)
+} catch (error) {
+  console.error(`그룹 할 일 옮기기 실패: ${error}`)
 }
 // 옛 세션 이름 "[역할] 이름" 을 역할과 이름으로 한 번 나눈다. 위와 같이 실패는 로그만 (다음 시작 때 다시 한다)
 try {

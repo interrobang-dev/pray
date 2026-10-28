@@ -112,13 +112,13 @@ export function cornerFixtures(padTiles: number): Fixture[] {
 /** 데스크존 위 줄 큰 화분(office-v2 plant-large, 폭 42): 그룹 오른쪽 끝에서 그림 가운데까지와 그림 반폭 (도트 px) */
 const GROUP_PLANT_FROM_RIGHT = 36
 const GROUP_PLANT_HALF_W = 21
-/** 이름표·TODO 버튼 오른쪽 끝과 화분 사이에 남길 틈 (도트 px). 버튼의 마우스 올림 테두리(3px 밖)도 닿지 않게 */
+/** 이름표 오른쪽 끝과 화분 사이에 남길 틈 (도트 px). 이름표의 마우스 올림 테두리(3px 밖)도 닿지 않게 */
 const GROUP_PLANT_GAP = 6
 
 /**
  * 데스크존 위 이름표 줄 (그룹 영역 왼쪽 위 기준). 그룹 영역 = 섬들 + 위 이름표 줄 1타일이라 이 줄에는 섬이 오지 않는다.
- * 왼쪽은 그룹 이름표와 TODO 버튼, 오른쪽 끝 큰 화분. 화분 아래 끝을 줄 아래 끝에 맞춰 어느 섬과도 겹치지 않는다 (위는 파티션에 걸친다).
- * labelRight = 이름표·TODO 버튼이 차지한 오른쪽 끝 (도트 px). 화분이 거기에 닿으면(좁은 그룹·긴 이름) 화분을 두지 않는다.
+ * 왼쪽은 그룹 이름표, 오른쪽 끝 큰 화분. 화분 아래 끝을 줄 아래 끝에 맞춰 어느 섬과도 겹치지 않는다 (위는 파티션에 걸친다).
+ * labelRight = 이름표가 차지한 오른쪽 끝 (도트 px). 화분이 거기에 닿으면(좁은 그룹·긴 이름) 화분을 두지 않는다.
  * 왼쪽·오른쪽·아래는 섬 테두리가 그룹 벽에 닿아 소품을 둘 자리가 없다
  */
 export function groupFixtures(area: Rect, labelRight: number): Fixture[] {

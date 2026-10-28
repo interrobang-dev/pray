@@ -17,8 +17,8 @@ import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { FlowPanel } from './FlowPanel'
-import { GroupTodosModal } from './GroupTodosModal'
-import { remainingCount, todosOf } from './groupTodos'
+import { TeamTodosModal } from './TeamTodosModal'
+import { remainingCount, todosOf } from './teamTodos'
 import { Modal, Segmented } from './Modal'
 import { ModelSettingModal, useRestartingSessions } from './ModelSettingModal'
 import { nextLabel } from './modelSetting'
@@ -37,7 +37,7 @@ import {
   type FlowStatus,
   type Office as OfficeData,
   type Group,
-  type GroupTodo,
+  type TeamTodo,
   type OffDutyLabel,
   type Part,
   type Session,
@@ -262,9 +262,9 @@ export function App() {
   /** 헤더 테마 버튼과 Appearance 창의 Mode 가 같은 값을 본다 */
   const theme = useSyncExternalStore(subscribeTheme, themeChoice)
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
-  /** TODO 모달을 연 그룹. 목록 그룹 라벨의 버튼과 사무실 그룹 이름표 옆 버튼이 같은 모달을 연다 */
-  const [todoGroupId, setTodoGroupId] = useState<string | null>(null)
-  const todoGroup = todoGroupId ? office.groups.find((g) => g.id === todoGroupId) : undefined
+  /** TODO 모달을 연 팀. 목록 팀 머리줄의 버튼과 사무실 팀 명판 옆 버튼이 같은 모달을 연다 */
+  const [todoTeamId, setTodoTeamId] = useState<string | null>(null)
+  const todoTeam = todoTeamId ? office.teams.find((t) => t.id === todoTeamId) : undefined
 
   useEffect(() => {
     let isCurrent = true
@@ -730,8 +730,8 @@ export function App() {
   }
 
   /** TODO 모달이 서버 응답으로 화면 목록을 먼저 바꾼다. 사무실 SSE 가 오면 서버 것으로 바뀐다 */
-  function changeTodos(groupId: string, update: (todos: GroupTodo[]) => GroupTodo[]) {
-    setOffice((prev) => ({ ...prev, groups: prev.groups.map((g) => (g.id === groupId ? { ...g, todos: update(todosOf(g)) } : g)) }))
+  function changeTodos(teamId: string, update: (todos: TeamTodo[]) => TeamTodo[]) {
+    setOffice((prev) => ({ ...prev, teams: prev.teams.map((t) => (t.id === teamId ? { ...t, todos: update(todosOf(t)) } : t)) }))
   }
 
   /** 그룹 안의 팀들도 같은 만큼 옮긴다 (서버도 PATCH 한 번에 같이 옮긴다) */
@@ -879,13 +879,13 @@ export function App() {
     )
   }
 
-  /** 그룹 라벨의 TODO 버튼: 체크리스트 아이콘 + 남은 개수. 남은 것이 있으면 늘 보이고 0 이면 "+"·"⋯" 처럼 마우스를 올렸을 때만 (터치 기기는 늘) */
-  function renderTodoButton(group: Group) {
-    const remaining = remainingCount(group)
+  /** 팀 머리줄의 TODO 버튼: 체크리스트 아이콘 + 남은 개수. 남은 것이 있으면 늘 보이고 0 이면 "+"·"⋯" 처럼 마우스를 올렸을 때만 (터치 기기는 늘) */
+  function renderTodoButton(team: Team) {
+    const remaining = remainingCount(team)
     return (
       <button
         className={remaining > 0 ? 'todo-button has-todos' : 'todo-button'}
-        onClick={() => setTodoGroupId(group.id)}
+        onClick={() => setTodoTeamId(team.id)}
         title="TODO"
         aria-label={remaining > 0 ? `TODO · ${remaining} left` : 'TODO'}
       >
@@ -993,6 +993,7 @@ export function App() {
               {team.vcs.kind === 'git' ? 'git' : 'SVN'}
             </span>
           )}
+          {renderTodoButton(team)}
           <span className="head-actions">
             <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="Add session to team">
               +
@@ -1228,7 +1229,6 @@ export function App() {
                 >
                   <div className="group-label">
                     <span className="name">{group.name}</span>
-                    {renderTodoButton(group)}
                     <span className="head-actions">
                       <button onClick={() => openTeamForm(group.id)} title="Add team to group">
                         +
@@ -1312,7 +1312,7 @@ export function App() {
           </Modal>
         )}
         {sessionForm && renderSessionModal(sessionForm.teamId, sessionForm.partId)}
-        {todoGroup && <GroupTodosModal key={todoGroup.id} group={todoGroup} onClose={() => setTodoGroupId(null)} onChangeTodos={changeTodos} />}
+        {todoTeam && <TeamTodosModal key={todoTeam.id} team={todoTeam} onClose={() => setTodoTeamId(null)} onChangeTodos={changeTodos} />}
         {partForm && (
           <Modal
             title={`New part — Team "${office.teams.find((t) => t.id === partForm.teamId)?.name ?? ''}"`}
@@ -1401,7 +1401,7 @@ export function App() {
             onMoveGroup={moveGroup}
             onMoveTeam={moveTeam}
             onEditTeam={editTeam}
-            onOpenGroupTodos={setTodoGroupId}
+            onOpenTeamTodos={setTodoTeamId}
           />
         )}
         {isFlowOpen && !selected && (
@@ -1902,7 +1902,7 @@ function NewSessionIcon() {
   )
 }
 
-/** 그룹 라벨의 TODO 아이콘: 체크리스트 (체크한 줄 둘 + 빈 상자 줄 하나). 사무실 그룹 이름표 옆 도트 아이콘(Office.tsx TODO_ICON)과 같은 모양 */
+/** 팀 머리줄의 TODO 아이콘: 체크리스트 (체크한 줄 둘 + 빈 상자 줄 하나). 사무실 팀 명판 옆 도트 아이콘(Office.tsx TODO_ICON)과 같은 모양 */
 function TodoIcon() {
   return (
     <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
