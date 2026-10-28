@@ -2,7 +2,6 @@ import { memo } from 'react'
 import Markdown, { type Components, type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import 'highlight.js/styles/github.css'
 import { CopyButton } from './CopyButton'
 import { codeBlockText, type HastNode } from './codeText'
 

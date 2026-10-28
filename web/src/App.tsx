@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -42,7 +43,8 @@ import {
   type Shell,
   type Team,
 } from './types'
-import { setThemeChoice, themeChoice, type ThemeChoice } from './theme'
+import { setThemeChoice, subscribeTheme, themeChoice, type ThemeChoice } from './theme'
+import { AppearanceModal } from './AppearanceModal'
 
 interface Snapshot {
   isHostReachable: boolean
@@ -256,7 +258,9 @@ export function App() {
   const [dotHeadArt, setDotHeadArt] = useState<{ sheet: CharacterSheet; art: RecolorArt } | null>(null)
   /** 데스크톱에서 사무실을 숨긴 화면: 패널이 목록 오른쪽 폭을 다 쓰고, 세션을 안 골랐으면 그 자리에 안내 */
   const isOfficeHiddenLayout = !isNarrow && isOfficeHidden
-  const [theme, setTheme] = useState<ThemeChoice>(themeChoice)
+  /** 헤더 테마 버튼과 Appearance 창의 Mode 가 같은 값을 본다 */
+  const theme = useSyncExternalStore(subscribeTheme, themeChoice)
+  const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
   /** TODO 모달을 연 그룹. 목록 그룹 라벨의 버튼과 사무실 그룹 이름표 옆 버튼이 같은 모달을 연다 */
   const [todoGroupId, setTodoGroupId] = useState<string | null>(null)
   const todoGroup = todoGroupId ? office.groups.find((g) => g.id === todoGroupId) : undefined
@@ -580,9 +584,7 @@ export function App() {
   }
 
   function cycleTheme() {
-    const next = NEXT_THEME[theme]
-    setThemeChoice(next)
-    setTheme(next)
+    setThemeChoice(NEXT_THEME[theme])
   }
 
   async function renameSession(event: FormEvent<HTMLFormElement>) {
@@ -1183,6 +1185,9 @@ export function App() {
             <button className="icon" onClick={cycleTheme} title={`Theme: ${THEME_LABELS[theme]}`} aria-label={`Theme: ${THEME_LABELS[theme]}`}>
               <ThemeIcon choice={theme} />
             </button>
+            <button className="icon" onClick={() => setIsAppearanceOpen(true)} title="Appearance" aria-label="Appearance">
+              <AppearanceIcon />
+            </button>
             {/* 폰 폭에는 원래 사무실이 없다 */}
             {!isNarrow && (
               <button
@@ -1511,6 +1516,7 @@ export function App() {
             )}
           </section>
         )}
+        {isAppearanceOpen && <AppearanceModal onClose={() => setIsAppearanceOpen(false)} />}
         {modelModalSession && attendanceOf(modelModalSession) === 'present' && modelModalSession.kind === 'web' && (
           <ModelSettingModal
             session={modelModalSession}
@@ -1791,6 +1797,16 @@ function ThemeIcon({ choice }: { choice: ThemeChoice }) {
           <path d="M8 11v2.5M5.5 13.5h5" />
         </>
       )}
+    </svg>
+  )
+}
+
+/** 헤더의 Appearance 버튼 아이콘: 톱니 */
+function AppearanceIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round">
+      <path d="M6.8 1.5h2.4l.35 1.75 1.2.7 1.7-.57 1.2 2.08-1.35 1.18v1.4l1.35 1.18-1.2 2.08-1.7-.57-1.2.7-.35 1.75H6.8l-.35-1.75-1.2-.7-1.7.57-1.2-2.08 1.35-1.18v-1.4L2.35 5.46l1.2-2.08 1.7.57 1.2-.7z" />
+      <circle cx="8" cy="8" r="2" />
     </svg>
   )
 }
