@@ -3,6 +3,7 @@ import { Modal, Segmented } from './Modal'
 import { ACCENT_PRESETS, PALETTES } from './palettes'
 import { DEFAULT_APPEARANCE, FONT_SIZE_OPTIONS, accentBase, accentSurface, accentVars, normalizeHex, paletteVars, type Appearance, type FontSize, type ThemeChoice } from './appearance'
 import { appearance, setAppearance, setThemeChoice, subscribeTheme, themeChoice, themeMode } from './theme'
+import { ChatStyleTab } from './ChatStyleTab'
 
 const MODE_OPTIONS: { value: ThemeChoice; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -10,11 +11,33 @@ const MODE_OPTIONS: { value: ThemeChoice; label: string }[] = [
   { value: 'system', label: 'System' },
 ]
 
+type Tab = 'app' | 'chat'
+
 /**
- * 화면 스타일 설정 창 (목록 헤더 톱니 버튼). 바꾸면 바로 걸리고 이 브라우저에 저장된다 (theme.ts).
- * 견본 색은 그 팔레트·강조색의 실제 값(palettes.ts·appearance.ts)을 인라인 style 로 칠한다 — 지금 화면 변수가 아니라 고를 것의 색이라서
+ * 화면 스타일 설정 창 (목록 헤더 톱니 버튼). 탭 App(앱 전체) · Chat(대화 모양, ChatStyleTab.tsx). 바꾸면 바로 걸리고 이 브라우저에 저장된다 (theme.ts).
+ * 열 때는 늘 App 탭이다
  */
 export function AppearanceModal({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<Tab>('app')
+  return (
+    <Modal title="Appearance" onClose={onClose} className="appearance-modal" hasCloseButton>
+      <div className="appearance-tabs" role="tablist" aria-label="Appearance">
+        {(['app', 'chat'] as const).map((value) => (
+          <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}>
+            {value === 'app' ? 'App' : 'Chat'}
+          </button>
+        ))}
+      </div>
+      {tab === 'app' ? <AppTab /> : <ChatStyleTab />}
+    </Modal>
+  )
+}
+
+/**
+ * App 탭: 모드·팔레트·강조색·글자 크기.
+ * 견본 색은 그 팔레트·강조색의 실제 값(palettes.ts·appearance.ts)을 인라인 style 로 칠한다 — 지금 화면 변수가 아니라 고를 것의 색이라서
+ */
+function AppTab() {
   const choice = useSyncExternalStore(subscribeTheme, themeChoice)
   const mode = useSyncExternalStore(subscribeTheme, themeMode)
   const current = useSyncExternalStore(subscribeTheme, appearance)
@@ -38,8 +61,9 @@ export function AppearanceModal({ onClose }: { onClose: () => void }) {
     if (hex) update({ accent: hex })
   }
 
+  /** App 탭 것만 기본으로 (모드는 시스템). 대화 모양은 Chat 탭의 Reset chat style 이 따로 한다 */
   function reset() {
-    setAppearance(DEFAULT_APPEARANCE)
+    setAppearance({ ...DEFAULT_APPEARANCE, chat: current.chat })
     setThemeChoice('system')
     setHexDraft('')
   }
@@ -50,7 +74,7 @@ export function AppearanceModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="Appearance" onClose={onClose} className="appearance-modal" hasCloseButton>
+    <>
       <section className="appearance-section">
         <span className="appearance-label">Mode</span>
         <Segmented value={choice} options={MODE_OPTIONS} onChange={setThemeChoice} />
@@ -146,6 +170,6 @@ export function AppearanceModal({ onClose }: { onClose: () => void }) {
           Reset to defaults
         </button>
       </div>
-    </Modal>
+    </>
   )
 }

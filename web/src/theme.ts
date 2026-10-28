@@ -1,6 +1,6 @@
 /**
- * 화면 테마·스타일 적용. 고른 값(모드 라이트·다크·시스템, 팔레트·강조색·글자 크기)은 이 브라우저의 localStorage 에 두고,
- * <html> 에 data-theme="light|dark"·data-palette·data-font-size 와 팔레트·강조색 변수(인라인 style)로 건다 (계산은 appearance.ts).
+ * 화면 테마·스타일 적용. 고른 값(모드 라이트·다크·시스템, 팔레트·강조색·글자 크기, 대화 모양)은 이 브라우저의 localStorage 에 두고,
+ * <html> 에 data-theme="light|dark"·data-palette·data-font-size·data-chat-*(대화 모양, 기본값이 아닌 것만)와 팔레트·강조색·대화 글자 색 변수(인라인 style)로 건다 (계산은 appearance.ts).
  * 시스템이면 OS 설정(prefers-color-scheme)을 따르고 OS 가 바뀌면 바로 따라간다 (로그인 화면 포함 — 이 모듈은 main.tsx 가 불러온다).
  * index.html 의 인라인 스크립트가 React·CSS 전에 같은 결과를 한 번 건다 (첫 화면이 번쩍이지 않게). 그 스크립트는 여기서 미리 계산해 둔
  * APPEARANCE_BOOT_KEY 값을 그대로 걸기만 한다 — 거는 규칙을 바꾸면 거기도 같이 바꾼다 (appearance.test.ts 가 두 곳의 결과를 맞춰 본다)
@@ -9,6 +9,7 @@ import {
   ALL_VAR_NAMES,
   APPEARANCE_BOOT_KEY,
   APPEARANCE_KEY,
+  CHAT_ATTRIBUTE_NAMES,
   DEFAULT_APPEARANCE,
   THEME_KEY,
   appearanceBoot,
@@ -58,6 +59,11 @@ function applyTheme() {
   root.style.colorScheme = state.theme
   root.dataset.palette = state.palette
   root.dataset.fontSize = state.fontSize
+  for (const name of CHAT_ATTRIBUTE_NAMES) {
+    const value = state.chat[name]
+    if (value) root.setAttribute(`data-chat-${name}`, value)
+    else root.removeAttribute(`data-chat-${name}`)
+  }
   for (const name of ALL_VAR_NAMES) {
     const value = state.vars[name]
     if (value) root.style.setProperty(`--${name}`, value)

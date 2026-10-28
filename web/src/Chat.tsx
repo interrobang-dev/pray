@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { buildChatRows, hidingWorkKey, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
 import { reuseMessages, reuseRows } from './chatReuse'
@@ -17,6 +17,8 @@ import { PositionChip } from './PositionChip'
 import { memberOf as memberDisplay } from './sessionPosition'
 import { formatElapsed, ShellsButton, type ShellRequest } from './Shells'
 import type { AskQuestion, ChatMessage, Shell, ToolUse } from './types'
+import { isWorkOpen, type ChatStyle } from './appearance'
+import { appearance, subscribeTheme } from './theme'
 
 /**
  * 대화를 불러온 뒤 찾아 갈 곳. 지시·보고 = 팀원 대화에서 글이 같은 메시지 (같은 글이 여럿이면 at 과 시각이 가장 가까운 것),
@@ -897,7 +899,8 @@ interface ChatRowViewProps {
   canCancelQueued: boolean
   /** [Cancel] 을 누른 대기 메시지 ID (대기 메시지 줄만) */
   cancellingId: string | null
-  onToggleWork: (key: string) => void
+  /** 묶음 키와 지금 펼쳐졌는지 (누르면 그 반대로 정한다) */
+  onToggleWork: (key: string, isOpen: boolean) => void
   onOpenRelay: (relay: Relay, rowKey: string) => void
   onCancelQueued: (message: ChatMessage) => void
 }
@@ -937,7 +940,7 @@ const ChatRowView = memo(function ChatRowView({
 
   if (row.kind === 'work') {
     const { work } = row
-    return <WorkLine work={work} isOpen={isOpen} onToggle={() => onToggleWork(work.key)} highlightKey={highlightKey} searchKey={searchKey} />
+    return <WorkLine work={work} isOpen={isOpen} onToggle={() => onToggleWork(work.key, isOpen)} highlightKey={highlightKey} searchKey={searchKey} />
   }
   // claude 답변 (구간의 마지막 글. 도구 없는 구간이면 글마다)
   if (row.kind === 'text') {
@@ -1035,7 +1038,8 @@ const ChatRowView = memo(function ChatRowView({
 const MessageRows = memo(function MessageRows({
   rows,
   memberOf,
-  openWorkKeys,
+  workToggles,
+  workBundles,
   highlightKey,
   searchKey,
   lineNotice,
@@ -1048,7 +1052,9 @@ const MessageRows = memo(function MessageRows({
 }: {
   rows: ChatRow<Special>[]
   memberOf: MemberOf
-  openWorkKeys: ReadonlySet<string>
+  /** 사람이(또는 검색·점프가) 펼치거나 접은 작업 묶음 키 → 펼쳤는지. 없는 묶음은 workBundles 설정을 따른다 (isWorkOpen) */
+  workToggles: ReadonlyMap<string, boolean>
+  workBundles: ChatStyle['workBundles']
   /** 점프로 찾아 간 줄의 data-jump-key */
   highlightKey: string | null
   /** 대화 안 검색의 현재 결과 data-jump-key */
@@ -1058,7 +1064,7 @@ const MessageRows = memo(function MessageRows({
   lastQueuedId: string | null
   canCancelQueued: boolean
   cancellingId: string | null
-  onToggleWork: (key: string) => void
+  onToggleWork: (key: string, isOpen: boolean) => void
   onOpenRelay: (relay: Relay, rowKey: string) => void
   onCancelQueued: (message: ChatMessage) => void
 }) {
@@ -1071,7 +1077,7 @@ const MessageRows = memo(function MessageRows({
       <ChatRowView
         key={rowKeyOf(row)}
         row={row}
-        isOpen={row.kind === 'work' && openWorkKeys.has(row.work.key)}
+        isOpen={row.kind === 'work' && isWorkOpen(row.work.isInProgress, workToggles.get(row.work.key), workBundles)}
         highlightKey={index === highlightRow ? highlightKey : null}
         searchKey={index === searchRow ? searchKey : null}
         lineNotice={index === noticeRow ? lineNotice : null}
@@ -1245,8 +1251,12 @@ export function Chat({
   /** 설명 글이 말풍선으로 보이는 진행 중 묶음. 이게 바뀌면(끝남) 중간 설명 글이 줄 안으로 들어가 대화 길이가 갑자기 줄어든다 */
   const liveWorkRow = rows.find((row) => row.kind === 'work' && row.work.isInProgress)
   const liveWorkKey = liveWorkRow?.kind === 'work' ? liveWorkRow.work.key : null
-  /** 펼친 작업 묶음 키 (Work.key). 몇 초마다 대화를 다시 받아도 접히지 않게 여기 둔다. 세션을 바꾸면 비운다 */
-  const [openWorkKeys, setOpenWorkKeys] = useState<ReadonlySet<string>>(() => new Set())
+  /**
+   * 사람이 펼치거나 접은 작업 묶음 키(Work.key) → 펼쳤는지. 몇 초마다 대화를 다시 받아도 그대로이게 여기 둔다. 세션을 바꾸면 비운다.
+   * 여기 없는 묶음은 설정 Work bundles(Collapsed·Expanded)를 따른다 — Expanded 에서 직접 접은 묶음은 접힌 채다
+   */
+  const [workToggles, setWorkToggles] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  const { workBundles } = useSyncExternalStore(subscribeTheme, appearance).chat
   /** 대화 안 검색의 현재 결과 (data-jump-key). 노란 테두리를 늘 켜 둔다. 검색을 닫으면 null */
   const [searchCurrentKey, setSearchCurrentKey] = useState<string | null>(null)
   /** 검색이 이동한 결과. 바뀔 때마다 그 요소로 스크롤한다 (id 는 같은 결과로 다시 이동할 때도 새로 하려고) */
@@ -1262,7 +1272,7 @@ export function Chat({
     setSearchCurrentKey(target?.key ?? null)
     if (!target || !isNavigation) return
     const { workKey } = target
-    if (workKey) setOpenWorkKeys((current) => (current.has(workKey) ? current : new Set(current).add(workKey)))
+    if (workKey) setWorkToggles((current) => (current.get(workKey) ? current : new Map(current).set(workKey, true)))
     // 안 그린 범위의 결과면 거기까지 그린다 (개수에는 처음부터 든다)
     revealRow(rowIndexOfJumpKey(rowsRef.current, target.key))
     setSearchScroll({ key: target.key, id: nextSearchScrollIdRef.current++ })
@@ -1314,7 +1324,7 @@ export function Chat({
     setIsInterrupting(false)
     setInterruptNotice(null)
     setPendings([])
-    setOpenWorkKeys(new Set())
+    setWorkToggles(new Map())
     setWindowStart(null)
     expandAnchorRef.current = null
     setSearchCurrentKey(null)
@@ -1364,7 +1374,7 @@ export function Chat({
       return
     }
     const { workKey } = found
-    if (workKey) setOpenWorkKeys((current) => new Set(current).add(workKey))
+    if (workKey) setWorkToggles((current) => new Map(current).set(workKey, true))
     // 안 그린 범위면 거기까지 그린 뒤 스크롤한다 (같은 렌더에 묶인다)
     revealRow(rowIndexOfJumpKey(rows, found.key))
     setHighlight({ key: found.key, id: jump.id })
@@ -1465,14 +1475,8 @@ export function Chat({
   }, [startIndex, onMessagesScroll, expandIfNearTop])
 
   const toggleWork = useCallback(
-    (key: string) => {
-      flushSync(() =>
-        setOpenWorkKeys((current) => {
-          const next = new Set(current)
-          if (!next.delete(key)) next.add(key)
-          return next
-        }),
-      )
+    (key: string, isOpen: boolean) => {
+      flushSync(() => setWorkToggles((current) => new Map(current).set(key, !isOpen)))
       // 펼치면 내용만 길어지고 스크롤 이벤트가 없어 "맨 아래를 보고 있다" 가 남는다. 다음 갱신 때 펼친 것을 읽다 끌려 내려가지 않게 다시 잰다
       onMessagesScroll()
     },
@@ -1640,7 +1644,8 @@ export function Chat({
             onCurrentChange={handleSearchCurrentChange}
           />
         )}
-        <div className="messages" ref={messagesRef} onScroll={onMessagesScrollEvent}>
+        {/* chat-scope: 설정 창 Chat 탭의 대화 모양(<html data-chat-*>)이 걸리는 범위 */}
+        <div className="messages chat-scope" ref={messagesRef} onScroll={onMessagesScrollEvent}>
           {/* 그리는 범위 밖 이전 줄이 있다는 표시. 바로 다음 요소가 첫 줄이라 위로 더 그릴 때 위치 보정의 기준이 된다 */}
           {startIndex > 0 && (
             <div ref={earlierRef} className="earlier-rows">
@@ -1650,7 +1655,8 @@ export function Chat({
           <MessageRows
             rows={visibleRows}
             memberOf={memberOf}
-            openWorkKeys={openWorkKeys}
+            workToggles={workToggles}
+            workBundles={workBundles}
             highlightKey={highlight?.key ?? null}
             searchKey={searchCurrentKey}
             lineNotice={lineNotice}

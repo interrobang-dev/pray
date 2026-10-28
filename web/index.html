@@ -6,7 +6,7 @@
     <title>jk-corp</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
-      // 첫 화면부터 테마·팔레트·강조색·글자 크기로 (React·CSS 전에). theme.ts 가 미리 계산해 둔 jk-corp.appearanceBoot 를 그대로 건다.
+      // 첫 화면부터 테마·팔레트·강조색·글자 크기·대화 모양으로 (React·CSS 전에). theme.ts 가 미리 계산해 둔 jk-corp.appearanceBoot 를 그대로 건다.
       // 규칙은 src/theme.ts·src/appearance.ts 와 같다 — 바꾸면 같이 바꾼다 (appearance.test.ts 가 이 스크립트를 돌려 결과를 맞춰 본다)
       ;(function () {
         var root = document.documentElement
@@ -21,6 +21,8 @@
         root.style.colorScheme = theme
         root.dataset.palette = (boot && boot.palette) || 'default'
         root.dataset.fontSize = (boot && boot.fontSize) || 'normal'
+        var chat = (boot && boot.chat) || {}
+        for (var key in chat) root.setAttribute('data-chat-' + key, chat[key])
         var vars = (boot && boot[theme]) || {}
         for (var name in vars) root.style.setProperty('--' + name, vars[name])
       })()

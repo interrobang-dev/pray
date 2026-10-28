@@ -2,7 +2,15 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   ACCENT_VAR_NAMES,
+  CHAT_ATTRIBUTE_NAMES,
+  CHAT_CHOICE_KEYS,
+  CHAT_OPTIONS,
   DEFAULT_APPEARANCE,
+  DEFAULT_CHAT_STYLE,
+  chatAttributes,
+  chatColorVars,
+  chatColorWarnings,
+  isWorkOpen,
   accentVars,
   appearanceBoot,
   contrast,
@@ -39,8 +47,8 @@ describe('parseAppearance', () => {
     expect(parseAppearance('"x"')).toEqual(DEFAULT_APPEARANCE)
   })
   it('모르는 항목만 기본값', () => {
-    expect(parseAppearance(JSON.stringify({ palette: 'nord', accent: 'nope', fontSize: 'huge' }))).toEqual({ palette: 'nord', accent: 'palette', fontSize: 'normal' })
-    expect(parseAppearance(JSON.stringify({ palette: 'nope', accent: '#12ab34', fontSize: 'large' }))).toEqual({ palette: 'default', accent: '#12ab34', fontSize: 'large' })
+    expect(parseAppearance(JSON.stringify({ palette: 'nord', accent: 'nope', fontSize: 'huge' }))).toEqual({ palette: 'nord', accent: 'palette', fontSize: 'normal', chat: DEFAULT_CHAT_STYLE })
+    expect(parseAppearance(JSON.stringify({ palette: 'nope', accent: '#12ab34', fontSize: 'large' }))).toEqual({ palette: 'default', accent: '#12ab34', fontSize: 'large', chat: DEFAULT_CHAT_STYLE })
     expect(parseAppearance(JSON.stringify({ accent: '#12AB34' })).accent).toBe('palette')
   })
   it('테마 선택', () => {
@@ -187,13 +195,71 @@ describe('강조색', () => {
   })
 })
 
+describe('대화 모양', () => {
+  it('저장 값 해석: 모르는 항목·틀린 색만 기본값', () => {
+    const parsed = parseAppearance(
+      JSON.stringify({ chat: { user: 'bar', reply: 'nope', width: 'full', fontSize: 'small', tables: 'rules', workBundles: 'expanded', colors: { code: '#ABCDEF', link: '#00aa11', quote: 'red' } } }),
+    )
+    expect(parsed.chat).toEqual({
+      ...DEFAULT_CHAT_STYLE,
+      user: 'bar',
+      width: 'full',
+      fontSize: 'small',
+      tables: 'rules',
+      workBundles: 'expanded',
+      colors: { code: null, link: '#00aa11', heading: null, quote: null },
+    })
+    expect(parseAppearance(JSON.stringify({ chat: 'x' })).chat).toEqual(DEFAULT_CHAT_STYLE)
+  })
+
+  it('선택지의 첫 값이 기본값이고, 기본값이면 속성을 걸지 않는다', () => {
+    for (const key of CHAT_CHOICE_KEYS) expect(CHAT_OPTIONS[key].options[0].value, key).toBe(DEFAULT_CHAT_STYLE[key])
+    expect(chatAttributes(DEFAULT_CHAT_STYLE)).toEqual({})
+    expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, user: 'plain', fontSize: 'large', lineSpacing: 'relaxed', workBundles: 'expanded' })).toEqual({
+      user: 'plain',
+      'font-size': 'large',
+      line: 'relaxed',
+      work: 'expanded',
+    })
+    expect(new Set(CHAT_ATTRIBUTE_NAMES).size).toBe(CHAT_ATTRIBUTE_NAMES.length)
+  })
+
+  it('글자 색은 고른 것만 두 모드에 같은 변수로', () => {
+    const appearance: Appearance = { ...DEFAULT_APPEARANCE, chat: { ...DEFAULT_CHAT_STYLE, colors: { code: null, link: '#ff0088', heading: null, quote: null } } }
+    expect(chatColorVars(appearance.chat.colors)).toEqual({ 'chat-link': '#ff0088' })
+    for (const mode of MODES) expect(documentState(appearance, mode).vars).toEqual({ 'chat-link': '#ff0088' })
+  })
+
+  it('바탕 대비 3 아래인 색은 그 모드를 경고한다', () => {
+    const colors = { code: null, link: '#ffffff', heading: '#2b2f3a', quote: '#3a3d45' }
+    const warnings = chatColorWarnings(colors, 'default')
+    expect(warnings.map((warning) => `${warning.key}/${warning.mode}`).sort()).toEqual(['heading/dark', 'link/light', 'quote/dark'].sort())
+    expect(warnings.every((warning) => warning.ratio < 3)).toBe(true)
+    expect(chatColorWarnings(DEFAULT_CHAT_STYLE.colors, 'nord')).toEqual([])
+  })
+
+  it('작업 묶음: 사람이 정한 것이 먼저, 없으면 설정 (진행 중은 늘 접힘)', () => {
+    expect(isWorkOpen(false, undefined, 'collapsed')).toBe(false)
+    expect(isWorkOpen(false, undefined, 'expanded')).toBe(true)
+    expect(isWorkOpen(true, undefined, 'expanded')).toBe(false)
+    expect(isWorkOpen(false, false, 'expanded')).toBe(false)
+    expect(isWorkOpen(false, true, 'collapsed')).toBe(true)
+    expect(isWorkOpen(true, true, 'collapsed')).toBe(true)
+  })
+})
+
 describe('index.html 첫 화면 스크립트', () => {
   const script = indexHtml.match(/<script>([\s\S]*?)<\/script>/)![1]
 
   /** 가짜 브라우저에서 인라인 스크립트를 돌려 <html> 에 걸린 것을 돌려준다 */
   function runInline(storage: Record<string, string>, isOsDark: boolean, isStorageBlocked = false) {
     const vars: Record<string, string> = {}
-    const root = { dataset: {} as Record<string, string>, style: { colorScheme: '', setProperty: (name: string, value: string) => (vars[name.slice(2)] = value) } }
+    const chat: Record<string, string> = {}
+    const root = {
+      dataset: {} as Record<string, string>,
+      style: { colorScheme: '', setProperty: (name: string, value: string) => (vars[name.slice(2)] = value) },
+      setAttribute: (name: string, value: string) => (chat[name.replace('data-chat-', '')] = value),
+    }
     const localStorage = {
       getItem: (key: string) => {
         if (isStorageBlocked) throw new Error('blocked')
@@ -202,15 +268,16 @@ describe('index.html 첫 화면 스크립트', () => {
     }
     const window = { matchMedia: () => ({ matches: isOsDark }) }
     new Function('document', 'localStorage', 'window', script)({ documentElement: root }, localStorage, window)
-    return { theme: root.dataset.theme, colorScheme: root.style.colorScheme, palette: root.dataset.palette, fontSize: root.dataset.fontSize, vars }
+    return { theme: root.dataset.theme, colorScheme: root.style.colorScheme, palette: root.dataset.palette, fontSize: root.dataset.fontSize, chat, vars }
   }
 
   const APPEARANCES: Appearance[] = [
     DEFAULT_APPEARANCE,
-    { palette: 'nord', accent: 'palette', fontSize: 'small' },
-    { palette: 'default', accent: 'blue', fontSize: 'large' },
-    { palette: 'catppuccin', accent: '#e05a00', fontSize: 'normal' },
-    { palette: 'solarized', accent: 'slate', fontSize: 'large' },
+    { palette: 'nord', accent: 'palette', fontSize: 'small', chat: DEFAULT_CHAT_STYLE },
+    { palette: 'default', accent: 'blue', fontSize: 'large', chat: { ...DEFAULT_CHAT_STYLE, user: 'bar', tables: 'minimal' } },
+    { palette: 'catppuccin', accent: '#e05a00', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, fontSize: 'large', colors: { ...DEFAULT_CHAT_STYLE.colors, link: '#ff0088' } } },
+    { palette: 'default', accent: 'palette', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, reply: 'plain', width: 'full', workBundles: 'expanded', colors: { code: '#123456', link: null, heading: '#abcdef', quote: '#654321' } } },
+    { palette: 'solarized', accent: 'slate', fontSize: 'large', chat: DEFAULT_CHAT_STYLE },
   ]
   const CHOICES: ThemeChoice[] = ['light', 'dark', 'system']
 

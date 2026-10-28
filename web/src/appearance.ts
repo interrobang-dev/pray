@@ -1,6 +1,6 @@
 /**
- * 화면 스타일 설정(Appearance)의 순수 로직: 고른 값 해석, 색 계산(명암비·섞기), 팔레트 펼치기, 강조색 파생 색, 문서에 걸 값.
- * DOM 에 거는 것은 theme.ts, 팔레트 값은 palettes.ts, 설정 창은 AppearanceModal.tsx.
+ * 화면 스타일 설정(Appearance)의 순수 로직: 고른 값 해석, 색 계산(명암비·섞기), 팔레트 펼치기, 강조색 파생 색, 대화 모양, 문서에 걸 값.
+ * DOM 에 거는 것은 theme.ts, 팔레트 값은 palettes.ts, 설정 창은 AppearanceModal.tsx(App 탭)·ChatStyleTab.tsx(Chat 탭).
  * 색 변수 이름은 style.css 맨 위 `:root` 의 이름에서 `--` 를 뗀 것이다
  */
 import { ACCENT_PRESETS, DEFAULT_VARS, PALETTES, type PaletteCore, type VarName, type Vars } from './palettes'
@@ -14,6 +14,8 @@ export interface Appearance {
   /** 'palette' = 팔레트 자체 강조색, 프리셋 id, 또는 직접 입력 '#rrggbb' (소문자) */
   accent: string
   fontSize: FontSize
+  /** 대화 탭 모양 (설정 창 Chat 탭) */
+  chat: ChatStyle
 }
 
 /** 화면 테마 선택 (헤더 테마 버튼·설정 창 Mode). 시스템이면 OS prefers-color-scheme 을 따른다 */
@@ -31,7 +33,132 @@ export function resolveMode(choice: ThemeChoice, isOsDark: boolean): Mode {
   return choice === 'dark' || (choice === 'system' && isOsDark) ? 'dark' : 'light'
 }
 
-export const DEFAULT_APPEARANCE: Appearance = { palette: 'default', accent: 'palette', fontSize: 'normal' }
+/** 대화 탭 모양. 바꾸는 범위는 대화 탭 안(style.css 의 .chat-scope — 대화 목록과 설정 창 미리보기)뿐이다 */
+export interface ChatStyle {
+  /** 내 말: 말풍선 / 왼쪽 강조색 세로줄 / 꾸밈 없이 */
+  user: 'bubble' | 'bar' | 'plain'
+  /** claude 답: 카드 / 테두리·바탕 없이 본문처럼 */
+  reply: 'card' | 'plain'
+  /** 사무실을 숨긴 넓은 화면의 대화 열 폭: 960px / 1200px / 양옆 16px 만 */
+  width: 'normal' | 'wide' | 'full'
+  /** 말풍선·마크다운 글자 크기. app = App 탭의 Font size 그대로 */
+  fontSize: 'app' | FontSize
+  lineSpacing: 'compact' | 'normal' | 'relaxed'
+  /** 마크다운 표: 칸마다 테두리 / 줄 사이 선만 / 머리 아래 선만 */
+  tables: 'box' | 'rules' | 'minimal'
+  headings: 'default' | 'underline'
+  /** 끝난 작업 묶음을 처음에 접을지 펼칠지 (사용자가 직접 접거나 펼친 묶음은 그대로 — isWorkOpen) */
+  workBundles: 'collapsed' | 'expanded'
+  /** 글자 색. null = 팔레트 값 */
+  colors: ChatColors
+}
+
+export interface ChatColors {
+  code: string | null
+  link: string | null
+  heading: string | null
+  quote: string | null
+}
+
+type ChatChoiceKey = Exclude<keyof ChatStyle, 'colors'>
+
+/** 대화 모양 선택지 (설정 창 순서). attribute 는 <html data-chat-…> 의 이름이고 첫 선택지가 기본값이다 — 기본값이면 속성을 걸지 않는다 */
+export const CHAT_OPTIONS: { [K in ChatChoiceKey]: { attribute: string; label: string; options: { value: ChatStyle[K]; label: string }[] } } = {
+  user: {
+    attribute: 'user',
+    label: 'Your messages',
+    options: [
+      { value: 'bubble', label: 'Bubble' },
+      { value: 'bar', label: 'Bar' },
+      { value: 'plain', label: 'Plain' },
+    ],
+  },
+  reply: {
+    attribute: 'reply',
+    label: 'Claude replies',
+    options: [
+      { value: 'card', label: 'Card' },
+      { value: 'plain', label: 'Plain' },
+    ],
+  },
+  width: {
+    attribute: 'width',
+    label: 'Chat width',
+    options: [
+      { value: 'normal', label: 'Normal' },
+      { value: 'wide', label: 'Wide' },
+      { value: 'full', label: 'Full' },
+    ],
+  },
+  fontSize: {
+    attribute: 'font-size',
+    label: 'Chat font size',
+    options: [
+      { value: 'app', label: 'App' },
+      { value: 'small', label: 'Small' },
+      { value: 'normal', label: 'Normal' },
+      { value: 'large', label: 'Large' },
+    ],
+  },
+  lineSpacing: {
+    attribute: 'line',
+    label: 'Line spacing',
+    options: [
+      { value: 'normal', label: 'Normal' },
+      { value: 'compact', label: 'Compact' },
+      { value: 'relaxed', label: 'Relaxed' },
+    ],
+  },
+  tables: {
+    attribute: 'tables',
+    label: 'Tables',
+    options: [
+      { value: 'box', label: 'Box' },
+      { value: 'rules', label: 'Rules' },
+      { value: 'minimal', label: 'Minimal' },
+    ],
+  },
+  headings: {
+    attribute: 'headings',
+    label: 'Headings',
+    options: [
+      { value: 'default', label: 'Default' },
+      { value: 'underline', label: 'Underline' },
+    ],
+  },
+  workBundles: {
+    attribute: 'work',
+    label: 'Work bundles',
+    options: [
+      { value: 'collapsed', label: 'Collapsed' },
+      { value: 'expanded', label: 'Expanded' },
+    ],
+  },
+}
+
+export const CHAT_CHOICE_KEYS = Object.keys(CHAT_OPTIONS) as ChatChoiceKey[]
+
+/** 대화 글자 색. variable 은 <html> 에 인라인으로 거는 변수 이름이고, 비어 있으면 style.css 가 팔레트 값으로 대신한다 (var(--chat-link, var(--link))) */
+export const CHAT_COLOR_OPTIONS: { key: keyof ChatColors; label: string; variable: string; surfaces: VarName[] }[] = [
+  { key: 'code', label: 'Inline code', variable: 'chat-code', surfaces: ['code-bg'] },
+  { key: 'link', label: 'Links', variable: 'chat-link', surfaces: ['panel', 'bg'] },
+  { key: 'heading', label: 'Headings', variable: 'chat-heading', surfaces: ['panel', 'bg'] },
+  { key: 'quote', label: 'Quotes', variable: 'chat-quote', surfaces: ['panel', 'bg'] },
+]
+
+export const DEFAULT_CHAT_STYLE: ChatStyle = {
+  user: 'bubble',
+  reply: 'card',
+  width: 'normal',
+  fontSize: 'app',
+  lineSpacing: 'normal',
+  tables: 'box',
+  headings: 'default',
+  workBundles: 'collapsed',
+  colors: { code: null, link: null, heading: null, quote: null },
+}
+
+export const DEFAULT_APPEARANCE: Appearance = { palette: 'default', accent: 'palette', fontSize: 'normal', chat: DEFAULT_CHAT_STYLE }
 
 /** 글자 크기 선택지. 기준(Normal)은 지금 화면의 14px 이고, 모든 글자가 같은 비율로 바뀐다 (style.css 의 --font-scale) */
 export const FONT_SIZE_OPTIONS: { value: FontSize; label: string; px: number }[] = [
@@ -71,7 +198,65 @@ export function parseAppearance(raw: string | null): Appearance {
     else if (HEX_PATTERN.test(value.accent)) accent = value.accent
   }
   const fontSize = FONT_SIZE_OPTIONS.some((option) => option.value === value.fontSize) ? (value.fontSize as FontSize) : DEFAULT_APPEARANCE.fontSize
-  return { palette, accent, fontSize }
+  return { palette, accent, fontSize, chat: parseChatStyle(value.chat) }
+}
+
+function parseChatStyle(raw: unknown): ChatStyle {
+  const value = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const chat: Record<string, unknown> = { ...DEFAULT_CHAT_STYLE }
+  for (const key of CHAT_CHOICE_KEYS) {
+    if (CHAT_OPTIONS[key].options.some((option) => option.value === value[key])) chat[key] = value[key]
+  }
+  const rawColors = value.colors && typeof value.colors === 'object' ? (value.colors as Record<string, unknown>) : {}
+  const colors = { ...DEFAULT_CHAT_STYLE.colors }
+  for (const { key } of CHAT_COLOR_OPTIONS) {
+    const color = rawColors[key]
+    if (typeof color === 'string' && HEX_PATTERN.test(color)) colors[key] = color
+  }
+  return { ...(chat as unknown as ChatStyle), colors }
+}
+
+/** <html data-chat-…> 에 걸 것 (기본값이 아닌 것만. 속성이 없으면 style.css 는 기본 모양이다) */
+export function chatAttributes(chat: ChatStyle): Record<string, string> {
+  const attributes: Record<string, string> = {}
+  for (const key of CHAT_CHOICE_KEYS) {
+    const { attribute, options } = CHAT_OPTIONS[key]
+    if (chat[key] !== options[0].value) attributes[attribute] = chat[key]
+  }
+  return attributes
+}
+
+/** 대화 글자 색 변수 (고른 것만. 두 모드에 같은 값) */
+export function chatColorVars(colors: ChatColors): Record<string, string> {
+  const vars: Record<string, string> = {}
+  for (const { key, variable } of CHAT_COLOR_OPTIONS) {
+    const color = colors[key]
+    if (color) vars[variable] = color
+  }
+  return vars
+}
+
+/** 대화 글자 색이 바탕 대비 3 아래인 모드 (설정 창 경고). 링크·제목·인용은 답 카드(패널)·Plain 답(바탕), 인라인 코드는 코드 바탕 기준 */
+export function chatColorWarnings(colors: ChatColors, paletteId: string): { key: keyof ChatColors; mode: Mode; ratio: number }[] {
+  const warnings: { key: keyof ChatColors; mode: Mode; ratio: number }[] = []
+  for (const { key, surfaces } of CHAT_COLOR_OPTIONS) {
+    const color = colors[key]
+    if (!color) continue
+    for (const mode of ['light', 'dark'] as const) {
+      const vars = paletteVars(paletteId, mode)
+      const ratio = Math.min(...surfaces.map((surface) => contrast(color, vars[surface])))
+      if (ratio < 3) warnings.push({ key, mode, ratio })
+    }
+  }
+  return warnings
+}
+
+/**
+ * 작업 묶음이 펼쳐졌는지. toggle = 사용자가(또는 검색·점프가) 정한 값 — 있으면 그대로다 (Expanded 에서 직접 접은 것은 접힌 채, Collapsed 에서 펼친 것은 펼친 채).
+ * 없으면 설정을 따르되 진행 중 묶음은 늘 접힌다 (진행 중에는 설명 글이 따로 말풍선으로 보인다)
+ */
+export function isWorkOpen(isInProgress: boolean, toggle: boolean | undefined, workBundles: ChatStyle['workBundles']): boolean {
+  return toggle ?? (workBundles === 'expanded' && !isInProgress)
 }
 
 // ── 색 계산 ──────────────────────────────────────────────
@@ -297,24 +482,38 @@ export interface DocumentState {
   theme: Mode
   palette: string
   fontSize: FontSize
-  vars: Partial<Vars>
+  /** data-chat-<이름> → 값 (기본값이 아닌 것만) */
+  chat: Record<string, string>
+  /** 인라인으로 덮을 변수 (팔레트·강조색·대화 글자 색) */
+  vars: Record<string, string>
 }
 
 export function documentState(appearance: Appearance, mode: Mode): DocumentState {
-  return { theme: mode, palette: appearance.palette, fontSize: appearance.fontSize, vars: overrideVars(appearance, mode) }
+  return {
+    theme: mode,
+    palette: appearance.palette,
+    fontSize: appearance.fontSize,
+    chat: chatAttributes(appearance.chat),
+    vars: { ...overrideVars(appearance, mode), ...chatColorVars(appearance.chat.colors) },
+  }
 }
 
 /** index.html 인라인 스크립트가 읽는 값: 두 모드의 결과를 미리 계산해 둔다 (시스템 모드는 그때 OS 에 맞는 쪽을 고른다) */
 export interface AppearanceBoot {
   palette: string
   fontSize: FontSize
-  light: Partial<Vars>
-  dark: Partial<Vars>
+  chat: Record<string, string>
+  light: Record<string, string>
+  dark: Record<string, string>
 }
 
 export function appearanceBoot(appearance: Appearance): AppearanceBoot {
-  return { palette: appearance.palette, fontSize: appearance.fontSize, light: overrideVars(appearance, 'light'), dark: overrideVars(appearance, 'dark') }
+  const light = documentState(appearance, 'light')
+  return { palette: appearance.palette, fontSize: appearance.fontSize, chat: light.chat, light: light.vars, dark: documentState(appearance, 'dark').vars }
 }
 
 /** 인라인으로 덮을 수 있는 변수 이름 전부 (바꿀 때 지난 값을 지우려고) */
-export const ALL_VAR_NAMES = Object.keys(DEFAULT_VARS.light) as VarName[]
+export const ALL_VAR_NAMES: string[] = [...Object.keys(DEFAULT_VARS.light), ...CHAT_COLOR_OPTIONS.map((option) => option.variable)]
+
+/** data-chat-<이름> 전부 (기본값으로 돌아간 것을 지우려고) */
+export const CHAT_ATTRIBUTE_NAMES = CHAT_CHOICE_KEYS.map((key) => CHAT_OPTIONS[key].attribute)

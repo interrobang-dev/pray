@@ -1242,6 +1242,99 @@ li.group.drop-after::after {
 .appearance-actions {
   display: flex;
 }
+/* 설정 창 탭 (App · Chat) */
+.appearance-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.appearance-tabs button {
+  margin-bottom: -1px;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.appearance-tabs button[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+.appearance-tabs button:hover {
+  color: var(--text);
+}
+/* Chat 탭 미리보기: 대화 목록과 같은 .chat-scope 라 대화 모양이 그대로 걸린다. 누를 수 없다. 데스크톱은 스크롤해도 위에 붙어 있다 */
+.chat-preview {
+  position: sticky;
+  top: -16px;
+  z-index: 1;
+  /* 창(.modal 은 세로 flex)이 화면보다 길면 줄어들지 않고 창이 스크롤된다 */
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+/* 안쪽은 누를 수 없다 (링크·복사·묶음 줄). 미리보기 자체는 스크롤된다 */
+.chat-preview > * {
+  pointer-events: none;
+}
+.chat-preview .work {
+  gap: 8px;
+}
+.appearance-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.appearance-row .appearance-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.appearance-row .segmented button {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.appearance-hint {
+  grid-column: 2;
+  font-size: calc(11px * var(--font-scale));
+  color: var(--muted);
+}
+.chat-color {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chat-color input[type='color'] {
+  width: 38px;
+  height: 30px;
+  padding: 2px;
+  cursor: pointer;
+}
+.chat-color input[type='text'] {
+  width: 110px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.chat-color input.is-invalid {
+  border-color: var(--red);
+}
+.chat-color-clear {
+  padding: 3px 8px;
+  color: var(--muted);
+}
+.chat-color-warning {
+  grid-column: 2;
+  font-size: calc(11px * var(--font-scale));
+  color: var(--error);
+}
 .model-notes {
   margin: 0;
   padding-left: 16px;
@@ -2308,6 +2401,106 @@ li.group.drop-after::after {
 .markdown th {
   background: var(--pre-bg);
   font-weight: 600;
+}
+/* 대화 모양 (설정 창 Chat 탭 — appearance.ts 의 ChatStyle). <html data-chat-*> 는 기본값이 아니면만 걸리고, 범위는 .chat-scope
+   (대화 목록 .messages 와 설정 창 미리보기)뿐이다 — 작업 파일 미리보기의 마크다운·relay 한 줄·사무실 카드는 그대로.
+   내 말 모양은 지시 말풍선(.msg.relay, 팀원이 받은 지시)에 걸지 않는다 */
+/* 글자 색: 비어 있으면 팔레트 값 */
+.chat-scope .markdown a {
+  color: var(--chat-link, var(--link));
+}
+.chat-scope .markdown :not(pre) > code {
+  color: var(--chat-code, currentColor);
+}
+.chat-scope .markdown :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--chat-heading, currentColor);
+}
+.chat-scope .markdown blockquote {
+  color: var(--chat-quote, var(--muted));
+  border-left-color: var(--chat-quote, var(--line));
+}
+/* 내 말: Bar = 말풍선 대신 왼쪽 강조색 세로줄(왼쪽 정렬, 바탕 없음) / Plain = 오른쪽 그대로 바탕·테두리 없이.
+   대기·보내기 실패는 테두리로 보이던 것이라 각 모양에서 다시 보인다 */
+:root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) {
+  align-self: stretch;
+  max-width: none;
+  padding: 2px 0 2px 10px;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid var(--accent);
+  border-radius: 0;
+  box-shadow: none;
+}
+:root[data-chat-user='bar'] .chat-scope .msg.user.queued:not(.relay) {
+  border-left-style: dashed;
+  border-left-color: var(--accent-dash);
+}
+:root[data-chat-user='bar'] .chat-scope .msg.user.pending.failed:not(.relay) {
+  border-left-color: var(--red-border);
+}
+:root[data-chat-user='plain'] .chat-scope .msg.user:not(.relay) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+:root[data-chat-user='plain'] .chat-scope .msg.user.queued:not(.relay) {
+  border-color: var(--accent-dash);
+}
+:root[data-chat-user='plain'] .chat-scope .msg.user.pending.failed:not(.relay) {
+  border-color: var(--red-border);
+}
+/* claude 답: Plain = 카드 테두리·바탕 없이 열 폭 전부 (작업 묶음 안 설명 글도) */
+:root[data-chat-reply='plain'] .chat-scope .msg.assistant {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+/* 대화 글자 크기: 말풍선 안의 --font-scale 만 바꾼다 (말풍선 안 글자 크기는 모두 이 변수를 쓴다). 말풍선 밖(묶음 줄·relay 한 줄·입력칸)은 App 크기 */
+:root[data-chat-font-size='small'] .chat-scope .msg {
+  --font-scale: calc(13 / 14);
+}
+:root[data-chat-font-size='normal'] .chat-scope .msg {
+  --font-scale: 1;
+}
+:root[data-chat-font-size='large'] .chat-scope .msg {
+  --font-scale: calc(15 / 14);
+}
+:root[data-chat-font-size] .chat-scope .msg:is(.user, .assistant) {
+  font-size: calc(14px * var(--font-scale));
+}
+/* 줄 간격: Normal 은 마크다운 1.55·일반 글 브라우저 기본 그대로 */
+:root[data-chat-line='compact'] .chat-scope .msg .markdown {
+  line-height: 1.35;
+}
+:root[data-chat-line='compact'] .chat-scope .msg .text {
+  line-height: 1.25;
+}
+:root[data-chat-line='relaxed'] .chat-scope .msg .markdown {
+  line-height: 1.8;
+}
+:root[data-chat-line='relaxed'] .chat-scope .msg .text {
+  line-height: 1.6;
+}
+/* 표: Rules = 줄 사이 가로선만 / Minimal = 머리 아래 선만 (둘 다 머리 바탕 없음) */
+:root[data-chat-tables='rules'] .chat-scope .markdown :is(th, td) {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+:root[data-chat-tables='minimal'] .chat-scope .markdown :is(th, td) {
+  border: 0;
+}
+:root[data-chat-tables='rules'] .chat-scope .markdown th,
+:root[data-chat-tables='minimal'] .chat-scope .markdown th {
+  background: transparent;
+  border-bottom: 1px solid var(--line-strong);
+}
+/* 제목: Underline = h1~h3 아래 선 */
+:root[data-chat-headings='underline'] .chat-scope .markdown :is(h1, h2, h3) {
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--line);
 }
 .msg,
 .tool summary {
@@ -3916,9 +4109,17 @@ li.group.drop-after::after {
    대화 스크롤바는 패널 폭 그대로 두려고 max-width 대신 양옆 여백으로 좁힌다. 좁으면 원래 여백 16px.
    변수 안의 % 는 쓰는 곳에서 풀린다: 여백은 부모(.chat·.messages-pane) 폭, 버튼 묶음 left·right 는 .messages-pane 폭 — 모두 대화 폭이다.
    입력칸 자리의 카드는 위 공통 규칙의 margin 으로 이 변수를 쓴다.
-   말풍선 최대 폭(82%)·제안 말풍선 최대 폭(70%)은 이 열 기준이 된다 */
+   말풍선 최대 폭(82%)·제안 말풍선 최대 폭(70%)은 이 열 기준이 된다.
+   열 폭 --chat-column 은 설정 창 Chat width 로 바뀐다 (Wide 1200px, Full 100% → 여백은 늘 16px) */
 .layout.office-hidden .chat {
-  --chat-gutter: max(16px, calc((100% - 960px) / 2));
+  --chat-column: 960px;
+  --chat-gutter: max(16px, calc((100% - var(--chat-column)) / 2));
+}
+:root[data-chat-width='wide'] .layout.office-hidden .chat {
+  --chat-column: 1200px;
+}
+:root[data-chat-width='full'] .layout.office-hidden .chat {
+  --chat-column: 100%;
 }
 .layout.office-hidden .messages,
 .layout.office-hidden .chat > .hint {
@@ -4249,6 +4450,32 @@ li.group.drop-after::after {
   .accent-custom input[type='color'] {
     width: 44px;
     height: 40px;
+  }
+  /* Chat 탭: 라벨을 위로, 미리보기는 붙이지 않는다 (화면 절반을 가려서) */
+  .chat-preview {
+    position: static;
+  }
+  .appearance-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .chat-color-warning,
+  .appearance-hint {
+    grid-column: 1;
+  }
+  .chat-preview {
+    max-height: 260px;
+  }
+  .appearance-tabs button {
+    min-height: 40px;
+    padding: 0 16px;
+  }
+  .chat-color input[type='color'] {
+    width: 44px;
+    height: 40px;
+  }
+  .chat-color-clear {
+    min-height: 40px;
   }
   /* 작업 파일 모달: 화면 전체. 목록 → 파일을 누르면 미리보기 → "←" 로 목록. 경로 표시줄은 한 줄을 다 쓴다 */
   .modal.files-modal {
