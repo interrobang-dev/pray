@@ -34,7 +34,7 @@ const PREVIEW_REPLY = [
 ].join('\n')
 
 /** 색을 고르기 전 색 고르기 칸에 보일 값 (지금 팔레트에서 그 글자가 쓰는 색) */
-const PALETTE_COLOR: Record<keyof ChatColors, 'link' | 'muted' | 'md-code' | 'md-heading' | 'md-number' | 'md-path'> = { code: 'md-code', link: 'link', heading: 'md-heading', quote: 'muted', number: 'md-number', path: 'md-path' }
+const PALETTE_COLOR: Record<keyof ChatColors, 'md-code' | 'md-heading' | 'md-number' | 'md-path'> = { code: 'md-code', heading: 'md-heading', number: 'md-number', path: 'md-path' }
 
 /**
  * 설정 창 Chat 탭: 대화 모양(appearance.ts 의 ChatStyle). 맨 위 미리보기는 대화 목록과 같은 .chat-scope 라 고른 모양이 그대로 보인다

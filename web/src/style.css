@@ -2473,19 +2473,16 @@ li.group.drop-after::after {
 /* 대화 모양 (설정 창 Chat 탭 — appearance.ts 의 ChatStyle). <html data-chat-*> 는 기본값이 아니면만 걸리고, 범위는 .chat-scope
    (대화 목록 .messages 와 설정 창 미리보기)뿐이다 — 작업 파일 미리보기의 마크다운·relay 한 줄·사무실 카드는 그대로.
    내 말 모양은 지시 말풍선(.msg.relay, 팀원이 받은 지시)에 걸지 않는다 */
-/* 글자 색: 비어 있으면 팔레트 값 */
+/* 링크·인용은 설정 없이 고정 모양: 팔레트 링크색 + 밑줄 / 팔레트 회색 글자 + 회색 세로줄 (위 .markdown a·blockquote 규칙 그대로).
+   글자 색: 비어 있으면 팔레트 값 */
 .chat-scope .markdown a {
-  color: var(--chat-link, var(--link));
+  text-decoration: underline;
 }
 .chat-scope .markdown :not(pre) > code {
   color: var(--chat-code, var(--md-code));
 }
 .chat-scope .markdown :is(h1, h2, h3, h4, h5, h6) {
   color: var(--chat-heading, var(--md-heading));
-}
-.chat-scope .markdown blockquote {
-  color: var(--chat-quote, var(--muted));
-  border-left-color: var(--chat-quote, var(--line));
 }
 /* 숫자·파일 경로 강조: Markdown.tsx 의 isChat 일 때만 span.num·span.path 가 있다 (대화·곁가지 질문 답·설정 창 미리보기). Colors 줄 스위치 Numbers·Paths Off 면 색만 끈다 */
 .markdown .num {
@@ -2498,17 +2495,10 @@ li.group.drop-after::after {
 :root[data-chat-paths='off'] .markdown .path {
   color: inherit;
 }
-/* Colors 줄 스위치 Off: 제목·인라인 코드 = 본문색(코드 배경 칩은 그대로), 링크·인용 = 사용자 색만 무시하고 팔레트 값 */
+/* Colors 줄 스위치 Off: 제목·인라인 코드 = 본문색(코드 배경 칩은 그대로) */
 :root[data-chat-heading-color='off'] .chat-scope .markdown :is(h1, h2, h3, h4, h5, h6),
 :root[data-chat-code-color='off'] .chat-scope .markdown :not(pre) > code {
   color: inherit;
-}
-:root[data-chat-link-color='off'] .chat-scope .markdown a {
-  color: var(--link);
-}
-:root[data-chat-quote-color='off'] .chat-scope .markdown blockquote {
-  color: var(--muted);
-  border-left-color: var(--line);
 }
 /* 내 말: Bar = 말풍선 대신 왼쪽 강조색 세로줄(왼쪽 정렬, 바탕 없음) / Plain = 오른쪽 그대로 바탕·테두리 없이.
    대기·보내기 실패는 테두리로 보이던 것이라 각 모양에서 다시 보인다 */

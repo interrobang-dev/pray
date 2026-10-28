@@ -224,7 +224,7 @@ describe('강조색', () => {
 describe('대화 모양', () => {
   it('저장 값 해석: 모르는 항목·틀린 색만 기본값', () => {
     const parsed = parseAppearance(
-      JSON.stringify({ chat: { user: 'bar', reply: 'nope', width: 'full', fontSize: 'small', tables: 'rules', workBundles: 'expanded', colors: { code: '#ABCDEF', link: '#00aa11', quote: 'red' } } }),
+      JSON.stringify({ chat: { user: 'bar', reply: 'nope', width: 'full', fontSize: 'small', tables: 'rules', workBundles: 'expanded', colors: { code: '#ABCDEF', heading: '#00aa11', number: 'red' } } }),
     )
     expect(parsed.chat).toEqual({
       ...DEFAULT_CHAT_STYLE,
@@ -233,7 +233,7 @@ describe('대화 모양', () => {
       fontSize: 'small',
       tables: 'rules',
       workBundles: 'expanded',
-      colors: { code: null, link: '#00aa11', heading: null, quote: null, number: null, path: null },
+      colors: { code: null, heading: '#00aa11', number: null, path: null },
     })
     expect(parseAppearance(JSON.stringify({ chat: 'x' })).chat).toEqual(DEFAULT_CHAT_STYLE)
   })
@@ -255,39 +255,67 @@ describe('대화 모양', () => {
   })
 
   it('색 줄 스위치: 기본 On 이라 속성이 없고, Off 만 걸리며, 옛 저장 값은 그대로 읽힌다', () => {
-    expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, codeColor: 'off', linkColor: 'off', headingColor: 'off', quoteColor: 'off' })).toEqual({
+    expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, codeColor: 'off', headingColor: 'off' })).toEqual({
       'code-color': 'off',
-      'link-color': 'off',
       'heading-color': 'off',
-      'quote-color': 'off',
     })
-    // 새 키가 없는 옛 저장 값: numbers·paths·colors 는 그대로, 나머지 넷은 On
-    const old = parseAppearance(JSON.stringify({ chat: { numbers: 'off', colors: { link: '#00aa11' } } })).chat
-    expect(old).toMatchObject({ numbers: 'off', paths: 'on', codeColor: 'on', linkColor: 'on', headingColor: 'on', quoteColor: 'on' })
-    expect(old.colors.link).toBe('#00aa11')
+    // 새 키가 없는 옛 저장 값: numbers·paths·colors 는 그대로, 나머지는 On
+    const old = parseAppearance(JSON.stringify({ chat: { numbers: 'off', colors: { heading: '#00aa11' } } })).chat
+    expect(old).toMatchObject({ numbers: 'off', paths: 'on', codeColor: 'on', headingColor: 'on' })
+    expect(old.colors.heading).toBe('#00aa11')
     // 끄면 골라 둔 색 값은 남는다 (변수도 그대로, CSS 가 안 쓴다)
-    const off = parseAppearance(JSON.stringify({ chat: { linkColor: 'off', colors: { link: '#00aa11' } } })).chat
-    expect(off.linkColor).toBe('off')
-    expect(chatColorVars(off.colors)).toEqual({ 'chat-link': '#00aa11' })
-    expect(CHAT_COLOR_OPTIONS.map((option) => option.label)).toEqual(['Numbers', 'Paths', 'Headings', 'Inline code', 'Links', 'Quotes'])
+    const off = parseAppearance(JSON.stringify({ chat: { headingColor: 'off', colors: { heading: '#00aa11' } } })).chat
+    expect(off.headingColor).toBe('off')
+    expect(chatColorVars(off.colors)).toEqual({ 'chat-heading': '#00aa11' })
+    expect(CHAT_COLOR_OPTIONS.map((option) => option.label)).toEqual(['Numbers', 'Paths', 'Headings', 'Inline code'])
+  })
+
+  it('옛 저장 값의 링크·인용 색과 스위치는 읽을 때 버려지고 나머지는 유지된다', () => {
+    const legacy = parseAppearance(
+      JSON.stringify({
+        palette: 'nord',
+        chat: {
+          user: 'bar',
+          numbers: 'off',
+          linkColor: 'off',
+          quoteColor: 'off',
+          codeColor: 'off',
+          colors: { link: '#00aa11', quote: '#aa0011', heading: '#112233', number: '#aa5500' },
+        },
+      }),
+    )
+    expect(legacy.palette).toBe('nord')
+    expect(legacy.chat).toMatchObject({ user: 'bar', numbers: 'off', codeColor: 'off', headingColor: 'on' })
+    expect(legacy.chat).not.toHaveProperty('linkColor')
+    expect(legacy.chat).not.toHaveProperty('quoteColor')
+    expect(legacy.chat.colors).toEqual({ code: null, heading: '#112233', number: '#aa5500', path: null })
+    expect(chatColorVars(legacy.chat.colors)).toEqual({ 'chat-heading': '#112233', 'chat-number': '#aa5500' })
+    expect(chatAttributes(legacy.chat)).toEqual({ user: 'bar', numbers: 'off', 'code-color': 'off' })
+    for (const mode of MODES) {
+      const state = documentState(legacy, mode)
+      expect(Object.keys(state.vars)).not.toContain('chat-link')
+      expect(Object.keys(state.vars)).not.toContain('chat-quote')
+      expect(Object.keys(state.chat)).not.toContain('link-color')
+      expect(Object.keys(state.chat)).not.toContain('quote-color')
+    }
   })
 
   it('끈 줄은 대비 경고를 하지 않는다', () => {
-    const colors = { ...DEFAULT_CHAT_STYLE.colors, link: '#ffffff', heading: '#2b2f3a' }
-    expect(chatColorWarnings(colors, 'default', { ...DEFAULT_CHAT_STYLE, linkColor: 'off' }).map((warning) => warning.key)).toEqual(['heading'])
+    const colors = { ...DEFAULT_CHAT_STYLE.colors, number: '#ffffff', heading: '#2b2f3a' }
+    expect(chatColorWarnings(colors, 'default', { ...DEFAULT_CHAT_STYLE, numbers: 'off' }).map((warning) => warning.key)).toEqual(['heading'])
   })
 
   it('글자 색은 고른 것만 두 모드에 같은 변수로', () => {
-    const appearance: Appearance = { ...DEFAULT_APPEARANCE, chat: { ...DEFAULT_CHAT_STYLE, colors: { ...DEFAULT_CHAT_STYLE.colors, link: '#ff0088' } } }
-    expect(chatColorVars(appearance.chat.colors)).toEqual({ 'chat-link': '#ff0088' })
+    const appearance: Appearance = { ...DEFAULT_APPEARANCE, chat: { ...DEFAULT_CHAT_STYLE, colors: { ...DEFAULT_CHAT_STYLE.colors, heading: '#ff0088' } } }
+    expect(chatColorVars(appearance.chat.colors)).toEqual({ 'chat-heading': '#ff0088' })
     expect(chatColorVars({ ...DEFAULT_CHAT_STYLE.colors, number: '#aa5500', path: '#007766' })).toEqual({ 'chat-number': '#aa5500', 'chat-path': '#007766' })
-    for (const mode of MODES) expect(documentState(appearance, mode).vars).toEqual({ 'chat-link': '#ff0088' })
+    for (const mode of MODES) expect(documentState(appearance, mode).vars).toEqual({ 'chat-heading': '#ff0088' })
   })
 
   it('바탕 대비 3 아래인 색은 그 모드를 경고한다', () => {
-    const colors = { ...DEFAULT_CHAT_STYLE.colors, link: '#ffffff', heading: '#2b2f3a', quote: '#3a3d45' }
+    const colors = { ...DEFAULT_CHAT_STYLE.colors, number: '#ffffff', heading: '#2b2f3a' }
     const warnings = chatColorWarnings(colors, 'default')
-    expect(warnings.map((warning) => `${warning.key}/${warning.mode}`).sort()).toEqual(['heading/dark', 'link/light', 'quote/dark'].sort())
+    expect(warnings.map((warning) => `${warning.key}/${warning.mode}`).sort()).toEqual(['heading/dark', 'number/light'].sort())
     expect(warnings.every((warning) => warning.ratio < 3)).toBe(true)
     expect(chatColorWarnings(DEFAULT_CHAT_STYLE.colors, 'nord')).toEqual([])
   })
@@ -329,8 +357,8 @@ describe('index.html 첫 화면 스크립트', () => {
     DEFAULT_APPEARANCE,
     { palette: 'nord', accent: 'palette', fontSize: 'small', chat: DEFAULT_CHAT_STYLE },
     { palette: 'default', accent: 'blue', fontSize: 'large', chat: { ...DEFAULT_CHAT_STYLE, user: 'bar', tables: 'minimal' } },
-    { palette: 'catppuccin', accent: '#e05a00', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, fontSize: 'large', colors: { ...DEFAULT_CHAT_STYLE.colors, link: '#ff0088' } } },
-    { palette: 'default', accent: 'palette', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, reply: 'plain', width: 'full', workBundles: 'expanded', colors: { code: '#123456', link: null, heading: '#abcdef', quote: '#654321', number: '#aa5500', path: '#007766' } } },
+    { palette: 'catppuccin', accent: '#e05a00', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, fontSize: 'large', colors: { ...DEFAULT_CHAT_STYLE.colors, heading: '#ff0088' } } },
+    { palette: 'default', accent: 'palette', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, reply: 'plain', width: 'full', workBundles: 'expanded', colors: { code: '#123456', heading: '#abcdef', number: '#aa5500', path: '#007766' } } },
     { palette: 'solarized', accent: 'slate', fontSize: 'large', chat: DEFAULT_CHAT_STYLE },
   ]
   const CHOICES: ThemeChoice[] = ['light', 'dark', 'system']

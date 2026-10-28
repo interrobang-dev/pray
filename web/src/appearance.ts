@@ -54,18 +54,14 @@ export interface ChatStyle {
   paths: 'on' | 'off'
   /** 나머지 색 줄의 켜기/끄기 (설정 창 Colors 줄 스위치). 끄면 CSS 가 그 줄의 색을 안 쓴다 — 골라 둔 값은 colors 에 남는다 */
   codeColor: 'on' | 'off'
-  linkColor: 'on' | 'off'
   headingColor: 'on' | 'off'
-  quoteColor: 'on' | 'off'
   /** 글자 색. null = 팔레트 값 */
   colors: ChatColors
 }
 
 export interface ChatColors {
   code: string | null
-  link: string | null
   heading: string | null
-  quote: string | null
   number: string | null
   path: string | null
 }
@@ -152,26 +148,22 @@ export const CHAT_OPTIONS: { [K in ChatChoiceKey]: { attribute: string; label: s
   numbers: { attribute: 'numbers', label: 'Numbers', options: ON_OFF },
   paths: { attribute: 'paths', label: 'Paths', options: ON_OFF },
   codeColor: { attribute: 'code-color', label: 'Inline code', options: ON_OFF },
-  linkColor: { attribute: 'link-color', label: 'Links', options: ON_OFF },
   headingColor: { attribute: 'heading-color', label: 'Headings', options: ON_OFF },
-  quoteColor: { attribute: 'quote-color', label: 'Quotes', options: ON_OFF },
 }
 
 /** Colors 줄 스위치로만 바꾸는 켜기/끄기 키. 세그먼트 목록(설정 창 위쪽)에는 나오지 않는다 */
-export type ChatSwitchKey = 'numbers' | 'paths' | 'codeColor' | 'linkColor' | 'headingColor' | 'quoteColor'
-const CHAT_SWITCH_KEYS: ChatChoiceKey[] = ['numbers', 'paths', 'codeColor', 'linkColor', 'headingColor', 'quoteColor']
+export type ChatSwitchKey = 'numbers' | 'paths' | 'codeColor' | 'headingColor'
+const CHAT_SWITCH_KEYS: ChatChoiceKey[] = ['numbers', 'paths', 'codeColor', 'headingColor']
 
 export const CHAT_CHOICE_KEYS = Object.keys(CHAT_OPTIONS) as ChatChoiceKey[]
 export const CHAT_SEGMENT_KEYS = CHAT_CHOICE_KEYS.filter((key) => !CHAT_SWITCH_KEYS.includes(key))
 
-/** 대화 글자 색. variable 은 <html> 에 인라인으로 거는 변수 이름이고, 비어 있으면 style.css 가 팔레트 값으로 대신한다 (var(--chat-link, var(--link))). switchKey = 그 줄 스위치 */
+/** 대화 글자 색. variable 은 <html> 에 인라인으로 거는 변수 이름이고, 비어 있으면 style.css 가 팔레트 값으로 대신한다 (var(--chat-heading, var(--md-heading))). switchKey = 그 줄 스위치 */
 export const CHAT_COLOR_OPTIONS: { key: keyof ChatColors; label: string; variable: string; surfaces: VarName[]; switchKey: ChatSwitchKey }[] = [
   { key: 'number', label: 'Numbers', variable: 'chat-number', surfaces: ['panel', 'bg'], switchKey: 'numbers' },
   { key: 'path', label: 'Paths', variable: 'chat-path', surfaces: ['panel', 'bg'], switchKey: 'paths' },
   { key: 'heading', label: 'Headings', variable: 'chat-heading', surfaces: ['panel', 'bg'], switchKey: 'headingColor' },
   { key: 'code', label: 'Inline code', variable: 'chat-code', surfaces: ['code-bg'], switchKey: 'codeColor' },
-  { key: 'link', label: 'Links', variable: 'chat-link', surfaces: ['panel', 'bg'], switchKey: 'linkColor' },
-  { key: 'quote', label: 'Quotes', variable: 'chat-quote', surfaces: ['panel', 'bg'], switchKey: 'quoteColor' },
 ]
 
 export const DEFAULT_CHAT_STYLE: ChatStyle = {
@@ -186,10 +178,8 @@ export const DEFAULT_CHAT_STYLE: ChatStyle = {
   numbers: 'on',
   paths: 'on',
   codeColor: 'on',
-  linkColor: 'on',
   headingColor: 'on',
-  quoteColor: 'on',
-  colors: { code: null, link: null, heading: null, quote: null, number: null, path: null },
+  colors: { code: null, heading: null, number: null, path: null },
 }
 
 export const DEFAULT_APPEARANCE: Appearance = { palette: 'default', accent: 'palette', fontSize: 'normal', chat: DEFAULT_CHAT_STYLE }
@@ -270,7 +260,7 @@ export function chatColorVars(colors: ChatColors): Record<string, string> {
   return vars
 }
 
-/** 대화 글자 색이 바탕 대비 3 아래인 모드 (설정 창 경고). 링크·제목·인용은 답 카드(패널)·Plain 답(바탕), 인라인 코드는 코드 바탕 기준 */
+/** 대화 글자 색이 바탕 대비 3 아래인 모드 (설정 창 경고). 제목·숫자·경로는 답 카드(패널)·Plain 답(바탕), 인라인 코드는 코드 바탕 기준 */
 export function chatColorWarnings(colors: ChatColors, paletteId: string, chat: ChatStyle = DEFAULT_CHAT_STYLE): { key: keyof ChatColors; mode: Mode; ratio: number }[] {
   const warnings: { key: keyof ChatColors; mode: Mode; ratio: number }[] = []
   for (const { key, surfaces, switchKey } of CHAT_COLOR_OPTIONS) {
