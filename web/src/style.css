@@ -729,6 +729,17 @@ li.group.drop-after::after {
   white-space: nowrap;
   cursor: pointer;
 }
+/* 팀 폴더의 형상관리 종류 (git·SVN). 줄지 않고 이름이 말줄임된다 */
+.team-head .vcs-chip {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: calc(10px * var(--font-scale));
+  font-weight: 500;
+  line-height: 14px;
+}
 .session {
   display: grid;
   /* 아바타(테두리가 상태) · 제목 · 모델(남는 폭만. 좁으면 말줄임되다 사라진다) · 배지·시각 */

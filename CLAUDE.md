@@ -83,6 +83,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 서버 → `server-api.md` (계정·플로우·대화·대기열은 각 파일)
 - `server/src/index.ts` — Express: 모든 API·SSE·훅 수신
 - `server/src/sessions.ts` — 세션 목록(근무·휴식·퇴근 합치기, 생성순) · `transcript.ts` — jsonl 요약 · `transcriptWatcher.ts` — jsonl 감시 → SSE
+- `server/src/vcs.ts` — 팀 폴더의 형상관리(git·SVN) 판정·5분 캐시 → office 응답의 `vcs`
 - `server/src/hookState.ts` — 훅 → 훅 상태 · `turnEnd.ts` — waiting·done·my-turn 판정 · `liveSessions.ts` — pid 생존 확인
 - `server/src/shells.ts` — 백그라운드 shell·작업 판정, 출력 끝 N줄 · `scratchpad.ts` — 세션 작업 폴더·첨부 저장
 - `server/src/askQuestion.ts` — AskUserQuestion 해석·답 · `serialRunner.ts` — 한 번에 하나 실행기 · `hostClient.ts` — pipe 클라이언트

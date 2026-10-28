@@ -137,6 +137,8 @@ export interface Team {
   parts: Part[]
   partOf: Record<string, string>
   createdAt: string
+  /** 팀 폴더의 형상관리 (서버가 판정해 주는 파생값. 옛 서버 응답에는 없다) */
+  vcs?: { kind: 'git' | 'svn'; root: string } | null
 }
 
 export interface Office {
@@ -366,4 +368,9 @@ export interface FlowAlarmPage {
   hasNext: boolean
   /** 다음 쪽을 받을 cursor. 마지막 쪽이면 null */
   nextCursor: string | null
+}
+
+/** 팀 머리줄 형상관리 칩의 툴팁·aria-label: "Git · <루트 경로>"·"SVN · <루트 경로>" */
+export function vcsLabel(vcs: { kind: 'git' | 'svn'; root: string }): string {
+  return `${vcs.kind === 'git' ? 'Git' : 'SVN'} · ${vcs.root}`
 }

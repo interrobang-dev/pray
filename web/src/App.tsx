@@ -33,6 +33,7 @@ import {
   formatDateTime,
   offDutyLabel,
   statusLabel,
+  vcsLabel,
   type FlowStatus,
   type Office as OfficeData,
   type Group,
@@ -987,6 +988,11 @@ export function App() {
             {team.name}
           </span>
           {members.length > 0 && <span className="count">{members.length}</span>}
+          {team.vcs && (
+            <span className="vcs-chip" role="img" title={vcsLabel(team.vcs)} aria-label={vcsLabel(team.vcs)}>
+              {team.vcs.kind === 'git' ? 'git' : 'SVN'}
+            </span>
+          )}
           <span className="head-actions">
             <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="Add session to team">
               +

@@ -71,6 +71,7 @@ import {
 } from './scratchpad.js'
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 import { HostClient } from './hostClient.js'
+import { makeVcsCache } from './vcs.js'
 import { attachInstructions, queuedPrompts, withoutQueued, type ChatMessage } from './messages.js'
 import { InstructionLogCache, MessageVersions, messageJsons, TranscriptMessageCache } from './messageCache.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
@@ -1054,8 +1055,16 @@ app.get('/api/sessions/:id/stream', (req, res) => {
   if (!host.send({ type: 'attach', sessionId })) sendSse(res, 'error', 'Not connected to session host')
 })
 
-function broadcastOffice(): void {
+/** 팀 폴더의 형상관리 판정(5분 캐시). 화면 전용 파생 필드라 hq.json 에는 저장하지 않는다 */
+const vcsOf = makeVcsCache({ ttlMs: 5 * 60_000 })
+
+function readOfficeWithVcs() {
   const office = readOffice()
+  return { ...office, teams: office.teams.map((team) => ({ ...team, vcs: vcsOf(team.cwd) })) }
+}
+
+function broadcastOffice(): void {
+  const office = readOfficeWithVcs()
   for (const res of subscribers) sendSse(res, 'office', office)
 }
 
@@ -1387,7 +1396,7 @@ app.get('/api/team/:teamId', async (req, res) => {
       lastAssistantText: s.lastAssistantText,
       pendingTool: s.pendingTool,
     }))
-  res.json({ ...team, part, members, tasks: tasks.listByUnit(team.id, part?.id ?? null) })
+  res.json({ ...team, vcs: vcsOf(team.cwd), part, members, tasks: tasks.listByUnit(team.id, part?.id ?? null) })
 })
 
 app.patch('/api/team/:teamId', (req, res) => {
@@ -1749,7 +1758,7 @@ app.post('/api/server/restart', (_req, res) => {
 })
 
 app.get('/api/office', (_req, res) => {
-  res.json(readOffice())
+  res.json(readOfficeWithVcs())
 })
 
 /** 팀이 없는 그룹만 지운다 (팀이 있으면 409) */
