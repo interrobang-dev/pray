@@ -7,7 +7,7 @@ import type { HookState } from './hookState.js'
 import { summarizeTranscript, type TranscriptSummary, type TurnOutcome } from './transcript.js'
 import { hasWakingTask, runningBackgroundTasks, runningShells, type BackgroundTask } from './shells.js'
 import { turnEndStatus, type TurnEndFacts } from './turnEnd.js'
-import { readLiveSessions } from './liveSessions.js'
+import { readLiveSessions, type LiveSession } from './liveSessions.js'
 import { modelSettingOf } from './memberModel.js'
 import { partOfSession, roleOf, teamOf, type Team } from '@jk-corp/host/team'
 import type { OffDutyRecord, SessionCharacter, SessionGender, WebSessionRecord } from '@jk-corp/host/hq'
@@ -153,6 +153,11 @@ export async function findTranscriptSummary(sessionId: string): Promise<Transcri
 /** 세션 목록과 같은 캐시의 분석 (요약·shell·백그라운드 작업). jsonl 이 없으면 null */
 export async function findTranscriptAnalysis(sessionId: string): Promise<TranscriptAnalysis | null> {
   return transcripts.analyze(sessionId)
+}
+
+/** 살아 있는 pid 기록 (cwd 포함). 없으면 undefined */
+export async function findLiveSession(sessionId: string): Promise<LiveSession | undefined> {
+  return (await readLiveSessions(sessionsDir)).find((s) => s.sessionId === sessionId)
 }
 
 /** pid 기록이 살아 있는 세션인지. 근무 판정은 이것 또는 호스트 목록 (listSessions 의 attendance 와 같은 기준) */

@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Terminal } from './Terminal'
+import { FilesTab } from './FilesTab'
 import { Chat, type Jump, type JumpTarget } from './Chat'
 import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
@@ -211,7 +212,7 @@ export function App() {
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   /** 이름 모달에서 고른 도트 인물 (null = 자동). 지시자일 때만 모달에 보인다 */
   const [renameCharacter, setRenameCharacter] = useState<CharacterChoice>({ id: null, hair: null, top: null })
-  const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
+  const [tab, setTab] = useState<'chat' | 'terminal' | 'files'>('chat')
   /** 대화 탭 안 검색 막대를 열었는지. 세션을 바꾸거나 대화 탭을 떠나면 닫는다 */
   const [isChatSearchOpen, setIsChatSearchOpen] = useState(false)
   /** 바뀔 때마다 열려 있는 검색 막대의 입력칸에 포커스한다 (Ctrl+F 를 다시 누름) */
@@ -359,8 +360,8 @@ export function App() {
   const isSelectedPresent = selected !== null && attendanceOf(selected) === 'present'
   /** 근무 중인 웹 세션. 터미널·입력·승인·종료는 이때만 (휴식·퇴근 세션 pty 에 키·resize 를 보내지 않게) */
   const isSelectedLiveWeb = isSelectedPresent && selected.kind === 'web'
-  /** 터미널을 못 여는 세션이면 보던 탭이 터미널이어도 대화 */
-  const shownTab = isSelectedLiveWeb ? tab : 'chat'
+  /** 터미널을 못 여는 세션이면 보던 탭이 터미널이어도 대화. Files 는 읽기만 해서 모든 세션(휴식·퇴근·외부 포함)에 있다 */
+  const shownTab = tab === 'terminal' && !isSelectedLiveWeb ? 'chat' : tab
   /** 대화 안 검색을 쓸 수 있는 때: 세션 패널의 대화 탭 (터미널 탭은 범위 밖) */
   const isChatSearchAvailable = selected !== null && shownTab === 'chat'
 
@@ -1471,6 +1472,9 @@ export function App() {
                     <TerminalTabIcon />
                   </button>
                 )}
+                <button className={shownTab === 'files' ? 'on' : ''} onClick={() => setTab('files')} title="Files" aria-label="Files">
+                  <FilesTabIcon />
+                </button>
               </nav>
               {shownTab === 'chat' && (
                 <button
@@ -1502,6 +1506,8 @@ export function App() {
             {jumpBack?.toSessionId === selected.id && renderJumpBack(jumpBack)}
             {shownTab === 'terminal' ? (
               <Terminal sessionId={selected.id} />
+            ) : shownTab === 'files' ? (
+              <FilesTab key={selected.id} sessionId={selected.id} cwd={selected.cwd} />
             ) : (
               <Chat
                 sessionId={selected.id}
@@ -1839,6 +1845,21 @@ function ChatTabIcon() {
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
       <path
         d="M4 2.5h8a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5v-2.5H4a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 4 2.5z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** 패널 헤더 Files 탭 아이콘: 폴더 */
+function FilesTabIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M2 4.25A1.25 1.25 0 0 1 3.25 3h3.1l1.4 1.5h5A1.25 1.25 0 0 1 14 5.75v6A1.25 1.25 0 0 1 12.75 13h-9.5A1.25 1.25 0 0 1 2 11.75z"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.25"

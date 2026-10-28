@@ -199,6 +199,39 @@ export interface ScratchpadListing {
   isTruncated: boolean
 }
 
+/** 세션 작업 폴더(cwd) 한 단계 목록 `GET /api/sessions/:id/tree` (server workspaceFiles.ts 와 손으로 맞춘다) */
+export interface WorkspaceEntry {
+  name: string
+  kind: 'dir' | 'file'
+  size: number
+  mtime: string
+}
+
+export interface WorkspaceFolder {
+  /** 폴더 먼저·이름순 */
+  entries: WorkspaceEntry[]
+  /** 숨긴 폴더(.git·node_modules 등)와 밖을 가리키는 링크 수 */
+  hiddenCount: number
+  /** 서버 상한(2000개)에서 잘렸는지 */
+  isTruncated: boolean
+}
+
+/** `GET /api/sessions/:id/file`. euc-kr·utf-8-bom 은 4단계(편집)에서 저장 방식이 달라진다 */
+export type WorkspaceFile =
+  | { kind: 'text'; text: string; size: number; mtime: string; hash: string; language: string | null; encoding: 'utf-8' | 'utf-8-bom' | 'euc-kr' }
+  | { kind: 'binary'; isBinary: true; size: number; mtime: string }
+  | { kind: 'too-large'; isTooLarge: true; size: number; mtime: string }
+
+/** `GET /api/sessions/:id/find?q=` */
+export interface WorkspaceFindResult {
+  paths: string[]
+  total: number
+  /** 파일 수·시간 상한에 걸려 폴더를 다 훑지 못했다 */
+  isIndexPartial: boolean
+  fileCount: number
+  elapsedMs: number
+}
+
 /** 출근 상태. attendance 가 없는 옛 서버 응답은 isAlive 로 본다 (끝난 세션은 퇴근. 다시 출근·기록 지우기는 못 한다) */
 export function attendanceOf(session: Session): Attendance {
   return session.attendance ?? (session.isAlive ? 'present' : 'off')

@@ -2213,6 +2213,232 @@ li.group.drop-after::after {
   align-items: center;
   gap: 8px;
 }
+/* 세션 패널 Files 탭 (FilesTab.tsx): 위 막대(← 폰만·빠른 찾기·경로·크기·↻) + 왼쪽 트리 + 오른쪽 파일 보기 */
+.ws {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+}
+.ws-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.ws-back {
+  display: none;
+}
+.ws-find {
+  position: relative;
+  flex: 0 1 260px;
+  min-width: 120px;
+}
+.ws-find input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 4px 8px;
+  font-size: calc(13px * var(--font-scale));
+}
+/* 빠른 찾기 결과: 입력칸 아래로 뜨는 목록 (이름 굵게 + 폴더 회색) */
+.ws-find-results {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  width: min(520px, calc(100vw - 32px));
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.ws-find-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+}
+.ws-find-item.active {
+  background: var(--accent-soft);
+}
+.ws-find-name {
+  flex-shrink: 0;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+}
+.ws-find-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-find-note {
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-path {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: calc(13px * var(--font-scale));
+}
+.ws-path-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-path b {
+  flex-shrink: 0;
+  color: var(--text);
+}
+.ws-path-sep {
+  margin: 0 4px;
+}
+.ws-meta {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  white-space: nowrap;
+}
+.ws-reload,
+.ws-back {
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  flex-shrink: 0;
+}
+.ws-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /* 사무실이 보이는 520px 패널에서는 트리가 160px, 넓으면 300px 까지 */
+  grid-template-columns: clamp(160px, 32%, 300px) minmax(0, 1fr);
+}
+.ws-side {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+}
+/* 트리 줄은 칸 폭 안에서 말줄임 (전체 경로는 툴팁). 들여쓰기는 깊이(--depth) × 14px. position 은 찾기로 연 줄까지 스크롤할 때 offsetTop 기준 */
+.ws-tree {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.ws-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 24px;
+  padding: 1px 8px 1px calc(6px + var(--depth) * 14px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  font-size: calc(13px * var(--font-scale));
+  white-space: nowrap;
+}
+.ws-row:hover {
+  background: var(--bg);
+}
+.ws-row.selected {
+  background: var(--accent-soft);
+}
+.ws-chevron {
+  flex: 0 0 14px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  text-align: center;
+}
+.ws-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-note {
+  padding: 2px 8px 2px calc(22px + var(--depth) * 14px);
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-note.error,
+.ws-error {
+  color: var(--error);
+}
+.ws-view {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-view > .hint {
+  margin: auto;
+  text-align: center;
+}
+/* 투명한 그림이 보이게 체크무늬 바탕 (작업 파일 미리보기와 같다) */
+.ws-image {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: repeating-conic-gradient(var(--code-bg) 0 25%, var(--panel) 0 50%) 0 0 / 16px 16px;
+}
+.ws-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+/* 코드 보기 (CodeView.tsx): 줄은 접지 않고 가로 스크롤. 줄 번호는 ::before 라 선택·복사에 끼지 않고, 가로로 스크롤해도 왼쪽에 붙어 있다 */
+.code-view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: calc(12px * var(--font-scale));
+  line-height: 1.5;
+}
+.code-lines {
+  min-width: max-content;
+  padding: 6px 0 24px;
+}
+.code-line {
+  padding-right: 24px;
+  white-space: pre;
+}
+.code-line::before {
+  content: attr(data-line);
+  position: sticky;
+  left: 0;
+  display: inline-block;
+  width: calc(var(--gutter-digits) * 1ch);
+  margin-right: 14px;
+  padding: 0 10px 0 12px;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
 /* 작업 중 표시기 (Chat.tsx). claude 쪽(왼쪽)의 작은 말풍선에 점 세 개가 차례로 출렁인다. 옆에 [중지] */
 .typing-row {
   align-self: flex-start;
@@ -4716,6 +4942,49 @@ li.group.drop-after::after {
   }
   .files-preview-body {
     padding: 8px 0;
+  }
+  /* Files 탭: 한 장씩. 트리(찾기 막대) → 파일을 누르면 보기(← · 경로 막대) → ← 로 트리 */
+  .ws-find {
+    flex: 1;
+  }
+  .ws-find input {
+    min-height: 40px;
+    font-size: 16px;
+  }
+  .ws-find-results {
+    width: calc(100vw - 20px);
+  }
+  .ws-find-item {
+    min-height: 40px;
+  }
+  .ws:not(.is-viewing) .ws-path,
+  .ws:not(.is-viewing) .ws-meta,
+  .ws.is-viewing .ws-find {
+    display: none;
+  }
+  .ws.is-viewing .ws-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ws-reload,
+  .ws-back {
+    width: 40px;
+    height: 40px;
+  }
+  .ws-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ws-side {
+    border-right: 0;
+  }
+  .ws.is-viewing .ws-side,
+  .ws:not(.is-viewing) .ws-view {
+    display: none;
+  }
+  .ws-row {
+    min-height: 40px;
+    font-size: calc(14px * var(--font-scale));
   }
   /* 제안 Tab 칩: 폰에서는 손가락 폭 40px 에 보내기와 같은 높이 */
   .composer .suggestion-tab {

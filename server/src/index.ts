@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync } from 'node:fs'
+import { realpath, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import compression from 'compression'
 import express from 'express'
@@ -61,7 +62,7 @@ import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js
 import { makeSendCode } from './mail.js'
 import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptJudgement } from './interrupt.js'
-import { findTranscript, findTranscriptAnalysis, findTranscriptFile, findTranscriptSummary, isLiveSession, listSessions, projectsDir, sessionStatus } from './sessions.js'
+import { findLiveSession, findTranscript, findTranscriptAnalysis, findTranscriptFile, findTranscriptSummary, isLiveSession, listSessions, projectsDir, sessionStatus } from './sessions.js'
 import {
   contentTypeOf,
   findScratchpad,
@@ -72,6 +73,7 @@ import {
   saveAttachment,
 } from './scratchpad.js'
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
+import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
 import { HostClient } from './hostClient.js'
 import { makeVcsCache } from './vcs.js'
 import { attachInstructions, queuedPrompts, withoutQueued, type ChatMessage } from './messages.js'
@@ -490,6 +492,124 @@ app.get('/api/sessions/:id/files/raw', async (req, res) => {
   res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
   if (isActive) res.set('Content-Security-Policy', 'sandbox')
   res.sendFile(file, { dotfiles: 'allow' })
+})
+
+/**
+ * 작업 폴더 API(Files 탭)의 기준 폴더: 세션 목록(listSessions)과 같은 순서로 정한 cwd 의 realpath.
+ * 근무 중이면 pid 기록 → 훅 → 호스트 목록, 아니면 hq 기록(휴식·퇴근). 외부 세션도 읽기는 된다.
+ * 목록에 없는 세션(끝난 외부 세션 등)·cwd 가 없거나 폴더가 아니면 null
+ */
+async function workspaceRootOf(sessionId: string): Promise<string | null> {
+  const live = await findLiveSession(sessionId)
+  const hostEntry = host.sessions.find((s) => s.sessionId === sessionId)
+  const cwd =
+    live || hostEntry
+      ? (live?.cwd ?? hookStates.get(sessionId)?.cwd ?? hostEntry?.cwd)
+      : (listWebSessions().find((r) => r.sessionId === sessionId) ?? listOffDuty().find((r) => r.sessionId === sessionId))?.cwd
+  if (!cwd) return null
+  try {
+    const root = await realpath(cwd)
+    return (await stat(root)).isDirectory() ? root : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 작업 폴더 API 공통: 세션 ID·path 꼴 검사(400) → 기준 폴더(없으면 404) → path 를 기준 안 실제 경로로(밖·없음 404).
+ * 응답을 보냈으면 null
+ */
+async function resolveWorkspaceRequest(req: Request, res: Response, allowRoot: boolean): Promise<{ root: string; target: string } | null> {
+  const path = req.query.path ?? ''
+  if (!isSessionId(req.params.id as string) || typeof path !== 'string' || !isValidRequestPath(path, allowRoot)) {
+    res.status(400).json({ message: 'Invalid session ID or path' })
+    return null
+  }
+  const root = await workspaceRootOf(req.params.id as string)
+  if (!root) {
+    res.status(404).json({ message: 'Session folder not found' })
+    return null
+  }
+  const target = await resolveWorkspacePath(root, path)
+  if (!target) {
+    res.status(404).json({ message: 'Not found' })
+    return null
+  }
+  return { root, target }
+}
+
+/** 작업 폴더 한 단계 목록 (?path= 상대 경로, 빼면 기준 폴더) → { entries, hiddenCount, isTruncated }. 폴더 먼저·이름순 */
+app.get('/api/sessions/:id/tree', async (req, res) => {
+  const resolved = await resolveWorkspaceRequest(req, res, true)
+  if (!resolved) return
+  // 확인한 뒤 지워졌거나 권한이 없는 폴더(System Volume Information 등)도 404
+  const listing = (await stat(resolved.target).catch(() => null))?.isDirectory()
+    ? await listFolder(resolved.root, resolved.target).catch(() => null)
+    : null
+  if (!listing) {
+    res.status(404).json({ message: 'Not a folder, or it could not be read' })
+    return
+  }
+  res.set('Cache-Control', 'no-store')
+  res.json(listing)
+})
+
+/**
+ * 작업 폴더 파일 하나 (?path=) → 글이면 { kind: 'text', text, size, mtime, hash(sha1), language, encoding },
+ * 1MB 넘으면 { kind: 'too-large', isTooLarge, size, mtime }, NUL 바이트가 있으면 { kind: 'binary', isBinary, size, mtime }
+ */
+app.get('/api/sessions/:id/file', async (req, res) => {
+  const resolved = await resolveWorkspaceRequest(req, res, false)
+  if (!resolved) return
+  const file = (await stat(resolved.target).catch(() => null))?.isFile() ? await readWorkspaceFile(resolved.target).catch(() => null) : null
+  if (!file) {
+    res.status(404).json({ message: 'Not a file, or it could not be read' })
+    return
+  }
+  res.set('Cache-Control', 'no-store')
+  res.json(file)
+})
+
+/**
+ * 작업 폴더의 그림 파일 그대로 (?path=). 그림만 준다 — 그 밖은 404. 응답 머리는 scratchpad raw 와 같다
+ * (nosniff, SVG 는 CSP sandbox, 압축을 끄는 no-transform)
+ */
+app.get('/api/sessions/:id/file/raw', async (req, res) => {
+  const resolved = await resolveWorkspaceRequest(req, res, false)
+  if (!resolved) return
+  const { type, isActive } = contentTypeOf(resolved.target)
+  if (!type.startsWith('image/') || !(await stat(resolved.target).catch(() => null))?.isFile()) {
+    res.status(404).json({ message: 'Not an image' })
+    return
+  }
+  res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
+  if (isActive) res.set('Content-Security-Policy', 'sandbox')
+  res.sendFile(resolved.target, { dotfiles: 'allow' })
+})
+
+const MAX_FIND_RESULTS = 100
+const MAX_FIND_QUERY = 200
+const workspaceIndexOf = makeFileIndexCache()
+
+/**
+ * 작업 폴더 파일 이름 빠른 찾기 (?q=) → { paths, total, isIndexPartial, fileCount, elapsedMs }.
+ * 기준 폴더 아래를 숨긴 폴더·링크 빼고 훑은 목록(5만 개·3초 상한, 30초 캐시)에서 맞는 것 최대 100개
+ */
+app.get('/api/sessions/:id/find', async (req, res) => {
+  const { q } = req.query
+  if (!isSessionId(req.params.id) || typeof q !== 'string' || q.length > MAX_FIND_QUERY) {
+    res.status(400).json({ message: 'Invalid session ID or query' })
+    return
+  }
+  const root = await workspaceRootOf(req.params.id)
+  if (!root) {
+    res.status(404).json({ message: 'Session folder not found' })
+    return
+  }
+  const index = await workspaceIndexOf(root)
+  const { paths, total } = findFiles(index.paths, q, MAX_FIND_RESULTS)
+  res.set('Cache-Control', 'no-store')
+  res.json({ paths, total, isIndexPartial: index.isPartial, fileCount: index.paths.length, elapsedMs: index.elapsedMs })
 })
 
 /** Claude Code 백그라운드 작업 ID 꼴 (실제는 b + 영문·숫자 8자) */
