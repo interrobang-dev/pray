@@ -419,7 +419,7 @@ function WorkParts({ work, highlightKey, searchKey }: { work: Work; highlightKey
           {part.text && (
             <>
               <CopyButton text={part.text} />
-              <MarkdownText text={part.text} />
+              <MarkdownText text={part.text} isChat />
             </>
           )}
           {part.toolUses.map((toolUse) => (
@@ -474,7 +474,7 @@ function WorkLine({
             part.text && (
               <div key={part.message.id} className={`msg assistant${markClasses(part.message.id, highlightKey, searchKey)}`} data-jump-key={part.message.id}>
                 <CopyButton text={part.text} />
-                <MarkdownText text={part.text} />
+                <MarkdownText text={part.text} isChat />
               </div>
             ),
         )}
@@ -947,7 +947,7 @@ const ChatRowView = memo(function ChatRowView({
     return (
       <div className={`msg assistant${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
         <CopyButton text={row.message.text} />
-        <MarkdownText text={row.message.text} />
+        <MarkdownText text={row.message.text} isChat />
       </div>
     )
   }
@@ -963,7 +963,7 @@ const ChatRowView = memo(function ChatRowView({
       <div className={`msg user relay${highlightClass(message.id)}`} data-jump-key={message.id}>
         <CopyButton text={message.text} />
         <div className="relay-label">Instruction from {message.from.name}</div>
-        <MarkdownText text={message.text} />
+        <MarkdownText text={message.text} isChat />
       </div>
     )
   }

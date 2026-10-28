@@ -14,10 +14,12 @@ import {
 } from './appearance'
 import { appearance, setAppearance, subscribeTheme, themeMode } from './theme'
 
-/** 미리보기 답: 대화 모양이 바꾸는 것(제목·인라인 코드·링크·인용·표·코드 블록)을 다 넣는다 */
+/** 미리보기 답: 대화 모양이 바꾸는 것(제목·인라인 코드·링크·숫자·경로·인용·표·코드 블록)을 다 넣는다 */
 const PREVIEW_REPLY = [
   '### Release check',
   'Run `npm test` first, then read the [release notes](https://example.com).',
+  '',
+  'It took 42 tests in 3.5s (85% passed) on v1.2.3, see web/src/Chat.tsx and ~/.claude/rules/chat.md.',
   '',
   '> Ship only after the tests pass.',
   '',
@@ -32,7 +34,7 @@ const PREVIEW_REPLY = [
 ].join('\n')
 
 /** 색을 고르기 전 색 고르기 칸에 보일 값 (지금 팔레트에서 그 글자가 쓰는 색) */
-const PALETTE_COLOR: Record<keyof ChatColors, 'text' | 'link' | 'muted'> = { code: 'text', link: 'link', heading: 'text', quote: 'muted' }
+const PALETTE_COLOR: Record<keyof ChatColors, 'link' | 'muted' | 'md-code' | 'md-heading' | 'md-number' | 'md-path'> = { code: 'md-code', link: 'link', heading: 'md-heading', quote: 'muted', number: 'md-number', path: 'md-path' }
 
 /**
  * 설정 창 Chat 탭: 대화 모양(appearance.ts 의 ChatStyle). 맨 위 미리보기는 대화 목록과 같은 .chat-scope 라 고른 모양이 그대로 보인다
@@ -164,13 +166,13 @@ function ChatPreview({ isWorkOpen }: { isWorkOpen: boolean }) {
         {isWorkOpen && (
           <div className="work-items">
             <div className="msg assistant">
-              <MarkdownText text="Reading the release notes first." />
+              <MarkdownText text="Reading the release notes first." isChat />
             </div>
           </div>
         )}
       </div>
       <div className="msg assistant">
-        <MarkdownText text={PREVIEW_REPLY} />
+        <MarkdownText text={PREVIEW_REPLY} isChat />
       </div>
     </div>
   )

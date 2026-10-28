@@ -48,6 +48,10 @@ const DEFAULT_LIGHT = {
   'scrollbar-thumb': 'rgba(43, 47, 58, 0.22)',
   'scrollbar-thumb-hover': 'rgba(43, 47, 58, 0.4)',
   floor: '#dcdde6',
+  'md-heading': '#6f42c1',
+  'md-code': '#b0306a',
+  'md-number': '#af5109',
+  'md-path': '#0f766e',
   'hl-text': '#24292e',
   'hl-keyword': '#d73a49',
   'hl-entity': '#6f42c1',
@@ -106,6 +110,10 @@ export const DEFAULT_VARS: Record<'light' | 'dark', Vars> = {
     overlay: 'rgba(0, 0, 0, 0.55)',
     'scrollbar-thumb': 'rgba(227, 229, 234, 0.2)',
     'scrollbar-thumb-hover': 'rgba(227, 229, 234, 0.36)',
+    'md-heading': '#d2a8ff',
+    'md-code': '#ff9bb8',
+    'md-number': '#ffa657',
+    'md-path': '#5ad1c2',
     'hl-text': '#c9d1d9',
     'hl-keyword': '#ff7b72',
     'hl-entity': '#d2a8ff',
@@ -171,6 +179,16 @@ export interface PaletteCore {
   /** 점프한 줄·검색 현재 결과 */
   highlight: string
   syntax: SyntaxColors
+  /** 대화 마크다운 기본 글자 색 (제목·인라인 코드·숫자·파일 경로). --bg·--panel·지시 말풍선·코드 바탕 위에서 대비 4.5 이상 */
+  markdown: MarkdownColors
+}
+
+/** 대화 마크다운 기본 글자 색. 설정 창 Chat 탭 Colors 에서 고른 값이 이긴다 */
+export interface MarkdownColors {
+  heading: string
+  code: string
+  number: string
+  path: string
 }
 
 export interface Palette {
@@ -230,6 +248,7 @@ export const PALETTES: Palette[] = [
       link: '#0969da',
       relay: '#8250df',
       highlight: '#d4a72c',
+      markdown: { heading: '#7f4cde', code: '#cf222e', number: '#953800', path: '#116329' },
       syntax: GITHUB_LIGHT_SYNTAX,
     },
     dark: {
@@ -248,6 +267,7 @@ export const PALETTES: Palette[] = [
       link: '#4493f8',
       relay: '#ab7df8',
       highlight: '#d29922',
+      markdown: { heading: '#d2a8ff', code: '#ff7b72', number: '#ffa657', path: '#7ee787' },
       syntax: GITHUB_DARK_SYNTAX,
     },
   },
@@ -271,6 +291,7 @@ export const PALETTES: Palette[] = [
       link: '#0b59f4',
       relay: '#7287fd',
       highlight: '#df8e1d',
+      markdown: { heading: '#8230ee', code: '#c91b2a', number: '#b24101', path: '#127076' },
       syntax: {
         keyword: '#8839ef',
         entity: '#1e66f5',
@@ -302,6 +323,7 @@ export const PALETTES: Palette[] = [
       link: '#89b4fa',
       relay: '#b4befe',
       highlight: '#f9e2af',
+      markdown: { heading: '#cba6f7', code: '#eba0ac', number: '#fab387', path: '#94e2d5' },
       syntax: {
         keyword: '#cba6f7',
         entity: '#89b4fa',
@@ -336,6 +358,7 @@ export const PALETTES: Palette[] = [
       link: '#1d6ca2',
       relay: '#6c71c4',
       highlight: '#b58900',
+      markdown: { heading: '#826200', code: '#bc2970', number: '#af4113', path: '#1d706a' },
       syntax: {
         keyword: '#859900',
         entity: '#268bd2',
@@ -366,6 +389,7 @@ export const PALETTES: Palette[] = [
       link: '#48a0de',
       relay: '#6c71c4',
       highlight: '#b58900',
+      markdown: { heading: '#d4a000', code: '#e68eb9', number: '#ef8f68', path: '#30b9af' },
       syntax: {
         keyword: '#859900',
         entity: '#268bd2',
@@ -400,6 +424,7 @@ export const PALETTES: Palette[] = [
       link: '#076678',
       relay: '#8f3f71',
       highlight: '#b57614',
+      markdown: { heading: '#87580f', code: '#af3a03', number: '#8f3f71', path: '#396a4c' },
       syntax: {
         keyword: '#9d0006',
         entity: '#79740e',
@@ -430,6 +455,7 @@ export const PALETTES: Palette[] = [
       link: '#83a598',
       relay: '#d3869b',
       highlight: '#fabd2f',
+      markdown: { heading: '#fabd2f', code: '#fe831e', number: '#d791a4', path: '#8ec07c' },
       syntax: {
         keyword: '#fb4934',
         entity: '#b8bb26',
@@ -465,6 +491,7 @@ export const PALETTES: Palette[] = [
       link: '#286983',
       relay: '#907aa9',
       highlight: '#ea9d34',
+      markdown: { heading: '#765e92', code: '#b63e39', number: '#945c0f', path: '#416f77' },
       syntax: {
         keyword: '#286983',
         entity: '#d7827e',
@@ -496,6 +523,7 @@ export const PALETTES: Palette[] = [
       link: '#9ccfd8',
       relay: '#c4a7e7',
       highlight: '#f6c177',
+      markdown: { heading: '#c4a7e7', code: '#ebbcba', number: '#f6c177', path: '#9ccfd8' },
       syntax: {
         keyword: '#31748f',
         entity: '#ebbcba',
@@ -531,6 +559,7 @@ export const PALETTES: Palette[] = [
       link: '#4b6a91',
       relay: '#b48ead',
       highlight: '#d08770',
+      markdown: { heading: '#47668a', code: '#9c4d33', number: '#815679', path: '#526b3c' },
       syntax: {
         keyword: '#5e81ac',
         entity: '#88c0d0',
@@ -561,6 +590,7 @@ export const PALETTES: Palette[] = [
       link: '#88c0d0',
       relay: '#b48ead',
       highlight: '#ebcb8b',
+      markdown: { heading: '#88c0d0', code: '#dda796', number: '#c6aac1', path: '#a3be8c' },
       syntax: {
         keyword: '#81a1c1',
         entity: '#88c0d0',

@@ -131,6 +131,31 @@ describe('팔레트', () => {
     expect(others.flatMap((palette) => failures(palette.id, 'light', TEXT_ON_SURFACE))).toEqual([])
   })
 
+  it('대화 마크다운 기본색(제목·인라인 코드·숫자·경로)은 모든 팔레트·모드에서 바탕·패널·지시 말풍선·코드 바탕·표 머리 위에서 4.5 이상', () => {
+    const result: string[] = []
+    for (const palette of PALETTES) {
+      for (const mode of MODES) {
+        const vars = paletteVars(palette.id, mode)
+        for (const name of ['md-heading', 'md-code', 'md-number', 'md-path'] as const) {
+          for (const surface of ['bg', 'panel', 'relay-bg', 'code-bg', 'pre-bg'] as const) {
+            const ratio = contrast(vars[name], vars[surface])
+            if (ratio < 4.5) result.push(`${palette.id}/${mode} --${name} ${vars[name]} on --${surface} ${vars[surface]} = ${ratio.toFixed(2)}`)
+          }
+        }
+      }
+    }
+    expect(result).toEqual([])
+  })
+
+  it('네 가지 색이 한 팔레트·모드 안에서 서로 다르다', () => {
+    for (const palette of PALETTES) {
+      for (const mode of MODES) {
+        const vars = paletteVars(palette.id, mode)
+        expect(new Set([vars['md-heading'], vars['md-code'], vars['md-number'], vars['md-path']]).size, `${palette.id}/${mode}`).toBe(4)
+      }
+    }
+  })
+
   it('지시 말풍선 글자·검색 현재 결과 글자·채운 버튼 글자', () => {
     for (const palette of PALETTES) {
       for (const mode of MODES) {
@@ -207,7 +232,7 @@ describe('대화 모양', () => {
       fontSize: 'small',
       tables: 'rules',
       workBundles: 'expanded',
-      colors: { code: null, link: '#00aa11', heading: null, quote: null },
+      colors: { code: null, link: '#00aa11', heading: null, quote: null, number: null, path: null },
     })
     expect(parseAppearance(JSON.stringify({ chat: 'x' })).chat).toEqual(DEFAULT_CHAT_STYLE)
   })
@@ -221,17 +246,22 @@ describe('대화 모양', () => {
       line: 'relaxed',
       work: 'expanded',
     })
+    // 숫자·경로 강조는 기본이 On 이라 Off 일 때만 속성이 걸린다
+    expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, numbers: 'off' })).toEqual({ numbers: 'off' })
+    expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, paths: 'off' })).toEqual({ paths: 'off' })
+    expect(parseAppearance(JSON.stringify({ chat: { numbers: 'off', paths: 'nope' } })).chat).toMatchObject({ numbers: 'off', paths: 'on' })
     expect(new Set(CHAT_ATTRIBUTE_NAMES).size).toBe(CHAT_ATTRIBUTE_NAMES.length)
   })
 
   it('글자 색은 고른 것만 두 모드에 같은 변수로', () => {
-    const appearance: Appearance = { ...DEFAULT_APPEARANCE, chat: { ...DEFAULT_CHAT_STYLE, colors: { code: null, link: '#ff0088', heading: null, quote: null } } }
+    const appearance: Appearance = { ...DEFAULT_APPEARANCE, chat: { ...DEFAULT_CHAT_STYLE, colors: { ...DEFAULT_CHAT_STYLE.colors, link: '#ff0088' } } }
     expect(chatColorVars(appearance.chat.colors)).toEqual({ 'chat-link': '#ff0088' })
+    expect(chatColorVars({ ...DEFAULT_CHAT_STYLE.colors, number: '#aa5500', path: '#007766' })).toEqual({ 'chat-number': '#aa5500', 'chat-path': '#007766' })
     for (const mode of MODES) expect(documentState(appearance, mode).vars).toEqual({ 'chat-link': '#ff0088' })
   })
 
   it('바탕 대비 3 아래인 색은 그 모드를 경고한다', () => {
-    const colors = { code: null, link: '#ffffff', heading: '#2b2f3a', quote: '#3a3d45' }
+    const colors = { ...DEFAULT_CHAT_STYLE.colors, link: '#ffffff', heading: '#2b2f3a', quote: '#3a3d45' }
     const warnings = chatColorWarnings(colors, 'default')
     expect(warnings.map((warning) => `${warning.key}/${warning.mode}`).sort()).toEqual(['heading/dark', 'link/light', 'quote/dark'].sort())
     expect(warnings.every((warning) => warning.ratio < 3)).toBe(true)
@@ -276,7 +306,7 @@ describe('index.html 첫 화면 스크립트', () => {
     { palette: 'nord', accent: 'palette', fontSize: 'small', chat: DEFAULT_CHAT_STYLE },
     { palette: 'default', accent: 'blue', fontSize: 'large', chat: { ...DEFAULT_CHAT_STYLE, user: 'bar', tables: 'minimal' } },
     { palette: 'catppuccin', accent: '#e05a00', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, fontSize: 'large', colors: { ...DEFAULT_CHAT_STYLE.colors, link: '#ff0088' } } },
-    { palette: 'default', accent: 'palette', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, reply: 'plain', width: 'full', workBundles: 'expanded', colors: { code: '#123456', link: null, heading: '#abcdef', quote: '#654321' } } },
+    { palette: 'default', accent: 'palette', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, reply: 'plain', width: 'full', workBundles: 'expanded', colors: { code: '#123456', link: null, heading: '#abcdef', quote: '#654321', number: '#aa5500', path: '#007766' } } },
     { palette: 'solarized', accent: 'slate', fontSize: 'large', chat: DEFAULT_CHAT_STYLE },
   ]
   const CHOICES: ThemeChoice[] = ['light', 'dark', 'system']

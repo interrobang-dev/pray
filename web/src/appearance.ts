@@ -49,6 +49,9 @@ export interface ChatStyle {
   headings: 'default' | 'underline'
   /** 끝난 작업 묶음을 처음에 접을지 펼칠지 (사용자가 직접 접거나 펼친 묶음은 그대로 — isWorkOpen) */
   workBundles: 'collapsed' | 'expanded'
+  /** 숫자·파일 경로 강조 켜기/끄기 (끄면 CSS 가 색만 끈다 — 글을 다시 파싱하지 않는다). 색은 colors.number·colors.path */
+  numbers: 'on' | 'off'
+  paths: 'on' | 'off'
   /** 글자 색. null = 팔레트 값 */
   colors: ChatColors
 }
@@ -58,6 +61,8 @@ export interface ChatColors {
   link: string | null
   heading: string | null
   quote: string | null
+  number: string | null
+  path: string | null
 }
 
 type ChatChoiceKey = Exclude<keyof ChatStyle, 'colors'>
@@ -134,6 +139,22 @@ export const CHAT_OPTIONS: { [K in ChatChoiceKey]: { attribute: string; label: s
       { value: 'expanded', label: 'Expanded' },
     ],
   },
+  numbers: {
+    attribute: 'numbers',
+    label: 'Highlight numbers',
+    options: [
+      { value: 'on', label: 'On' },
+      { value: 'off', label: 'Off' },
+    ],
+  },
+  paths: {
+    attribute: 'paths',
+    label: 'Highlight paths',
+    options: [
+      { value: 'on', label: 'On' },
+      { value: 'off', label: 'Off' },
+    ],
+  },
 }
 
 export const CHAT_CHOICE_KEYS = Object.keys(CHAT_OPTIONS) as ChatChoiceKey[]
@@ -144,6 +165,8 @@ export const CHAT_COLOR_OPTIONS: { key: keyof ChatColors; label: string; variabl
   { key: 'link', label: 'Links', variable: 'chat-link', surfaces: ['panel', 'bg'] },
   { key: 'heading', label: 'Headings', variable: 'chat-heading', surfaces: ['panel', 'bg'] },
   { key: 'quote', label: 'Quotes', variable: 'chat-quote', surfaces: ['panel', 'bg'] },
+  { key: 'number', label: 'Numbers', variable: 'chat-number', surfaces: ['panel', 'bg'] },
+  { key: 'path', label: 'Paths', variable: 'chat-path', surfaces: ['panel', 'bg'] },
 ]
 
 export const DEFAULT_CHAT_STYLE: ChatStyle = {
@@ -155,7 +178,9 @@ export const DEFAULT_CHAT_STYLE: ChatStyle = {
   tables: 'box',
   headings: 'default',
   workBundles: 'collapsed',
-  colors: { code: null, link: null, heading: null, quote: null },
+  numbers: 'on',
+  paths: 'on',
+  colors: { code: null, link: null, heading: null, quote: null, number: null, path: null },
 }
 
 export const DEFAULT_APPEARANCE: Appearance = { palette: 'default', accent: 'palette', fontSize: 'normal', chat: DEFAULT_CHAT_STYLE }
@@ -425,6 +450,10 @@ export function expandPalette(core: PaletteCore, mode: Mode): Vars {
     overlay: isDark ? 'rgba(0, 0, 0, 0.55)' : rgba(text, 0.35),
     'scrollbar-thumb': rgba(text, isDark ? 0.2 : 0.22),
     'scrollbar-thumb-hover': rgba(text, isDark ? 0.36 : 0.4),
+    'md-heading': core.markdown.heading,
+    'md-code': core.markdown.code,
+    'md-number': core.markdown.number,
+    'md-path': core.markdown.path,
     'hl-text': text,
     'hl-keyword': core.syntax.keyword,
     'hl-entity': core.syntax.entity,

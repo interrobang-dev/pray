@@ -257,7 +257,7 @@ export function BtwCard({ ref, sessionId, version, isAsking, isApprovalNeeded, o
           {view.status === 'answered' && view.answer !== null && (
             <div className="btw-answer">
               <CopyButton text={view.answer} />
-              <MarkdownText text={view.answer} />
+              <MarkdownText text={view.answer} isChat />
             </div>
           )}
         </div>
