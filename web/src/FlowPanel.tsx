@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Segmented } from './Modal'
+import { confirmDialog } from './Dialog'
 import { formatClock } from './Chat'
 import { formatAgo, formatDateTime, type FlowAlarm, type FlowAlarmPage, type FlowStatus } from './types'
 
@@ -161,7 +162,10 @@ export function FlowPanel({
   }
 
   async function readAll() {
-    if (!confirm(`Mark all ${unreadAlarmCount} unread Flow alerts as read? This can't be undone.`)) return
+    const isConfirmed = await confirmDialog(`Mark all ${unreadAlarmCount} unread Flow alerts as read? This can't be undone.`, {
+      confirmLabel: 'Mark all read',
+    })
+    if (!isConfirmed) return
     setIsReadingAll(true)
     setReadAllError(null)
     const result = await postRead('/api/flow/alarms/read-all')

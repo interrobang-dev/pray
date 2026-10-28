@@ -1,5 +1,6 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Modal } from './Modal'
+import { confirmDialog } from './Dialog'
 import { applyTodo, clearDone, moveTo, removeTodo, reorderOpen, splitTodos, todosOf } from './teamTodos'
 import type { Team, TeamTodo } from './types'
 
@@ -91,7 +92,8 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
   /** 완료 항목을 모두 지운다: 확인 창 뒤 DELETE, 응답을 기다려 화면에서 뺀다 */
   async function clearAllDone() {
     if (isClearing || done.length === 0) return
-    if (!window.confirm(`Delete ${done.length} done ${done.length === 1 ? 'task' : 'tasks'}?`)) return
+    const isConfirmed = await confirmDialog(`Delete ${done.length} done ${done.length === 1 ? 'task' : 'tasks'}?`, { confirmLabel: 'Delete', isDanger: true })
+    if (!isConfirmed) return
     setIsClearing(true)
     const result = await send(`${baseUrl}/done`, 'DELETE')
     setIsClearing(false)

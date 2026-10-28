@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { accountName, accountTitle, busyLabel, impactMeta, isLoginOver, planLabel, reloginLabel, shortList, tokenLabel } from './accountLabels'
+import { confirmDialog } from './Dialog'
 import { Modal } from './Modal'
 import type { Account, AccountsResponse, ImpactSession, SwitchImpact, SwitchResponse } from './types'
 
@@ -110,7 +111,11 @@ export function Accounts({ version, onAdd, onUsageChange, modalRoot, onSwitchOpe
     }
     setSwitchTarget(null)
     await Promise.all([load(), onUsageChange()])
-    if (result.data?.hasBusyWebSessions !== false && !confirm('Restart host now? Web sessions reconnect with the new account.')) return null
+    if (
+      result.data?.hasBusyWebSessions !== false &&
+      !(await confirmDialog('Restart host now? Web sessions reconnect with the new account.', { confirmLabel: 'Restart', isDanger: true }))
+    )
+      return null
     setBusy({ id: account.id, action: 'restart' })
     setRestartingId(account.id)
     const restart = await request<unknown>('/api/host/restart', 'POST', {})
@@ -126,7 +131,11 @@ export function Accounts({ version, onAdd, onUsageChange, modalRoot, onSwitchOpe
   }
 
   async function remove(account: Account) {
-    if (!confirm(`Remove ${accountName(account)}? Its sign-in on this PC is revoked. To use it again, add it again.`)) return
+    const isConfirmed = await confirmDialog(`Remove ${accountName(account)}? Its sign-in on this PC is revoked. To use it again, add it again.`, {
+      confirmLabel: 'Remove',
+      isDanger: true,
+    })
+    if (!isConfirmed) return
     setError(account.id, null)
     setBusy({ id: account.id, action: 'remove' })
     const result = await request<unknown>(`/api/accounts/${encodeURIComponent(account.id)}`, 'DELETE')
@@ -136,12 +145,11 @@ export function Accounts({ version, onAdd, onUsageChange, modalRoot, onSwitchOpe
   }
 
   async function logOut(account: Account) {
-    if (
-      !confirm(
-        `Log out ${accountName(account)}? Every claude on this PC (terminal, IDE and web sessions) is logged out and this account leaves the list. To use claude again, you have to sign in again.`,
-      )
+    const isConfirmed = await confirmDialog(
+      `Log out ${accountName(account)}? Every claude on this PC (terminal, IDE and web sessions) is logged out and this account leaves the list. To use claude again, you have to sign in again.`,
+      { confirmLabel: 'Log out', isDanger: true },
     )
-      return
+    if (!isConfirmed) return
     setError(account.id, null)
     setBusy({ id: account.id, action: 'logout' })
     const result = await request<unknown>('/api/accounts/logout', 'POST', {})

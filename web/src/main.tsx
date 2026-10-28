@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { DialogHost } from './Dialog'
 import { Login } from './Login'
 import './theme'
 import './style.css'
@@ -22,7 +23,12 @@ function Root() {
   }, [])
   if (!me) return null
   if (!me.isAuthenticated) return <Login canLogin={me.canLogin} onLoggedIn={() => void load()} />
-  return <App />
+  return (
+    <>
+      <App />
+      <DialogHost />
+    </>
+  )
 }
 
 createRoot(document.getElementById('root')!).render(

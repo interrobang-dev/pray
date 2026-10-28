@@ -481,6 +481,44 @@ header button.icon svg {
   background: var(--bg);
   border-color: transparent;
 }
+/* 앱 안 확인·알림·입력 창 (Dialog.tsx). 다른 모달(z-index 10) 위에 뜬다 */
+.dialog-overlay {
+  z-index: 20;
+}
+.dialog-message {
+  margin: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.dialog-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.dialog-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.dialog-actions .primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+.dialog-actions .primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.dialog-actions .danger {
+  background: var(--red-fill);
+  color: var(--on-red);
+  border-color: var(--red-fill);
+}
+.dialog-actions .danger:focus-visible {
+  outline-color: var(--red-fill);
+}
 .segmented {
   display: flex;
   border: 1px solid var(--line);
@@ -4401,6 +4439,10 @@ li.group.drop-after::after {
   .modal-close {
     min-width: 40px;
     min-height: 36px;
+  }
+  .dialog-actions button {
+    min-height: 40px;
+    padding: 0 16px;
   }
   /* 16px 이 되면 안내 문구가 두 줄로 넘쳐 한 줄 입력칸에 스크롤바가 생긴다 */
   .composer textarea::placeholder,

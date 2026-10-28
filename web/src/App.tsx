@@ -20,6 +20,7 @@ import { FlowPanel } from './FlowPanel'
 import { TeamTodosModal } from './TeamTodosModal'
 import { remainingCount, todosOf } from './teamTodos'
 import { Modal, Segmented } from './Modal'
+import { alertDialog, confirmDialog, promptDialog } from './Dialog'
 import { ModelSettingModal, useRestartingSessions } from './ModelSettingModal'
 import { nextLabel } from './modelSetting'
 import { sessionMenuEntries } from './sessionMenu'
@@ -477,13 +478,13 @@ export function App() {
       isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
     })
     if (!response.ok) {
-      alert((await response.json()).message ?? "Couldn't create session")
+      void alertDialog((await response.json()).message ?? "Couldn't create session")
       return
     }
     const { sessionId, isTrustFailed } = (await response.json()) as { sessionId: string; isTrustFailed?: boolean }
     selectSession(sessionId, false)
     setSessionForm(null)
-    if (isTrustFailed) alert(SESSION_TRUST_FAILED_MESSAGE)
+    if (isTrustFailed) void alertDialog(SESSION_TRUST_FAILED_MESSAGE)
   }
 
   async function createTeam(event: FormEvent<HTMLFormElement>) {
@@ -494,7 +495,7 @@ export function App() {
     const anchor = spotForNewTeam(layoutOffice(office, snapshot.sessions), teamForm.groupId)
     const response = await postJson('/api/team', 'POST', { name: form.get('name'), cwd: form.get('cwd'), groupId: teamForm.groupId, ...anchor })
     if (!response.ok) {
-      alert((await response.json()).message ?? "Couldn't create team")
+      void alertDialog((await response.json()).message ?? "Couldn't create team")
       return
     }
     setTeamForm(null)
@@ -508,12 +509,12 @@ export function App() {
     const isWorktree = partLocation === 'worktree'
     const response = await postJson(`/api/team/${partForm.teamId}/parts`, 'POST', { name: form.get('name'), isWorktree })
     if (!response.ok) {
-      alert((await response.json()).message ?? "Couldn't create part")
+      void alertDialog((await response.json()).message ?? "Couldn't create part")
       return
     }
     const { part, isTrusted, isLinked } = (await response.json()) as { part: Part; isTrusted: boolean; isLinked?: boolean }
-    if (isWorktree && !isTrusted) alert(`Couldn't mark the folder as trusted. The first session in this folder needs trust allowed in the Terminal tab.\n${part.worktree?.cwd}`)
-    if (isLinked) alert(`Linked to the existing worktree and branch ${part.worktree?.branch} (not created fresh from the current HEAD).\n${part.worktree?.cwd}`)
+    if (isWorktree && !isTrusted) await alertDialog(`Couldn't mark the folder as trusted. The first session in this folder needs trust allowed in the Terminal tab.\n${part.worktree?.cwd}`)
+    if (isLinked) await alertDialog(`Linked to the existing worktree and branch ${part.worktree?.branch} (not created fresh from the current HEAD).\n${part.worktree?.cwd}`)
     setPartForm(null)
     if (!isPartLeadSpawned) return
     // 세션 추가 모달의 파트장과 같은 역할 Lead + 추천 이름과 그 성별. 추천을 못 받으면 이름 없이 (자동 제목)
@@ -530,13 +531,13 @@ export function App() {
       gender: leadName?.gender,
     })
     if (!leadResponse.ok) {
-      alert((await leadResponse.json()).message ?? "Couldn't start part lead")
+      void alertDialog((await leadResponse.json()).message ?? "Couldn't start part lead")
       return
     }
     const { sessionId, isTrustFailed } = (await leadResponse.json()) as { sessionId: string; isTrustFailed?: boolean }
     selectSession(sessionId, false)
     // worktree 신뢰 실패는 위에서 이미 알렸다 (같은 폴더라 같은 이유)
-    if (isTrustFailed && !(isWorktree && !isTrusted)) alert(SESSION_TRUST_FAILED_MESSAGE)
+    if (isTrustFailed && !(isWorktree && !isTrusted)) void alertDialog(SESSION_TRUST_FAILED_MESSAGE)
   }
 
   async function createGroup(event: FormEvent<HTMLFormElement>) {
@@ -545,32 +546,35 @@ export function App() {
     const spot = spotForNewGroup(layoutOffice(office, snapshot.sessions))
     const response = await postJson('/api/groups', 'POST', { name: form.get('name'), ...spot })
     if (!response.ok) {
-      alert((await response.json()).message ?? "Couldn't create group")
+      void alertDialog((await response.json()).message ?? "Couldn't create group")
       return
     }
     setIsGroupForm(false)
   }
 
   async function restartHost() {
-    if (!confirm('Restarting the host disconnects all web sessions. They come back with --resume when it starts again. Restart?')) return
+    const isConfirmed = await confirmDialog(
+      'Restarting the host disconnects all web sessions. They come back with --resume when it starts again. Restart?',
+      { confirmLabel: 'Restart', isDanger: true },
+    )
+    if (!isConfirmed) return
     const response = await postJson('/api/host/restart', 'POST', {})
-    if (!response.ok) alert((await response.json()).message ?? "Couldn't restart host")
+    if (!response.ok) void alertDialog((await response.json()).message ?? "Couldn't restart host")
   }
 
   async function restartServer() {
-    if (
-      !confirm(
-        'Restarting the server disconnects this screen for a few seconds. Sessions keep running, status comes back with the next hook, and questions held here must be answered in the Terminal tab. Restart?',
-      )
+    const isConfirmed = await confirmDialog(
+      'Restarting the server disconnects this screen for a few seconds. Sessions keep running, status comes back with the next hook, and questions held here must be answered in the Terminal tab. Restart?',
+      { confirmLabel: 'Restart' },
     )
-      return
+    if (!isConfirmed) return
     try {
       const response = await postJson('/api/server/restart', 'POST', {})
       if (response.ok) return
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
-      alert(`Couldn't restart server: ${message ?? `HTTP ${response.status}`}`)
+      void alertDialog(`Couldn't restart server: ${message ?? `HTTP ${response.status}`}`)
     } catch {
-      alert("Couldn't restart server: Network error")
+      void alertDialog("Couldn't restart server: Network error")
     }
   }
 
@@ -597,7 +601,7 @@ export function App() {
     if (Object.keys(patch).length > 0) {
       const response = await postJson(`/api/sessions/${renameTarget.id}`, 'PATCH', patch)
       if (!response.ok) {
-        alert((await response.json()).message ?? "Couldn't rename session")
+        void alertDialog((await response.json()).message ?? "Couldn't rename session")
         return
       }
     }
@@ -608,7 +612,7 @@ export function App() {
       const body = renameCharacter.id ? renameCharacter : { id: null }
       const characterResponse = await postJson(`/api/sessions/${renameTarget.id}/character`, 'PUT', body)
       if (!characterResponse.ok) {
-        alert((await characterResponse.json().catch(() => ({}))).message ?? "Couldn't change character")
+        void alertDialog((await characterResponse.json().catch(() => ({}))).message ?? "Couldn't change character")
         return
       }
     }
@@ -644,15 +648,16 @@ export function App() {
     setPartForm({ teamId })
   }
 
-  function editPart(team: Team, part: Part) {
-    const name = prompt('Part name (the worktree folder and branch keep their names)', part.name)
+  async function editPart(team: Team, part: Part) {
+    const name = await promptDialog('Part name (the worktree folder and branch keep their names)', { defaultValue: part.name, confirmLabel: 'Rename' })
     if (name?.trim()) void postJson(`/api/team/${team.id}/parts/${part.id}`, 'PATCH', { name: name.trim() })
   }
 
-  function releasePartLead(team: Team, part: Part) {
-    if (confirm(`Remove the part lead of "${part.name}"? (The session stays and becomes a part member.)`)) {
-      void postJson(`/api/team/${team.id}/parts/${part.id}`, 'PATCH', { leadSessionId: null })
-    }
+  async function releasePartLead(team: Team, part: Part) {
+    const isConfirmed = await confirmDialog(`Remove the part lead of "${part.name}"? (The session stays and becomes a part member.)`, {
+      confirmLabel: 'Remove',
+    })
+    if (isConfirmed) void postJson(`/api/team/${team.id}/parts/${part.id}`, 'PATCH', { leadSessionId: null })
   }
 
   /** worktree 파트는 서버가 폴더·브랜치도 지운다. 브랜치가 병합되지 않았으면 지울지 물어 ?branch= 로 다시 보낸다 */
@@ -660,45 +665,48 @@ export function App() {
     const effect = part.worktree
       ? `The worktree folder ${part.worktree.cwd} is deleted too (not if a session is working there or there are uncommitted changes). Branch ${part.worktree.branch} is deleted if merged; otherwise you'll be asked.`
       : 'Its sessions keep running and move directly under the team.'
-    if (!confirm(`Delete part "${part.name}"? ${effect}`)) return
+    if (!(await confirmDialog(`Delete part "${part.name}"? ${effect}`, { confirmLabel: 'Delete', isDanger: true }))) return
     const url = `/api/team/${team.id}/parts/${part.id}`
     let response = await fetch(url, { method: 'DELETE' })
     let body = (await response.json().catch(() => ({}))) as { code?: string; branch?: string; message?: string }
     if (response.status === 409 && body.code === 'branch-unmerged') {
-      const isBranchDeleted = confirm(`Branch ${body.branch} isn't merged. Delete the branch too? (OK = delete, Cancel = keep)`)
+      // 버튼 이름이 동작이라 예전 "(OK = delete, Cancel = keep)" 은 뺐다. 닫기(Esc·바깥 클릭)는 브라우저 confirm 처럼 Cancel = 남기기
+      const isBranchDeleted = await confirmDialog(`Branch ${body.branch} isn't merged. Delete the branch too?`, {
+        confirmLabel: 'Delete branch',
+        cancelLabel: 'Keep branch',
+        isDanger: true,
+      })
       response = await fetch(`${url}?branch=${isBranchDeleted ? 'delete' : 'keep'}`, { method: 'DELETE' })
       body = await response.json().catch(() => ({}))
     }
-    if (!response.ok) alert(body.message ?? "Couldn't delete part")
+    if (!response.ok) void alertDialog(body.message ?? "Couldn't delete part")
   }
 
-  function releaseLead(team: Team) {
-    if (confirm(`Remove the lead of "${team.name}"? (The session stays and becomes a member.)`)) {
-      void postJson(`/api/team/${team.id}`, 'PATCH', { leadSessionId: null })
-    }
+  async function releaseLead(team: Team) {
+    const isConfirmed = await confirmDialog(`Remove the lead of "${team.name}"? (The session stays and becomes a member.)`, { confirmLabel: 'Remove' })
+    if (isConfirmed) void postJson(`/api/team/${team.id}`, 'PATCH', { leadSessionId: null })
   }
 
-  function removeTeam(team: Team) {
-    if (confirm(`Delete team "${team.name}"? Its sessions keep running without a team.`)) {
-      void fetch(`/api/team/${team.id}`, { method: 'DELETE' })
-    }
+  async function removeTeam(team: Team) {
+    const isConfirmed = await confirmDialog(`Delete team "${team.name}"? Its sessions keep running without a team.`, { confirmLabel: 'Delete', isDanger: true })
+    if (isConfirmed) void fetch(`/api/team/${team.id}`, { method: 'DELETE' })
   }
 
   async function removeGroup(group: Group) {
-    if (!confirm(`Delete group "${group.name}"?`)) return
+    if (!(await confirmDialog(`Delete group "${group.name}"?`, { confirmLabel: 'Delete', isDanger: true }))) return
     const response = await fetch(`/api/groups/${group.id}`, { method: 'DELETE' })
-    if (!response.ok) alert((await response.json()).message ?? "Couldn't delete group")
+    if (!response.ok) void alertDialog((await response.json()).message ?? "Couldn't delete group")
   }
 
   async function renameGroup(group: Group) {
-    const name = prompt('Group name', group.name)?.trim()
+    const name = (await promptDialog('Group name', { defaultValue: group.name, confirmLabel: 'Rename' }))?.trim()
     if (!name || name === group.name) return
     const response = await postJson(`/api/groups/${group.id}`, 'PATCH', { name })
-    if (!response.ok) alert(((await response.json().catch(() => ({}))) as { message?: string }).message ?? "Couldn't rename group")
+    if (!response.ok) void alertDialog(((await response.json().catch(() => ({}))) as { message?: string }).message ?? "Couldn't rename group")
   }
 
-  function endSession(sessionId: string) {
-    if (confirm('End this session?')) void fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' })
+  async function endSession(sessionId: string) {
+    if (await confirmDialog('End this session?', { confirmLabel: 'End', isDanger: true })) void fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' })
   }
 
   /** 목록 ⋯ 메뉴의 Clock in. 받아들여지면 패널 퇴근 막대와 같이 근무로 바뀔 때까지 "Clocking in…" 으로 막는다 */
@@ -710,22 +718,26 @@ export function App() {
         return
       }
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
-      alert(`Couldn't clock in: ${message ?? `HTTP ${response.status}`}`)
+      void alertDialog(`Couldn't clock in: ${message ?? `HTTP ${response.status}`}`)
     } catch {
-      alert("Couldn't clock in: Network error")
+      void alertDialog("Couldn't clock in: Network error")
     }
   }
 
   /** 목록 ⋯ 메뉴의 Delete record. 확인 문구는 패널 퇴근 막대와 같다 */
   async function deleteRecord(sessionId: string) {
-    if (!confirm("Delete the off duty record? The session leaves the list and can't clock in again.")) return
+    const isConfirmed = await confirmDialog("Delete the off duty record? The session leaves the list and can't clock in again.", {
+      confirmLabel: 'Delete',
+      isDanger: true,
+    })
+    if (!isConfirmed) return
     try {
       const response = await fetch(`/api/sessions/${sessionId}/off-duty`, { method: 'DELETE' })
       if (response.ok) return
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
-      alert(`Couldn't delete record: ${message ?? `HTTP ${response.status}`}`)
+      void alertDialog(`Couldn't delete record: ${message ?? `HTTP ${response.status}`}`)
     } catch {
-      alert("Couldn't delete record: Network error")
+      void alertDialog("Couldn't delete record: Network error")
     }
   }
 
@@ -759,8 +771,8 @@ export function App() {
     void postJson(`/api/team/${teamId}`, 'PATCH', anchor)
   }
 
-  function editTeam(team: Team) {
-    const name = prompt(`Team name (folder: ${team.cwd})`, team.name)
+  async function editTeam(team: Team) {
+    const name = await promptDialog(`Team name (folder: ${team.cwd})`, { defaultValue: team.name, confirmLabel: 'Rename' })
     if (name?.trim()) void postJson(`/api/team/${team.id}`, 'PATCH', { name: name.trim() })
   }
 
@@ -850,7 +862,7 @@ export function App() {
     }
     if (failure === null) return
     setOffice((prev) => applyOrder(prev, scope, previousIds))
-    alert(`Couldn't change the order: ${failure}`)
+    void alertDialog(`Couldn't change the order: ${failure}`)
   }
 
   /** 끌어 놓기 중 목록 항목에 붙일 클래스: 끄는 중(흐리게)·놓일 자리 선(앞 또는 맨 끝 뒤) */
@@ -970,11 +982,11 @@ export function App() {
     // 근무·휴식 세션. 순서는 서버가 준 그대로 (생성순)
     const members = snapshot.sessions.filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off')
     const menuItems: MenuItem[] = [
-      { label: 'Rename', onClick: () => editTeam(team) },
+      { label: 'Rename', onClick: () => void editTeam(team) },
       { label: 'Add part', onClick: () => openPartForm(team.id) },
-      ...(team.leadSessionId ? [{ label: 'Remove lead', onClick: () => releaseLead(team) }] : []),
+      ...(team.leadSessionId ? [{ label: 'Remove lead', onClick: () => void releaseLead(team) }] : []),
       'separator',
-      { label: 'Delete team', onClick: () => removeTeam(team) },
+      { label: 'Delete team', onClick: () => void removeTeam(team) },
     ]
     return (
       <div
@@ -1011,8 +1023,8 @@ export function App() {
   /** 파트 소제목(worktree 아이콘·이름·세션 수·hover 버튼) + 파트 세션. 브랜치 이름은 아이콘 툴팁 */
   function renderPart(team: Team, part: Part, members: Session[]) {
     const menuItems: MenuItem[] = [
-      { label: 'Rename', onClick: () => editPart(team, part) },
-      ...(part.leadSessionId ? [{ label: 'Remove part lead', onClick: () => releasePartLead(team, part) }] : []),
+      { label: 'Rename', onClick: () => void editPart(team, part) },
+      ...(part.leadSessionId ? [{ label: 'Remove part lead', onClick: () => void releasePartLead(team, part) }] : []),
       'separator',
       { label: 'Delete part', onClick: () => void removePart(team, part) },
     ]
@@ -1052,7 +1064,7 @@ export function App() {
             ? { label: 'Model & effort…', onClick: () => undefined, isDisabled: true, title: 'Restarting…' }
             : { label: 'Model & effort…', onClick: () => setModelModalSessionId(session.id) }
         case 'end':
-          return { label: 'End session', onClick: () => endSession(session.id) }
+          return { label: 'End session', onClick: () => void endSession(session.id) }
         case 'clock-in': {
           const isReturning = session.id in returningSessions
           return {
@@ -1400,7 +1412,7 @@ export function App() {
             }}
             onMoveGroup={moveGroup}
             onMoveTeam={moveTeam}
-            onEditTeam={editTeam}
+            onEditTeam={(team) => void editTeam(team)}
             onOpenTeamTodos={setTodoTeamId}
           />
         )}
@@ -1477,7 +1489,7 @@ export function App() {
                   className="end-session"
                   title="End session"
                   aria-label="End session"
-                  onClick={() => endSession(selected.id)}
+                  onClick={() => void endSession(selected.id)}
                 >
                   <EndSessionIcon />
                 </button>
@@ -1555,14 +1567,14 @@ export function App() {
           <span className="status-link" title={isConnected ? 'Server connected' : 'Server disconnected'}>
             <span className="status-link-label">Server</span>
             <span className={isConnected ? 'dot on' : 'dot'} />
-            <button onClick={restartServer} disabled={!isConnected} title="Restart server (offline for a few seconds)">
+            <button onClick={() => void restartServer()} disabled={!isConnected} title="Restart server (offline for a few seconds)">
               ↻
             </button>
           </span>
           <span className="status-link" title={snapshot.isHostReachable ? 'Session host connected' : 'Session host disconnected'}>
             <span className="status-link-label">Host</span>
             <span className={snapshot.isHostReachable ? 'dot on' : 'dot'} />
-            <button onClick={restartHost} disabled={!snapshot.isHostReachable} title="Restart host (web sessions disconnect)">
+            <button onClick={() => void restartHost()} disabled={!snapshot.isHostReachable} title="Restart host (web sessions disconnect)">
               ↻
             </button>
           </span>
@@ -1613,8 +1625,12 @@ function OffDutyBar({
     setBusy(null)
   }
 
-  function clearRecord() {
-    if (confirm("Delete the off duty record? The session leaves the list and can't clock in again.")) void request('clear')
+  async function clearRecord() {
+    const isConfirmed = await confirmDialog("Delete the off duty record? The session leaves the list and can't clock in again.", {
+      confirmLabel: 'Delete',
+      isDanger: true,
+    })
+    if (isConfirmed) void request('clear')
   }
 
   return (
@@ -1628,7 +1644,7 @@ function OffDutyBar({
         <button className="primary" disabled={isLocked} onClick={() => void request('return')}>
           {isReturning || busy === 'return' ? 'Clocking in…' : 'Clock in'}
         </button>
-        <button disabled={isLocked} onClick={clearRecord}>
+        <button disabled={isLocked} onClick={() => void clearRecord()}>
           {busy === 'clear' || busy === 'cleared' ? 'Deleting…' : 'Delete record'}
         </button>
       </div>
