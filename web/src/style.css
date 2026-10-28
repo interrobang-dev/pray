@@ -1339,6 +1339,54 @@ li.group.drop-after::after {
   padding: 3px 8px;
   color: var(--muted);
 }
+.chat-color-row {
+  grid-template-columns: 36px 84px minmax(0, 1fr);
+}
+.chat-color-row .chat-color-warning {
+  grid-column: 2 / -1;
+}
+.chat-color.is-off {
+  opacity: 0.45;
+}
+/* 켜기·끄기 스위치 (role="switch"). 켜면 강조색 트랙, 끄면 회색 트랙 */
+.switch {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--line);
+  cursor: pointer;
+}
+.switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.12s;
+}
+.switch[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.switch[aria-checked='true']::before {
+  background: var(--on-accent);
+  transform: translateX(14px);
+}
+.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .switch::before {
+    transition: none;
+  }
+}
 .chat-color-warning {
   grid-column: 2;
   font-size: calc(11px * var(--font-scale));
@@ -2428,7 +2476,7 @@ li.group.drop-after::after {
   color: var(--chat-quote, var(--muted));
   border-left-color: var(--chat-quote, var(--line));
 }
-/* 숫자·파일 경로 강조: Markdown.tsx 의 isChat 일 때만 span.num·span.path 가 있다 (대화·곁가지 질문 답·설정 창 미리보기). Highlight numbers·paths Off 면 색만 끈다 */
+/* 숫자·파일 경로 강조: Markdown.tsx 의 isChat 일 때만 span.num·span.path 가 있다 (대화·곁가지 질문 답·설정 창 미리보기). Colors 줄 스위치 Numbers·Paths Off 면 색만 끈다 */
 .markdown .num {
   color: var(--chat-number, var(--md-number));
 }
@@ -2438,6 +2486,18 @@ li.group.drop-after::after {
 :root[data-chat-numbers='off'] .markdown .num,
 :root[data-chat-paths='off'] .markdown .path {
   color: inherit;
+}
+/* Colors 줄 스위치 Off: 제목·인라인 코드 = 본문색(코드 배경 칩은 그대로), 링크·인용 = 사용자 색만 무시하고 팔레트 값 */
+:root[data-chat-heading-color='off'] .chat-scope .markdown :is(h1, h2, h3, h4, h5, h6),
+:root[data-chat-code-color='off'] .chat-scope .markdown :not(pre) > code {
+  color: inherit;
+}
+:root[data-chat-link-color='off'] .chat-scope .markdown a {
+  color: var(--link);
+}
+:root[data-chat-quote-color='off'] .chat-scope .markdown blockquote {
+  color: var(--muted);
+  border-left-color: var(--line);
 }
 /* 내 말: Bar = 말풍선 대신 왼쪽 강조색 세로줄(왼쪽 정렬, 바탕 없음) / Plain = 오른쪽 그대로 바탕·테두리 없이.
    대기·보내기 실패는 테두리로 보이던 것이라 각 모양에서 다시 보인다 */
@@ -4482,6 +4542,28 @@ li.group.drop-after::after {
   .chat-color-warning,
   .appearance-hint {
     grid-column: 1;
+  }
+  .chat-color-row {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 4px 0;
+  }
+  .chat-color-row .chat-color,
+  .chat-color-row .chat-color-warning {
+    grid-column: 1 / -1;
+  }
+  .switch {
+    width: 44px;
+    height: 26px;
+    border-radius: 13px;
+  }
+  .switch::before {
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+  }
+  .switch[aria-checked='true']::before {
+    transform: translateX(18px);
   }
   .chat-preview {
     max-height: 260px;

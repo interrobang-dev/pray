@@ -9,7 +9,7 @@ import { rehypeHighlightTokens } from './markdownHighlight'
 const REMARK_PLUGINS: Options['remarkPlugins'] = [remarkGfm]
 // 언어가 표시된 코드 블록만 칠한다. 자동 추측(detect)은 엉뚱한 언어로 칠하기 쉬워 끈다
 const REHYPE_PLUGINS: Options['rehypePlugins'] = [[rehypeHighlight, { detect: false }]]
-// 대화에서만: 일반 글의 숫자·파일 경로를 span 으로 나눈다 (Chat 탭 설정 Highlight numbers·paths 는 CSS 가 색을 끄고 켠다 — 플러그인을 끄면 memo 된 모든 말풍선을 다시 파싱해서)
+// 대화에서만: 일반 글의 숫자·파일 경로를 span 으로 나눈다 (Chat 탭 Colors 의 Numbers·Paths 스위치는 CSS 가 색을 끄고 켠다 — 플러그인을 끄면 memo 된 모든 말풍선을 다시 파싱해서)
 const REHYPE_CHAT_PLUGINS: Options['rehypePlugins'] = [[rehypeHighlight, { detect: false }], rehypeHighlightTokens]
 const MARKDOWN_COMPONENTS: Components = {
   a: ({ href, title, children }) => (

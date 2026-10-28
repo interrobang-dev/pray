@@ -4,6 +4,7 @@ import {
   ACCENT_VAR_NAMES,
   CHAT_ATTRIBUTE_NAMES,
   CHAT_CHOICE_KEYS,
+  CHAT_COLOR_OPTIONS,
   CHAT_OPTIONS,
   DEFAULT_APPEARANCE,
   DEFAULT_CHAT_STYLE,
@@ -251,6 +252,29 @@ describe('대화 모양', () => {
     expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, paths: 'off' })).toEqual({ paths: 'off' })
     expect(parseAppearance(JSON.stringify({ chat: { numbers: 'off', paths: 'nope' } })).chat).toMatchObject({ numbers: 'off', paths: 'on' })
     expect(new Set(CHAT_ATTRIBUTE_NAMES).size).toBe(CHAT_ATTRIBUTE_NAMES.length)
+  })
+
+  it('색 줄 스위치: 기본 On 이라 속성이 없고, Off 만 걸리며, 옛 저장 값은 그대로 읽힌다', () => {
+    expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, codeColor: 'off', linkColor: 'off', headingColor: 'off', quoteColor: 'off' })).toEqual({
+      'code-color': 'off',
+      'link-color': 'off',
+      'heading-color': 'off',
+      'quote-color': 'off',
+    })
+    // 새 키가 없는 옛 저장 값: numbers·paths·colors 는 그대로, 나머지 넷은 On
+    const old = parseAppearance(JSON.stringify({ chat: { numbers: 'off', colors: { link: '#00aa11' } } })).chat
+    expect(old).toMatchObject({ numbers: 'off', paths: 'on', codeColor: 'on', linkColor: 'on', headingColor: 'on', quoteColor: 'on' })
+    expect(old.colors.link).toBe('#00aa11')
+    // 끄면 골라 둔 색 값은 남는다 (변수도 그대로, CSS 가 안 쓴다)
+    const off = parseAppearance(JSON.stringify({ chat: { linkColor: 'off', colors: { link: '#00aa11' } } })).chat
+    expect(off.linkColor).toBe('off')
+    expect(chatColorVars(off.colors)).toEqual({ 'chat-link': '#00aa11' })
+    expect(CHAT_COLOR_OPTIONS.map((option) => option.label)).toEqual(['Numbers', 'Paths', 'Headings', 'Inline code', 'Links', 'Quotes'])
+  })
+
+  it('끈 줄은 대비 경고를 하지 않는다', () => {
+    const colors = { ...DEFAULT_CHAT_STYLE.colors, link: '#ffffff', heading: '#2b2f3a' }
+    expect(chatColorWarnings(colors, 'default', { ...DEFAULT_CHAT_STYLE, linkColor: 'off' }).map((warning) => warning.key)).toEqual(['heading'])
   })
 
   it('글자 색은 고른 것만 두 모드에 같은 변수로', () => {

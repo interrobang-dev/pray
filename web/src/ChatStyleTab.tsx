@@ -2,8 +2,8 @@ import { useState, useSyncExternalStore } from 'react'
 import { Segmented } from './Modal'
 import { MarkdownText } from './Markdown'
 import {
-  CHAT_CHOICE_KEYS,
   CHAT_COLOR_OPTIONS,
+  CHAT_SEGMENT_KEYS,
   CHAT_OPTIONS,
   DEFAULT_CHAT_STYLE,
   chatColorWarnings,
@@ -45,7 +45,7 @@ export function ChatStyleTab() {
   const mode = useSyncExternalStore(subscribeTheme, themeMode)
   const { chat } = current
   const vars = paletteVars(current.palette, mode)
-  const warnings = chatColorWarnings(chat.colors, current.palette)
+  const warnings = chatColorWarnings(chat.colors, current.palette, chat)
   /** Reset 뒤 색 입력 칸의 글을 비우려고 행을 새로 만든다 */
   const [resetCount, setResetCount] = useState(0)
 
@@ -62,7 +62,7 @@ export function ChatStyleTab() {
     <>
       <ChatPreview isWorkOpen={chat.workBundles === 'expanded'} />
       <section className="appearance-section">
-        {CHAT_CHOICE_KEYS.map((key) => {
+        {CHAT_SEGMENT_KEYS.map((key) => {
           const { label, options } = CHAT_OPTIONS[key]
           return (
             <div key={key} className="appearance-row">
@@ -75,10 +75,12 @@ export function ChatStyleTab() {
       </section>
       <section className="appearance-section">
         <span className="appearance-label">Colors · empty uses the palette</span>
-        {CHAT_COLOR_OPTIONS.map(({ key, label }) => (
+        {CHAT_COLOR_OPTIONS.map(({ key, label, switchKey }) => (
           <ChatColorRow
             key={`${key}-${resetCount}`}
             label={label}
+            isOn={chat[switchKey] === 'on'}
+            onToggle={(isOn) => update({ [switchKey]: isOn ? 'on' : 'off' } as Partial<ChatStyle>)}
             value={chat.colors[key]}
             paletteColor={vars[PALETTE_COLOR[key]]}
             warnings={warnings.filter((warning) => warning.key === key)}
@@ -95,15 +97,19 @@ export function ChatStyleTab() {
   )
 }
 
-/** 글자 색 한 줄: 색 고르기 · #rrggbb 칸(맞는 값이 될 때마다 건다) · Clear, 대비가 3 아래인 모드가 있으면 경고 한 줄 */
+/** 글자 색 한 줄: 스위치 · 이름 · 색 고르기 · #rrggbb 칸(맞는 값이 될 때마다 건다) · Clear, 대비가 3 아래인 모드가 있으면 경고 한 줄. 끄면 색 칸은 흐려지고 잠기지만 값은 남는다 */
 function ChatColorRow({
   label,
+  isOn,
+  onToggle,
   value,
   paletteColor,
   warnings,
   onChange,
 }: {
   label: string
+  isOn: boolean
+  onToggle: (isOn: boolean) => void
   value: string | null
   paletteColor: string
   warnings: { mode: string; ratio: number }[]
@@ -124,11 +130,13 @@ function ChatColorRow({
   }
 
   return (
-    <div className="appearance-row">
+    <div className="appearance-row chat-color-row">
+      <button type="button" role="switch" aria-checked={isOn} aria-label={`Use ${label.toLowerCase()} color`} title={isOn ? `${label} color on` : `${label} color off`} className="switch" onClick={() => onToggle(!isOn)} />
       <span className="appearance-label">{label}</span>
-      <div className="chat-color">
-        <input type="color" value={value ?? paletteColor} onChange={(event) => applyText(event.target.value)} title={`Pick a color for ${label.toLowerCase()}`} aria-label={`${label} color`} />
+      <div className={`chat-color${isOn ? '' : ' is-off'}`}>
+        <input type="color" value={value ?? paletteColor} disabled={!isOn} onChange={(event) => applyText(event.target.value)} title={`Pick a color for ${label.toLowerCase()}`} aria-label={`${label} color`} />
         <input
+          disabled={!isOn}
           type="text"
           className={draft && !normalizeHex(draft) ? 'is-invalid' : ''}
           value={draft}
@@ -139,7 +147,7 @@ function ChatColorRow({
           onChange={(event) => applyText(event.target.value)}
           aria-label={`${label} hex`}
         />
-        <button type="button" className="chat-color-clear" onClick={clear} disabled={value === null}>
+        <button type="button" className="chat-color-clear" onClick={clear} disabled={!isOn || value === null}>
           Clear
         </button>
       </div>
