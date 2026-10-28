@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Modal } from './Modal'
-import { applyTodo, moveTo, removeTodo, reorderOpen, splitTodos, todosOf } from './teamTodos'
+import { applyTodo, clearDone, moveTo, removeTodo, reorderOpen, splitTodos, todosOf } from './teamTodos'
 import type { Team, TeamTodo } from './types'
 
 /** 끌기로 보는 최소 이동 (px) — App.tsx 목록 끌어 놓기와 같은 값 */
@@ -41,6 +41,7 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
   const { open, done } = splitTodos(todosOf(team))
   const [draft, setDraft] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [drag, setDrag] = useState<{ id: string; dropIndex: number | null } | null>(null)
@@ -85,6 +86,16 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
   async function remove(todo: TeamTodo) {
     const result = await send(`${baseUrl}/${encodeURIComponent(todo.id)}`, 'DELETE')
     if (result) onChangeTodos(team.id, (todos) => removeTodo(todos, todo.id))
+  }
+
+  /** 완료 항목을 모두 지운다: 확인 창 뒤 DELETE, 응답을 기다려 화면에서 뺀다 */
+  async function clearAllDone() {
+    if (isClearing || done.length === 0) return
+    if (!window.confirm(`Delete ${done.length} done ${done.length === 1 ? 'task' : 'tasks'}?`)) return
+    setIsClearing(true)
+    const result = await send(`${baseUrl}/done`, 'DELETE')
+    setIsClearing(false)
+    if (result) onChangeTodos(team.id, clearDone)
   }
 
   /** 고친 글 저장: 빈 글이면 저장하지 않고 되돌리고, 그대로면 보내지 않는다 */
@@ -230,7 +241,12 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
         )}
         {done.length > 0 && (
           <>
-            <div className="todo-done-head">Done ({done.length})</div>
+            <div className="todo-done-head">
+              <span>Done ({done.length})</span>
+              <button type="button" className="todo-clear" onClick={() => void clearAllDone()} disabled={isClearing} title="Delete all done tasks">
+                {isClearing ? '…' : 'Clear'}
+              </button>
+            </div>
             <ul className="todo-list done">
               {done.map((todo) => (
                 <li key={todo.id} className="todo-item">

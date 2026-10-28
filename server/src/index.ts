@@ -40,6 +40,7 @@ import {
   migrateWaitingNotes,
   parseTodoText,
   removeTodo,
+  clearDoneTodos,
   reorderTodos,
   TodoNotFoundError,
   updateTodo,
@@ -1928,6 +1929,17 @@ app.patch('/api/team/:teamId/todos/:todoId', (req, res) => {
     throw error
   }
   broadcastOffice()
+})
+
+/** 완료한 할 일 모두 삭제. 할 일 ID 는 randomUUID 앞 8자리 hex 라 "done" 과 겹치지 않는다. `:todoId` 라우트보다 앞에 둔다 */
+app.delete('/api/team/:teamId/todos/done', (req, res) => {
+  const removedCount = clearDoneTodos(req.params.teamId)
+  if (removedCount === null) {
+    res.status(404).json({ message: 'Team not found' })
+    return
+  }
+  res.json({ removed: removedCount })
+  if (removedCount > 0) broadcastOffice()
 })
 
 app.delete('/api/team/:teamId/todos/:todoId', (req, res) => {

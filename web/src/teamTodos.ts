@@ -37,6 +37,11 @@ export function removeTodo(todos: TeamTodo[], todoId: string): TeamTodo[] {
   return todos.filter((todo) => todo.id !== todoId)
 }
 
+/** 완료한 항목을 모두 뺀다 (할 일 순서는 그대로) */
+export function clearDone(todos: TeamTodo[]): TeamTodo[] {
+  return todos.filter((todo) => !todo.isDone)
+}
+
 /** 할 일만 ids 순서로 다시 놓는다 (완료는 그대로 뒤). ids 가 지금 할 일 집합과 다르면 그대로 둔다 */
 export function reorderOpen(todos: TeamTodo[], ids: string[]): TeamTodo[] {
   const { open } = splitTodos(todos)

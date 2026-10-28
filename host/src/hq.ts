@@ -530,6 +530,19 @@ export function removeTodo(teamId: string, todoId: string): Todo[] | null {
   return team.todos
 }
 
+/** 완료한 할 일을 모두 지우고 지운 개수를 돌려준다. 지울 것이 없으면 쓰지 않는다. 팀이 없으면 null */
+export function clearDoneTodos(teamId: string): number | null {
+  const hq = readHq()
+  const team = hq.teams.find((t) => t.id === teamId)
+  if (!team) return null
+  const remaining = team.todos.filter((t) => !t.isDone)
+  const removedCount = team.todos.length - remaining.length
+  if (removedCount === 0) return 0
+  team.todos = remaining
+  writeHq(hq)
+  return removedCount
+}
+
 /** 할 일(미완료) 구역 순서를 통째로 바꾼다. ids 는 그 구역 전부여야 한다. 완료 구역은 그대로. 팀이 없으면 null */
 export function reorderTodos(teamId: string, ids: string[]): Todo[] | null {
   const hq = readHq()

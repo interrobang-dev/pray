@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyTodo, moveTo, remainingCount, removeTodo, reorderOpen, splitTodos, todosOf } from './teamTodos'
+import { applyTodo, clearDone, moveTo, remainingCount, removeTodo, reorderOpen, splitTodos, todosOf } from './teamTodos'
 import type { Team, TeamTodo } from './types'
 
 const todo = (id: string, isDone = false): TeamTodo => ({
@@ -61,6 +61,13 @@ describe('removeTodo', () => {
   it('그 항목만 뺀다', () => {
     expect(ids(removeTodo(sample(), 'b'))).toEqual(['a', 'c', 'x', 'y'])
     expect(ids(removeTodo(sample(), 'none'))).toEqual(['a', 'b', 'c', 'x', 'y'])
+  })
+})
+
+describe('clearDone', () => {
+  it('완료만 빼고 할 일 순서는 그대로', () => {
+    expect(ids(clearDone(sample()))).toEqual(['a', 'b', 'c'])
+    expect(clearDone([])).toEqual([])
   })
 })
 

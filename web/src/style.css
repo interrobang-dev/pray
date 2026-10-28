@@ -4129,6 +4129,9 @@ li.group.drop-after::after {
   text-decoration: line-through;
 }
 .todo-done-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 10px 0 4px;
   padding: 0 2px;
   font-size: calc(11px * var(--font-scale));
@@ -4136,6 +4139,20 @@ li.group.drop-after::after {
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--muted);
+}
+.todo-clear {
+  padding: 0 8px;
+  font-size: calc(11px * var(--font-scale));
+  line-height: 20px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--muted);
+  background: transparent;
+}
+.todo-clear:hover:not(:disabled) {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: transparent;
 }
 /* 삭제 × 와 끌기 손잡이 ⠿: 줄에 마우스를 올렸을 때만 (터치 기기는 아래 hover: none 블록에서 늘) */
 .todo-delete,
@@ -4244,6 +4261,10 @@ li.group.drop-after::after {
     opacity: 1;
     padding: 3px 8px;
     font-size: calc(13px * var(--font-scale));
+  }
+  .todo-clear {
+    min-height: 40px;
+    padding: 0 14px;
   }
   .todo-delete,
   .todo-handle {

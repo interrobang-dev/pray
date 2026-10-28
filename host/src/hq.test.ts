@@ -13,6 +13,7 @@ import {
   migrateWaitingNotes,
   parseTodoText,
   removeTodo,
+  clearDoneTodos,
   reorderTodos,
   splitWaitingNote,
   TodoNotFoundError,
@@ -485,6 +486,20 @@ describe('team todos', () => {
     expect(removeTodo(team.id, a.id)?.map((t) => t.text)).toEqual(['나'])
     expect(removeTodo(team.id, b.id)).toEqual([])
     expect(texts(team.id)).toEqual([])
+  })
+
+  it('clears every done todo, keeps the open order, and does not write when none is done', () => {
+    const team = newTeam()
+    const [a, b, c, d] = ['가', '나', '다', '라'].map((text) => addTodo(team.id, text)!)
+    const before = readFileSync(hqPath, 'utf8')
+    expect(clearDoneTodos(team.id)).toBe(0)
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+    updateTodo(team.id, b.id, { isDone: true })
+    updateTodo(team.id, a.id, { isDone: true })
+    reorderTodos(team.id, [d.id, c.id])
+    expect(clearDoneTodos(team.id)).toBe(2)
+    expect(texts(team.id)).toEqual(['라', '다'])
+    expect(clearDoneTodos('nope')).toBeNull()
   })
 
   it('reorders only the open section and refuses anything but exactly the open IDs', () => {
