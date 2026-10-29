@@ -77,6 +77,7 @@ import {
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
 import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './workspaceChanges.js'
+import { commitDetail, commitFileDiff, historyFilePath, listHistory, REV_PATTERN } from './workspaceHistory.js'
 import { buildSearchPattern, MAX_MATCHES, parseSearchQuery, runSearchWorker, SEARCH_TIME_LIMIT_MS, SearchPatternError } from './workspaceSearch.js'
 import { editBlockReason, isLocalPageRequest, isVcsMetaPath, saveTextFile } from './workspaceSave.js'
 import { HostClient } from './hostClient.js'
@@ -832,6 +833,81 @@ app.get('/api/sessions/:id/changes/diff', async (req, res) => {
     const diff = await diffChange(workspaceChangesOf, root, path)
     if (!diff) {
       res.status(404).json({ message: 'Not a changed file' })
+      return
+    }
+    res.set('Cache-Control', 'no-store')
+    res.json(diff)
+  } catch (error) {
+    if (!(error instanceof VcsCommandError)) throw error
+    res.status(502).json({ message: error.message })
+  }
+})
+
+/**
+ * 작업 폴더의 git 커밋 히스토리 한 쪽 (읽기만, 규칙은 workspaceHistory.ts. ?skip= 앞에서 건너뛸 수, ?path= cwd 상대면 그 파일만 --follow) →
+ * { kind: git·svn·none, commits: [{ hash, shortHash, subject, authorName, authorDate, refs, isHead }], hasMore, error }. git 명령 실패는 200 + error
+ */
+app.get('/api/sessions/:id/history', async (req, res) => {
+  const { skip = '0', path } = req.query
+  const filePath = typeof path === 'string' && isValidRequestPath(path, false) ? historyFilePath(path) : null
+  if (!isSessionId(req.params.id) || typeof skip !== 'string' || !/^\d{1,7}$/.test(skip) || (path !== undefined && filePath === null)) {
+    res.status(400).json({ message: 'Invalid session ID, skip or path' })
+    return
+  }
+  const root = await workspaceRootOf(req.params.id)
+  if (!root) {
+    res.status(404).json({ message: 'Session folder not found' })
+    return
+  }
+  res.set('Cache-Control', 'no-store')
+  res.json(await listHistory(root, { skip: Number(skip), path: filePath }))
+})
+
+/** 히스토리 API 공통: 세션 ID·rev(4~64자 hex) 꼴(400) → 기준 폴더(404). 응답을 보냈으면 null */
+async function resolveHistoryRequest(req: Request, res: Response): Promise<string | null> {
+  if (!isSessionId(req.params.id as string) || !REV_PATTERN.test(req.params.rev as string)) {
+    res.status(400).json({ message: 'Invalid session ID or commit' })
+    return null
+  }
+  const root = await workspaceRootOf(req.params.id as string)
+  if (!root) res.status(404).json({ message: 'Session folder not found' })
+  return root
+}
+
+/**
+ * 커밋 하나 → { hash, shortHash, subject, body, authorName, authorEmail, authorDate, parents, files: [{ path, status, oldPath }], outsideCount, isTruncated }.
+ * 파일은 cwd 아래만(첫 부모 대비). 없는 커밋·git 이 아님 404, git 실패 502
+ */
+app.get('/api/sessions/:id/history/:rev', async (req, res) => {
+  const root = await resolveHistoryRequest(req, res)
+  if (!root) return
+  try {
+    const detail = await commitDetail(root, req.params.rev)
+    if (!detail) {
+      res.status(404).json({ message: 'Commit not found' })
+      return
+    }
+    res.set('Cache-Control', 'no-store')
+    res.json(detail)
+  } catch (error) {
+    if (!(error instanceof VcsCommandError)) throw error
+    res.status(502).json({ message: error.message })
+  }
+})
+
+/** 커밋의 파일 하나 diff (?path= cwd 상대) → Changes diff 와 같은 꼴. 그 커밋의 파일 목록에 없으면 404 */
+app.get('/api/sessions/:id/history/:rev/diff', async (req, res) => {
+  const { path } = req.query
+  if (typeof path !== 'string' || !isValidRequestPath(path, false)) {
+    res.status(400).json({ message: 'Invalid path' })
+    return
+  }
+  const root = await resolveHistoryRequest(req, res)
+  if (!root) return
+  try {
+    const diff = await commitFileDiff(root, req.params.rev, path)
+    if (!diff) {
+      res.status(404).json({ message: 'Not a file in this commit' })
       return
     }
     res.set('Cache-Control', 'no-store')

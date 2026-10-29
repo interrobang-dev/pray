@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type Ref } from 'react'
+import { AddToChatIcon } from './AddToChatIcon'
 import { diffLineRange, diffRowsOf, STATUS_LABELS, STATUS_LETTERS } from './changes'
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor'
 import { CodeView, type CodeFindState } from './CodeView'
@@ -7,6 +8,7 @@ import { CopyButton } from './CopyButton'
 import { alertDialog, choiceDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import { formatSize } from './Files'
+import { CommitDiffView, EMPTY_HISTORY, HistoryPanel, type HistoryState } from './HistoryPanel'
 import {
   formatAgo,
   formatDateTime,
@@ -57,8 +59,10 @@ interface SessionView {
   changes: ChangesState | null
   /** 내용 찾기 입력·결과 */
   search: SearchState
+  /** 커밋 히스토리 거르기·목록·고른 커밋과 파일 */
+  history: HistoryState
 }
-type SideMode = 'files' | 'changes' | 'search'
+type SideMode = 'files' | 'changes' | 'search' | 'history'
 const sessionViews = new Map<string, SessionView>()
 
 interface Props {
@@ -87,6 +91,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   const [changesState, setChangesState] = useState<ChangesState>(saved?.changes ?? { status: 'loading' })
   const [diffState, setDiffState] = useState<DiffState | null>(null)
   const [search, setSearch] = useState<SearchState>(saved?.search ?? EMPTY_SEARCH)
+  const [history, setHistory] = useState<HistoryState>(saved?.history ?? EMPTY_HISTORY)
   /** Ctrl+Shift+F: Search 입력칸에 포커스 (text 가 있으면 그 글로 찾기) */
   const [searchFocus, setSearchFocus] = useState<{ id: number; text: string | null } | null>(null)
   /** Search 결과에서 마지막으로 연 줄 (표시)과 코드 보기를 그 줄로 스크롤할 요청 */
@@ -120,8 +125,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   const rootName = nameOf(cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/')) || cwd
 
   useEffect(() => {
-    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState, search })
-  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState, search])
+    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState, search, history })
+  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState, search, history])
 
   const loadFolder = useCallback(
     async (path: string) => {
@@ -312,17 +317,25 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   }
 
   const isChanges = sideMode === 'changes'
-  const backLabel = isChanges ? 'Back to changes' : sideMode === 'search' ? 'Back to search' : 'Back to files'
-  const textFile = !isChanges && shownFile?.status === 'ok' && shownFile.file.kind === 'text' ? shownFile.file : null
+  const isHistory = sideMode === 'history'
+  /** 오른쪽이 파일 보기인 쪽 (Files·Search) */
+  const isFileSide = !isChanges && !isHistory
+  const backLabel = isChanges ? 'Back to changes' : isHistory ? 'Back to commit' : sideMode === 'search' ? 'Back to search' : 'Back to files'
+  const textFile = isFileSide && shownFile?.status === 'ok' && shownFile.file.kind === 'text' ? shownFile.file : null
   const isEditing = textFile !== null && editingPath !== null && editingPath === selectedPath
   /** 편집을 막는 이유 (서버가 파일마다 준다. 필드가 없는 옛 서버는 저장 API 도 없다) */
   const editBlock = textFile ? (textFile.editBlockReason === undefined ? 'The server needs a restart to support editing' : textFile.editBlockReason) : null
   /** 위 막대가 가리키는 파일과 공유할 줄 (Changes 면 고른 diff 줄의 새 파일 줄 번호, 편집 중이면 누를 때 편집기에서 고른 줄) */
-  const shownPath = isChanges ? selectedChange : selectedPath
-  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing ? null : lineRange
+  const shownPath = isChanges ? selectedChange : isHistory ? null : selectedPath
+  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing || isHistory ? null : lineRange
+  /** 경로 표시줄의 파일. History 면 고른 커밋의 파일이고 Add to chat·Copy path 는 없다 (지난 커밋의 줄 번호라 위치로 공유하지 않는다) */
+  const navPath = isHistory ? (history.selectedHash ? history.selectedFile : null) : shownPath
+  const changesKind = changesState.status === 'ok' ? changesState.changes.kind : null
+  /** 파일별 히스토리를 막는 이유 (변경 목록을 받아 git 이 아님을 알 때만) */
+  const fileHistoryBlock = changesKind === 'svn' ? 'available for git only' : changesKind === 'none' ? 'not a git repository' : null
   const locationRange = () => (isEditing ? (editorRef.current?.selectionLines() ?? null) : shownRange)
   const entry = selectedPath ? entryOf(folders, selectedPath) : null
-  const meta = isChanges ? null : shownFile?.status === 'ok' ? shownFile.file : entry
+  const meta = !isFileSide ? null : shownFile?.status === 'ok' ? shownFile.file : entry
 
   // 편집을 그만두면 ● 도 끈다. 저장 안 한 편집은 App 이 탭·세션을 바꾸기 전에 묻도록 적어 둔다 (탭이 언마운트되면 편집기 글이 사라진다)
   useEffect(() => {
@@ -469,6 +482,16 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
     if (path === selectedPath) open()
     else guardEdit(open)
   }
+  /** 위 막대 History: 고른 파일을 바꾼 커밋만 History 쪽에서 본다 (편집 중이면 버릴지 묻고 편집을 그만둔다 — 편집기가 사라진다) */
+  function openFileHistory(path: string) {
+    guardEdit(() => {
+      setEditingPath(null)
+      setHistory((previous) => (previous.filterPath === path ? previous : { ...previous, filterPath: path, selectedHash: null, selectedFile: null }))
+      setSideMode('history')
+      setIsViewing(false)
+    })
+  }
+
   const closeCodeFind = useCallback(() => setCodeFind((previous) => ({ ...previous, isOpen: false })), [])
   const changeCodeFind = useCallback(
     (query: string, isCaseSensitive: boolean) =>
@@ -488,11 +511,19 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
         >
           ←
         </button>
-        <QuickFind sessionId={sessionId} focusId={findFocusId} onOpen={(path) => (path === selectedPath && !isChanges ? openInFiles(path) : guardEdit(() => openInFiles(path)))} />
+        <QuickFind sessionId={sessionId} focusId={findFocusId} onOpen={(path) => (path === selectedPath && isFileSide ? openInFiles(path) : guardEdit(() => openInFiles(path)))} />
         {/* 좁으면 폴더 부분만 말줄임되고 파일 이름은 남는다 */}
-        <nav className="ws-path" aria-label="Path" title={shownPath ? [cwd.replace(/[\\/]+$/, ''), ...shownPath.split('/')].join('\\') : cwd}>
-          <span className="ws-path-dir">{[rootName, ...(shownPath?.split('/').slice(0, -1) ?? [])].join(' / ')}</span>
-          {shownPath && (
+        <nav
+          className="ws-path"
+          aria-label="Path"
+          title={
+            navPath
+              ? [cwd.replace(/[\\/]+$/, ''), ...navPath.split('/')].join('\\') + (isHistory && history.selectedHash ? ` at ${history.selectedHash.slice(0, 7)}` : '')
+              : cwd
+          }
+        >
+          <span className="ws-path-dir">{[rootName, ...(navPath?.split('/').slice(0, -1) ?? [])].join(' / ')}</span>
+          {navPath && (
             <>
               <span className="ws-path-sep" aria-hidden="true">
                 /
@@ -502,7 +533,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
                   ●
                 </span>
               )}
-              <b>{nameOf(shownPath)}</b>
+              <b>{nameOf(navPath)}</b>
               {shownRange && <span className="ws-path-lines">{locationText('', shownRange)}</span>}
             </>
           )}
@@ -529,6 +560,18 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
             aria-label={isEditing ? 'Stop editing' : 'Edit'}
           >
             <PencilIcon />
+          </button>
+        )}
+        {isFileSide && selectedPath && (
+          <button
+            type="button"
+            className="ws-file-history"
+            disabled={fileHistoryBlock !== null}
+            onClick={() => openFileHistory(selectedPath)}
+            title={fileHistoryBlock ? `Can't show history: ${fileHistoryBlock}` : `History of ${selectedPath}`}
+            aria-label="File history"
+          >
+            <HistoryIcon />
           </button>
         )}
         {shownPath && (
@@ -592,9 +635,40 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
             >
               <SearchSideIcon />
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isHistory}
+              className={`ws-side-search${isHistory ? ' on' : ''}`}
+              onClick={() =>
+                !isHistory &&
+                guardEdit(() => {
+                  setEditingPath(null)
+                  setSideMode('history')
+                })
+              }
+              title="History"
+              aria-label="History"
+            >
+              <HistoryIcon />
+            </button>
           </div>
           {isChanges ? (
             <ChangesList state={changesState} selectedPath={selectedChange} onOpen={openChange} onReload={() => setChangesReloadId((id) => id + 1)} />
+          ) : isHistory ? (
+            <HistoryPanel
+              sessionId={sessionId}
+              state={history}
+              onStateChange={setHistory}
+              reloadId={reloadId}
+              branch={changesState.status === 'ok' && changesState.changes.kind === 'git' ? changesState.changes.branch : null}
+              addToChatBlockReason={addToChatBlockReason}
+              onAddToChat={onAddToChat}
+              onOpenFile={(path) => {
+                setHistory((previous) => ({ ...previous, selectedFile: path }))
+                setIsViewing(true)
+              }}
+            />
           ) : sideMode === 'search' ? (
             <SearchPanel
               sessionId={sessionId}
@@ -650,6 +724,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
               onRangeChange={changeDiffRange}
               onOpenInFiles={openInFiles}
             />
+          ) : isHistory ? (
+            <CommitDiffView sessionId={sessionId} hash={history.selectedHash} path={history.selectedHash ? history.selectedFile : null} reloadId={reloadId} />
           ) : (
             <FileView
               sessionId={sessionId}
@@ -774,28 +850,22 @@ function SearchSideIcon() {
   )
 }
 
+/** 시계 (History — 왼쪽 칸 전환과 위 막대의 파일별 히스토리) */
+function HistoryIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 /** 연필 (Edit) */
 function PencilIcon() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
       <path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
       <path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-/** 말풍선 + "+" (Add to chat) */
-function AddToChatIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-      <path
-        d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-4.5 3.5V17H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-      <path d="M12 7.5v6M9 10.5h6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   )
 }

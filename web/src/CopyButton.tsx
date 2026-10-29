@@ -13,7 +13,7 @@ const TITLES: Record<CopyStatus, string | null> = { idle: null, copied: 'Copied'
  * 눌러도 말풍선·details·부모 클릭은 일어나지 않는다. 자리는 부모가 CSS 로 정한다 (`.copy-button` 은 부모 안 직속)
  */
 /** text 가 함수면 누를 때 부른다 (편집기에서 고른 줄처럼 그릴 때 정해 둘 수 없는 글) */
-export function CopyButton({ text, label = 'Copy' }: { text: string | (() => string); label?: 'Copy' | 'Copy code' | 'Copy command' | 'Copy path' }) {
+export function CopyButton({ text, label = 'Copy' }: { text: string | (() => string); label?: 'Copy' | 'Copy code' | 'Copy command' | 'Copy path' | 'Copy hash' }) {
   const [status, setStatus] = useState<CopyStatus>('idle')
   const timerRef = useRef<number | undefined>(undefined)
   const isMountedRef = useRef(true)

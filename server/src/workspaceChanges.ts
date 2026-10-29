@@ -182,7 +182,7 @@ export function parseSvnStatusXml(xml: string): RawChange[] {
   return changes.filter((change) => !(change.status === 'deleted' && movedTo.has(change.path) && renamedFrom.has(change.path)))
 }
 
-function toSlash(path: string): string {
+export function toSlash(path: string): string {
   return path.replace(/\\/g, '/')
 }
 
@@ -307,14 +307,19 @@ export function additionHunks(text: string): DiffHunk[] {
 
 // ---------- 명령 ----------
 
-/** 형상관리 명령 실패. message 는 화면에 그대로 보이는 영어 */
-export class VcsCommandError extends Error {}
+/** 형상관리 명령 실패. message 는 화면에 그대로 보이는 영어. exitCode = 명령이 돌고 0 이 아닌 코드로 끝났을 때 그 코드 */
+export class VcsCommandError extends Error {
+  exitCode: number | null = null
+}
+
+/** 실패 문구에 넣는 하위 명령 이름 */
+const SUBCOMMANDS = ['status', 'diff', 'log', 'show', 'diff-tree', 'rev-parse']
 
 /**
  * 셸 없이 실행하고 stdout 바이트를 준다. 실패는 화면에 보일 영어 문구의 VcsCommandError (stderr 첫 줄은 ASCII 일 때만 붙인다 — 한국어로 나올 수 있다).
  * 출력이 maxBytes 를 넘으면 code 'too-large'
  */
-function run(command: 'git' | 'svn', args: string[], cwd: string, maxBytes: number): Promise<Buffer> {
+export function run(command: 'git' | 'svn', args: string[], cwd: string, maxBytes: number): Promise<Buffer> {
   // git 메시지를 영어로 (Windows 에서 LC_ALL 은 번역에만 쓰인다). svn 은 경로를 코드 페이지로 바꾸는 데 locale 을 써서 건드리지 않는다
   const env = command === 'git' ? { ...process.env, LC_ALL: 'C', GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' } : process.env
   return new Promise((resolve, reject) => {
@@ -330,13 +335,15 @@ function run(command: 'git' | 'svn', args: string[], cwd: string, maxBytes: numb
       else {
         const firstLine = String(stderr).split(/\r?\n/).find((line) => line.trim()) ?? ''
         const detail = /^[\x20-\x7e]+$/.test(firstLine) ? `: ${firstLine.trim()}` : ''
-        reject(new VcsCommandError(`${command} ${args.find((arg) => arg === 'status' || arg === 'diff') ?? ''} failed${detail}`))
+        const failure = new VcsCommandError(`${command} ${args.find((arg) => SUBCOMMANDS.includes(arg)) ?? ''} failed${detail}`)
+        failure.exitCode = typeof code === 'number' ? code : null
+        reject(failure)
       }
     })
   })
 }
 
-const GIT_BASE = ['--no-optional-locks', '--literal-pathspecs', '-c', 'core.quotepath=false']
+export const GIT_BASE = ['--no-optional-locks', '--literal-pathspecs', '-c', 'core.quotepath=false']
 
 /** 변경 목록 + 다시 diff 할 때 쓸 해석 결과 */
 interface ChangesSnapshot {

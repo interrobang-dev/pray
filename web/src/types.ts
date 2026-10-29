@@ -318,6 +318,42 @@ export interface WorkspaceDiff {
   hasPropertyChanges: boolean
 }
 
+/** 히스토리 목록의 커밋 (`GET /api/sessions/:id/history`) */
+export interface HistoryCommit {
+  hash: string
+  shortHash: string
+  subject: string
+  authorName: string
+  /** ISO 8601 */
+  authorDate: string
+  /** 브랜치·태그 (HEAD 가 가리키는 브랜치가 맨 앞, 태그는 `tag: v1`) */
+  refs: string[]
+  isHead: boolean
+}
+
+/** `GET /api/sessions/:id/history?skip=&path=` (git 만. svn·none 은 commits 가 빈다) */
+export interface WorkspaceHistory {
+  kind: 'git' | 'svn' | 'none'
+  commits: HistoryCommit[]
+  hasMore: boolean
+  error: string | null
+}
+
+/** `GET /api/sessions/:id/history/:rev` — 파일은 cwd 아래만, 첫 부모 대비 */
+export interface CommitDetail {
+  hash: string
+  shortHash: string
+  subject: string
+  body: string
+  authorName: string
+  authorEmail: string
+  authorDate: string
+  parents: string[]
+  files: ChangedFile[]
+  outsideCount: number
+  isTruncated: boolean
+}
+
 /** 출근 상태. attendance 가 없는 옛 서버 응답은 isAlive 로 본다 (끝난 세션은 퇴근. 다시 출근·기록 지우기는 못 한다) */
 export function attendanceOf(session: Session): Attendance {
   return session.attendance ?? (session.isAlive ? 'present' : 'off')

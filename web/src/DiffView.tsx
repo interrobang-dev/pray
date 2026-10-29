@@ -10,14 +10,17 @@ interface Props {
   /** 고른 diff 줄(row) 범위 */
   selection: LineRange | null
   onSelectionChange: (range: LineRange | null) => void
-  onOpenInFiles: () => void
+  /** 없으면 Open in Files 를 숨긴다 (지난 커밋의 diff) */
+  onOpenInFiles?: () => void
+  /** false 면 줄 고르기를 끈다 — 지난 커밋 diff 의 줄 번호는 지금 파일과 달라 위치로 공유하지 않는다 */
+  isSelectable?: boolean
 }
 
 /**
- * Changes 의 diff 보기 (읽기만): 머리줄(상태·옛 이름·+/− 줄 수·Open in Files) + unified diff (옛·새 줄 번호, 추가·삭제 바탕색, hunk 머리).
+ * Changes·History 의 diff 보기 (읽기만): 머리줄(상태·옛 이름·+/− 줄 수·Open in Files) + unified diff (옛·새 줄 번호, 추가·삭제 바탕색, hunk 머리).
  * 줄은 CodeView 처럼 innerHTML 한 번이고 줄 고르기도 같다 (번호 칸 = `.diff-gutter`)
  */
-export const DiffView = memo(function DiffView({ diff, rows, selection, onSelectionChange, onOpenInFiles }: Props) {
+export const DiffView = memo(function DiffView({ diff, rows, selection, onSelectionChange, onOpenInFiles, isSelectable = true }: Props) {
   const html = useMemo(() => diffRowsHtml(rows), [rows])
   const digits = useMemo(() => {
     let max = 0
@@ -52,15 +55,15 @@ export const DiffView = memo(function DiffView({ diff, rows, selection, onSelect
           </span>
         )}
         {diff.encoding === 'euc-kr' && <span className="ws-diff-note">EUC-KR</span>}
-        {isOpenable(diff.status) && (
+        {onOpenInFiles && isOpenable(diff.status) && (
           <button type="button" className="ws-open-file" onClick={onOpenInFiles} title={`Open ${diff.path} in Files`}>
             Open in Files
           </button>
         )}
       </div>
       {diff.kind === 'diff' ? (
-        <div className="diff-view" style={{ '--diff-digits': digits } as CSSProperties}>
-          <div className="diff-lines" ref={linesRef} onMouseDown={onMouseDown} dangerouslySetInnerHTML={{ __html: html }} />
+        <div className={`diff-view${isSelectable ? '' : ' is-readonly'}`} style={{ '--diff-digits': digits } as CSSProperties}>
+          <div className="diff-lines" ref={linesRef} onMouseDown={isSelectable ? onMouseDown : undefined} dangerouslySetInnerHTML={{ __html: html }} />
           {diff.hasPropertyChanges && <p className="hint">Property changes aren't shown</p>}
         </div>
       ) : (
