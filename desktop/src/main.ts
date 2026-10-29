@@ -76,12 +76,12 @@ function createChildren(): { host: Child; server: Child } {
   const claude = findExe('claude')
   const env = childEnv()
   const host = new Child(
-    { name: 'host', cwd: join(repoDir, 'host'), args: [`--log=${join(logDir, 'pray-host.log')}`, `--claude=${claude}`] },
+    { name: 'host', cwd: join(repoDir, 'host'), args: [`--log=${join(logDir, 'host.log')}`, `--claude=${claude}`] },
     node,
     env,
   )
   const server = new Child(
-    { name: 'server', cwd: join(repoDir, 'server'), args: [`--log=${join(logDir, 'pray-server.log')}`] },
+    { name: 'server', cwd: join(repoDir, 'server'), args: [`--log=${join(logDir, 'server.log')}`] },
     node,
     env,
   )

@@ -32,7 +32,7 @@
 | 작업 공간 패키지 | `@jk-corp/{host,server,web,desktop,mcp}` | `@pray/…` (npm 에 `@pray` 범위가 있어도 workspace 가 먼저라 상관없다) |
 | 호스트 pipe | `\\.\pipe\jk-corp-host` | `\\.\pipe\pray-host` |
 | 설정 폴더 | `~/.claude/jk-corp/` | `~/.claude/pray/` (sprite-src 포함) |
-| 로그 파일 | `jk-corp-host.log`·`jk-corp-server.log` | `pray-host.log`·`pray-server.log` |
+| 로그 파일 | `jk-corp-host.log`·`jk-corp-server.log` | `host.log`·`server.log` (이미 `pray/` 폴더 안이라 앞말을 뺀다. 트레이 `desktop-launch` 로그는 원래 앞말 없음) |
 | 환경변수 | `JK_CORP_SESSION`·`JK_CORP_CLAUDE`·`JK_CORP_TEAM_ID`·`JK_CORP_PART_ID`·`JK_CORP_SERVER` | `PRAY_SESSION`·`PRAY_CLAUDE`·`PRAY_TEAM_ID`·`PRAY_PART_ID`·`PRAY_SERVER` |
 | MCP 서버 키 | `jk-corp` | `pray` (도구 전체 이름 `mcp__pray__<도구>`) |
 | MCP 도구 | `jk_spawn_member`·`jk_assign`·`jk_wait`·`jk_status`·`jk_dismiss` | `team_spawn_member`·`team_assign`·`team_wait`·`team_status`·`team_dismiss` (D4) |
@@ -164,7 +164,7 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 | 커밋 | 내용 |
 |---|---|
 | — | 0단계 백업: `~/.claude/jk-corp.backup-20261030/` (파트장이 함. config.json·accounts.json 에 비밀이 있어 저장소·공유 폴더에 두지 않는다) |
-| `359cf79` feat(data-dir) | D1·D2: `dataDir()`(호스트, 서버가 import)·트레이 사본, hq.ts·config.ts·accountStore.ts·트레이 logDir·install-startup.ps1(로그 폴더를 미리 만들지 않음), 로그 이름 `pray-*.log`, sprite-src 경로 |
+| `359cf79` feat(data-dir) | D1·D2: `dataDir()`(호스트, 서버가 import)·트레이 사본, hq.ts·config.ts·accountStore.ts·트레이 logDir·install-startup.ps1(로그 폴더를 미리 만들지 않음), sprite-src 경로 |
 | `2690b98` refactor(*) | 패키지 `@pray/*`·루트 `pray`, import·package-lock, D7 앱 데이터 폴더 이전 |
 | `df4eae3` refactor(host) | pipe `pray-host`, `PRAY_SESSION`·`PRAY_CLAUDE`, D3 막이(호스트 종료 코드 0, 트레이 "Quit the old tray first" 창 — 옛 잠금 실패·옛 pipe 둘 다), mod 의 `JK_CORP_SESSION` 대체 읽기, 로그 첫 줄 |
 | `53a782e` refactor(mod) | plugin 이름 `pray`·설명·`PLUGIN_NAME`·곁 질문 description, `btw.ts` 시간 초과 문구 |
@@ -173,6 +173,7 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 | `bf58b6e` refactor(desktop) | D10: 알림 ID `pray`, 로그인 시 자동 실행 값 이름 고정 (알림 제목 `Pray · N sessions` 는 1단계에서 이미 됨) |
 | `99eef87` chore(scripts) | 작업 이름 `pray-host`·`pray-server`. install·stop·uninstall 모두 옛 `jk-corp-*` 작업도 멈추고 지운다 |
 | `38623f7` chore(*) | #16 임시 접두사 `pray-account-`·`.pray.<pid>.tmp`(뜰 때 15분 넘은 옛 `jk-corp-account-*` 도 지움), 곁 질문 명령 `/pray-btw`, 주석·테스트 접두사·문서 |
+| refactor(logs) | 로그 이름 `host.log`·`server.log` (트레이·`install-startup.ps1`. 스케줄러 작업 이름은 `pray-*` 그대로) |
 
 반영 (한 번, 사용자가 반영 스크립트로): 트레이 Quit → main 반영 → `npm install` → `npm run build` → `npm run build --workspace desktop` → 트레이 켜기. 확인할 것:
 

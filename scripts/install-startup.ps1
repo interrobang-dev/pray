@@ -28,8 +28,9 @@ $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interac
 $launcher = Join-Path $PSScriptRoot 'launch-hidden.vbs'
 
 function Register-PrayTask {
-    param([string]$Name, [string]$WorkDir, [string[]]$ExtraArgs, [string]$Description)
-    $log = Join-Path $logDir "$Name.log"
+    param([string]$Name, [string]$LogName, [string]$WorkDir, [string[]]$ExtraArgs, [string]$Description)
+    # 로그 이름은 작업 이름과 따로: 이미 pray 폴더 안이라 앞말 없이 host.log·server.log (트레이와 같은 이름)
+    $log = Join-Path $logDir "$LogName.log"
     # 인자마다 따옴표로 감싸 wscript 에 넘기고, VBS 가 다시 따옴표를 붙여 node 명령줄을 만든다 (중첩 따옴표 회피)
     $pieces = @($launcher, $WorkDir, $node, $tsx, 'src/index.ts', "--log=$log") + $ExtraArgs
     $argument = '//B //Nologo ' + (($pieces | ForEach-Object { '"' + $_ + '"' }) -join ' ')
@@ -45,8 +46,8 @@ foreach ($name in 'jk-corp-server', 'jk-corp-host') {
         Write-Host "옛 작업 제거: $name (떠 있던 node 는 stop.ps1 로 멈춘다)"
     }
 }
-Register-PrayTask -Name 'pray-host' -WorkDir (Join-Path $repo 'host') -ExtraArgs @("--claude=$claude") -Description 'Pray 세션 호스트 (claude 프로세스 보관)'
-Register-PrayTask -Name 'pray-server' -WorkDir (Join-Path $repo 'server') -ExtraArgs @() -Description 'Pray 서버 (http://127.0.0.1:4710)'
+Register-PrayTask -Name 'pray-host' -LogName 'host' -WorkDir (Join-Path $repo 'host') -ExtraArgs @("--claude=$claude") -Description 'Pray 세션 호스트 (claude 프로세스 보관)'
+Register-PrayTask -Name 'pray-server' -LogName 'server' -WorkDir (Join-Path $repo 'server') -ExtraArgs @() -Description 'Pray 서버 (http://127.0.0.1:4710)'
 
 Write-Host "로그: $logDir"
 Write-Host '지금 시작: Start-ScheduledTask pray-host; Start-ScheduledTask pray-server'
