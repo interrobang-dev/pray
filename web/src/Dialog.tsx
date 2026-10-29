@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react'
-import { cancelAnswer, createDialogQueue, type DialogAnswer, type DialogRequest } from './dialogQueue'
+import { cancelAnswer, createDialogQueue, type DialogAnswer, type DialogChoice, type DialogRequest } from './dialogQueue'
 
 /**
  * 브라우저 기본 confirm·alert·prompt 대신 앱 안에 그리는 대화 창 (트레이 앱 창에서 기본 창은 꾸밀 수 없고 "127.0.0.1:4710 says" 가 붙는다).
@@ -24,6 +24,14 @@ export function promptDialog(
   options: { defaultValue?: string; placeholder?: string; confirmLabel?: string } = {},
 ): Promise<string | null> {
   return queue.open('prompt', message, options).then((answer) => (typeof answer === 'string' ? answer : null))
+}
+
+/**
+ * 둘보다 많은 길 중 고르기 (예: Overwrite · Reload). 고른 선택지의 value, 취소(Esc·바깥 클릭·Cancel)면 null.
+ * 처음 포커스는 Cancel 이다 (Enter 한 번에 덮어쓰기 같은 것이 되지 않게)
+ */
+export function choiceDialog(message: string, options: { title?: string; choices: DialogChoice[]; cancelLabel?: string }): Promise<string | null> {
+  return queue.open('choice', message, options).then((answer) => (typeof answer === 'string' ? answer : null))
 }
 
 export function DialogHost() {
@@ -54,7 +62,7 @@ function DialogBox({ request }: { request: DialogRequest }) {
     if (kind === 'prompt') {
       inputRef.current?.focus()
       inputRef.current?.select()
-    } else (isDanger ? cancelRef : confirmRef).current?.focus()
+    } else (isDanger || kind === 'choice' ? cancelRef : confirmRef).current?.focus()
     return () => {
       if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true })
     }
@@ -71,9 +79,12 @@ function DialogBox({ request }: { request: DialogRequest }) {
         cancel()
       } else if (event.key === 'Enter') {
         event.preventDefault()
-        // 포커스가 취소 버튼이면 취소 (isDanger 는 취소 버튼에서 시작해 Enter 한 번에 지워지지 않는다)
-        if (document.activeElement === cancelRef.current) cancel()
-        else accept()
+        // 포커스가 취소 버튼이면 취소 (isDanger 는 취소 버튼에서 시작해 Enter 한 번에 지워지지 않는다). choice 는 포커스한 선택지
+        const active = document.activeElement
+        if (active === cancelRef.current) cancel()
+        else if (kind === 'choice') {
+          if (active instanceof HTMLElement && active.dataset.choice !== undefined) close(active.dataset.choice)
+        } else accept()
       } else if (event.key === 'Tab') trapTab(event)
     }
     window.addEventListener('keydown', onKeyDown, true)
@@ -139,9 +150,17 @@ function DialogBox({ request }: { request: DialogRequest }) {
               {request.cancelLabel ?? 'Cancel'}
             </button>
           )}
-          <button ref={confirmRef} type="button" className={isDanger ? 'danger' : 'primary'} onClick={accept}>
-            {request.confirmLabel ?? 'OK'}
-          </button>
+          {kind === 'choice' ? (
+            request.choices?.map((choice) => (
+              <button key={choice.value} type="button" data-choice={choice.value} className={choice.isDanger ? 'danger' : 'primary'} onClick={() => close(choice.value)}>
+                {choice.label}
+              </button>
+            ))
+          ) : (
+            <button ref={confirmRef} type="button" className={isDanger ? 'danger' : 'primary'} onClick={accept}>
+              {request.confirmLabel ?? 'OK'}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -2336,10 +2336,64 @@ li.group.drop-after::after {
   padding: 0;
   flex-shrink: 0;
 }
-.ws-add-chat {
+.ws-add-chat,
+.ws-edit {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+/* 편집 버튼(연필): 편집 중이면 눌린 모양 */
+.ws-edit {
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  flex-shrink: 0;
+}
+.ws-edit.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+/* 저장: 강조색 채운 버튼, 바뀐 것이 없으면 흐림 */
+.ws-save {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+}
+.ws-save:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+/* 저장 안 한 편집 ● (파일 이름 앞 — 좁으면 이름 뒤가 잘린다). 편집 중에는 크기·지난 시각을 숨겨 자리를 낸다 (저장하기 전까지 맞지도 않는다) */
+.ws-dirty {
+  flex-shrink: 0;
+  margin-right: 4px;
+  color: var(--accent-text);
+}
+.ws.is-editing .ws-meta {
+  display: none;
+}
+/* 편집기 (CodeEditor.tsx · codeMirrorEditor.ts): 코드 보기 자리를 채운다. 색·글꼴은 CodeMirror 테마가 변수로 정한다 */
+.ws-editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-editor > .hint {
+  margin: auto;
+  text-align: center;
+}
+.ws-editor-host {
+  flex: 1;
+  min-height: 0;
+}
+.ws-editor-host .cm-editor {
+  height: 100%;
 }
 .ws-body {
   flex: 1;
@@ -5259,9 +5313,17 @@ li.group.drop-after::after {
   .ws-reload,
   .ws-back,
   .ws-add-chat,
+  .ws-edit,
   .ws-toolbar > .copy-button {
     width: 40px;
     height: 40px;
+  }
+  .ws-save {
+    height: 40px;
+  }
+  .ws:not(.is-viewing) .ws-edit,
+  .ws:not(.is-viewing) .ws-save {
+    display: none;
   }
   .ws-toolbar > .copy-button {
     opacity: 1;

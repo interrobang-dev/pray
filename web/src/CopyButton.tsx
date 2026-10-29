@@ -12,7 +12,8 @@ const TITLES: Record<CopyStatus, string | null> = { idle: null, copied: 'Copied'
  * 복사 버튼 (아이콘만). 성공하면 1.5초 ✓, 실패하면 ✕. 상태는 버튼 안 state 라 대화 전체를 다시 그리지 않는다.
  * 눌러도 말풍선·details·부모 클릭은 일어나지 않는다. 자리는 부모가 CSS 로 정한다 (`.copy-button` 은 부모 안 직속)
  */
-export function CopyButton({ text, label = 'Copy' }: { text: string; label?: 'Copy' | 'Copy code' | 'Copy command' | 'Copy path' }) {
+/** text 가 함수면 누를 때 부른다 (편집기에서 고른 줄처럼 그릴 때 정해 둘 수 없는 글) */
+export function CopyButton({ text, label = 'Copy' }: { text: string | (() => string); label?: 'Copy' | 'Copy code' | 'Copy command' | 'Copy path' }) {
   const [status, setStatus] = useState<CopyStatus>('idle')
   const timerRef = useRef<number | undefined>(undefined)
   const isMountedRef = useRef(true)
@@ -29,7 +30,7 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: 'Co
     // summary 안에서 details 를 여닫지 않게, 말풍선·점프 같은 부모 동작도 막는다
     event.preventDefault()
     event.stopPropagation()
-    const isCopied = await copyText(text)
+    const isCopied = await copyText(typeof text === 'function' ? text() : text)
     if (!isMountedRef.current) return
     setStatus(isCopied ? 'copied' : 'failed')
     window.clearTimeout(timerRef.current)

@@ -218,7 +218,17 @@ export interface WorkspaceFolder {
 
 /** `GET /api/sessions/:id/file`. euc-kr·utf-8-bom 은 4단계(편집)에서 저장 방식이 달라진다 */
 export type WorkspaceFile =
-  | { kind: 'text'; text: string; size: number; mtime: string; hash: string; language: string | null; encoding: 'utf-8' | 'utf-8-bom' | 'euc-kr' }
+  | {
+      kind: 'text'
+      text: string
+      size: number
+      mtime: string
+      hash: string
+      language: string | null
+      encoding: 'utf-8' | 'utf-8-bom' | 'euc-kr'
+      /** 이 접속에서 편집할 수 없는 이유 (다른 PC·.git 안·EUC-KR). 되면 null, 옛 서버 응답은 없다 */
+      editBlockReason?: string | null
+    }
   | { kind: 'binary'; isBinary: true; size: number; mtime: string }
   | { kind: 'too-large'; isTooLarge: true; size: number; mtime: string }
 

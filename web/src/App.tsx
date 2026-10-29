@@ -13,6 +13,7 @@ import { Terminal } from './Terminal'
 import { FilesTab } from './FilesTab'
 import { Chat, type Jump, type JumpTarget } from './Chat'
 import { addToComposerDraft } from './composerDraft'
+import { hasUnsavedEdit, confirmDiscardUnsaved, whenLeavingAllowed } from './unsavedEdits'
 import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
@@ -399,8 +400,10 @@ export function App() {
 
   /** Files 탭 Add to chat: 대화 입력칸(언마운트돼 있다)의 커서 자리에 넣고 대화 탭으로 간다. 입력칸이 그려질 때 포커스한다 */
   function addToChat(snippet: string) {
-    addToComposerDraft(snippet)
-    setTab('chat')
+    whenLeavingAllowed(() => {
+      addToComposerDraft(snippet)
+      setTab('chat')
+    })
   }
 
   function toggleChatSearch() {
@@ -418,6 +421,11 @@ export function App() {
    * 다른 세션을 직접 고르면 점프·돌아가기는 끝난다. 목록·상태 표시줄에서 고르면 사무실 화면도 그 책상으로 옮긴다
    */
   function selectSession(sessionId: string, isOfficeFocused = true) {
+    // Files 탭에 저장 안 한 편집이 있으면 버릴지 먼저 묻는다 (없으면 그대로 동기 — 탭과 선택을 한 번에 바꾼다)
+    if (sessionId !== selectedId && hasUnsavedEdit()) {
+      void confirmDiscardUnsaved().then((isAllowed) => isAllowed && selectSession(sessionId, isOfficeFocused))
+      return
+    }
     if (sessionId !== selectedId) {
       setTab('chat')
       setJump(null)
@@ -437,6 +445,10 @@ export function App() {
 
   /** 오른쪽 패널을 플로우 알림으로 바꾼다. 세션 선택은 닫힌다 (다시 고르면 대화 탭부터, 점프·돌아가기도 끝) */
   function openFlow() {
+    if (hasUnsavedEdit()) {
+      void confirmDiscardUnsaved().then((isAllowed) => isAllowed && openFlow())
+      return
+    }
     setSelectedId(null)
     setIsFlowOpen(true)
   }
@@ -458,6 +470,10 @@ export function App() {
 
   /** 상태 표시줄 Shells 창의 줄을 눌렀다: 그 세션을 대화 탭으로 열고(shell 버튼은 대화 탭에만 있다) shell 모달을 그 shell 을 고른 채 연다 */
   function openShell(sessionId: string, shell: Shell) {
+    if (hasUnsavedEdit()) {
+      void confirmDiscardUnsaved().then((isAllowed) => isAllowed && openShell(sessionId, shell))
+      return
+    }
     selectSession(sessionId)
     setTab('chat')
     setShellRequest({ id: nextShellRequestIdRef.current++, sessionId, shell })
@@ -1466,13 +1482,13 @@ export function App() {
               )}
               <span className="cwd">{selected.cwd}</span>
               <nav className="tabs">
-                <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')} title="Chat" aria-label="Chat">
+                <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => whenLeavingAllowed(() => setTab('chat'))} title="Chat" aria-label="Chat">
                   <ChatTabIcon />
                 </button>
                 {isSelectedLiveWeb && (
                   <button
                     className={shownTab === 'terminal' ? 'on' : ''}
-                    onClick={() => setTab('terminal')}
+                    onClick={() => whenLeavingAllowed(() => setTab('terminal'))}
                     title="Terminal"
                     aria-label="Terminal"
                   >
@@ -1506,7 +1522,7 @@ export function App() {
                 </button>
               )}
               {/* 폰에서는 패널이 화면 전체라 "뒤로" 가 목록으로 돌아가는 버튼이다 */}
-              <button className="close" onClick={() => setSelectedId(null)} title={isNarrow ? 'Back to list' : 'Close'}>
+              <button className="close" onClick={() => whenLeavingAllowed(() => setSelectedId(null))} title={isNarrow ? 'Back to list' : 'Close'}>
                 {isNarrow ? '←' : '×'}
               </button>
             </div>

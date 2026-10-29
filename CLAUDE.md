@@ -16,12 +16,12 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 |---|---|
 | `host.md` | 호스트(pipe·pty·resume·퇴근 기록)·`hq.json`(`hq.ts` 전문)·트레이 앱·스케줄러 스크립트·훅 설치·팀 할 일 저장 규칙 |
 | `team.md` | 팀·파트 판정, 팀장·파트장 지침·MCP 도구, task 상태, 팀원 이름·모델·effort, worktree 파트 |
-| `server-api.md` | 서버 API 경로 전부(`index.ts` 전문), 세션 목록·jsonl 요약·훅 상태·표시 상태 계산, shell·작업 파일·첨부·세션 cwd 파일 읽기(`workspaceFiles.ts`)·변경 보기(`workspaceChanges.ts`), AskUserQuestion, 세션 이름·역할·인물, 폴더 신뢰, 모델·effort 바꾸기 |
+| `server-api.md` | 서버 API 경로 전부(`index.ts` 전문), 세션 목록·jsonl 요약·훅 상태·표시 상태 계산, shell·작업 파일·첨부·세션 cwd 파일 읽기(`workspaceFiles.ts`)·변경 보기(`workspaceChanges.ts`)·저장(`workspaceSave.ts`), AskUserQuestion, 세션 이름·역할·인물, 폴더 신뢰, 모델·effort 바꾸기 |
 | `queue-interrupt.md` | mod(입력 제안·입력칸 알림·곁가지 질문), 보내기의 함정, 대기열·대기 메시지 취소, 작업 중지, 곁가지 질문 흐름(`btw.ts`) |
 | `accounts.md` | 사용량 조회·사용량 창, Claude 계정 보관·전환·로그인·로그아웃 (서버·화면) |
 | `flow.md` | 플로우(flow.team) 알림 서버·화면 |
 | `chat.md` | 대화 메시지(`messages.ts`)와 대화 탭 전체, 마크다운, 작업 파일, Shells, 터미널 탭 |
-| `workspace.md` | 세션 패널 Files 탭(세션 cwd 트리·코드 보기·빠른 찾기·줄 고르기·Add to chat·git/SVN 변경 목록과 diff)과 4단계(편집) 자리. 그 서버 API 는 `server-api.md` |
+| `workspace.md` | 세션 패널 Files 탭(세션 cwd 트리·코드 보기·빠른 찾기·줄 고르기·Add to chat·git/SVN 변경 목록과 diff·이 PC 에서만 되는 편집). 그 서버 API 는 `server-api.md` |
 | `web-app.md` | App.tsx(목록·패널·상태 표시줄·폰·사무실 숨기기), 응답 타입·공통 문구, 테마·스크롤바·로고, 모달·메뉴, 팀 할 일 화면, 역할 칩, 모델 변경 창 |
 | `office.md` | 사무실 캔버스(Office.tsx 전문), 배치·섬 밀기·그룹 크기, 고정 꾸미기, 라운지·라운지 휴식, 퇴근 거리 |
 | `office-art.md` | 목록 아바타·인물 고르기·색 바꾸기, 스프라이트 파이프라인·아틀라스 |
@@ -87,7 +87,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/vcs.ts` — 팀 폴더의 형상관리(git·SVN) 판정·5분 캐시 → office 응답의 `vcs`
 - `server/src/hookState.ts` — 훅 → 훅 상태 · `turnEnd.ts` — waiting·done·my-turn 판정 · `liveSessions.ts` — pid 생존 확인
 - `server/src/shells.ts` — 백그라운드 shell·작업 판정, 출력 끝 N줄 · `scratchpad.ts` — 세션 작업 폴더·첨부 저장
-- `server/src/workspaceFiles.ts` — 세션 cwd 읽기(Files 탭 API): 경로 검증·한 단계 목록·파일 글/바이너리 판정·이름 빠른 찾기 · `workspaceChanges.ts` — 세션 cwd 의 git/SVN 변경 목록·diff(읽기만)
+- `server/src/workspaceFiles.ts` — 세션 cwd 읽기(Files 탭 API): 경로 검증·한 단계 목록·파일 글/바이너리 판정·이름 빠른 찾기 · `workspaceChanges.ts` — 세션 cwd 의 git/SVN 변경 목록·diff(읽기만) · `workspaceSave.ts` — 세션 cwd 글 파일 저장(이 PC 에서만, CSRF·충돌·줄바꿈/BOM)
 - `server/src/askQuestion.ts` — AskUserQuestion 해석·답 · `serialRunner.ts` — 한 번에 하나 실행기 · `hostClient.ts` — pipe 클라이언트
 - `server/src/auth.ts`·`mail.ts`·`config.ts` — 메일 인증·토큰·config.json
 - `server/src/messages.ts` — jsonl → 대화 메시지 (→ `chat.md`) · `flow.ts` — 플로우 (→ `flow.md`)
@@ -100,7 +100,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `web/src/theme.ts` — 테마·스타일 적용 · `appearance.ts`·`palettes.ts`·`AppearanceModal.tsx`·`ChatStyleTab.tsx` — 스타일 설정(팔레트·강조색·글자 크기·대화 모양) 계산·값·창 · `Modal.tsx` — 모달·세그먼트 · `Dialog.tsx`·`dialogQueue.ts` — 브라우저 confirm·alert·prompt 대신 쓰는 앱 안 확인·알림·입력 창 · `sessionMenu.ts` — 세션 줄 ⋯ 메뉴 · `sessionPosition.ts`·`PositionChip.tsx` — 역할·이름
 - `web/src/TeamTodosModal.tsx`·`teamTodos.ts` — 팀 TODO · `ModelSettingModal.tsx`·`modelSetting.ts` — 모델·effort 변경 창
 - `web/src/Chat.tsx`·`chatRows.ts`·`runningTools.ts` — 대화 탭 · `chatWindow.ts`·`chatReuse.ts`·`chatDelta.ts` — 최근 줄만 그리기·다시 받은 대화 재사용·바뀐 뒤쪽만 받기 · `Composer.tsx`·`composerText.ts` — 대화 입력 상자(글·첨부 state) · `BtwCard.tsx` — 곁가지 질문 카드 · `Markdown.tsx` — 마크다운 · `markdownHighlight.ts` — 대화 마크다운 숫자·경로 강조 · `CopyButton.tsx`·`copyText.ts`·`codeText.ts` — 복사 버튼·클립보드·코드 글자 뽑기 · `Files.tsx` — 작업 파일 · `Shells.tsx` — shell 보기 · `Terminal.tsx` — xterm · `chatSearch.ts`·`ChatSearchBar.tsx`·`chatSearchPaint.ts` — 대화 탭 안 검색(찾기·막대·글자 칠하기) (→ `chat.md`)
-- `web/src/FilesTab.tsx`·`CodeView.tsx`·`DiffView.tsx`·`codeLines.ts`·`codeSelection.ts`·`changes.ts`·`lineSelection.ts`·`workspaceTree.ts`·`composerDraft.ts` — 세션 패널 Files 탭(트리·줄 번호 코드 보기·Changes 변경 목록·diff·줄 고르기·Add to chat·빠른 찾기, 탭을 오가도 남는 입력칸 글·커서) (→ `workspace.md`)
+- `web/src/FilesTab.tsx`·`CodeView.tsx`·`DiffView.tsx`·`codeLines.ts`·`codeSelection.ts`·`changes.ts`·`lineSelection.ts`·`workspaceTree.ts`·`composerDraft.ts`·`CodeEditor.tsx`·`codeMirrorEditor.ts`·`unsavedEdits.ts` — 세션 패널 Files 탭(트리·줄 번호 코드 보기·Changes 변경 목록·diff·줄 고르기·Add to chat·빠른 찾기·CodeMirror 편집(동적 import), 탭을 오가도 남는 입력칸 글·커서) (→ `workspace.md`)
 - `web/src/Office.tsx` — PixiJS 사무실 · `officeLayout.ts` — 배치 · `officeFixtures.ts` — 고정 꾸미기 · `lounge.ts` — 라운지 자리 · `dotState.ts` — 인물 상태·라운지 판정 · `offDutyStreet.ts` — 퇴근 거리 배치 (→ `office.md`)
 - `web/src/characterArt.ts`·`dotCharacter.ts`·`recolor.ts`·`CharacterPicker.tsx` — 인물 그림·고르기·색 · `tools/sprites/` — 스프라이트 파이프라인 · `web/public/office/` — 아틀라스 (→ `office-art.md`)
 - `web/src/UsagePanel.tsx`·`Accounts.tsx`·`accountLabels.ts` — 사용량·계정 (→ `accounts.md`) · `FlowPanel.tsx` — 플로우 (→ `flow.md`)

@@ -1,6 +1,13 @@
 /** 앱 안 대화 창(Dialog.tsx)의 대기열. 여러 개를 겹쳐 부르면 부른 차례로 하나씩 보인다 (화면은 맨 앞 것만 그린다) */
 
-export type DialogKind = 'confirm' | 'alert' | 'prompt'
+export type DialogKind = 'confirm' | 'alert' | 'prompt' | 'choice'
+
+/** 고르기 창(choice)의 버튼 하나. 고르면 value 가 답이다 */
+export interface DialogChoice {
+  label: string
+  value: string
+  isDanger?: boolean
+}
 
 export interface DialogOptions {
   title?: string
@@ -9,9 +16,11 @@ export interface DialogOptions {
   isDanger?: boolean
   defaultValue?: string
   placeholder?: string
+  /** choice 창의 버튼 (취소 오른쪽에 차례로) */
+  choices?: DialogChoice[]
 }
 
-/** 닫을 때의 답: confirm 은 확인 여부, prompt 는 입력한 글(취소면 null), alert 는 무시 */
+/** 닫을 때의 답: confirm 은 확인 여부, prompt 는 입력한 글·choice 는 고른 value(취소면 null), alert 는 무시 */
 export type DialogAnswer = boolean | string | null
 
 export interface DialogRequest extends DialogOptions {
@@ -61,7 +70,7 @@ export function createDialogQueue(): DialogQueue {
   }
 }
 
-/** 취소(Esc·바깥 클릭·Cancel)의 답: confirm false, prompt null */
+/** 취소(Esc·바깥 클릭·Cancel)의 답: confirm false, prompt·choice null */
 export function cancelAnswer(kind: DialogKind): DialogAnswer {
   return kind === 'confirm' ? false : null
 }

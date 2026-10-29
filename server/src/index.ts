@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, join, relative } from 'node:path'
 import compression from 'compression'
 import express from 'express'
 import type { Request, Response } from 'express'
@@ -75,6 +75,7 @@ import {
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
 import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './workspaceChanges.js'
+import { editBlockReason, isLocalPageRequest, isVcsMetaPath, saveTextFile } from './workspaceSave.js'
 import { HostClient } from './hostClient.js'
 import { makeVcsCache } from './vcs.js'
 import { attachInstructions, queuedPrompts, withoutQueued, type ChatMessage } from './messages.js'
@@ -179,7 +180,14 @@ app.use(
 const jsonBody = express.json({ limit: '1mb' })
 /** 첨부 API 경로 (Express 라우팅처럼 대소문자·끝 슬래시 무시). 본문이 파일 바이트 그대로라 .json 파일이 JSON 파서에 먼저 읽히면 안 된다 */
 const ATTACHMENT_PATH = /^\/api\/sessions\/[^/]+\/attachments\/?$/i
-app.use((req, res, next) => (req.method === 'POST' && ATTACHMENT_PATH.test(req.path) ? next() : jsonBody(req, res, next)))
+/** 작업 폴더 파일 저장(PUT) 경로. 1MB 파일의 글이 JSON 이스케이프로 1MB 를 조금 넘을 수 있어 이 경로만 상한이 크다 (파일 1MB 상한은 저장할 때 따로 본다) */
+const WORKSPACE_FILE_PATH = /^\/api\/sessions\/[^/]+\/file\/?$/i
+const largeJsonBody = express.json({ limit: '4mb' })
+app.use((req, res, next) => {
+  if (req.method === 'POST' && ATTACHMENT_PATH.test(req.path)) return next()
+  if (req.method === 'PUT' && WORKSPACE_FILE_PATH.test(req.path)) return largeJsonBody(req, res, next)
+  return jsonBody(req, res, next)
+})
 
 // 로컬(127.0.0.1)은 무인증. 그 외는 로그인 쿠키 필요. 훅·인증 API 는 예외
 app.use('/api', (req, res, next) => {
@@ -556,7 +564,8 @@ app.get('/api/sessions/:id/tree', async (req, res) => {
 })
 
 /**
- * 작업 폴더 파일 하나 (?path=) → 글이면 { kind: 'text', text, size, mtime, hash(sha1), language, encoding },
+ * 작업 폴더 파일 하나 (?path=) → 글이면 { kind: 'text', text, size, mtime, hash(sha1), language, encoding, editBlockReason }
+ * (editBlockReason = 이 접속에서 편집할 수 없는 이유, 되면 null — 다른 PC·.git 안·EUC-KR),
  * 1MB 넘으면 { kind: 'too-large', isTooLarge, size, mtime }, NUL 바이트가 있으면 { kind: 'binary', isBinary, size, mtime }
  */
 app.get('/api/sessions/:id/file', async (req, res) => {
@@ -568,7 +577,63 @@ app.get('/api/sessions/:id/file', async (req, res) => {
     return
   }
   res.set('Cache-Control', 'no-store')
-  res.json(file)
+  if (file.kind !== 'text') {
+    res.json(file)
+    return
+  }
+  const isLocal = isLoopback(req.socket.remoteAddress)
+  res.json({ ...file, editBlockReason: editBlockReason({ isLocal, path: relative(resolved.root, resolved.target), encoding: file.encoding }) })
+})
+
+/**
+ * 작업 폴더의 기존 글 파일 덮어쓰기 (Files 탭 편집, ?path= · 본문 { text, hash }). 규칙은 workspaceSave.ts.
+ * **이 PC(소켓 주소가 loopback)에서만** — X-Forwarded-For 같은 머리는 보지 않는다. CSRF: Origin(없으면 Referer)·Host 가 loopback 주소이고
+ * JSON 일 때만 (다른 사이트의 form·no-cors 요청은 JSON 을 못 보내고, fetch 로 보내면 CORS 사전 요청에서 막힌다).
+ * hash = 열었을 때의 sha1. 지금 파일과 다르면 409 { message, current: { hash, mtime, size } }. 성공 { hash, mtime, size }
+ */
+app.put('/api/sessions/:id/file', async (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress)) {
+    res.status(403).json({ message: 'Editing works only on this PC (open it at 127.0.0.1)' })
+    return
+  }
+  if (!isLocalPageRequest({ origin: req.get('origin'), referer: req.get('referer'), host: req.get('host') })) {
+    res.status(403).json({ message: 'Save requests must come from this app on this PC' })
+    return
+  }
+  if (!req.is('application/json')) {
+    res.status(415).json({ message: 'Expected a JSON body' })
+    return
+  }
+  const { text, hash } = (req.body ?? {}) as { text?: unknown; hash?: unknown }
+  if (typeof text !== 'string' || typeof hash !== 'string' || !/^[0-9a-f]{40}$/.test(hash)) {
+    res.status(400).json({ message: 'Invalid text or hash' })
+    return
+  }
+  const resolved = await resolveWorkspaceRequest(req, res, false)
+  if (!resolved) return
+  if (isVcsMetaPath(String(req.query.path)) || isVcsMetaPath(relative(resolved.root, resolved.target))) {
+    res.status(403).json({ message: "Files inside .git, .svn or .hg can't be edited" })
+    return
+  }
+  if (!(await stat(resolved.target).catch(() => null))?.isFile()) {
+    res.status(404).json({ message: 'Not a file' })
+    return
+  }
+  try {
+    const result = await saveTextFile(resolved.target, text, hash)
+    if (result.kind === 'conflict') {
+      res.status(409).json({ message: 'The file changed on disk since you opened it', current: { hash: result.hash, mtime: result.mtime, size: result.size } })
+    } else if (result.kind === 'rejected') {
+      res.status(result.status).json({ message: result.message })
+    } else {
+      res.json({ hash: result.hash, mtime: result.mtime, size: result.size })
+    }
+  } catch (error) {
+    // 읽기 전용(EPERM)·다른 프로그램이 잠금(EBUSY) 등. 원래 바이트로 되돌려 쓰기를 시도한 뒤다
+    const code = (error as NodeJS.ErrnoException).code ?? 'unknown error'
+    console.error('작업 폴더 파일 저장 실패', resolved.target, error)
+    res.status(500).json({ message: `Couldn't save the file (${code})` })
+  }
 })
 
 /**

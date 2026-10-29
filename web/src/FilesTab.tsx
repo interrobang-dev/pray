@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type Ref } from 'react'
 import { diffLineRange, diffRowsOf, STATUS_LABELS, STATUS_LETTERS } from './changes'
+import { CodeEditor, type CodeEditorHandle } from './CodeEditor'
 import { CodeView } from './CodeView'
 import { chatLocationText, clampLineRange, lineCountOf, locationText, type LineRange } from './codeSelection'
 import { CopyButton } from './CopyButton'
+import { alertDialog, choiceDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import { formatSize } from './Files'
 import {
@@ -16,6 +18,7 @@ import {
   type WorkspaceFindResult,
   type WorkspaceFolder,
 } from './types'
+import { setUnsavedEdit, whenLeavingAllowed } from './unsavedEdits'
 import { ancestorFolders, nameOf, treeRows, type FolderState } from './workspaceTree'
 
 /** 서버 /file/raw 가 주는 그림 (SVG 는 글자로 본다) */
@@ -80,7 +83,8 @@ interface Props {
 }
 
 /**
- * 세션 패널의 Files 탭: 세션 cwd 를 IDE 처럼 본다 (읽기 전용). 위 막대(빠른 찾기·경로·Add to chat·Copy path·↻), 왼쪽 트리(폴더를 펼칠 때 받는다), 오른쪽 파일 보기.
+ * 세션 패널의 Files 탭: 세션 cwd 를 IDE 처럼 본다. 위 막대(빠른 찾기·경로·편집·저장·Add to chat·Copy path·↻), 왼쪽 트리(폴더를 펼칠 때 받는다)·변경 목록, 오른쪽 파일 보기·편집기·diff.
+ * 편집은 연필 버튼으로 들어가고 이 PC(127.0.0.1) 접속에서만 된다 (서버가 파일마다 editBlockReason 으로 알려 준다).
  * 폰은 트리 → 파일을 누르면 보기 → ← 로 트리. 세션마다 App 이 key 로 새로 만든다
  */
 export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: Props) {
@@ -97,6 +101,16 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   /** 변경 목록 머리줄 ↻ (목록과 고른 diff 만) */
   const [changesReloadId, setChangesReloadId] = useState(0)
   const [fileState, setFileState] = useState<FileState | null>(null)
+  /** 편집 모드인 파일. 고른 파일이 이것이고 Files 쪽이고 글 파일일 때만 편집기가 보인다 (다른 파일을 열면 null) */
+  const [editingPath, setEditingPath] = useState<string | null>(null)
+  const editingPathRef = useRef(editingPath)
+  editingPathRef.current = editingPath
+  /** 편집기 글이 저장된 글과 다르다 (●) */
+  const [isDirty, setIsDirty] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const isSavingRef = useRef(false)
+  const editorRef = useRef<CodeEditorHandle>(null)
+  const wsRef = useRef<HTMLDivElement>(null)
   /** 폰에서 파일 보기를 띄웠는지 (데스크톱은 늘 둘 다 보인다) */
   const [isViewing, setIsViewing] = useState(false)
   const [reloadId, setReloadId] = useState(0)
@@ -138,6 +152,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
     fetchJson<WorkspaceFile>(apiUrl(sessionId, 'file', { path: selectedPath }), controller.signal).then(
       (file) => {
         setFileState({ path: selectedPath, status: 'ok', file })
+        // 편집 중인 파일을 다시 받았으면(↻·충돌 뒤 Reload — 저장 안 한 편집은 버리기로 한 뒤다) 편집기 글도 바꾼다
+        if (file.kind === 'text' && editingPathRef.current === selectedPath) editorRef.current?.setText(file.text)
         // 다시 읽은 파일이 줄었으면 고른 범위를 자른다 (글이 아니게 됐으면 뺀다)
         setLineRanges((prev) => {
           const range = prev[selectedPath]
@@ -259,8 +275,14 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   }
 
   function openFile(path: string) {
+    if (path !== selectedPath) setEditingPath(null)
     setSelectedPath(path)
     setIsViewing(true)
+  }
+
+  /** 다른 파일·Changes·↻ 로 편집기 글이 바뀌거나 사라지기 전에: 저장 안 한 편집이 있으면 버릴지 묻고 버리기로 했을 때만 */
+  function guardEdit(run: () => void) {
+    whenLeavingAllowed(run)
   }
 
   /** 빠른 찾기로 고른 파일: 조상 폴더를 펼치고(안 받은 것은 받고) 고른 뒤 트리에서 보이게 한다 */
@@ -287,14 +309,122 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   }
 
   const isChanges = sideMode === 'changes'
-  /** 위 막대가 가리키는 파일과 공유할 줄 (Changes 면 고른 diff 줄의 새 파일 줄 번호) */
+  const textFile = !isChanges && shownFile?.status === 'ok' && shownFile.file.kind === 'text' ? shownFile.file : null
+  const isEditing = textFile !== null && editingPath !== null && editingPath === selectedPath
+  /** 편집을 막는 이유 (서버가 파일마다 준다. 필드가 없는 옛 서버는 저장 API 도 없다) */
+  const editBlock = textFile ? (textFile.editBlockReason === undefined ? 'The server needs a restart to support editing' : textFile.editBlockReason) : null
+  /** 위 막대가 가리키는 파일과 공유할 줄 (Changes 면 고른 diff 줄의 새 파일 줄 번호, 편집 중이면 누를 때 편집기에서 고른 줄) */
   const shownPath = isChanges ? selectedChange : selectedPath
-  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : lineRange
+  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing ? null : lineRange
+  const locationRange = () => (isEditing ? (editorRef.current?.selectionLines() ?? null) : shownRange)
   const entry = selectedPath ? entryOf(folders, selectedPath) : null
   const meta = isChanges ? null : shownFile?.status === 'ok' ? shownFile.file : entry
 
+  // 편집을 그만두면 ● 도 끈다. 저장 안 한 편집은 App 이 탭·세션을 바꾸기 전에 묻도록 적어 둔다 (탭이 언마운트되면 편집기 글이 사라진다)
+  useEffect(() => {
+    if (!isEditing) setIsDirty(false)
+  }, [isEditing])
+  useEffect(() => {
+    setUnsavedEdit(isEditing && isDirty ? selectedPath : null)
+  }, [isEditing, isDirty, selectedPath])
+  useEffect(() => () => setUnsavedEdit(null), [])
+  // 창 닫기·새로고침: 브라우저 기본 확인 창 (beforeunload 는 앱 안 창을 띄울 수 없다)
+  useEffect(() => {
+    if (!isEditing || !isDirty) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [isEditing, isDirty])
+
+  /**
+   * 편집기 글 저장 (PUT file). 열었을 때의 hash 를 실어 보내고, 디스크 파일이 바뀌었으면(409) Overwrite·Reload·Cancel 을 고른다.
+   * 저장하면 파일 정보(hash·mtime·크기)를 바꾸고 변경 목록을 다시 받는다
+   */
+  async function save() {
+    const editor = editorRef.current
+    const text = editor?.getText() ?? null
+    if (!isEditing || !isDirty || !selectedPath || !textFile || !editor || text === null || isSavingRef.current) return
+    const path = selectedPath
+    isSavingRef.current = true
+    setIsSaving(true)
+    try {
+      let hash = textFile.hash
+      for (;;) {
+        let response: Response
+        try {
+          response = await fetch(apiUrl(sessionId, 'file', { path }), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, hash }),
+          })
+        } catch {
+          await alertDialog("Couldn't save the file: network error", { title: 'Save failed' })
+          return
+        }
+        const body = (await response.json().catch(() => null)) as { message?: string; hash?: string; mtime?: string; size?: number; current?: { hash?: string } } | null
+        if (response.ok && body?.hash && body.mtime && typeof body.size === 'number') {
+          setFileState({ path, status: 'ok', file: { ...textFile, text, hash: body.hash, mtime: body.mtime, size: body.size } })
+          editor.markSaved(text)
+          setChangesReloadId((id) => id + 1)
+          return
+        }
+        if (response.status === 409 && body?.current?.hash) {
+          const choice = await choiceDialog(`${nameOf(path)} changed on disk after you opened it. Overwrite it with your version, or reload it and lose your changes?`, {
+            title: 'File changed on disk',
+            choices: [
+              { label: 'Reload', value: 'reload' },
+              { label: 'Overwrite', value: 'overwrite', isDanger: true },
+            ],
+          })
+          if (choice === 'overwrite') {
+            hash = body.current.hash
+            continue
+          }
+          if (choice === 'reload') {
+            setUnsavedEdit(null)
+            setReloadId((id) => id + 1)
+          }
+          return
+        }
+        await alertDialog(`Couldn't save the file: ${body?.message ?? `HTTP ${response.status}`}`, { title: 'Save failed' })
+        return
+      }
+    } finally {
+      isSavingRef.current = false
+      setIsSaving(false)
+    }
+  }
+  const saveRef = useRef(save)
+  saveRef.current = save
+
+  // Ctrl+S (맥 Cmd+S): 편집 중이고 포커스가 Files 탭 안(또는 아무 데도 없음)일 때 브라우저 저장 창 대신 저장. 편집기 안은 편집기 키맵이 먼저 받는다
+  useEffect(() => {
+    if (!isEditing) return
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      const isSKey = event.code === 'KeyS' || event.key.toLowerCase() === 's'
+      if (!isSKey || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.defaultPrevented) return
+      const active = document.activeElement
+      if (document.querySelector('.modal-overlay') || !(active === document.body || (active && wsRef.current?.contains(active)))) return
+      event.preventDefault()
+      void saveRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isEditing])
+
+  function toggleEdit() {
+    if (!isEditing) {
+      setEditingPath(selectedPath)
+      return
+    }
+    guardEdit(() => setEditingPath(null))
+  }
+
   return (
-    <div className={`ws${isViewing ? ' is-viewing' : ''}`}>
+    <div className={`ws${isViewing ? ' is-viewing' : ''}${isEditing ? ' is-editing' : ''}`} ref={wsRef}>
       <div className="ws-toolbar">
         <button
           type="button"
@@ -305,7 +435,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
         >
           ←
         </button>
-        <QuickFind sessionId={sessionId} focusId={findFocusId} onOpen={(path) => openInFiles(path)} />
+        <QuickFind sessionId={sessionId} focusId={findFocusId} onOpen={(path) => (path === selectedPath && !isChanges ? openInFiles(path) : guardEdit(() => openInFiles(path)))} />
         {/* 좁으면 폴더 부분만 말줄임되고 파일 이름은 남는다 */}
         <nav className="ws-path" aria-label="Path" title={shownPath ? [cwd.replace(/[\\/]+$/, ''), ...shownPath.split('/')].join('\\') : cwd}>
           <span className="ws-path-dir">{[rootName, ...(shownPath?.split('/').slice(0, -1) ?? [])].join(' / ')}</span>
@@ -314,6 +444,11 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
               <span className="ws-path-sep" aria-hidden="true">
                 /
               </span>
+              {isEditing && isDirty && (
+                <span className="ws-dirty" title="Unsaved changes" aria-label="Unsaved changes">
+                  ●
+                </span>
+              )}
               <b>{nameOf(shownPath)}</b>
               {shownRange && <span className="ws-path-lines">{locationText('', shownRange)}</span>}
             </>
@@ -325,22 +460,46 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
             {shownFile?.status === 'ok' && shownFile.file.kind === 'text' && shownFile.file.encoding === 'euc-kr' && ' · EUC-KR'}
           </span>
         )}
+        {isEditing && (
+          <button type="button" className="ws-save" disabled={!isDirty || isSaving} onClick={() => void save()} title="Save (Ctrl+S)">
+            {isSaving ? 'Saving…' : 'Save'}
+          </button>
+        )}
+        {textFile && (
+          <button
+            type="button"
+            className={`ws-edit${isEditing ? ' on' : ''}`}
+            disabled={!isEditing && editBlock !== null}
+            aria-pressed={isEditing}
+            onClick={toggleEdit}
+            title={isEditing ? 'Stop editing' : editBlock ? `Can't edit: ${editBlock}` : 'Edit'}
+            aria-label={isEditing ? 'Stop editing' : 'Edit'}
+          >
+            <PencilIcon />
+          </button>
+        )}
         {shownPath && (
           <>
             <button
               type="button"
               className="ws-add-chat"
               disabled={addToChatBlockReason !== null}
-              onClick={() => onAddToChat(chatLocationText(shownPath, shownRange))}
-              title={addToChatBlockReason ? `Can't add to chat: ${addToChatBlockReason}` : `Add to chat: ${locationText(shownPath, shownRange)}`}
+              onClick={() => onAddToChat(chatLocationText(shownPath, locationRange()))}
+              title={
+                addToChatBlockReason
+                  ? `Can't add to chat: ${addToChatBlockReason}`
+                  : isEditing
+                    ? `Add to chat: ${shownPath} (with the selected lines)`
+                    : `Add to chat: ${locationText(shownPath, shownRange)}`
+              }
               aria-label="Add to chat"
             >
               <AddToChatIcon />
             </button>
-            <CopyButton text={locationText(shownPath, shownRange)} label="Copy path" />
+            <CopyButton text={() => locationText(shownPath, locationRange())} label="Copy path" />
           </>
         )}
-        <button type="button" className="ws-reload" onClick={() => setReloadId((id) => id + 1)} title="Reload" aria-label="Reload">
+        <button type="button" className="ws-reload" onClick={() => guardEdit(() => setReloadId((id) => id + 1))} title="Reload" aria-label="Reload">
           ↻
         </button>
       </div>
@@ -351,7 +510,19 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
             <button type="button" role="tab" aria-selected={!isChanges} className={isChanges ? '' : 'on'} onClick={() => setSideMode('files')}>
               Files
             </button>
-            <button type="button" role="tab" aria-selected={isChanges} className={isChanges ? 'on' : ''} onClick={() => setSideMode('changes')}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isChanges}
+              className={isChanges ? 'on' : ''}
+              onClick={() =>
+                !isChanges &&
+                guardEdit(() => {
+                  setEditingPath(null)
+                  setSideMode('changes')
+                })
+              }
+            >
               Changes
               {changesState.status === 'ok' && changesState.changes.kind !== 'none' && changesState.changes.files.length > 0 && (
                 <span className="ws-count">{changesState.changes.files.length.toLocaleString('en')}{changesState.changes.isTruncated ? '+' : ''}</span>
@@ -374,7 +545,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
                   className={`ws-row${row.path === selectedPath ? ' selected' : ''}`}
                   style={{ '--depth': row.depth } as CSSProperties}
                   title={row.path}
-                  onClick={() => (row.entry.kind === 'dir' ? toggleFolder(row.path) : openFile(row.path))}
+                  onClick={() => (row.entry.kind === 'dir' ? toggleFolder(row.path) : row.path === selectedPath ? openFile(row.path) : guardEdit(() => openFile(row.path)))}
                 >
                   <span className="ws-chevron" aria-hidden="true">
                     {row.entry.kind === 'dir' ? (row.isExpanded ? '▾' : '▸') : ''}
@@ -413,6 +584,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
               reloadId={reloadId}
               lineRange={lineRange}
               onLineRangeChange={changeLineRange}
+              editor={isEditing ? { ref: editorRef, onDirtyChange: setIsDirty, onSave: () => void saveRef.current() } : null}
             />
           )}
         </section>
@@ -514,6 +686,16 @@ function ChangeView({
   return <DiffView key={path} diff={state.diff} rows={rows} selection={range} onSelectionChange={onRangeChange} onOpenInFiles={() => onOpenInFiles(path)} />
 }
 
+/** 연필 (Edit) */
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 /** 말풍선 + "+" (Add to chat) */
 function AddToChatIcon() {
   return (
@@ -530,10 +712,7 @@ function AddToChatIcon() {
   )
 }
 
-/**
- * 오른쪽 파일 보기. 글 파일은 CodeView(줄 고르기 포함). 4단계(편집)는 글 파일일 때 CodeView 자리를 편집기로 바꾼다
- * (그때 file.hash·encoding 을 저장 요청에 쓴다)
- */
+/** 오른쪽 파일 보기. 글 파일은 CodeView(줄 고르기 포함), 편집 모드면 그 자리에 CodeEditor */
 function FileView({
   sessionId,
   path,
@@ -541,6 +720,7 @@ function FileView({
   reloadId,
   lineRange,
   onLineRangeChange,
+  editor,
 }: {
   sessionId: string
   path: string | null
@@ -548,6 +728,8 @@ function FileView({
   reloadId: number
   lineRange: LineRange | null
   onLineRangeChange: (range: LineRange | null) => void
+  /** 편집 모드면 편집기에 줄 것 */
+  editor: { ref: Ref<CodeEditorHandle>; onDirtyChange: (isDirty: boolean) => void; onSave: () => void } | null
 }) {
   if (!path) return <p className="hint">Select a file to view it</p>
   if (isImagePath(path)) {
@@ -562,6 +744,7 @@ function FileView({
   const { file } = state
   if (file.kind === 'binary') return <p className="hint">Binary file · {formatSize(file.size)} · No preview</p>
   if (file.kind === 'too-large') return <p className="hint">Too large to show · {formatSize(file.size)} (limit 1 MB)</p>
+  if (editor) return <CodeEditor key={path} ref={editor.ref} text={file.text} path={path} onDirtyChange={editor.onDirtyChange} onSave={editor.onSave} />
   return <CodeView key={path} text={file.text} language={file.language} selection={lineRange} onSelectionChange={onLineRangeChange} />
 }
 

@@ -53,5 +53,6 @@ describe('cancelAnswer', () => {
     expect(cancelAnswer('confirm')).toBe(false)
     expect(cancelAnswer('prompt')).toBeNull()
     expect(cancelAnswer('alert')).toBeNull()
+    expect(cancelAnswer('choice')).toBeNull()
   })
 })
