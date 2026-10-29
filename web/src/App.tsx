@@ -12,6 +12,7 @@ import {
 import { Terminal } from './Terminal'
 import { FilesTab } from './FilesTab'
 import { Chat, type Jump, type JumpTarget } from './Chat'
+import { addToComposerDraft } from './composerDraft'
 import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
@@ -395,6 +396,12 @@ export function App() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isSelectedLiveWeb, shownTab])
+
+  /** Files 탭 Add to chat: 대화 입력칸(언마운트돼 있다)의 커서 자리에 넣고 대화 탭으로 간다. 입력칸이 그려질 때 포커스한다 */
+  function addToChat(snippet: string) {
+    addToComposerDraft(snippet)
+    setTab('chat')
+  }
 
   function toggleChatSearch() {
     if (isChatSearchOpen) {
@@ -1507,7 +1514,21 @@ export function App() {
             {shownTab === 'terminal' ? (
               <Terminal sessionId={selected.id} />
             ) : shownTab === 'files' ? (
-              <FilesTab key={selected.id} sessionId={selected.id} cwd={selected.cwd} />
+              <FilesTab
+                key={selected.id}
+                sessionId={selected.id}
+                cwd={selected.cwd}
+                onAddToChat={addToChat}
+                addToChatBlockReason={
+                  isSelectedLiveWeb
+                    ? null
+                    : selected.kind !== 'web'
+                      ? 'started from a terminal or IDE, so this session is view-only'
+                      : attendanceOf(selected) === 'off'
+                        ? 'this session is off duty'
+                        : 'this session is on a break'
+                }
+              />
             ) : (
               <Chat
                 sessionId={selected.id}

@@ -2289,9 +2289,11 @@ li.group.drop-after::after {
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
 }
+/* 바탕 폭은 글 폭이라 좁으면 찾기 칸과 같이 준다 (0 이면 버튼이 늘어 자리가 없을 때 폭 0 이 되고 파일 이름이 옆 글자 위로 넘쳤다) */
 .ws-path {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
   display: flex;
   white-space: nowrap;
   color: var(--muted);
@@ -2309,6 +2311,11 @@ li.group.drop-after::after {
 .ws-path-sep {
   margin: 0 4px;
 }
+/* 고른 줄 ":12-20" (파일 이름 바로 뒤) */
+.ws-path-lines {
+  flex-shrink: 0;
+  color: var(--accent-text);
+}
 .ws-meta {
   flex-shrink: 0;
   color: var(--muted);
@@ -2316,11 +2323,18 @@ li.group.drop-after::after {
   white-space: nowrap;
 }
 .ws-reload,
-.ws-back {
+.ws-back,
+.ws-add-chat,
+.ws-toolbar > .copy-button {
   width: 32px;
   height: 30px;
   padding: 0;
   flex-shrink: 0;
+}
+.ws-add-chat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .ws-body {
   flex: 1;
@@ -2438,6 +2452,15 @@ li.group.drop-after::after {
   color: var(--muted);
   text-align: right;
   user-select: none;
+  cursor: pointer;
+}
+/* 고른 줄 (CodeView 가 class 를 붙인다). 번호 칸도 같은 바탕 — sticky 라 불투명해야 한다 */
+.code-line.is-selected,
+.code-line.is-selected::before {
+  background: var(--accent-soft);
+}
+.code-line.is-selected::before {
+  color: var(--accent-text);
 }
 /* 작업 중 표시기 (Chat.tsx). claude 쪽(왼쪽)의 작은 말풍선에 점 세 개가 차례로 출렁인다. 옆에 [중지] */
 .typing-row {
@@ -4958,7 +4981,9 @@ li.group.drop-after::after {
     min-height: 40px;
   }
   .ws:not(.is-viewing) .ws-path,
-  .ws:not(.is-viewing) .ws-meta,
+  .ws-meta,
+  .ws:not(.is-viewing) .ws-add-chat,
+  .ws:not(.is-viewing) .ws-toolbar > .copy-button,
   .ws.is-viewing .ws-find {
     display: none;
   }
@@ -4968,9 +4993,14 @@ li.group.drop-after::after {
     justify-content: center;
   }
   .ws-reload,
-  .ws-back {
+  .ws-back,
+  .ws-add-chat,
+  .ws-toolbar > .copy-button {
     width: 40px;
     height: 40px;
+  }
+  .ws-toolbar > .copy-button {
+    opacity: 1;
   }
   .ws-body {
     grid-template-columns: minmax(0, 1fr);

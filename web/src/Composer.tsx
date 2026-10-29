@@ -1,5 +1,6 @@
 import { useEffect, useImperativeHandle, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent, type Ref } from 'react'
 import { flushSync } from 'react-dom'
+import { composerDraft } from './composerDraft'
 import { composerRows, parseBtwCommand, withAttachmentPaths } from './composerText'
 import { formatSize } from './Files'
 
@@ -75,10 +76,10 @@ interface Props {
 
 /**
  * 대화 입력 상자: 여러 줄 입력칸·첨부 칩·보내기. 글자 state 를 여기 두어 칠 때마다 대화(Chat)가 다시 그려지지 않는다.
- * 세션을 바꿔도 쓰던 글은 남고 첨부 칩은 비운다
+ * 세션을 바꿔도 쓰던 글은 남고 첨부 칩은 비운다. 글·커서는 composerDraft 에도 적어 Files·터미널 탭을 다녀와도(언마운트) 되살린다
  */
 export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw }: Props) {
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState(() => composerDraft.text)
   /** 입력 상자의 첨부 칩. 세션을 바꾸면 비운다 */
   const [attachments, setAttachments] = useState<Attachment[]>([])
   /** 올리는 중인 첨부가 있으면 보내지 않는다 (경로가 빠진 채 가지 않게) */
@@ -92,7 +93,30 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
   /** 글을 바꾼다. 비었는지가 바뀔 때만 Chat 에 알린다 (같은 렌더에 묶인다) */
   function changeDraft(next: string) {
     setDraft(next)
+    composerDraft.text = next
     if ((next === '') !== (draft === '')) onEmptyChange(next === '')
+  }
+
+  // 되살린 글이 있으면 Chat 에 알린다 (Chat 도 같이 새로 마운트돼 빈 것으로 시작한다)
+  useEffect(() => {
+    if (composerDraft.text !== '') onEmptyChange(false)
+  }, []) // 마운트 때 한 번
+
+  // 입력칸이 그려질 때 되살린 커서를 놓고, Add to chat 이 넣은 뒤면 포커스한다 (터치 기기도 — 사람이 누른 버튼이다)
+  useEffect(() => {
+    const textarea = composerRef.current
+    if (!textarea) return
+    const { selection } = composerDraft
+    if (selection) textarea.setSelectionRange(selection.start, selection.end)
+    if (composerDraft.isFocusPending) {
+      composerDraft.isFocusPending = false
+      textarea.focus()
+    }
+  }, [isWritable])
+
+  /** 커서·선택을 적어 둔다 (언마운트 뒤에도 Add to chat 이 그 자리에 넣는다) */
+  function saveSelection(textarea: HTMLTextAreaElement) {
+    composerDraft.selection = { start: textarea.selectionStart, end: textarea.selectionEnd }
   }
 
   // 앞 세션으로 올리던 것은 그대로 끝나고(그 세션 scratchpad 에 남는다) 결과는 칩이 없어 버려진다
@@ -106,6 +130,7 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
     const textarea = composerRef.current
     textarea?.focus()
     textarea?.setSelectionRange(text.length, text.length)
+    composerDraft.selection = { start: text.length, end: text.length }
   }
   useImperativeHandle(ref, () => ({ fill, focus: () => composerRef.current?.focus() }))
 
@@ -246,7 +271,12 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
         <textarea
           ref={composerRef}
           value={draft}
-          onChange={(e) => changeDraft(e.target.value)}
+          onChange={(e) => {
+            changeDraft(e.target.value)
+            saveSelection(e.target)
+          }}
+          onSelect={(e) => saveSelection(e.currentTarget)}
+          onBlur={(e) => saveSelection(e.currentTarget)}
           onKeyDown={onComposerKeyDown}
           onPaste={onComposerPaste}
           placeholder={suggestion ? '' : isAsking ? 'Answer the question above first' : 'Type an instruction (Shift+Enter for a new line)'}

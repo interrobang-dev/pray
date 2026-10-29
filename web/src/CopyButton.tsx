@@ -12,7 +12,7 @@ const TITLES: Record<CopyStatus, string | null> = { idle: null, copied: 'Copied'
  * 복사 버튼 (아이콘만). 성공하면 1.5초 ✓, 실패하면 ✕. 상태는 버튼 안 state 라 대화 전체를 다시 그리지 않는다.
  * 눌러도 말풍선·details·부모 클릭은 일어나지 않는다. 자리는 부모가 CSS 로 정한다 (`.copy-button` 은 부모 안 직속)
  */
-export function CopyButton({ text, label = 'Copy' }: { text: string; label?: 'Copy' | 'Copy code' | 'Copy command' }) {
+export function CopyButton({ text, label = 'Copy' }: { text: string; label?: 'Copy' | 'Copy code' | 'Copy command' | 'Copy path' }) {
   const [status, setStatus] = useState<CopyStatus>('idle')
   const timerRef = useRef<number | undefined>(undefined)
   const isMountedRef = useRef(true)

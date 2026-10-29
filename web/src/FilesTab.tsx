@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { CodeView } from './CodeView'
+import { chatLocationText, clampLineRange, lineCountOf, locationText, type LineRange } from './codeSelection'
+import { CopyButton } from './CopyButton'
 import { formatSize } from './Files'
 import { formatAgo, formatDateTime, type WorkspaceEntry, type WorkspaceFile, type WorkspaceFindResult, type WorkspaceFolder } from './types'
 import { ancestorFolders, nameOf, treeRows, type FolderState } from './workspaceTree'
@@ -40,18 +42,30 @@ interface SessionView {
   folders: Record<string, FolderState>
   expanded: Set<string>
   selectedPath: string | null
+  /** 파일별로 고른 줄 범위 */
+  lineRanges: Record<string, LineRange>
 }
 const sessionViews = new Map<string, SessionView>()
 
+interface Props {
+  sessionId: string
+  cwd: string
+  /** 위치 글을 이 세션 대화 입력칸에 넣고 대화 탭으로 간다 */
+  onAddToChat: (snippet: string) => void
+  /** 입력칸이 없는 세션(외부·휴식·퇴근)이면 그 이유. 있으면 Add to chat 을 막고 title 로 보인다 */
+  addToChatBlockReason: string | null
+}
+
 /**
- * 세션 패널의 Files 탭: 세션 cwd 를 IDE 처럼 본다 (읽기 전용). 위 막대(빠른 찾기·경로·↻), 왼쪽 트리(폴더를 펼칠 때 받는다), 오른쪽 파일 보기.
+ * 세션 패널의 Files 탭: 세션 cwd 를 IDE 처럼 본다 (읽기 전용). 위 막대(빠른 찾기·경로·Add to chat·Copy path·↻), 왼쪽 트리(폴더를 펼칠 때 받는다), 오른쪽 파일 보기.
  * 폰은 트리 → 파일을 누르면 보기 → ← 로 트리. 세션마다 App 이 key 로 새로 만든다
  */
-export function FilesTab({ sessionId, cwd }: { sessionId: string; cwd: string }) {
+export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: Props) {
   const saved = sessionViews.get(sessionId)
   const [folders, setFolders] = useState<Record<string, FolderState>>(saved?.folders ?? {})
   const [expanded, setExpanded] = useState<Set<string>>(saved?.expanded ?? new Set())
   const [selectedPath, setSelectedPath] = useState<string | null>(saved?.selectedPath ?? null)
+  const [lineRanges, setLineRanges] = useState<Record<string, LineRange>>(saved?.lineRanges ?? {})
   const [fileState, setFileState] = useState<FileState | null>(null)
   /** 폰에서 파일 보기를 띄웠는지 (데스크톱은 늘 둘 다 보인다) */
   const [isViewing, setIsViewing] = useState(false)
@@ -65,8 +79,8 @@ export function FilesTab({ sessionId, cwd }: { sessionId: string; cwd: string })
   const rootName = nameOf(cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/')) || cwd
 
   useEffect(() => {
-    sessionViews.set(sessionId, { folders, expanded, selectedPath })
-  }, [sessionId, folders, expanded, selectedPath])
+    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges })
+  }, [sessionId, folders, expanded, selectedPath, lineRanges])
 
   const loadFolder = useCallback(
     async (path: string) => {
@@ -92,12 +106,39 @@ export function FilesTab({ sessionId, cwd }: { sessionId: string; cwd: string })
     if (!selectedPath || isImagePath(selectedPath)) return
     const controller = new AbortController()
     fetchJson<WorkspaceFile>(apiUrl(sessionId, 'file', { path: selectedPath }), controller.signal).then(
-      (file) => setFileState({ path: selectedPath, status: 'ok', file }),
+      (file) => {
+        setFileState({ path: selectedPath, status: 'ok', file })
+        // 다시 읽은 파일이 줄었으면 고른 범위를 자른다 (글이 아니게 됐으면 뺀다)
+        setLineRanges((prev) => {
+          const range = prev[selectedPath]
+          if (!range) return prev
+          const clamped = file.kind === 'text' ? clampLineRange(range, lineCountOf(file.text)) : null
+          if (clamped === range) return prev
+          const next = { ...prev }
+          if (clamped) next[selectedPath] = clamped
+          else delete next[selectedPath]
+          return next
+        })
+      },
       (error: Error) => error.name !== 'AbortError' && setFileState({ path: selectedPath, status: 'error', message: error.message }),
     )
     return () => controller.abort()
   }, [sessionId, selectedPath, reloadId])
   const shownFile = fileState && fileState.path === selectedPath ? fileState : null
+  const lineRange = selectedPath ? (lineRanges[selectedPath] ?? null) : null
+
+  const changeLineRange = useCallback(
+    (range: LineRange | null) => {
+      if (!selectedPath) return
+      setLineRanges((prev) => {
+        const next = { ...prev }
+        if (range) next[selectedPath] = range
+        else delete next[selectedPath]
+        return next
+      })
+    },
+    [selectedPath],
+  )
 
   // Ctrl+P (맥 Meta+P): Files 탭이 열려 있고 모달이 없을 때만 브라우저 인쇄 대신 빠른 찾기. 한글 자판에서도 되게 code 로도 본다
   useEffect(() => {
@@ -172,6 +213,7 @@ export function FilesTab({ sessionId, cwd }: { sessionId: string; cwd: string })
                 /
               </span>
               <b>{nameOf(selectedPath)}</b>
+              {lineRange && <span className="ws-path-lines">{locationText('', lineRange)}</span>}
             </>
           )}
         </nav>
@@ -180,6 +222,21 @@ export function FilesTab({ sessionId, cwd }: { sessionId: string; cwd: string })
             {formatSize(meta.size)} · {formatAgo(meta.mtime, Date.now())}
             {shownFile?.status === 'ok' && shownFile.file.kind === 'text' && shownFile.file.encoding === 'euc-kr' && ' · EUC-KR'}
           </span>
+        )}
+        {selectedPath && (
+          <>
+            <button
+              type="button"
+              className="ws-add-chat"
+              disabled={addToChatBlockReason !== null}
+              onClick={() => onAddToChat(chatLocationText(selectedPath, lineRange))}
+              title={addToChatBlockReason ? `Can't add to chat: ${addToChatBlockReason}` : `Add to chat: ${locationText(selectedPath, lineRange)}`}
+              aria-label="Add to chat"
+            >
+              <AddToChatIcon />
+            </button>
+            <CopyButton text={locationText(selectedPath, lineRange)} label="Copy path" />
+          </>
         )}
         <button type="button" className="ws-reload" onClick={() => setReloadId((id) => id + 1)} title="Reload" aria-label="Reload">
           ↻
@@ -223,7 +280,14 @@ export function FilesTab({ sessionId, cwd }: { sessionId: string; cwd: string })
           </div>
         </div>
         <section className="ws-view">
-          <FileView sessionId={sessionId} path={selectedPath} state={shownFile} reloadId={reloadId} />
+          <FileView
+            sessionId={sessionId}
+            path={selectedPath}
+            state={shownFile}
+            reloadId={reloadId}
+            lineRange={lineRange}
+            onLineRangeChange={changeLineRange}
+          />
         </section>
       </div>
     </div>
@@ -237,11 +301,41 @@ function entryOf(folders: Record<string, FolderState>, path: string): WorkspaceE
   return state?.status === 'ok' ? (state.listing.entries.find((entry) => entry.name === nameOf(path)) ?? null) : null
 }
 
+/** 말풍선 + "+" (Add to chat) */
+function AddToChatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path
+        d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-4.5 3.5V17H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M12 7.5v6M9 10.5h6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 /**
- * 오른쪽 파일 보기. 2단계(줄 고르기·Add to chat)는 CodeView 의 줄(data-line)에 붙고, 4단계(편집)는 글 파일일 때 CodeView 자리를 편집기로 바꾼다
+ * 오른쪽 파일 보기. 글 파일은 CodeView(줄 고르기 포함). 4단계(편집)는 글 파일일 때 CodeView 자리를 편집기로 바꾼다
  * (그때 file.hash·encoding 을 저장 요청에 쓴다)
  */
-function FileView({ sessionId, path, state, reloadId }: { sessionId: string; path: string | null; state: FileState | null; reloadId: number }) {
+function FileView({
+  sessionId,
+  path,
+  state,
+  reloadId,
+  lineRange,
+  onLineRangeChange,
+}: {
+  sessionId: string
+  path: string | null
+  state: FileState | null
+  reloadId: number
+  lineRange: LineRange | null
+  onLineRangeChange: (range: LineRange | null) => void
+}) {
   if (!path) return <p className="hint">Select a file to view it</p>
   if (isImagePath(path)) {
     return (
@@ -255,7 +349,7 @@ function FileView({ sessionId, path, state, reloadId }: { sessionId: string; pat
   const { file } = state
   if (file.kind === 'binary') return <p className="hint">Binary file · {formatSize(file.size)} · No preview</p>
   if (file.kind === 'too-large') return <p className="hint">Too large to show · {formatSize(file.size)} (limit 1 MB)</p>
-  return <CodeView text={file.text} language={file.language} />
+  return <CodeView key={path} text={file.text} language={file.language} selection={lineRange} onSelectionChange={onLineRangeChange} />
 }
 
 /**
