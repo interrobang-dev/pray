@@ -65,7 +65,7 @@ test('웹 세션: 시작할 때 /jk-btw 를 숨겨 등록하고, 요청 ID 로 �
     description: 'x',
     isHidden: false,
     immediate: true,
-    provider: { plugin: 'jk-corp', tier: 'user' },
+    provider: { plugin: 'pray', tier: 'user' },
   })
   expect(described.isHidden).toBe(true)
 

@@ -1,12 +1,12 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-// jk-corp 서버. 같은 PC 라 loopback 이고 인증이 필요 없다. localhost 는 IPv6(::1)로 갈 수 있어 IP 로 쓴다
+// Pray 서버. 같은 PC 라 loopback 이고 인증이 필요 없다. localhost 는 IPv6(::1)로 갈 수 있어 IP 로 쓴다
 const ENDPOINT = 'http://127.0.0.1:4710/api/hook/suggestion'
 const BOX_ENDPOINT = 'http://127.0.0.1:4710/api/hook/prompt-box'
 /** 입력칸 알림에 대한 서버 답을 기다리는 시간. 넘으면 아무것도 안 한다 */
 const BOX_TIMEOUT_MS = 2000
 /** plugin.json 의 name. 자기 fill 이 만든 입력칸 변경을 알아보는 데 쓴다 */
-const PLUGIN_NAME = 'jk-corp'
+const PLUGIN_NAME = 'pray'
 /** 곁가지 질문(btw) 요청. 뒤에 요청 ID 를 붙여 GET 으로 질문을 받고 POST 로 답을 보낸다 */
 const BTW_ENDPOINT = 'http://127.0.0.1:4710/api/hook/btw/'
 /** 서버가 pty 에 `/jk-btw <요청 ID>` 로 친다. Claude Code 내장 /btw 와 이름이 겹치지 않게 앞말을 붙였다 */
@@ -64,7 +64,7 @@ async function registerBtw($: EngineInterface): Promise<void> {
     if ((await sessionIdOf($)) === undefined) return
     await $.command.register({
       name: BTW_COMMAND,
-      description: 'jk-corp side question (sent by the web chat tab)',
+      description: 'Pray side question (sent by the web chat tab)',
       argumentHint: '<request id>',
       immediate: true,
     })

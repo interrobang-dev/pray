@@ -15,7 +15,7 @@ export const BTW_HISTORY_LIMIT = 20
 export const BTW_QUESTION_MAX_LENGTH = 4000
 /** 이 시간 안에 mod 가 답을 안 보내면 실패로 끝낸다 */
 export const BTW_TIMEOUT_MS = 60_000
-export const BTW_TIMEOUT_MESSAGE = 'No answer — the session may not have the jk-corp mod loaded (restart the host once)'
+export const BTW_TIMEOUT_MESSAGE = 'No answer — the session may not have the Pray mod loaded (restart the host once)'
 
 export type BtwStatus = 'pending' | 'answered' | 'failed'
 

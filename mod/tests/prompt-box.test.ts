@@ -55,7 +55,7 @@ test('웹 세션: 꺼냄·자기 fill·빈 입력칸만 알리고, 서버가 준
   expect(sent).toEqual([{ url: BOX, body: { sessionId: 'abc', text: '대기1\n대기2', origin: 'engine' } }])
   expect(filled).toEqual(['대기1'])
 
-  await change($, '대기1', { kind: 'plugin', name: 'jk-corp' })
+  await change($, '대기1', { kind: 'plugin', name: 'pray' })
   await change($, '', { kind: 'clear' })
   await change($, '', { kind: 'undo' })
   // 알리지 않는 것: 기록 불러오기, 다른 플러그인의 fill

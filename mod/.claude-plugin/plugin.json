@@ -1,5 +1,5 @@
 {
-  "name": "jk-corp",
+  "name": "pray",
   "version": "0.1.0",
-  "description": "jk-corp 웹 세션을 jk-corp 서버와 잇는다: 입력칸 제안(Prompt suggestions)·입력칸 알림(대기 메시지 취소)·곁가지 질문(/jk-btw)"
+  "description": "Pray 웹 세션을 Pray 서버와 잇는다: 입력칸 제안(Prompt suggestions)·입력칸 알림(대기 메시지 취소)·곁가지 질문(/jk-btw)"
 }
