@@ -2,7 +2,7 @@
  "name": "office-v5-props",
  "palette": 255,
  "slice": "figure",
- "description": "v5 가구·공간·라운지·책상 소품·상태 아이콘. 원본 ~/.claude/jk-corp/sprite-src/v5 (v4 소품 7개는 ../v4). 섬 받침은 그림 없이 Graphics (색은 설계 문서)",
+ "description": "v5 가구·공간·라운지·책상 소품·상태 아이콘. 원본 ~/.claude/pray/sprite-src/v5 (v4 소품 7개는 ../v4). 섬 받침은 그림 없이 Graphics (색은 설계 문서)",
  "spec": {
   "tile": 48,
   "cell": [

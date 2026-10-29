@@ -1,6 +1,6 @@
 # Pray (jk-corp)
 
-앱 이름은 **Pray** (문구 "Do your best. Then pray."). 화면·트레이·알림·로그인 메일에 보이는 이름만 Pray 이고 저장소·패키지·pipe·설정 폴더(`~/.claude/jk-corp/`)·localStorage 키·MCP·mod·쿠키·알림 AppUserModelId 같은 내부 이름은 jk-corp 그대로다 (로고·글자 로고 → `web-app.md`). Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사무실의 직원으로 보여주고, 웹에서 띄운 세션은 조작하고 외부(터미널·IDE) 세션은 관찰만 한다. 설계 전문: `docs/plans/2026-10-20-session-office-design.md`.
+앱 이름은 **Pray** (문구 "Do your best. Then pray."). 화면·트레이·알림·로그인 메일에 보이는 이름만 Pray 이고 저장소·패키지·pipe·localStorage 키·MCP·mod·쿠키·알림 AppUserModelId 같은 내부 이름은 jk-corp 그대로다 (로고·글자 로고 → `web-app.md`). 설정 폴더는 `~/.claude/pray/` (옛 `~/.claude/jk-corp/` 만 있으면 트레이·호스트·서버가 시작할 때 한 번 옮긴다 → `host.md` 의 `dataDir.ts`). Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사무실의 직원으로 보여주고, 웹에서 띄운 세션은 조작하고 외부(터미널·IDE) 세션은 관찰만 한다. 설계 전문: `docs/plans/2026-10-20-session-office-design.md`.
 
 하지 않는 것: 외부 세션 조작(관찰만) · 설치 파일(electron-builder) — 저장소에서 실행한다 · HTTPS(사내망 전제) · Claude 토큰 직접 갱신(Claude Code 가 한다).
 
@@ -47,15 +47,15 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 **평소에는 트레이 앱으로 쓴다.** 바탕화면 `jk-corp.lnk` (= `node_modules\electron\dist\electron.exe desktop`, 작업 폴더 저장소). 바로가기는 빌드하지 않고 `desktop/dist/` 를 그대로 실행하므로 `desktop/src` 를 고치면 `npm run build --workspace desktop` 뒤 트레이 Quit → 다시 켜야 한다 (`npm run desktop` 은 빌드한 뒤 띄우고, 루트 `npm run build` 는 web 만 빌드한다). 트레이 아이콘: 클릭 = 창 열기, 우클릭 = 상태·서버/호스트 재시작·로그 폴더·로그인 시 자동 실행·알림 켜기/끄기·종료 (메뉴·툴팁·확인 창·알림 글자는 영어: Restart server·Restart host·Open log folder·Launch at login·Notifications·Quit). 세션이 끝나거나(Done·My turn, 팀원 제외) 승인을 기다리면 Windows 알림, 누르면 그 세션 패널 (→ `host.md`). 창 X 는 숨기기이고 **트레이 "Quit"만이 진짜 종료**(호스트가 꺼져 웹 세션이 끊기고 다음 실행 때 `--resume`). 승인 대기 세션이 있으면 아이콘에 빨간 점. 자식이 죽으면 3초 뒤 재시작, 1분에 5번 넘으면 포기하고 알림. 설치 파일(electron-builder)은 만들지 않았다 — 저장소에서 실행한다.
 
-브라우저로도 `http://127.0.0.1:4710` 접속 가능. 로그: `~/.claude/jk-corp/logs/*.log`. 화면 아래 상태 표시줄의 연결 상태 옆 `↻` 로 재시작한다. 호스트 ↻ = `POST /api/host/restart` → 호스트가 종료 코드 2 로 나감 → 트레이가 새 코드로 다시 띄움. 웹 세션은 끊겼다가 `--resume` 된다. 서버 ↻ = `POST /api/server/restart` → 서버가 응답을 보낸 뒤 종료 코드 2 로 나감 → 트레이가 새 코드로 다시 띄움. 몇 초 끊기고 세션은 그대로지만, 서버 메모리에만 있는 훅 상태(다음 훅부터 다시 보인다)·붙잡은 질문(터미널 탭에서 답한다)·입력칸 제안은 사라진다. **작업 스케줄러 방식에서는 둘 다 종료만 되고 다시 뜨지 않는다** (서버는 `npm run dev` 에서도).
+브라우저로도 `http://127.0.0.1:4710` 접속 가능. 로그: `~/.claude/pray/logs/*.log`. 화면 아래 상태 표시줄의 연결 상태 옆 `↻` 로 재시작한다. 호스트 ↻ = `POST /api/host/restart` → 호스트가 종료 코드 2 로 나감 → 트레이가 새 코드로 다시 띄움. 웹 세션은 끊겼다가 `--resume` 된다. 서버 ↻ = `POST /api/server/restart` → 서버가 응답을 보낸 뒤 종료 코드 2 로 나감 → 트레이가 새 코드로 다시 띄움. 몇 초 끊기고 세션은 그대로지만, 서버 메모리에만 있는 훅 상태(다음 훅부터 다시 보인다)·붙잡은 질문(터미널 탭에서 답한다)·입력칸 제안은 사라진다. **작업 스케줄러 방식에서는 둘 다 종료만 되고 다시 뜨지 않는다** (서버는 `npm run dev` 에서도).
 
-설정: `~/.claude/jk-corp/config.json` (저장소 밖. SMTP 비밀번호가 들어 있으니 절대 커밋·출력하지 않는다)
+설정: `~/.claude/pray/config.json` (저장소 밖. SMTP 비밀번호가 들어 있으니 절대 커밋·출력하지 않는다)
 
 ```json
 { "bind": "0.0.0.0", "loginEmails": ["..."], "smtp": { "host", "port", "user", "pass" } }
 ```
 
-파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP 또는 PC 이름>:4710` (도메인 이름은 Host 검사로 403 → `security.md`) → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 토큰은 `~/.claude/jk-corp/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
+파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP 또는 PC 이름>:4710` (도메인 이름은 Host 검사로 403 → `security.md`) → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 토큰은 `~/.claude/pray/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
 
 **트레이 앱 없이 쓰는 대안: 작업 스케줄러.** `npm run startup:install` 이 `jk-corp-host`/`jk-corp-server` 작업을 등록한다(`wscript launch-hidden.vbs` 래퍼로 창 없이. S4U 는 관리자 권한 필요. PowerShell `-WindowStyle Hidden` 은 대화형 작업에서 콘솔 창이 보여 사용자가 닫는 사고가 두 번 났다). 멈출 때는 반드시 `scripts/stop.ps1` (`Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남는다). **트레이 앱과 스케줄러를 같이 쓰면 pipe·포트가 충돌한다** — 지금은 스케줄러 작업을 제거한 상태.
 
@@ -70,8 +70,8 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 호스트·트레이 → `host.md`
 - `host/src/index.ts` — named pipe `\\.\pipe\jk-corp-host` 서버. spawn·resume·forget·kill·restart·restart-session 처리, 퇴근 기록 보관 기간 정리
 - `host/src/ptyPool.ts` — node-pty 로 `claude.exe` 실행·세션별 링버퍼, extraArgs 저장, 끝나면 퇴근 기록, 모델 바꾸기 재시작, 웹 세션에 mod 불러오기
-- `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기·쓰기 (웹 세션·퇴근 기록·그룹·팀·이름·인물·성별·역할·팀 할 일·목록 순서)
-- `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=` 파일 로그 · `host/src/protocol.ts` — pipe 메시지 타입·줄 단위 JSON
+- `host/src/hq.ts` — `~/.claude/pray/hq.json` 읽기·쓰기 (웹 세션·퇴근 기록·그룹·팀·이름·인물·성별·역할·팀 할 일·목록 순서)
+- `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=` 파일 로그 · `host/src/dataDir.ts` — 설정 폴더 `~/.claude/pray/` 정하기·옛 폴더 한 번 옮기기 (서버가 `@jk-corp/host/dataDir` 로 import, 트레이는 `desktop/src/dataDir.ts` 에 같은 규칙) · `host/src/protocol.ts` — pipe 메시지 타입·줄 단위 JSON
 - `desktop/src/main.ts`·`children.ts`·`icon.ts`·`notify.ts` — Electron 트레이 앱, 자식 재시작 정책, 코드로 만든 트레이·창 아이콘, 세션 알림 판정·글자
 - `scripts/*.ps1` — 작업 스케줄러 등록·중지·제거 · `hooks/install.mjs` — settings.json 훅 설치
 
@@ -112,9 +112,9 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - **서버가 화면으로 보내는 `{ message }` 도 영어다** — `@jk-corp/host/hq` 의 오류 문구는 한국어라 `error.message` 를 그대로 보내지 않는다 (→ `server-api.md`).
 - **색은 `web/src/style.css` 맨 위 `:root`(라이트)·`:root[data-theme='dark']`(다크) 변수로만 쓴다** — literal 로 박지 말고 변수를 만들어 두 값을 다 넣고 `web/src/palettes.ts` 의 `DEFAULT_VARS` 에도 넣는다 (테스트가 같은지 본다). 테마·팔레트 규칙 전문 → `web-app.md`. 폰 전용 스타일은 `style.css` 끝 `@media (max-width: 768px)` 블록에만 둔다.
 - **`hq.json` 은 호스트·서버 두 프로세스가 같이 읽고 쓴다.** `readHq` 는 모르는 키를 보존한다 (한쪽만 새 코드일 때 다른 쪽 데이터가 지워진 적이 있다). 쓰기는 같은 폴더 임시 파일에 다 쓴 뒤 `renameSync` 로 바꿔 끼우고, 파일이 있는데 읽기·해석에 실패하면 던져서 읽기·쓰기를 모두 막는다. 요청 처리 밖에서 hq 를 부르는 곳을 새로 만들면 예외를 잡아야 한다 (안 잡으면 서버가 죽고 트레이가 재시작을 반복하다 포기한다). 전문 → `host.md` 의 `host/src/hq.ts`.
-- **계정 기능 시험 규칙.** 실제 `~/.claude/.credentials.json`·`~/.claude.json`·`~/.claude/jk-corp/` 를 쓰지 않고, 실제 로그인을 끝내지 않고, 기본 폴더에서 실제 `claude auth logout` 을 하지 않는다. 시험 서버(아래 "화면 확인 방법")의 preload 로 전역 `fetch` 의 `https://api.anthropic.com/` 를 가짜 API 로 돌리고 가짜 토큰 파일을 둔다. 시험 서버가 띄우는 claude 의 외부 접속은 `HTTPS_PROXY` 를 CONNECT 를 막는 가짜 프록시로 줘서 막는다 (Claude Code 의 OAuth 주소는 `CLAUDE_CODE_CUSTOM_OAUTH_URL` 허용 목록 밖으로 못 돌린다). claude(Bun)의 홈이 `USERPROFILE` 을 따르는지 확인하지 않았으니 시험 서버에서도 기본 폴더 claude 는 띄우지 않는다 (`--claude=` 로 다른 실행 파일을 주고 확인한다)
+- **계정 기능 시험 규칙.** 실제 `~/.claude/.credentials.json`·`~/.claude.json`·`~/.claude/pray/` 를 쓰지 않고, 실제 로그인을 끝내지 않고, 기본 폴더에서 실제 `claude auth logout` 을 하지 않는다. 시험 서버(아래 "화면 확인 방법")의 preload 로 전역 `fetch` 의 `https://api.anthropic.com/` 를 가짜 API 로 돌리고 가짜 토큰 파일을 둔다. 시험 서버가 띄우는 claude 의 외부 접속은 `HTTPS_PROXY` 를 CONNECT 를 막는 가짜 프록시로 줘서 막는다 (Claude Code 의 OAuth 주소는 `CLAUDE_CODE_CUSTOM_OAUTH_URL` 허용 목록 밖으로 못 돌린다). claude(Bun)의 홈이 `USERPROFILE` 을 따르는지 확인하지 않았으니 시험 서버에서도 기본 폴더 claude 는 띄우지 않는다 (`--claude=` 로 다른 실행 파일을 주고 확인한다)
 - **Claude Code 세션 안에서 호스트를 띄우지 않는다** (위 "실행·확인").
-- 설정 `~/.claude/jk-corp/config.json` 의 SMTP 비밀번호는 커밋·출력하지 않는다 (위 "실행·확인").
+- 설정 `~/.claude/pray/config.json` 의 SMTP 비밀번호는 커밋·출력하지 않는다 (위 "실행·확인").
 
 ## 핵심 개념 (공통)
 

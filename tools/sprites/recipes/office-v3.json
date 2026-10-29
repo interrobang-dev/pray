@@ -1,6 +1,6 @@
 {
  "name": "office-v3",
- "description": "인물 18명(리더 4·팀원 14) × typing·raise-hand·idle·doze + 책상·의자. v1 인물 9명은 v1 원본 그대로(../v1/), 새 9명은 ~/.claude/jk-corp/sprite-src/v3. 환경은 office-v2",
+ "description": "인물 18명(리더 4·팀원 14) × typing·raise-hand·idle·doze + 책상·의자. v1 인물 9명은 v1 원본 그대로(../v1/), 새 9명은 ~/.claude/pray/sprite-src/v3. 환경은 office-v2",
  "spec": {
   "tile": 48,
   "cell": [

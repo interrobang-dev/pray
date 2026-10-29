@@ -14,7 +14,7 @@ v5 칸막이 블록 모듈: 이어 붙이면 한 덩어리로 보이는 책상 �
 - block-lead 48: 블록 왼쪽 끝 수납 칸막이 판 + 그 왼쪽에 붙은 지휘자 옆 책상(옆에서 본 모니터·키보드). screenOff 로 block-lead-off
 
 사용:
-  python tools/sprites/draw_blocks.py --source-dir ~/.claude/jk-corp/sprite-src/v5
+  python tools/sprites/draw_blocks.py --source-dir ~/.claude/pray/sprite-src/v5
 """
 import argparse
 import json

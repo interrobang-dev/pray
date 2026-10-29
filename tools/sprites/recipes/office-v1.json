@@ -1,6 +1,6 @@
 {
  "name": "office-v1",
- "description": "2단계 인물 프리셋 9명(리더 2·팀원 7) × typing·raise-hand·idle·doze. 가구·벽·바닥은 v0 원본 그대로. 원본은 ~/.claude/jk-corp/sprite-src/v1",
+ "description": "2단계 인물 프리셋 9명(리더 2·팀원 7) × typing·raise-hand·idle·doze. 가구·벽·바닥은 v0 원본 그대로. 원본은 ~/.claude/pray/sprite-src/v1",
  "spec": {
   "tile": 48,
   "cell": [

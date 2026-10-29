@@ -9,7 +9,7 @@
 
 사용:
   python tools/sprites/check_edges.py --recipe tools/sprites/recipes/office-v5-right.json \
-      --source-dir ~/.claude/jk-corp/sprite-src/v5 --atlas web/public/office/office-v5-right
+      --source-dir ~/.claude/pray/sprite-src/v5 --atlas web/public/office/office-v5-right
 """
 import argparse
 import json

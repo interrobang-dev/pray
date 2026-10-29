@@ -6,6 +6,7 @@
     "./protocol": "./src/protocol.ts",
     "./hq": "./src/hq.ts",
     "./runtime": "./src/runtime.ts",
+    "./dataDir": "./src/dataDir.ts",
     "./team": "./src/team.ts",
     "./dotCharacter": "./src/dotCharacter.ts"
   },

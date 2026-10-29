@@ -1,6 +1,6 @@
 {
  "name": "office-v2",
- "description": "3단계 환경: 바닥·벽(창 유리 투명)·창밖 4시간대·그룹 바닥·섬 러그·Focus Zone 카펫·부스·거리(보도·집·가로등 4시간대)·소품. 인물·책상·의자는 office-v1 을 그대로 쓴다. 원본은 ~/.claude/jk-corp/sprite-src/v2",
+ "description": "3단계 환경: 바닥·벽(창 유리 투명)·창밖 4시간대·그룹 바닥·섬 러그·Focus Zone 카펫·부스·거리(보도·집·가로등 4시간대)·소품. 인물·책상·의자는 office-v1 을 그대로 쓴다. 원본은 ~/.claude/pray/sprite-src/v2",
  "spec": { "tile": 48, "cell": [64, 128], "baseline": 124, "bodyHeight": 108 },
  "props": [
   { "id": "plant-large", "sheet": "props.png", "grid": [2, 2], "cell": [0, 0], "width": 42 },

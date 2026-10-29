@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { dataDir } from '@jk-corp/host/dataDir'
 
 export interface SmtpConfig {
   host: string
@@ -17,13 +17,10 @@ export interface Config {
   smtp: SmtpConfig | null
 }
 
-export const configDir = join(homedir(), '.claude', 'jk-corp')
-const configPath = join(configDir, 'config.json')
-
 export function readConfig(): Config {
   let parsed: Partial<Config> = {}
   try {
-    parsed = JSON.parse(readFileSync(configPath, 'utf8'))
+    parsed = JSON.parse(readFileSync(join(dataDir(), 'config.json'), 'utf8'))
   } catch {
     // 파일 없음 → 로컬 전용 기본값
   }

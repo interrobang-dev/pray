@@ -15,6 +15,7 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { lock, type LockOptions } from 'proper-lockfile'
+import { DATA_DIR_NAME, dataDir } from '@jk-corp/host/dataDir'
 import {
   accessTokenOf,
   findByRefreshToken,
@@ -40,7 +41,7 @@ import {
 } from './accounts.js'
 
 /**
- * Claude 계정 보관함(~/.claude/jk-corp/accounts.json)과 기본 폴더 로그인 파일(~/.claude/.credentials.json·~/.claude.json) 다루기.
+ * Claude 계정 보관함(~/.claude/pray/accounts.json)과 기본 폴더 로그인 파일(~/.claude/.credentials.json·~/.claude.json) 다루기.
  * 한 번에 한 계정만 기본 폴더에 있다 (A 방식). 토큰 값은 응답·로그·오류 문구에 넣지 않는다
  */
 
@@ -84,13 +85,14 @@ export interface AccountPaths {
   vaultPath: string
 }
 
-export function defaultAccountPaths(home = homedir()): AccountPaths {
-  const claudeDir = join(home, '.claude')
+/** 시험은 홈을 넘긴다. 넘기지 않으면 실제 홈이고 보관함은 설정 폴더 이전 규칙(dataDir)을 따른다 */
+export function defaultAccountPaths(home?: string): AccountPaths {
+  const claudeDir = join(home ?? homedir(), '.claude')
   return {
     claudeDir,
     credentialsPath: join(claudeDir, '.credentials.json'),
-    claudeJsonPath: join(home, '.claude.json'),
-    vaultPath: join(claudeDir, 'jk-corp', 'accounts.json'),
+    claudeJsonPath: join(home ?? homedir(), '.claude.json'),
+    vaultPath: join(home === undefined ? dataDir() : join(claudeDir, DATA_DIR_NAME), 'accounts.json'),
   }
 }
 

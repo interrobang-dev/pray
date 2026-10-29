@@ -4,12 +4,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Child } from './children'
+import { resolveDataDir } from './dataDir'
 import { trayIconPng } from './icon'
 import { diffSessions, type NotifySession, type SessionNotice, type StatusBaseline } from './notify'
 
 const SERVER_URL = 'http://127.0.0.1:4710'
 const repoDir = resolve(__dirname, '..', '..')
-const logDir = join(homedir(), '.claude', 'jk-corp', 'logs')
+/** `~/.claude/pray/logs`. 잠금을 얻은 뒤 자식을 띄우기 전에 설정 폴더를 옮기며 정한다 */
+let logDir = ''
 
 let tray: Tray | null = null
 let window: BrowserWindow | null = null
@@ -72,12 +74,12 @@ function createChildren(): { host: Child; server: Child } {
   const claude = findExe('claude')
   const env = childEnv()
   const host = new Child(
-    { name: 'host', cwd: join(repoDir, 'host'), args: [`--log=${join(logDir, 'jk-corp-host.log')}`, `--claude=${claude}`] },
+    { name: 'host', cwd: join(repoDir, 'host'), args: [`--log=${join(logDir, 'pray-host.log')}`, `--claude=${claude}`] },
     node,
     env,
   )
   const server = new Child(
-    { name: 'server', cwd: join(repoDir, 'server'), args: [`--log=${join(logDir, 'jk-corp-server.log')}`] },
+    { name: 'server', cwd: join(repoDir, 'server'), args: [`--log=${join(logDir, 'pray-server.log')}`] },
     node,
     env,
   )
@@ -269,6 +271,10 @@ async function quit(): Promise<void> {
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
+  // 호스트·서버보다 먼저 옛 설정 폴더 ~/.claude/jk-corp 를 옮긴다 (자식은 --log 로 받은 폴더에 로그를 연다)
+  const dataDir = resolveDataDir(join(homedir(), '.claude'))
+  if (dataDir.warning) console.warn(dataDir.warning)
+  logDir = join(dataDir.dir, 'logs')
   // 알림을 Windows 에 'jk-corp' ID 로 올린다 (알림 기록·설정이 이 ID 로 묶인다).
   // 알림 머리의 앱 이름은 그래도 electron.exe 파일 설명 "Electron" 이다 — HKCU\Software\Classes\AppUserModelId 의
   // DisplayName·시작 메뉴 바로가기(AUMID 포함)로도 바뀌지 않았다(실측). 바꾸려면 exe 이름·설명을 바꾼 설치본이 필요하다

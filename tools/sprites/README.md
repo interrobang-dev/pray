@@ -14,10 +14,10 @@ numpy·Pillow 가 있는 Python 3.10 이상이면 된다 (scipy 는 쓰지 않�
 
 ```bash
 python tools/sprites/build.py --recipe tools/sprites/recipes/office-v0.json \
-  --source-dir ~/.claude/jk-corp/sprite-src/v0 --out web/public/office
+  --source-dir ~/.claude/pray/sprite-src/v0 --out web/public/office
 ```
 
-- `--source-dir`: 레시피의 파일 이름이 가리키는 생성 원본 폴더. 원본은 커밋하지 않는다 (장당 1~2MB). v0 원본은 `~/.claude/jk-corp/sprite-src/v0/` (프롬프트 사본 `prompts/` 포함)
+- `--source-dir`: 레시피의 파일 이름이 가리키는 생성 원본 폴더. 원본은 커밋하지 않는다 (장당 1~2MB). v0 원본은 `~/.claude/pray/sprite-src/v0/` (프롬프트 사본 `prompts/` 포함)
 - 알파 문제(전부 투명·전부 불투명·반투명 픽셀)가 있으면 아무것도 쓰지 않고 종료 코드 1. 캐릭터 셀이 위·왼쪽·오른쪽 가장자리에 닿으면 "주의:" 로 알린다 (잘렸을 수 있음)
 - 잘림 검사: `python tools/sprites/check_edges.py --recipe <레시피> --source-dir <원본 폴더> --atlas web/public/office/<판>` — 인물 프레임이 셀 네 가장자리에 닿거나 인물·소품이 원본 칸 경계(덩어리 단위 판이면 원본 그림 끝·이웃 그림)에 닿은 곳을 센다. 원본 px 상자(`box`)로 자르는 소품은 상자 경계·상자 바로 밖 1px·원본 그림 끝에 닿은 곳을 센다. 0 개가 아니면 종료 코드 1 (v5 넷·v6 거리는 0 개)
 - 다 만든 뒤 `npm run build` 해야 web/dist 에 들어가 화면에 반영된다

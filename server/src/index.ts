@@ -59,7 +59,8 @@ import {
 } from '@jk-corp/host/hq'
 import { normalizeCwd } from '@jk-corp/host/team'
 import { setupFileLog } from '@jk-corp/host/runtime'
-import { configDir, readConfig } from './config.js'
+import { dataDir } from '@jk-corp/host/dataDir'
+import { readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
 import { isAllowedHost, isSameOriginRequest } from './requestGuard.js'
 import { makeSendCode } from './mail.js'
@@ -175,11 +176,11 @@ const btwTimers = new Map<string, { sessionId: string; timer: ReturnType<typeof 
 const btwTyping = new Set<string>()
 
 const config = readConfig()
-const auth = new AuthStore(config.loginEmails, join(configDir, 'auth-tokens.json'))
+const auth = new AuthStore(config.loginEmails, join(dataDir(), 'auth-tokens.json'))
 const sendCode = makeSendCode(config.smtp)
 const COOKIE = 'jk_session'
 /** 팀원에게 보낸 지시 기록 (한 줄 = InstructionRecord). 대화 탭이 사람 입력과 구분하는 데 쓴다 */
-const instructionLogPath = join(configDir, 'instructions.jsonl')
+const instructionLogPath = join(dataDir(), 'instructions.jsonl')
 /**
  * 대화 API 의 해석 캐시·보낸 버전·지시 기록 캐시 (messageCache.ts). 개수는 메모리 상한:
  * 가장 큰 세션(jsonl 173MB·2,730 메시지)이 해석 캐시 약 12.5MB·버전 기록 약 8MB 라 8개 세션이면 최악 약 160MB
@@ -1559,7 +1560,7 @@ app.get('/api/usage', async (_req, res) => {
   res.json(await readUsage())
 })
 
-// ---------- Claude 계정 로그인·로그아웃·전환 (한 번에 한 계정이 기본 폴더에. 보관함 ~/.claude/jk-corp/accounts.json) ----------
+// ---------- Claude 계정 로그인·로그아웃·전환 (한 번에 한 계정이 기본 폴더에. 보관함 ~/.claude/pray/accounts.json) ----------
 
 const accountStore = makeAccountStore({ runClaude: runClaudeAuth, onChange: () => readUsage.clear() })
 const accountLogins = makeLoginManager({ saveLogin: (configDir) => accountStore.saveLogin(configDir) })

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from './accounts.js'
 import {
@@ -169,7 +169,7 @@ describe('list', () => {
   })
 
   it('refuses to work over a broken accounts.json', async () => {
-    mkdirSync(join(paths.claudeDir, 'jk-corp'))
+    mkdirSync(dirname(paths.vaultPath))
     writeFileSync(paths.vaultPath, '{"accounts": [ broken')
     await expectError(makeStore().list(), 500, /accounts\.json/)
     expect(readFileSync(paths.vaultPath, 'utf8')).toBe('{"accounts": [ broken')

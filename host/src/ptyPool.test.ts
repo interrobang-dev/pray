@@ -10,7 +10,7 @@ vi.mock('node-pty', () => ({
   spawn: vi.fn(() => ({ pid: 1, onData: vi.fn(), onExit: vi.fn(), kill: vi.fn() })),
 }))
 
-// spawn·exit 가 hq.json 에 기록한다. 실제 ~/.claude/jk-corp/hq.json 대신 가짜로 바꾼다
+// spawn·exit 가 hq.json 에 기록한다. 실제 ~/.claude/pray/hq.json 대신 가짜로 바꾼다
 vi.mock('./hq.js', () => ({
   addWebSession: vi.fn(),
   discardWebSession: vi.fn(),

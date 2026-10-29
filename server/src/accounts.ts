@@ -53,7 +53,7 @@ export interface StoredAccount {
   updatedAt: string
 }
 
-/** ~/.claude/jk-corp/accounts.json. 모르는 키도 보존한다 */
+/** ~/.claude/pray/accounts.json. 모르는 키도 보존한다 */
 export interface Vault {
   accounts: StoredAccount[]
   [key: string]: unknown

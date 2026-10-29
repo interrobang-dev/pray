@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { dataDir } from './dataDir.js'
 import { normalizeCwd, type Part, type Team, type Todo } from './team.js'
 
 export type { Part, Team, Todo } from './team.js'
@@ -79,13 +79,15 @@ interface HqFile extends Office {
   positions: Record<string, string>
 }
 
-const hqDir = join(homedir(), '.claude', 'jk-corp')
-const hqPath = join(hqDir, 'hq.json')
+/** 설정 폴더는 처음 읽고 쓸 때 정한다 (dataDir) */
+function hqPath(): string {
+  return join(dataDir(), 'hq.json')
+}
 
 function readHq(): HqFile {
   let parsed: Partial<HqFile> = {}
   try {
-    parsed = JSON.parse(readFileSync(hqPath, 'utf8'))
+    parsed = JSON.parse(readFileSync(hqPath(), 'utf8'))
   } catch (error) {
     // 파일 없음 → 기본값. 있는데 못 읽거나 깨졌으면 던져서 저장을 막는다. 기본값으로 넘어가면 다음 쓰기가 기록을 통째로 지운다
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw unreadable(error)
@@ -120,7 +122,7 @@ function withDefaults(team: Partial<Team> & Pick<Team, 'id' | 'name' | 'cwd'> & 
 }
 
 function unreadable(cause: unknown): Error {
-  return new Error(`hq.json 을 읽을 수 없어 읽기·저장을 막음 (${hqPath}): ${cause}`, { cause })
+  return new Error(`hq.json 을 읽을 수 없어 읽기·저장을 막음 (${hqPath()}): ${cause}`, { cause })
 }
 
 /** Windows 는 대상 파일을 다른 프로세스(백신·인덱서 등)가 잡고 있으면 rename 이 실패한다. 잠깐 기다렸다 다시 한다 */
@@ -130,11 +132,12 @@ const RENAME_RETRY_MS = 50
 
 /** 같은 폴더의 임시 파일에 다 쓴 뒤 바꿔 끼운다. 바로 덮어쓰면 쓰는 도중 강제 종료되거나 다른 프로세스가 그 사이에 읽을 때 빈 파일이 된다 */
 function writeHq(hq: HqFile): void {
-  mkdirSync(hqDir, { recursive: true })
-  const tempPath = `${hqPath}.${process.pid}.tmp`
+  mkdirSync(dataDir(), { recursive: true })
+  const path = hqPath()
+  const tempPath = `${path}.${process.pid}.tmp`
   try {
     writeFileSync(tempPath, JSON.stringify(hq, null, 2) + '\n')
-    renameWithRetry(tempPath, hqPath)
+    renameWithRetry(tempPath, path)
   } catch (error) {
     rmSync(tempPath, { force: true })
     throw error

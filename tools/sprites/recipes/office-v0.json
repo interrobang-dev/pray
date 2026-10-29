@@ -1,6 +1,6 @@
 {
  "name": "office-v0",
- "description": "1단계 임시 에셋: 시안(2026-10-22)의 팀장·팀원 typing·raise-hand, 책상·의자·책장·화분, 벽·바닥. 원본은 ~/.claude/jk-corp/sprite-src/v0",
+ "description": "1단계 임시 에셋: 시안(2026-10-22)의 팀장·팀원 typing·raise-hand, 책상·의자·책장·화분, 벽·바닥. 원본은 ~/.claude/pray/sprite-src/v0",
  "spec": { "tile": 48, "cell": [64, 128], "baseline": 124, "bodyHeight": 108 },
  "characters": [
   {

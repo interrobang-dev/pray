@@ -1,6 +1,6 @@
 {
  "name": "office-v6-street",
- "description": "퇴근 거리(Off Duty 띠): 장소 4종(버스 정류장·카페·공원·집)과 거리 소품·바닥 타일. 원본 ~/.claude/jk-corp/sprite-src/v6. 소품은 원본 px 상자(box)로 자른다. 장소 배치·자리 메타는 jkCorp.street (sideSeatLift·headBox 는 tools/sprites/street_seats.py --write 가 잰다)",
+ "description": "퇴근 거리(Off Duty 띠): 장소 4종(버스 정류장·카페·공원·집)과 거리 소품·바닥 타일. 원본 ~/.claude/pray/sprite-src/v6. 소품은 원본 px 상자(box)로 자른다. 장소 배치·자리 메타는 jkCorp.street (sideSeatLift·headBox 는 tools/sprites/street_seats.py --write 가 잰다)",
  "palette": 255,
  "spec": {
   "tile": 48

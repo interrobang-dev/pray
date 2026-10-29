@@ -13,8 +13,8 @@ $node = (Get-Command node.exe).Source
 $claude = (Get-Command claude.exe).Source
 $tsx = Join-Path $repo 'node_modules\tsx\dist\cli.mjs'
 if (-not (Test-Path $tsx)) { throw "tsx 없음. 먼저 npm install 을 실행하세요: $tsx" }
-$logDir = Join-Path $env:USERPROFILE '.claude\jk-corp\logs'
-New-Item -ItemType Directory -Force $logDir | Out-Null
+# 로그 폴더는 만들지 않는다: 호스트·서버가 옛 설정 폴더 ~/.claude/jk-corp 를 ~/.claude/pray 로 옮긴 뒤 만든다 (먼저 만들면 pray 가 생겨 옮기지 않는다)
+$logDir = Join-Path $env:USERPROFILE '.claude\pray\logs'
 
 $settings = New-ScheduledTaskSettingsSet `
     -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
@@ -27,8 +27,8 @@ $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interac
 $launcher = Join-Path $PSScriptRoot 'launch-hidden.vbs'
 
 function Register-JkTask {
-    param([string]$Name, [string]$WorkDir, [string[]]$ExtraArgs, [string]$Description)
-    $log = Join-Path $logDir "$Name.log"
+    param([string]$Name, [string]$LogName, [string]$WorkDir, [string[]]$ExtraArgs, [string]$Description)
+    $log = Join-Path $logDir "$LogName.log"
     # 인자마다 따옴표로 감싸 wscript 에 넘기고, VBS 가 다시 따옴표를 붙여 node 명령줄을 만든다 (중첩 따옴표 회피)
     $pieces = @($launcher, $WorkDir, $node, $tsx, 'src/index.ts', "--log=$log") + $ExtraArgs
     $argument = '//B //Nologo ' + (($pieces | ForEach-Object { '"' + $_ + '"' }) -join ' ')
@@ -37,8 +37,8 @@ function Register-JkTask {
     Write-Host "등록: $Name ($WorkDir)"
 }
 
-Register-JkTask -Name 'jk-corp-host' -WorkDir (Join-Path $repo 'host') -ExtraArgs @("--claude=$claude") -Description 'jk-corp 세션 호스트 (claude 프로세스 보관)'
-Register-JkTask -Name 'jk-corp-server' -WorkDir (Join-Path $repo 'server') -ExtraArgs @() -Description 'jk-corp 서버 (http://127.0.0.1:4710)'
+Register-JkTask -Name 'jk-corp-host' -LogName 'pray-host' -WorkDir (Join-Path $repo 'host') -ExtraArgs @("--claude=$claude") -Description 'jk-corp 세션 호스트 (claude 프로세스 보관)'
+Register-JkTask -Name 'jk-corp-server' -LogName 'pray-server' -WorkDir (Join-Path $repo 'server') -ExtraArgs @() -Description 'jk-corp 서버 (http://127.0.0.1:4710)'
 
 Write-Host "로그: $logDir"
 Write-Host '지금 시작: Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server'

@@ -14,12 +14,12 @@ ponytail 뒷모습(office-v5-up) 16칸의 하체를 뒷모습으로 고친다. v
 
 v5-up 을 다시 뽑을 때 순서:
   1. python tools/sprites/build.py --recipe tools/sprites/recipes/office-v5-up.json \
-         --source-dir ~/.claude/jk-corp/sprite-src/v5 --out web/public/office
+         --source-dir ~/.claude/pray/sprite-src/v5 --out web/public/office
   2. python tools/sprites/patch_ponytail_up.py --atlas web/public/office/office-v5-up
   3. python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v5-up-recolor.json \
          --atlas web/public/office/office-v5-up --sample-atlas web/public/office/office-v5-down
   4. python tools/sprites/check_edges.py --recipe tools/sprites/recipes/office-v5-up.json \
-         --source-dir ~/.claude/jk-corp/sprite-src/v5 --atlas web/public/office/office-v5-up   (고친 뒤에도 잘림 0개)
+         --source-dir ~/.claude/pray/sprite-src/v5 --atlas web/public/office/office-v5-up   (고친 뒤에도 잘림 0개)
 `--out` 을 주면 그 PNG 에 쓰고, 없으면 `--atlas` 의 PNG 를 고쳐 쓴다.
 """
 import argparse

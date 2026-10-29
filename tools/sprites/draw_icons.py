@@ -4,7 +4,7 @@
 결과는 생성 원본처럼 마젠타 바탕 격자 한 장(칸 40x160, 그림은 칸 왼쪽 위)이고 레시피가 다른 원본과 같은 방식으로 자른다.
 
 사용:
-  python tools/sprites/draw_icons.py --out ~/.claude/jk-corp/sprite-src/v5/drawn.png
+  python tools/sprites/draw_icons.py --out ~/.claude/pray/sprite-src/v5/drawn.png
 """
 import argparse
 import sys

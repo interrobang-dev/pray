@@ -48,7 +48,7 @@ import {
   updateGroup,
 } from './hq.js'
 
-// hq.ts 는 import 때 homedir() 로 경로를 정한다. 실제 ~/.claude/jk-corp/hq.json 대신 임시 폴더를 쓴다
+// hq.ts 는 homedir() 아래 설정 폴더(dataDir)를 쓴다. 실제 ~/.claude/pray/hq.json 대신 임시 폴더를 쓴다
 vi.mock('node:os', async (importOriginal) => {
   const os = await importOriginal<typeof import('node:os')>()
   const { mkdtempSync } = await vi.importActual<typeof import('node:fs')>('node:fs')
@@ -66,7 +66,7 @@ vi.mock('node:fs', async (importOriginal) => {
 // 모킹이 안 먹었으면 실제 기록을 지우게 되므로 시작하지 않는다
 if (!homedir().startsWith(tmpdir())) throw new Error(`테스트 홈이 임시 폴더가 아님: ${homedir()}`)
 
-const hqDir = join(homedir(), '.claude', 'jk-corp')
+const hqDir = join(homedir(), '.claude', 'pray')
 const hqPath = join(hqDir, 'hq.json')
 
 function systemError(code: string): NodeJS.ErrnoException {
