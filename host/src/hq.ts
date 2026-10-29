@@ -14,7 +14,7 @@ export interface WebSessionRecord {
   extraArgs?: string[]
 }
 
-/** released = 팀장이 정리한 팀원(jk_dismiss), dismissed = 그 밖의 kill 요청(화면 종료 버튼), exit = 종료 코드 0, error = 그 밖의 종료 코드 */
+/** released = 팀장이 정리한 팀원(team_dismiss), dismissed = 그 밖의 kill 요청(화면 종료 버튼), exit = 종료 코드 0, error = 그 밖의 종료 코드 */
 export type OffDutyReason = 'exit' | 'dismissed' | 'error' | 'released'
 
 /** 끝난 웹 세션 (퇴근). 다시 출근(resume)하면 webSessions 로 되돌아간다. 호스트만 쓴다 */

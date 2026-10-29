@@ -172,7 +172,7 @@ const interrupts = new Map<string, InterruptBox>()
 const btw = new BtwStore()
 /** 답을 기다리는 btw 요청의 시간 초과 타이머 (요청 ID → 세션·타이머) */
 const btwTimers = new Map<string, { sessionId: string; timer: ReturnType<typeof setTimeout> }>()
-/** `/jk-btw <ID>` 를 쓰고 Enter 를 보내기 전인 세션. 그 사이 중지의 Esc·대기 취소의 ↑ 가 입력칸의 명령 글과 섞이지 않게 막는다 */
+/** `/pray-btw <ID>` 를 쓰고 Enter 를 보내기 전인 세션. 그 사이 중지의 Esc·대기 취소의 ↑ 가 입력칸의 명령 글과 섞이지 않게 막는다 */
 const btwTyping = new Set<string>()
 
 const config = readConfig()
@@ -1331,7 +1331,7 @@ function interruptConflict(sessionId: string): string | null {
 }
 
 /** mod 가 실행하는 slash command (mod/hooks/register.ts 의 BTW_COMMAND) */
-const BTW_COMMAND = 'jk-btw'
+const BTW_COMMAND = 'pray-btw'
 /** 명령 글을 쓰고 Enter 까지 (화면 대화 탭의 SUBMIT_ENTER_DELAY_MS 와 같다 — 이어 보내면 \r 이 줄바꿈이 된다) */
 const BTW_ENTER_DELAY_MS = 300
 
@@ -1363,7 +1363,7 @@ function btwConflict(sessionId: string): string | null {
 
 /**
  * 곁가지 질문 `{ question }` (Claude Code /btw 와 같은 일. btw.ts). 근무 중인 웹 세션만. 작업 중에도 된다 — 명령이 immediate 라 차례를 멈추지 않는다.
- * pty 에 `/jk-btw <요청 ID>` 를 쓰고 300ms 뒤 Enter 를 보낸 다음 `{ requestId }` 로 답한다 (화면이 Enter 까지 기다려 다음 보내기와 섞이지 않게).
+ * pty 에 `/pray-btw <요청 ID>` 를 쓰고 300ms 뒤 Enter 를 보낸 다음 `{ requestId }` 로 답한다 (화면이 Enter 까지 기다려 다음 보내기와 섞이지 않게).
  * 답은 mod 가 `POST /api/hook/btw/:requestId` 로 보내고, BTW_TIMEOUT_MS 안에 안 오면 실패로 끝낸다. 바뀔 때마다 SSE `btw { sessionId }`
  */
 app.post('/api/sessions/:id/btw', async (req, res) => {
@@ -1478,7 +1478,7 @@ function modelChangeConflict(sessionId: string, jsonl: string | null): string | 
   if (!jsonl) return "Can't change the model before the first message"
   if (queuedPrompts(jsonl).length) return "Can't change the model while messages are queued"
   if (runningShells(jsonl).length) return "Can't change the model while background shells are running"
-  // 백그라운드로 넘어간 MCP 호출(팀장의 jk_wait 등)·백그라운드 에이전트도 프로세스와 같이 끝난다
+  // 백그라운드로 넘어간 MCP 호출(팀장의 team_wait 등)·백그라운드 에이전트도 프로세스와 같이 끝난다
   if (runningBackgroundTasks(jsonl).length) return "Can't change the model while background tasks are running"
   return null
 }
@@ -1890,7 +1890,7 @@ app.post('/api/team', async (req, res) => {
   broadcastOffice()
 })
 
-/** 지휘 단위(?partId= 없으면 팀 직속)의 세션과 task. 팀장·파트장 MCP 의 jk_status 가 부른다 */
+/** 지휘 단위(?partId= 없으면 팀 직속)의 세션과 task. 팀장·파트장 MCP 의 team_status 가 부른다 */
 app.get('/api/team/:teamId', async (req, res) => {
   const unit = findUnit(req.params.teamId, req.query.partId, res)
   if (!unit) return
@@ -2106,7 +2106,7 @@ app.post('/api/team/:teamId/members', async (req, res) => {
     res.status(400).json({ message: 'role or name required' })
     return
   }
-  // claude 쪽 세션 이름(터미널 제목·resume 목록)에는 역할을 붙여 둔다. jk-corp 화면은 이 값을 읽지 않는다
+  // claude 쪽 세션 이름(터미널 제목·resume 목록)에는 역할을 붙여 둔다. Pray 화면은 이 값을 읽지 않는다
   const claudeName = memberName ? withPosition(memberName, memberPosition) : `[${memberPosition}]`
   const extraArgs = memberExtraArgs(claudeName, permissionMode ?? 'bypassPermissions', modelChoice)
   const character = await autoCharacterFor({ id: sessionId, isLead: false, gender: memberGender, teamId: team.id })
@@ -2145,7 +2145,7 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   }, MEMBER_FIRST_INPUT_DELAY_MS)
 })
 
-/** 팀원 세션 종료 (jk_dismiss). 호스트가 기록을 팀장이 정리(released) 퇴근으로 옮긴다 — 보관 기간이 짧다 */
+/** 팀원 세션 종료 (team_dismiss). 호스트가 기록을 팀장이 정리(released) 퇴근으로 옮긴다 — 보관 기간이 짧다 */
 app.delete('/api/team/:teamId/members/:sessionId', (req, res) => {
   host.send({ type: 'kill', sessionId: req.params.sessionId, isReleased: true })
   tasks.markExited(req.params.sessionId)
@@ -2624,7 +2624,7 @@ app.post('/api/hook/prompt-box', (req, res) => {
 })
 
 /**
- * mod 가 곁가지 질문을 받아 간다 (`/jk-btw <요청 ID>` 를 실행할 때). `?sessionId=` 의 pending 요청이면 `{ question, history }`, 아니면 404.
+ * mod 가 곁가지 질문을 받아 간다 (`/pray-btw <요청 ID>` 를 실행할 때). `?sessionId=` 의 pending 요청이면 `{ question, history }`, 아니면 404.
  * suggestion 과 같은 이유로 인증 예외가 아니다 (mod 는 loopback 으로 통과)
  */
 app.get('/api/hook/btw/:requestId', (req, res) => {

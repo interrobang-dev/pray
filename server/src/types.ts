@@ -38,7 +38,7 @@ export interface Session {
   attendance: 'present' | 'break' | 'off'
   /** attendance === 'present' 와 같은 뜻 */
   isAlive: boolean
-  /** 퇴근일 때만. released = 팀장이 정리(jk_dismiss), dismissed = 그 밖의 kill 요청(종료 버튼), exit = 종료 코드 0, error = 그 밖 */
+  /** 퇴근일 때만. released = 팀장이 정리(team_dismiss), dismissed = 그 밖의 kill 요청(종료 버튼), exit = 종료 코드 0, error = 그 밖 */
   offDuty: { endedAt: string; reason: 'exit' | 'dismissed' | 'error' | 'released'; exitCode: number | null } | null
   /** 세션 생성 시각 (목록 정렬 기준: 오래된 것 먼저). 웹 세션은 hq 기록의 createdAt, 없으면 jsonl 첫 시각, 둘 다 없으면 null */
   createdAt: string | null

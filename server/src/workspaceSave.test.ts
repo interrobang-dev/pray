@@ -54,7 +54,7 @@ describe('workspaceSave', () => {
 })
 
 describe('saveTextFile on disk', () => {
-  const root = mkdtempSync(join(tmpdir(), 'jk-corp-save-'))
+  const root = mkdtempSync(join(tmpdir(), 'pray-save-'))
   afterAll(() => rmSync(root, { recursive: true, force: true }))
   const write = (name: string, data: Buffer | string) => {
     const file = join(root, name)

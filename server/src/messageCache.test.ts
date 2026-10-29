@@ -19,7 +19,7 @@ describe('TranscriptMessageCache', () => {
   let cache: TranscriptMessageCache
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'jk-corp-message-cache-'))
+    dir = mkdtempSync(join(tmpdir(), 'pray-message-cache-'))
     path = join(dir, 's.jsonl')
     cache = new TranscriptMessageCache(2)
   })
@@ -67,7 +67,7 @@ describe('TranscriptMessageCache', () => {
   })
 
   it('cuts results of tools named in earlier appends the same way as a full parse', async () => {
-    writeFileSync(path, assistant('a1', 'm1', [toolUse('jk', 'mcp__jk-corp__jk_wait'), toolUse('b')]))
+    writeFileSync(path, assistant('a1', 'm1', [toolUse('jk', 'mcp__pray__team_wait'), toolUse('b')]))
     await read()
     appendFileSync(path, toolResult('u1', 'jk', 'x'.repeat(3000)) + toolResult('u2', 'b', 'y'.repeat(3000)))
     const [message] = await expectSameAsFull()
@@ -84,7 +84,7 @@ describe('TranscriptMessageCache', () => {
     appendFileSync(path, `\n${assistant('a1', 'm1', [toolUse('t1')])}`)
     await expectSameAsFull()
     // 덜 쓰인 줄의 도구 호출 이름은 상태에 남지 않고, 다 쓰인 뒤 들어간다
-    const call = assistant('a2', 'm2', [toolUse('jk', 'mcp__jk-corp__jk_status')])
+    const call = assistant('a2', 'm2', [toolUse('jk', 'mcp__pray__team_status')])
     appendFileSync(path, call.slice(0, -1))
     await expectSameAsFull()
     appendFileSync(path, `\n${toolResult('u3', 'jk', 'z'.repeat(2500))}`)
@@ -229,7 +229,7 @@ describe('InstructionLogCache', () => {
   let dir: string
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'jk-corp-instruction-log-'))
+    dir = mkdtempSync(join(tmpdir(), 'pray-instruction-log-'))
   })
 
   afterEach(() => {

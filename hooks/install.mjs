@@ -1,4 +1,4 @@
-// ~/.claude/settings.json 에 jk-corp http 훅을 추가한다. 기존 훅은 건드리지 않는다.
+// ~/.claude/settings.json 에 Pray http 훅을 추가한다. 기존 훅은 건드리지 않는다.
 import { readFileSync, writeFileSync, copyFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'

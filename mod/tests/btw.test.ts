@@ -42,15 +42,15 @@ function engine(on: On, record: { registered: CommandSpec[]; prompts: string[]; 
 }
 
 const newRecord = () => ({ registered: [] as CommandSpec[], prompts: [] as string[], sent: [] as Sent[] })
-/** 사람이 입력칸에서 친 `/jk-btw <args>` */
+/** 사람이 입력칸에서 친 `/pray-btw <args>` */
 function run($: Engine, args: string) {
-  return $.command.run({ command: 'jk-btw', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
+  return $.command.run({ command: 'pray-btw', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
 }
 
 // 훅이 기다리지 않고 보낸 fetch·fork 가 끝나도록 잠깐 쉰다
 const settle = () => new Promise<void>(resolve => setTimeout(resolve, 100))
 
-test('웹 세션: 시작할 때 /jk-btw 를 숨겨 등록하고, 요청 ID 로 질문을 받아 fork 한 답을 보낸다', async ($, on) => {
+test('웹 세션: 시작할 때 /pray-btw 를 숨겨 등록하고, 요청 ID 로 질문을 받아 fork 한 답을 보낸다', async ($, on) => {
   const record = newRecord()
   mock.env(on, { PRAY_SESSION: 'abc' })
   mock.clock(on)
@@ -58,10 +58,10 @@ test('웹 세션: 시작할 때 /jk-btw 를 숨겨 등록하고, 요청 ID 로 �
 
   await $.session.start({ cwd: 'D:/repo', surface: 'terminal', isInteractive: true })
   expect(record.registered).toEqual([
-    { name: 'jk-btw', description: expect.stringContaining('side question'), argumentHint: '<request id>', immediate: true },
+    { name: 'pray-btw', description: expect.stringContaining('side question'), argumentHint: '<request id>', immediate: true },
   ])
   const described = await $.command.describe({
-    command: 'jk-btw',
+    command: 'pray-btw',
     description: 'x',
     isHidden: false,
     immediate: true,
@@ -84,7 +84,7 @@ test('웹 세션: 시작할 때 /jk-btw 를 숨겨 등록하고, 요청 ID 로 �
   expect(prompt).toEndWith('\n\nWhat code word?')
 })
 
-test('사람이 직접 친 /jk-btw (인자 없음·요청 ID 꼴이 아님)는 아무것도 안 한다', async ($, on) => {
+test('사람이 직접 친 /pray-btw (인자 없음·요청 ID 꼴이 아님)는 아무것도 안 한다', async ($, on) => {
   const record = newRecord()
   mock.env(on, { PRAY_SESSION: 'abc' })
   mock.clock(on)

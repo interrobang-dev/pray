@@ -53,7 +53,7 @@ vi.mock('node:os', async (importOriginal) => {
   const os = await importOriginal<typeof import('node:os')>()
   const { mkdtempSync } = await vi.importActual<typeof import('node:fs')>('node:fs')
   const { join } = await import('node:path')
-  const home = mkdtempSync(join(os.tmpdir(), 'jk-corp-hq-'))
+  const home = mkdtempSync(join(os.tmpdir(), 'pray-hq-'))
   return { ...os, homedir: () => home }
 })
 

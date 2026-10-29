@@ -47,10 +47,10 @@ describe('경로 강조', () => {
   })
 
   it('윈도우 절대 경로·홈 경로', () => {
-    expect(marked(String.raw`open C:\Users\ENGSOFT\a.txt and D:/workspace/@private/jk-corp and ~/.claude/jk-corp/hq.json.`)).toEqual([
+    expect(marked(String.raw`open C:\Users\ENGSOFT\a.txt and D:/workspace/@private/jk-corp and ~/.claude/pray/hq.json.`)).toEqual([
       String.raw`path:C:\Users\ENGSOFT\a.txt`,
       'path:D:/workspace/@private/jk-corp',
-      'path:~/.claude/jk-corp/hq.json',
+      'path:~/.claude/pray/hq.json',
     ])
   })
 

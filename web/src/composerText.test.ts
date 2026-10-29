@@ -81,7 +81,7 @@ describe('parseBtwCommand', () => {
   })
 
   it('다른 글·다른 명령은 아니다', () => {
-    for (const text of ['/btwx 질문', 'btw 질문', '질문 /btw', '/help', '/jk-btw abc', '']) expect(parseBtwCommand(text)).toBeNull()
+    for (const text of ['/btwx 질문', 'btw 질문', '질문 /btw', '/help', '/pray-btw abc', '']) expect(parseBtwCommand(text)).toBeNull()
   })
 })
 

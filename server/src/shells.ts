@@ -58,7 +58,7 @@ function deliveredText(record: Record<string, unknown>): string {
 
 /**
  * 백그라운드 작업 하나 (판정용). shell = Bash·PowerShell(Session.shells 에도 나간다), mcp = 시간이 오래 걸려 백그라운드로 넘어간 MCP 호출
- * (예: 팀장의 jk_wait), agent = 백그라운드 에이전트 (Agent run_in_background, SendMessage 로 다시 깨운 것)
+ * (예: 팀장의 team_wait), agent = 백그라운드 에이전트 (Agent run_in_background, SendMessage 로 다시 깨운 것)
  */
 export interface BackgroundTask {
   id: string

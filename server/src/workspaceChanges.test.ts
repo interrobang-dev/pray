@@ -186,7 +186,7 @@ const hasCommand = (command: string) => {
 }
 
 describe('workspaceChanges on real working copies', () => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'jk-corp-changes-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'pray-changes-')))
   afterAll(() => rmSync(root, { recursive: true, force: true }))
 
   it.skipIf(!hasCommand('git'))('lists git changes under the session folder and diffs them', async () => {

@@ -85,7 +85,7 @@ const hasGit = (() => {
 })()
 
 describe.skipIf(!hasGit)('workspaceHistory on a real repository', () => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'jk-corp-history-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'pray-history-')))
   afterAll(() => rmSync(root, { recursive: true, force: true }))
   const repo = join(root, 'repo')
   const git = (...args: string[]) =>

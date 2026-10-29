@@ -22,7 +22,7 @@ describe('TranscriptCache', () => {
   let cache: TranscriptCache
 
   beforeEach(() => {
-    projects = mkdtempSync(join(tmpdir(), 'jk-corp-transcripts-'))
+    projects = mkdtempSync(join(tmpdir(), 'pray-transcripts-'))
     mkdirSync(join(projects, 'D--a'))
     mkdirSync(join(projects, 'D--b'))
     cache = new TranscriptCache(projects)

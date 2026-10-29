@@ -129,8 +129,10 @@ export interface ClaudeRunResult {
 /** `claude <args>` 한 번 실행. configDir 이 null 이면 기본 폴더(~/.claude) */
 export type RunClaudeAuth = (args: string[], configDir: string | null) => Promise<ClaudeRunResult>
 
-/** 로그인·폐기 때 계정 키가 잠깐 들어가는 임시 설정 폴더 (`<tmp>/jk-corp-account-*`). 끝나면 지운다 */
-const ACCOUNT_TEMP_PREFIX = 'jk-corp-account-'
+/** 로그인·폐기 때 계정 키가 잠깐 들어가는 임시 설정 폴더 (`<tmp>/pray-account-*`). 끝나면 지운다 */
+const ACCOUNT_TEMP_PREFIX = 'pray-account-'
+/** 이름을 바꾸기 전 서버가 남긴 임시 폴더. 오래된 것은 같이 지운다 (호환 코드) */
+const LEGACY_ACCOUNT_TEMP_PREFIX = 'jk-corp-account-'
 /** 서버가 죽어 남은 임시 폴더를 지우는 기준. 가장 긴 로그인(10분)보다 길게 */
 const STALE_TEMP_MS = 15 * 60_000
 
@@ -147,17 +149,17 @@ export function removeAccountTempDir(dir: string): void {
   }
 }
 
-/** 서버가 로그인 도중 죽어 남은 임시 폴더 (토큰이 들어 있을 수 있다) */
-export function removeStaleAccountTempDirs(nowMs = Date.now()): void {
+/** 서버가 로그인 도중 죽어 남은 임시 폴더 (토큰이 들어 있을 수 있다). root 는 시험용 */
+export function removeStaleAccountTempDirs(nowMs = Date.now(), root = tmpdir()): void {
   let names: string[]
   try {
-    names = readdirSync(tmpdir())
+    names = readdirSync(root)
   } catch {
     return
   }
   for (const name of names) {
-    if (!name.startsWith(ACCOUNT_TEMP_PREFIX)) continue
-    const dir = join(tmpdir(), name)
+    if (!name.startsWith(ACCOUNT_TEMP_PREFIX) && !name.startsWith(LEGACY_ACCOUNT_TEMP_PREFIX)) continue
+    const dir = join(root, name)
     try {
       if (nowMs - statSync(dir).mtimeMs > STALE_TEMP_MS) removeAccountTempDir(dir)
     } catch {
@@ -195,7 +197,7 @@ function renameWithRetry(from: string, to: string): void {
 
 /** 같은 폴더 임시 파일에 다 쓴 뒤 바꿔 끼운다 (Claude Code 도 이렇게 쓴다. 링크로 바꿔 끼우지 않는다) */
 export function writeFileAtomic(path: string, text: string): void {
-  const tempPath = `${path}.jk-corp.${process.pid}.tmp`
+  const tempPath = `${path}.pray.${process.pid}.tmp`
   try {
     writeFileSync(tempPath, text)
     renameWithRetry(tempPath, path)

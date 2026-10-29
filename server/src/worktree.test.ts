@@ -48,7 +48,7 @@ describe('worktree', () => {
 
 describe('session folder trust', () => {
   // 실제 ~/.claude.json 대신 임시 폴더의 파일을 쓴다
-  const root = mkdtempSync(join(tmpdir(), 'jk-corp-trust-'))
+  const root = mkdtempSync(join(tmpdir(), 'pray-trust-'))
   const folder = join(root, 'MixedCase')
   mkdirSync(folder)
   const claudeJsonPath = join(root, '.claude.json')
@@ -122,7 +122,7 @@ describe('worktree list parsing', () => {
 
 describe('part worktrees on a real git repo', () => {
   // 저장소마다 <root>/<이름>, worktree 는 그 옆 <root>/<이름>.worktrees/<슬러그>
-  const root = mkdtempSync(join(tmpdir(), 'jk-corp-wt-'))
+  const root = mkdtempSync(join(tmpdir(), 'pray-wt-'))
   afterAll(() => rmSync(root, { recursive: true, force: true }))
 
   const git = (cwd: string, ...args: string[]) =>

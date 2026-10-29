@@ -1,12 +1,12 @@
 /**
  * 곁가지 질문(btw, Claude Code `/btw` 와 같은 일)의 서버 쪽 순수 함수·저장소.
  *
- * 흐름: 화면 `POST /api/sessions/:id/btw { question }` → 요청을 만들고 pty 에 `/jk-btw <요청 ID>` → 웹 세션의 mod 가
+ * 흐름: 화면 `POST /api/sessions/:id/btw { question }` → 요청을 만들고 pty 에 `/pray-btw <요청 ID>` → 웹 세션의 mod 가
  * `GET /api/hook/btw/:requestId` 로 질문·이전 문답을 받아 `$.model.fork`(지금 대화 문맥, 도구 없음)로 답을 만들고
  * `POST /api/hook/btw/:requestId` 로 결과를 보낸다. 문답은 대화 기록(jsonl)에 남지 않고 서버 메모리에만 있다.
  *
  * 실측 (Claude Code 2.1.311, Haiku, node-pty): 쉬는 중·Bash 실행 중 모두 1~3초에 답이 오고 차례는 멈추지 않았다.
- * `/jk-btw` 를 친 흔적은 jsonl 에 한 줄도 안 남고 다음 차례 claude 도 보지 못했다. 첫 차례가 끝나기 전에는 `nothing-to-fork`.
+ * `/pray-btw` 를 친 흔적은 jsonl 에 한 줄도 안 남고 다음 차례 claude 도 보지 못했다. 첫 차례가 끝나기 전에는 `nothing-to-fork`.
  * fork 는 main 의 마지막 요청을 다시 쓰므로 프롬프트 캐시를 읽는다 (cache_read 5만 토큰대). 작업 중이면 그 요청 뒤의 도구 호출은 보지 못한다
  */
 

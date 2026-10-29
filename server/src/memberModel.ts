@@ -1,4 +1,4 @@
-/** 팀원 spawn 에 고를 수 있는 모델 (claude --model 별칭). 팀장·파트장 MCP 의 jk_spawn_member enum 과 같다 */
+/** 팀원 spawn 에 고를 수 있는 모델 (claude --model 별칭). 팀장·파트장 MCP 의 team_spawn_member enum 과 같다 */
 export const MEMBER_MODELS = ['haiku', 'sonnet', 'opus', 'fable'] as const
 /** claude --effort 값 전부. 낮은 effort 도 막지 않는다 */
 export const MEMBER_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
@@ -44,7 +44,7 @@ export interface ModelSetting {
 }
 
 /**
- * jk-corp 가 extraArgs 에 넣는, 값을 하나 받는 claude 옵션 (leadExtraArgs·memberExtraArgs). 이 옵션 다음 칸은 글자가 무엇이든
+ * Pray 가 extraArgs 에 넣는, 값을 하나 받는 claude 옵션 (leadExtraArgs·memberExtraArgs). 이 옵션 다음 칸은 글자가 무엇이든
  * (`--model` 이어도) 그 값이다 — claude(commander)도 값이 꼭 필요한 옵션은 다음 칸을 그대로 값으로 읽는다.
  * 값 옵션을 새로 넣으면 여기에도 더한다 (빠지면 그 값이 `--model` 일 때 모델 옵션으로 읽힌다)
  */

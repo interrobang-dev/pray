@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,6 +8,7 @@ import {
   accountErrorBody,
   defaultAccountPaths,
   makeAccountStore,
+  removeStaleAccountTempDirs,
   type AccountPaths,
   type RunClaudeAuth,
 } from './accountStore.js'
@@ -92,7 +93,7 @@ async function seedAB() {
 }
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'jk-accounts-test-'))
+  home = mkdtempSync(join(tmpdir(), 'pray-accounts-test-'))
   paths = defaultAccountPaths(home)
   mkdirSync(paths.claudeDir)
   profiles = new Map([
@@ -335,5 +336,16 @@ describe('saveLogin', () => {
     const store = makeStore()
     const dir = mkdtempSync(join(home, 'login-'))
     await expectError(store.saveLogin(dir), 500, /no login/)
+  })
+})
+
+describe('removeStaleAccountTempDirs', () => {
+  it('removes temp folders older than 15 minutes, including ones left under the old name', () => {
+    const now = Date.now()
+    const old = new Date(now - 16 * 60_000)
+    for (const name of ['pray-account-old', 'jk-corp-account-old', 'pray-account-new', 'other-old']) mkdirSync(join(home, name))
+    for (const name of ['pray-account-old', 'jk-corp-account-old', 'other-old']) utimesSync(join(home, name), old, old)
+    removeStaleAccountTempDirs(now, home)
+    expect(readdirSync(home).sort()).toEqual(['.claude', 'other-old', 'pray-account-new'])
   })
 })

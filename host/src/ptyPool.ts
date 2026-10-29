@@ -42,7 +42,7 @@ function transcriptExists(sessionId: string): boolean {
   }
 }
 
-/** kill 요청의 퇴근 이유. released = 팀장이 정리한 팀원(jk_dismiss), dismissed = 그 밖(화면 종료 버튼) */
+/** kill 요청의 퇴근 이유. released = 팀장이 정리한 팀원(team_dismiss), dismissed = 그 밖(화면 종료 버튼) */
 export type KillReason = 'dismissed' | 'released'
 
 /**

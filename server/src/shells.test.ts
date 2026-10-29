@@ -180,7 +180,7 @@ describe('background shells from jsonl', () => {
 })
 
 describe('output tail', () => {
-  const root = mkdtempSync(join(tmpdir(), 'jk-corp-tail-'))
+  const root = mkdtempSync(join(tmpdir(), 'pray-tail-'))
   afterAll(() => rmSync(root, { recursive: true, force: true }))
   const file = (name: string, content: string | Buffer) => {
     const path = join(root, name)
@@ -223,7 +223,7 @@ describe('output tail', () => {
 })
 
 describe('background tasks (shell, MCP, agent) from jsonl', () => {
-  /** MCP 호출이 120초를 넘어 백그라운드로 넘어간 두 줄 (실측 꼴: 팀장의 jk_wait) */
+  /** MCP 호출이 120초를 넘어 백그라운드로 넘어간 두 줄 (실측 꼴 그대로: 이름을 바꾸기 전 팀장의 jk_wait. 판정은 도구 이름을 보지 않는다) */
   function mcpMoved(toolUseId: string, id: string, tool = 'mcp__jk-corp__jk_wait') {
     const text = `MCP tool "jk-corp/jk_wait" is still running after 120s. It was moved to the background as task ${id} and keeps running; you'll receive a notification with the result when it completes. You can keep working in the meantime. To stop it, use TaskStop with task_id "${id}". Note: it does not survive exiting this session.`
     return [

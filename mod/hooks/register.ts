@@ -9,8 +9,8 @@ const BOX_TIMEOUT_MS = 2000
 const PLUGIN_NAME = 'pray'
 /** 곁가지 질문(btw) 요청. 뒤에 요청 ID 를 붙여 GET 으로 질문을 받고 POST 로 답을 보낸다 */
 const BTW_ENDPOINT = 'http://127.0.0.1:4710/api/hook/btw/'
-/** 서버가 pty 에 `/jk-btw <요청 ID>` 로 친다. Claude Code 내장 /btw 와 이름이 겹치지 않게 앞말을 붙였다 */
-const BTW_COMMAND = 'jk-btw'
+/** 서버가 pty 에 `/pray-btw <요청 ID>` 로 친다. Claude Code 내장 /btw 와 이름이 겹치지 않게 앞말을 붙였다 */
+const BTW_COMMAND = 'pray-btw'
 /** 서버 요청 하나를 기다리는 시간 (fork 는 서버가 60초로 자른다) */
 const BTW_FETCH_TIMEOUT_MS = 5000
 /** 서버가 만드는 요청 ID 꼴. 사람이 직접 친 다른 인자는 아무것도 안 한다 */
@@ -58,7 +58,7 @@ async function sessionIdOf($: EngineInterface): Promise<string | undefined> {
   return (await $.env.get('PRAY_SESSION')) ?? (await $.env.get('JK_CORP_SESSION'))
 }
 
-/** 웹 세션에만 /jk-btw 를 등록한다. 실패는 조용히 넘어간다 (곁가지 질문만 안 된다. 서버가 시간 초과로 실패를 알린다) */
+/** 웹 세션에만 /pray-btw 를 등록한다. 실패는 조용히 넘어간다 (곁가지 질문만 안 된다. 서버가 시간 초과로 실패를 알린다) */
 async function registerBtw($: EngineInterface): Promise<void> {
   try {
     if ((await sessionIdOf($)) === undefined) return
@@ -158,7 +158,7 @@ export const register: Register = on => {
   // 서버가 치는 명령이라 typeahead·/help 에서 숨긴다 (다 쳐서 실행하면 그대로 돈다)
   on('command.describe', { command: BTW_COMMAND }, ($, e, next) => next({ ...e, isHidden: true }))
 
-  // 서버가 친 `/jk-btw <요청 ID>`. 기다리지 않고 바로 끝낸다 — 글(text) 없이 답해 대화에 출력 줄을 남기지 않는다.
+  // 서버가 친 `/pray-btw <요청 ID>`. 기다리지 않고 바로 끝낸다 — 글(text) 없이 답해 대화에 출력 줄을 남기지 않는다.
   // 요청 ID 꼴이 아니면(사람이 직접 친 것) 아무것도 안 한다
   on('command.run', { command: BTW_COMMAND }, ($, e) => {
     const requestId = e.args.trim()

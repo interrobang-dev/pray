@@ -40,8 +40,8 @@ describe('runningToolNames', () => {
   })
 
   it('MCP 도구는 <서버>/<도구>', () => {
-    const messages = [message('user'), message('assistant', [tool('mcp__jk-corp__jk_wait'), tool('mcp__claude_ai_Claude_Docs__batch')])]
-    expect(runningToolNames(messages)).toEqual(['jk-corp/jk_wait', 'claude_ai_Claude_Docs/batch'])
+    const messages = [message('user'), message('assistant', [tool('mcp__pray__team_wait'), tool('mcp__claude_ai_Claude_Docs__batch')])]
+    expect(runningToolNames(messages)).toEqual(['pray/team_wait', 'claude_ai_Claude_Docs/batch'])
   })
 
   it('여러 개면 처음 나온 순서로, 같은 이름은 한 번만', () => {
