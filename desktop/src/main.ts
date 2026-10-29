@@ -7,6 +7,7 @@ import { Child } from './children'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
 import { trayIconPng } from './icon'
 import { isPipeAlive, LEGACY_PIPE_PATH } from './legacyHost'
+import { isLaunchAtLogin, LOGIN_ITEM_NAME } from './loginItem'
 import { diffSessions, type NotifySession, type SessionNotice, type StatusBaseline } from './notify'
 
 const SERVER_URL = 'http://127.0.0.1:4710'
@@ -229,8 +230,8 @@ function refreshTray(): void {
       {
         label: 'Launch at login',
         type: 'checkbox',
-        checked: app.getLoginItemSettings(loginItemOptions()).openAtLogin,
-        click: (item) => app.setLoginItemSettings({ ...loginItemOptions(), openAtLogin: item.checked }),
+        checked: isLaunchAtLogin(app.getLoginItemSettings(loginItemOptions()).launchItems, loginItemOptions().args ?? []),
+        click: (item) => app.setLoginItemSettings({ ...loginItemOptions(), name: LOGIN_ITEM_NAME, openAtLogin: item.checked }),
       },
       {
         label: 'Notifications',
@@ -282,10 +283,11 @@ if (!app.requestSingleInstanceLock()) {
   if (isLegacyAppData) dialog.showErrorBox('Pray', OLD_TRAY_MESSAGE)
   app.quit()
 } else {
-  // 알림을 Windows 에 'jk-corp' ID 로 올린다 (알림 기록·설정이 이 ID 로 묶인다).
+  // 알림을 Windows 에 'pray' ID 로 올린다 (알림 기록·설정이 이 ID 로 묶인다. 대소문자는 가리지 않는다).
   // 알림 머리의 앱 이름은 그래도 electron.exe 파일 설명 "Electron" 이다 — HKCU\Software\Classes\AppUserModelId 의
-  // DisplayName·시작 메뉴 바로가기(AUMID 포함)로도 바뀌지 않았다(실측). 바꾸려면 exe 이름·설명을 바꾼 설치본이 필요하다
-  app.setAppUserModelId('jk-corp')
+  // DisplayName·시작 메뉴 바로가기(AUMID 포함)로도 바뀌지 않았다(실측). 바꾸려면 exe 이름·설명을 바꾼 설치본이 필요하다.
+  // 로그인 시 자동 실행의 Run 값 이름은 이 ID 를 따르지 않게 LOGIN_ITEM_NAME 으로 고정한다
+  app.setAppUserModelId('pray')
   app.on('second-instance', () => void showWindow())
   app.on('window-all-closed', () => {
     // 트레이 앱: 창이 다 닫혀도 종료하지 않는다

@@ -1,6 +1,6 @@
 # Pray (jk-corp)
 
-앱 이름은 **Pray** (문구 "Do your best. Then pray."). 화면·트레이·알림·로그인 메일에 보이는 이름만 Pray 이고 저장소·localStorage 키·MCP·mod·쿠키·알림 AppUserModelId 같은 내부 이름은 jk-corp 그대로다 (로고·글자 로고 → `web-app.md`). 패키지는 `@pray/*`(루트 `pray`), 호스트 pipe 는 `\\.\pipe\pray-host`, 설정 폴더는 `~/.claude/pray/` (옛 `~/.claude/jk-corp/` 만 있으면 트레이·호스트·서버가 시작할 때 한 번 옮긴다 → `host.md` 의 `dataDir.ts`). Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사무실의 직원으로 보여주고, 웹에서 띄운 세션은 조작하고 외부(터미널·IDE) 세션은 관찰만 한다. 설계 전문: `docs/plans/2026-10-20-session-office-design.md`.
+앱 이름은 **Pray** (문구 "Do your best. Then pray."). 화면·트레이·알림·로그인 메일에 보이는 이름만 Pray 이고 저장소·localStorage 키·MCP·쿠키 같은 내부 이름은 jk-corp 그대로다 (로고·글자 로고 → `web-app.md`). 패키지는 `@pray/*`(루트 `pray`), 알림 ID(AppUserModelId)·mod 플러그인 이름은 `pray`, 호스트 pipe 는 `\\.\pipe\pray-host`, 설정 폴더는 `~/.claude/pray/` (옛 `~/.claude/jk-corp/` 만 있으면 트레이·호스트·서버가 시작할 때 한 번 옮긴다 → `host.md` 의 `dataDir.ts`). Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사무실의 직원으로 보여주고, 웹에서 띄운 세션은 조작하고 외부(터미널·IDE) 세션은 관찰만 한다. 설계 전문: `docs/plans/2026-10-20-session-office-design.md`.
 
 하지 않는 것: 외부 세션 조작(관찰만) · 설치 파일(electron-builder) — 저장소에서 실행한다 · HTTPS(사내망 전제) · Claude 토큰 직접 갱신(Claude Code 가 한다).
 
