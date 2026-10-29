@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
+import { hostname } from 'node:os'
 import { basename, join, relative } from 'node:path'
 import compression from 'compression'
 import express from 'express'
@@ -59,6 +60,7 @@ import { normalizeCwd } from '@jk-corp/host/team'
 import { setupFileLog } from '@jk-corp/host/runtime'
 import { configDir, readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
+import { isAllowedHost, isSameOriginRequest } from './requestGuard.js'
 import { makeSendCode } from './mail.js'
 import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptJudgement } from './interrupt.js'
@@ -170,6 +172,19 @@ const NO_LEAD_NAME = 'Team API'
 const POSITION_FORMAT_MESSAGE = 'position must be 1–12 characters with no [ ] or line breaks (e.g. FE, BE, Lead)'
 
 const app = express()
+/** 이 PC 이름. 다른 PC 가 `http://<PC 이름>:4710` 으로 열 때의 Host */
+const machineName = hostname()
+// DNS rebinding 막기: Host 이름이 IP 숫자 주소·localhost·이 PC 이름일 때만 (정적 파일·SSE 포함 모든 요청. 공격 사이트 도메인으로 연 화면은 처음부터 안 뜬다)
+app.use((req, res, next) => {
+  if (isAllowedHost(req.headers.host, machineName)) return next()
+  res.status(403).json({ message: 'Host name not allowed' })
+})
+// CSRF 막기: 쓰기 요청의 Origin 이 있으면 같은 출처여야 한다 (본문을 읽기 전에 거절)
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+app.use('/api', (req, res, next) => {
+  if (SAFE_METHODS.has(req.method) || isSameOriginRequest(req.headers.origin, req.headers.host)) return next()
+  res.status(403).json({ message: 'Cross-site request blocked' })
+})
 // SSE 는 압축하면 압축 버퍼에 쌓여 이벤트가 늦게 가거나 안 가므로 뺀다 (Express 가 `; charset=utf-8` 을 붙여 앞부분으로 비교)
 app.use(
   compression({
@@ -189,9 +204,16 @@ app.use((req, res, next) => {
   return jsonBody(req, res, next)
 })
 
-// 로컬(127.0.0.1)은 무인증. 그 외는 로그인 쿠키 필요. 훅·인증 API 는 예외
+/** claude 의 http 훅 경로 (Express 라우팅처럼 대소문자·끝 슬래시 무시). 이 PC 의 claude 만 보내므로 loopback 소켓만 받는다 — 다른 PC 가 가짜 Stop 으로 팀원 task 결과를 꾸미지 못하게 */
+const CLAUDE_HOOK_PATH = /^\/hook(?:\/ask)?\/?$/i
+// 로컬(127.0.0.1)은 무인증. 그 외는 로그인 쿠키 필요. 인증 API 는 예외, 훅은 로컬만 (로그인한 다른 PC 도 403)
 app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/auth/') || req.path === '/hook' || req.path === '/hook/ask') return next()
+  if (CLAUDE_HOOK_PATH.test(req.path)) {
+    if (isLoopback(req.socket.remoteAddress)) return next()
+    res.status(403).json({ message: 'Hooks are accepted only from this PC' })
+    return
+  }
+  if (req.path.startsWith('/auth/')) return next()
   if (isLoopback(req.socket.remoteAddress)) return next()
   if (auth.emailOf(parseCookie(req.headers.cookie, COOKIE))) return next()
   res.status(401).json({ message: 'Login required' })

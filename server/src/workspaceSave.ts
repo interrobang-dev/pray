@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { open, readFile, stat } from 'node:fs/promises'
+import { isLoopbackUrl } from './requestGuard.js'
 import { decodeText, isBinaryBuffer, MAX_TEXT_BYTES, type TextEncoding } from './workspaceFiles.js'
 
 /**
@@ -13,17 +14,6 @@ const VCS_META_DIRS = new Set(['.git', '.svn', '.hg'])
 /** 경로 어느 칸이든 .git·.svn·.hg 면 true (worktree 의 `.git` 파일 자신도) */
 export function isVcsMetaPath(path: string): boolean {
   return path.split(/[\\/]/).some((part) => VCS_META_DIRS.has(part.toLowerCase()))
-}
-
-const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
-
-function isLoopbackUrl(value: string): boolean {
-  try {
-    const url = new URL(value)
-    return (url.protocol === 'http:' || url.protocol === 'https:') && LOOPBACK_HOSTNAMES.has(url.hostname.toLowerCase())
-  } catch {
-    return false
-  }
 }
 
 /**

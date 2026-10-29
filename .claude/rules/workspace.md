@@ -22,7 +22,7 @@ paths:
 - 서버 API 꼴·경로 검증·숨김 목록·찾기 점수·인코딩·변경 목록/diff 규칙 → server-api.md (`index.ts` 의 "세션 작업 폴더(cwd) API", `workspaceFiles.ts`·`workspaceChanges.ts`)
 - 패널 탭 세그먼트·`shownTab` → web-app.md (`App.tsx`)
 - scratchpad 작업 파일 모달(대화 오른쪽 아래 폴더 버튼, `Files.tsx`)은 다른 기능이다 → chat.md. `formatSize` 만 그 파일 것을 쓴다
-- 저장 API·loopback·Origin 판정·줄바꿈/BOM 되살리기·제자리 쓰기 → server-api.md (`workspaceSave.ts`). 고르기 창 `choiceDialog`·App 의 탭·세션 바꾸기 → web-app.md
+- 저장 API·loopback·줄바꿈/BOM 되살리기·제자리 쓰기 → server-api.md (`workspaceSave.ts`), Origin·Host 판정 → security.md. 고르기 창 `choiceDialog`·App 의 탭·세션 바꾸기 → web-app.md
 - 대화 입력 상자(`Composer.tsx`)·`CopyButton` → chat.md. 입력칸 글·커서 저장소 `composerDraft.ts` 는 이 파일이다 (아래 구조)
 
 ## 구조

@@ -16,6 +16,7 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 |---|---|
 | `host.md` | 호스트(pipe·pty·resume·퇴근 기록)·`hq.json`(`hq.ts` 전문)·트레이 앱·스케줄러 스크립트·훅 설치·팀 할 일 저장 규칙 |
 | `team.md` | 팀·파트 판정, 팀장·파트장 지침·MCP 도구, task 상태, 팀원 이름·모델·effort, worktree 파트 |
+| `security.md` | 인증(`auth.ts`)·DNS rebinding 을 막는 Host 검사·CSRF 를 막는 Origin 검사(`requestGuard.ts`)·훅 경로 이 PC 전용·`index.ts` 미들웨어 순서 |
 | `server-api.md` | 서버 API 경로 전부(`index.ts` 전문), 세션 목록·jsonl 요약·훅 상태·표시 상태 계산, shell·작업 파일·첨부·세션 cwd 파일 읽기(`workspaceFiles.ts`)·변경 보기(`workspaceChanges.ts`)·저장(`workspaceSave.ts`), AskUserQuestion, 세션 이름·역할·인물, 폴더 신뢰, 모델·effort 바꾸기 |
 | `queue-interrupt.md` | mod(입력 제안·입력칸 알림·곁가지 질문), 보내기의 함정, 대기열·대기 메시지 취소, 작업 중지, 곁가지 질문 흐름(`btw.ts`) |
 | `accounts.md` | 사용량 조회·사용량 창, Claude 계정 보관·전환·로그인·로그아웃 (서버·화면) |
@@ -54,7 +55,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 { "bind": "0.0.0.0", "loginEmails": ["..."], "smtp": { "host", "port", "user", "pass" } }
 ```
 
-파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP>:4710` → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 토큰은 `~/.claude/jk-corp/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
+파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP 또는 PC 이름>:4710` (도메인 이름은 Host 검사로 403 → `security.md`) → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 토큰은 `~/.claude/jk-corp/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
 
 **트레이 앱 없이 쓰는 대안: 작업 스케줄러.** `npm run startup:install` 이 `jk-corp-host`/`jk-corp-server` 작업을 등록한다(`wscript launch-hidden.vbs` 래퍼로 창 없이. S4U 는 관리자 권한 필요. PowerShell `-WindowStyle Hidden` 은 대화형 작업에서 콘솔 창이 보여 사용자가 닫는 사고가 두 번 났다). 멈출 때는 반드시 `scripts/stop.ps1` (`Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남는다). **트레이 앱과 스케줄러를 같이 쓰면 pipe·포트가 충돌한다** — 지금은 스케줄러 작업을 제거한 상태.
 
@@ -89,7 +90,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/shells.ts` — 백그라운드 shell·작업 판정, 출력 끝 N줄 · `scratchpad.ts` — 세션 작업 폴더·첨부 저장
 - `server/src/workspaceFiles.ts` — 세션 cwd 읽기(Files 탭 API): 경로 검증·한 단계 목록·파일 글/바이너리 판정·이름 빠른 찾기 · `workspaceChanges.ts` — 세션 cwd 의 git/SVN 변경 목록·diff(읽기만) · `workspaceSave.ts` — 세션 cwd 글 파일 저장(이 PC 에서만, CSRF·충돌·줄바꿈/BOM)
 - `server/src/askQuestion.ts` — AskUserQuestion 해석·답 · `serialRunner.ts` — 한 번에 하나 실행기 · `hostClient.ts` — pipe 클라이언트
-- `server/src/auth.ts`·`mail.ts`·`config.ts` — 메일 인증·토큰·config.json
+- `server/src/auth.ts`·`mail.ts`·`config.ts` — 메일 인증·토큰·config.json · `requestGuard.ts` — Host·Origin 머리 판정 (→ `security.md`)
 - `server/src/messages.ts` — jsonl → 대화 메시지 (→ `chat.md`) · `flow.ts` — 플로우 (→ `flow.md`)
 - `server/src/messageCache.ts` — 대화 API 의 해석 캐시·버전·바뀐 뒤쪽만 보내기
 - `server/src/suggestion.ts`·`unqueue.ts`·`interrupt.ts`·`btw.ts` — 입력 제안·대기 취소·작업 중지·곁가지 질문(`/btw`) (→ `queue-interrupt.md`) · `mod/` — 웹 세션 전용 mod (→ 같은 파일)
