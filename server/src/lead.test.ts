@@ -12,9 +12,18 @@ describe('lead', () => {
     expect(prompt).toContain('팀원 정리 규칙')
   })
 
+  it('prompt uses the Pray office and team_* tool names only', () => {
+    const part = { id: 'p1', name: 'api', createdAt: '' }
+    for (const prompt of [leadSystemPrompt(team), leadSystemPrompt(team, part)]) {
+      expect(prompt).toContain('Pray 사무실')
+      expect(prompt).toContain('team_wait')
+      expect(prompt).not.toMatch(/jk_|jk-corp/)
+    }
+  })
+
   it('prompt tells the lead when to pick a model and effort for a member', () => {
     const prompt = leadSystemPrompt(team)
-    expect(prompt).toContain('jk_spawn_member 의 model·effort')
+    expect(prompt).toContain('team_spawn_member 의 model·effort')
     expect(prompt).toContain('애매하면 늘 둘 다 빼서')
     for (const word of ['- opus:', '- sonnet:', '- haiku:', '- fable:', 'max 는', 'low·medium 은']) expect(prompt).toContain(word)
   })
@@ -30,12 +39,12 @@ describe('lead', () => {
 
   it('mcp config runs mcp/src/index.ts with tsx loader and team env', () => {
     const config = JSON.parse(leadMcpConfig(team, null, 'http://127.0.0.1:4710', 'C:/node.exe'))
-    const server = config.mcpServers['jk-corp']
+    const server = config.mcpServers.pray
     expect(server.command).toBe('C:/node.exe')
     expect(server.args[0]).toBe('--import')
     expect(server.args[1]).toMatch(/^file:\/\/\/.*tsx\/dist\/loader\.mjs$/)
     expect(server.args[2].replace(/\\/g, '/')).toMatch(/\/mcp\/src\/index\.ts$/)
-    expect(server.env).toEqual({ JK_CORP_TEAM_ID: 'abc12345', JK_CORP_SERVER: 'http://127.0.0.1:4710' })
+    expect(server.env).toEqual({ PRAY_TEAM_ID: 'abc12345', PRAY_SERVER: 'http://127.0.0.1:4710' })
   })
 
   it('part lead gets its own name, prompt and part env', () => {
@@ -44,6 +53,6 @@ describe('lead', () => {
     expect(args[1]).toBe('api 파트장')
     expect(args[5]).toContain('"api" 파트 파트장')
     expect(args[5]).toContain('part/api')
-    expect(JSON.parse(args[7]).mcpServers['jk-corp'].env).toEqual({ JK_CORP_TEAM_ID: 'abc12345', JK_CORP_PART_ID: 'p1', JK_CORP_SERVER: 'http://x' })
+    expect(JSON.parse(args[7]).mcpServers.pray.env).toEqual({ PRAY_TEAM_ID: 'abc12345', PRAY_PART_ID: 'p1', PRAY_SERVER: 'http://x' })
   })
 })

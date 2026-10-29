@@ -11,6 +11,7 @@ import { restoreToComposerDraft } from './composerDraft'
 import { isSuggestionVisible } from './composerText'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
 import { runningToolNames, shortToolName } from './runningTools'
+import { isTeamWaitSummary, teamToolOf } from './teamTools'
 import { FilesButton } from './Files'
 import { CopyButton } from './CopyButton'
 import { MarkdownText } from './Markdown'
@@ -85,14 +86,11 @@ function summarizeInput(name: string, input: unknown): string {
   return value.split('\n')[0].slice(0, 120) || name
 }
 
-const SPAWN_TOOL = 'mcp__jk-corp__jk_spawn_member'
-const ASSIGN_TOOL = 'mcp__jk-corp__jk_assign'
-const WAIT_TOOL = 'mcp__jk-corp__jk_wait'
-/** jk_spawn_member 결과의 첫 sessionId = 새 팀원 */
+/** 팀원 만들기(team_spawn_member·옛 jk_spawn_member) 결과의 첫 sessionId = 새 팀원 */
 const SPAWNED_SESSION_ID = /"sessionId":\s*"([^"]+)"/
 /**
  * 백그라운드 작업(명령·MCP 호출·에이전트·모니터)이 끝나면 오는 알림. 작업 중에 오면 system 메시지 글에 이 꼴로 들어 있다.
- * 120초를 넘긴 jk_wait 도 백그라운드로 넘어가 결과가 이 알림으로 온다
+ * 120초를 넘긴 팀 대기 도구(team_wait·옛 jk_wait)도 백그라운드로 넘어가 결과가 이 알림으로 온다
  */
 const TASK_NOTIFICATION = /<task-notification>[\s\S]*?<\/task-notification>/g
 const XML_ENTITIES: Record<string, string> = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" }
@@ -131,10 +129,10 @@ function splitNotifications(text: string): (string | TaskNotification)[] | null 
 }
 
 function isWaitNotification(notification: TaskNotification): boolean {
-  return notification.status === 'completed' && notification.summary.includes('(jk-corp/jk_wait)')
+  return notification.status === 'completed' && isTeamWaitSummary(notification.summary)
 }
 
-/** jk_wait 결과의 task 가 null = 시간 안에 끝난 팀원이 없다 (기다릴 task 가 없을 때도 null 이지만 그건 바로 돌아와 백그라운드 알림이 되지 않는다) */
+/** 팀 대기 도구 결과의 task 가 null = 시간 안에 끝난 팀원이 없다 (기다릴 task 가 없을 때도 null 이지만 그건 바로 돌아와 백그라운드 알림이 되지 않는다) */
 function isWaitTimeout(json: string | null): boolean {
   try {
     return json !== null && (JSON.parse(json) as { task?: unknown }).task === null
@@ -143,7 +141,7 @@ function isWaitTimeout(json: string | null): boolean {
   }
 }
 
-/** "Background task completed · MCP task … (jk-corp/jk_wait)". 요약 끝의 상태 낱말은 앞에서 말했으니 뺀다 */
+/** "Background task completed · MCP task … (pray/team_wait)". 요약 끝의 상태 낱말은 앞에서 말했으니 뺀다 */
 function notificationTitle(notification: TaskNotification): string {
   const { status, summary } = notification
   if (isWaitNotification(notification) && isWaitTimeout(notification.result)) return 'Waiting for members · timed out'
@@ -168,7 +166,7 @@ function NoticeLine({ title, raw, isFailed = false, jumpKey, markClass = '' }: {
 /** 팀장↔팀원이 주고받은 글: 팀장 → 팀원 지시, 팀원 → 팀장 보고. 팀장 대화에는 한 줄로 보이고 누르면 그 팀원 대화의 그 메시지로 간다 */
 interface Relay {
   kind: 'instruction' | 'report'
-  /** 지시를 받은·보고한 팀원. 결과가 아직 없는 jk_spawn_member 면 null (세션이 아직 없다) */
+  /** 지시를 받은·보고한 팀원. 결과가 아직 없는 팀원 만들기면 null (세션이 아직 없다) */
   memberSessionId: string | null
   memberName: string
   /** 팀원 역할 (칩). 없으면 null */
@@ -178,7 +176,7 @@ interface Relay {
   at: string
 }
 
-/** jk_wait 결과 JSON 에서 팀원 보고. 해석 실패·시간 초과(task null)·결과 없음이면 null */
+/** 팀 대기 도구 결과 JSON 에서 팀원 보고. 해석 실패·시간 초과(task null)·결과 없음이면 null */
 function waitReport(json: string): { memberSessionId: string; result: string; finishedAt: string | null } | null {
   try {
     const { task } = JSON.parse(json) as { task?: { memberSessionId?: unknown; result?: unknown; finishedAt?: unknown } | null }
@@ -210,7 +208,7 @@ function nameParts(member: { name: string; position: string | null }): { memberN
 }
 
 /**
- * jk_spawn_member 결과의 새 팀원: 첫 sessionId 와 서버가 붙인 이름 member.name·역할 member.position (role 로 만들면 입력에 이름이 없다).
+ * 팀원 만들기 결과의 새 팀원: 첫 sessionId 와 서버가 붙인 이름 member.name·역할 member.position (role 로 만들면 입력에 이름이 없다).
  * 옛 대화 기록은 이름에 "[FE] Park" 꼴로 역할이 들어 있고 position 이 없다
  */
 function spawnedMember(toolUse: ToolUse): { sessionId: string; name: string | null; position: string | null } | null {
@@ -228,13 +226,15 @@ function spawnedMember(toolUse: ToolUse): { sessionId: string; name: string | nu
   }
 }
 
-/** 팀장 대화의 jk 도구 호출을 지시·보고 한 줄로. 실패한 지시(결과가 JSON 이 아닌 오류 글)·jk_status·jk_dismiss 는 null */
+/** 팀장 대화의 팀 MCP 도구 호출을 지시·보고 한 줄로 (옛·새 이름 → teamTools.ts). 실패한 지시(결과가 JSON 이 아닌 오류 글)·상태 보기·정리는 null */
 function relayOf(toolUse: ToolUse, message: ChatMessage, memberOf: MemberOf): Relay | null {
+  const teamTool = teamToolOf(toolUse.name)
+  if (!teamTool) return null
   const input = (toolUse.input ?? {}) as { name?: unknown; role?: unknown; sessionId?: unknown; instruction?: unknown }
   const isDelivered = toolUse.result === null || toolUse.result.startsWith('{')
   if (typeof input.instruction === 'string' && input.instruction && isDelivered) {
     const instruction = { kind: 'instruction', text: input.instruction, at: message.timestamp } as const
-    if (toolUse.name === SPAWN_TOOL) {
+    if (teamTool === 'spawn') {
       const memberSessionId = spawnedMember(toolUse)?.sessionId ?? null
       if (memberSessionId) return { ...instruction, memberSessionId, ...nameParts(memberOf(memberSessionId)) }
       // 결과(새 세션)가 오기 전: 팀장이 준 이름, role 로 만들면 "[역할]"
@@ -245,11 +245,11 @@ function relayOf(toolUse: ToolUse, message: ChatMessage, memberOf: MemberOf): Re
         return { ...instruction, memberSessionId: null, ...nameParts(pending) }
       }
     }
-    if (toolUse.name === ASSIGN_TOOL && typeof input.sessionId === 'string') {
+    if (teamTool === 'assign' && typeof input.sessionId === 'string') {
       return { ...instruction, memberSessionId: input.sessionId, ...nameParts(memberOf(input.sessionId)) }
     }
   }
-  if (toolUse.name === WAIT_TOOL && toolUse.result) {
+  if (teamTool === 'wait' && toolUse.result) {
     const report = waitReport(toolUse.result)
     if (report) return reportRelay(report, message.timestamp, memberOf)
   }
@@ -897,7 +897,7 @@ interface ChatRowViewProps {
   searchKey: string | null
   /** 지시·보고 한 줄 바로 아래 알림 (이 줄 안에 있을 때만) */
   lineNotice: { rowKey: string; text: string } | null
-  /** system 글 안 jk_wait 보고의 팀원 이름 (사람 쪽·system 줄만) */
+  /** system 글 안 팀 대기 도구 보고의 팀원 이름 (사람 쪽·system 줄만) */
   memberOf: MemberOf | null
   /** 이 대기 메시지에 [Cancel] 을 보이는지 (맨 마지막 대기 메시지·취소할 수 있을 때) */
   canCancelQueued: boolean
@@ -979,7 +979,7 @@ const ChatRowView = memo(function ChatRowView({
   if (message.isInterrupt) {
     return <NoticeLine title={INTERRUPT_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
   }
-  // 백그라운드 작업 알림: 팀장 대화의 jk_wait 팀원 보고는 보고 한 줄, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
+  // 백그라운드 작업 알림: 팀장 대화의 팀 대기 도구 팀원 보고는 보고 한 줄, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
   const parts = message.role === 'system' ? splitNotifications(message.text) : null
   if (parts) {
     return (
@@ -1186,14 +1186,14 @@ export function Chat({
   const lastMessageIdRef = useRef<string | null>(null)
 
   /**
-   * jk_spawn_member 때 붙은 팀원 이름·역할 [세션 ID, 이름·역할] 목록을 글로. 글이라 대화를 다시 받아도 내용이 같으면 memberOf 가 그대로다
+   * 팀원 만들기 때 붙은 팀원 이름·역할 [세션 ID, 이름·역할] 목록을 글로. 글이라 대화를 다시 받아도 내용이 같으면 memberOf 가 그대로다
    * (memberOf 가 바뀌면 지시·보고 줄이 모두 다시 만들어진다)
    */
   const spawnedJson = useMemo(() => {
     const spawned: [string, { name: string; position: string | null }][] = []
     for (const message of messages) {
       for (const toolUse of message.toolUses) {
-        if (toolUse.name !== SPAWN_TOOL) continue
+        if (teamToolOf(toolUse.name) !== 'spawn') continue
         const inputName = (toolUse.input as { name?: unknown } | null)?.name
         const member = spawnedMember(toolUse)
         const name = member?.name ?? (typeof inputName === 'string' ? inputName : null)
@@ -1202,7 +1202,7 @@ export function Chat({
     }
     return JSON.stringify(spawned)
   }, [messages])
-  /** 팀원 이름·역할: jk_spawn_member 때 붙은 것(서버가 붙인 member.name·member.position, 없으면 팀장이 준 name) → 세션 목록 이름·역할 → ID 앞 8자리 */
+  /** 팀원 이름·역할: 팀원 만들기 때 붙은 것(서버가 붙인 member.name·member.position, 없으면 팀장이 준 name) → 세션 목록 이름·역할 → ID 앞 8자리 */
   const memberOf = useMemo<MemberOf>(() => {
     const spawned = new Map<string, { name: string; position: string | null }>(JSON.parse(spawnedJson))
     return (id: string) => {

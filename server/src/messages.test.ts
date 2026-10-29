@@ -48,7 +48,7 @@ describe('parseMessages', () => {
     expect(messages[1].toolUses).toEqual([{ id: 'tu1', name: 'Bash', input: { command: 'ls' }, result: 'a.txt' }])
   })
 
-  it('keeps long jk-corp tool results whole and cuts other long results at 2000 chars', () => {
+  it('keeps long team MCP results whole (new pray and old jk-corp server keys) and cuts other long results at 2000 chars', () => {
     const longText = 'x'.repeat(5000)
     const jsonl = [
       line({
@@ -58,6 +58,7 @@ describe('parseMessages', () => {
           id: 'm1',
           content: [
             { type: 'tool_use', id: 'jk', name: 'mcp__jk-corp__jk_wait', input: {} },
+            { type: 'tool_use', id: 'pray', name: 'mcp__pray__team_wait', input: {} },
             { type: 'tool_use', id: 'bash', name: 'Bash', input: {} },
           ],
         },
@@ -68,6 +69,7 @@ describe('parseMessages', () => {
         message: {
           content: [
             { type: 'tool_result', tool_use_id: 'jk', content: [{ type: 'text', text: longText }] },
+            { type: 'tool_result', tool_use_id: 'pray', content: [{ type: 'text', text: longText }] },
             { type: 'tool_result', tool_use_id: 'bash', content: longText },
           ],
         },
@@ -75,7 +77,7 @@ describe('parseMessages', () => {
     ].join('\n')
 
     const [message] = parseMessages(jsonl)
-    expect(message.toolUses.map((t) => t.result?.length)).toEqual([5000, 2000])
+    expect(message.toolUses.map((t) => t.result?.length)).toEqual([5000, 5000, 2000])
   })
 
   it('puts toolUseResult.answers on AskUserQuestion tool uses only', () => {

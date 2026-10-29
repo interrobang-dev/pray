@@ -82,7 +82,7 @@ describe('noticeLines', () => {
   })
   it('팀장·파트장이면 도구 재시작 안내', () => {
     const lines = noticeLines({ role: 'lead', turnEndedAt: minutesAgo(1) }, initial, { model: 'opus', effort: 'low' }, NOW)
-    expect(lines.at(-1)).toBe('Its team tools restart too; a background jk_wait stops and has to be called again.')
+    expect(lines.at(-1)).toBe('Its team tools restart too; a background wait stops and has to be called again.')
   })
 })
 

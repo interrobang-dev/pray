@@ -19,18 +19,18 @@ export class TeamApi {
         headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
       })
     } catch (error) {
-      throw new Error(`jk-corp 서버(${this.baseUrl})에 연결 실패: ${(error as Error).message}`)
+      throw new Error(`Pray 서버(${this.baseUrl})에 연결 실패: ${(error as Error).message}`)
     }
     let raw: string
     try {
       raw = await response.text()
     } catch (error) {
       // wait 는 헤더를 먼저 받고 본문을 오래 기다리므로 서버 재시작 등으로 그 사이에 끊길 수 있다
-      throw new Error(`jk-corp 서버 응답을 받는 중 연결이 끊김: ${(error as Error).message}`)
+      throw new Error(`Pray 서버 응답을 받는 중 연결이 끊김: ${(error as Error).message}`)
     }
     const body = parseBody(raw)
     if (!response.ok) throw new Error((body as { message?: string } | null)?.message ?? `HTTP ${response.status}`)
-    if (body === null) throw new Error(`jk-corp 서버 응답을 해석하지 못함: ${raw.trim().slice(0, 200)}`)
+    if (body === null) throw new Error(`Pray 서버 응답을 해석하지 못함: ${raw.trim().slice(0, 200)}`)
     return body
   }
 

@@ -117,6 +117,6 @@ export function noticeLines(
     lines.push('Effort changes keep the prompt cache.')
   }
   lines.push('The session restarts for a few seconds.')
-  if (session.role === 'lead') lines.push('Its team tools restart too; a background jk_wait stops and has to be called again.')
+  if (session.role === 'lead') lines.push('Its team tools restart too; a background wait stops and has to be called again.')
   return lines
 }

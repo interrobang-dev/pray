@@ -46,8 +46,11 @@ interface Block {
 }
 
 const RESULT_LIMIT = 2000
-/** 이 도구들의 결과는 자르지 않는다: 팀원 보고가 결과 JSON 안에 있어 자르면 화면이 해석하지 못한다 */
-const UNLIMITED_RESULT_PREFIX = 'mcp__jk-corp__'
+/**
+ * 이 도구들의 결과는 자르지 않는다: 팀원 보고가 결과 JSON 안에 있어 자르면 화면이 해석하지 못한다.
+ * 팀 MCP 의 서버 키는 지금 pray, 이름을 바꾸기 전 리드는 jk-corp — 옛 jsonl 이 남아 있어 둘 다 영구로 본다
+ */
+const UNLIMITED_RESULT_PREFIXES = ['mcp__pray__', 'mcp__jk-corp__']
 
 function resultToText(content: unknown): string {
   if (typeof content === 'string') return content
@@ -125,7 +128,7 @@ function humanContent(content: unknown): HumanContent {
 
 /**
  * jsonl 줄 → MessageLine. 줄마다 JSON.parse 하는 비싼 단계라 덧붙은 줄만 넣을 수 있게 앞 줄의 상태(도구 호출 ID → 이름)를 들고 있다.
- * 도구 결과를 자를지(UNLIMITED_RESULT_PREFIX)는 그 앞에 나온 도구 호출 이름으로 정한다 (buildMessages 가 결과를 붙이는 도구 호출과 같은 것)
+ * 도구 결과를 자를지(UNLIMITED_RESULT_PREFIXES)는 그 앞에 나온 도구 호출 이름으로 정한다 (buildMessages 가 결과를 붙이는 도구 호출과 같은 것)
  */
 export class MessageLineParser {
   readonly lines: (MessageLine | null)[] = []
@@ -177,7 +180,7 @@ export class MessageLineParser {
           const result = resultToText(block.content)
           toolResults.push({
             toolUseId: block.tool_use_id,
-            result: name.startsWith(UNLIMITED_RESULT_PREFIX) ? result : result.slice(0, RESULT_LIMIT),
+            result: UNLIMITED_RESULT_PREFIXES.some((prefix) => name.startsWith(prefix)) ? result : result.slice(0, RESULT_LIMIT),
             answers: name === 'AskUserQuestion' ? askAnswers(record.toolUseResult) : null,
           })
         }

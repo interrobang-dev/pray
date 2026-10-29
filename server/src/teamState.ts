@@ -28,7 +28,7 @@ export interface Task {
  */
 export const ACK_TIMEOUT_MS = 13_000
 
-/** 사람이 중지한 task 의 error. 지시자가 jk_wait 결과로 본다 */
+/** 사람이 중지한 task 의 error. 지시자가 team_wait(옛 리드는 jk_wait) 결과로 본다 */
 export const INTERRUPTED_ERROR = '사람이 웹 화면에서 팀원의 작업을 중지함'
 
 type Waiter = {

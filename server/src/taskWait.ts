@@ -1,13 +1,13 @@
 import type { Response } from 'express'
 
 /**
- * jk_wait 롱폴링 (GET /api/team/:teamId/tasks/:taskId/wait). 기다리는 동안 응답 헤더를 먼저 보내고 공백을 흘려
+ * 팀 대기 도구(team_wait·옛 jk_wait) 롱폴링 (GET /api/team/:teamId/tasks/:taskId/wait). 기다리는 동안 응답 헤더를 먼저 보내고 공백을 흘려
  * MCP 쪽 fetch(undici)의 headersTimeout·bodyTimeout(각 300초)에 걸리지 않게 한다.
  */
 
 /** timeoutSec 를 안 주거나 숫자가 아닐 때 */
 export const DEFAULT_WAIT_SECONDS = 1800
-/** 이보다 길게 주면 이 값으로 줄인다. mcp jk_wait 의 최대와 같다 */
+/** 이보다 길게 주면 이 값으로 줄인다. mcp 대기 도구(team_wait)의 최대와 같다 */
 export const MAX_WAIT_SECONDS = 3600
 /** 기다리는 동안 공백 한 글자를 흘리는 간격. undici bodyTimeout(데이터 사이 300초)보다 충분히 짧게 */
 export const WAIT_HEARTBEAT_MS = 30_000
