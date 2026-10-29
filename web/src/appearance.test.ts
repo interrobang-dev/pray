@@ -110,7 +110,7 @@ describe('팔레트', () => {
   })
 
   /** 글자로 쓰이는 색 → 그 바탕들. 상태 색(빨강·노랑·파랑·초록)은 점·테두리로도 쓰이지만 글자로도 쓰여(경고·승인 대기) 같은 기준이다 */
-  const TEXT_ON_SURFACE: VarName[] = ['text', 'muted', 'red', 'red-dot', 'error', 'yellow', 'blue-dot', 'success', 'success-text', 'link', 'accent-text']
+  const TEXT_ON_SURFACE: VarName[] = ['text', 'muted', 'red', 'red-dot', 'error', 'yellow', 'blue-dot', 'success', 'success-text', 'link', 'accent-text', 'vcs-modified']
 
   function failures(paletteId: string, mode: Mode, names: VarName[]): string[] {
     const vars = paletteVars(paletteId, mode)

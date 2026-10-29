@@ -232,6 +232,50 @@ export interface WorkspaceFindResult {
   elapsedMs: number
 }
 
+/** 변경 파일 상태 (HEAD·BASE 대비 작업 트리). missing = SVN 에서 svn delete 없이 지운 파일 */
+export type ChangeStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflicted' | 'missing'
+
+export interface ChangedFile {
+  /** 세션 cwd 상대 (구분자 `/`) */
+  path: string
+  status: ChangeStatus
+  /** 이름 바뀜의 옛 경로 (cwd 밖이면 `../` 로 시작) */
+  oldPath: string | null
+}
+
+/** `GET /api/sessions/:id/changes` */
+export type WorkspaceChanges =
+  | { kind: 'none' }
+  | { kind: 'git' | 'svn'; branch: string | null; files: ChangedFile[]; isTruncated: boolean; hiddenCount: number; error: string | null }
+
+export interface DiffLine {
+  kind: 'context' | 'add' | 'del'
+  text: string
+  oldLine: number | null
+  newLine: number | null
+  hasNoNewline?: boolean
+}
+
+export interface DiffHunk {
+  header: string
+  oldStart: number
+  oldLines: number
+  newStart: number
+  newLines: number
+  lines: DiffLine[]
+}
+
+/** `GET /api/sessions/:id/changes/diff?path=` */
+export interface WorkspaceDiff {
+  kind: 'diff' | 'binary' | 'too-large' | 'empty'
+  path: string
+  status: ChangeStatus
+  oldPath: string | null
+  hunks: DiffHunk[]
+  encoding: 'utf-8' | 'euc-kr' | null
+  hasPropertyChanges: boolean
+}
+
 /** 출근 상태. attendance 가 없는 옛 서버 응답은 isAlive 로 본다 (끝난 세션은 퇴근. 다시 출근·기록 지우기는 못 한다) */
 export function attendanceOf(session: Session): Attendance {
   return session.attendance ?? (session.isAlive ? 'present' : 'off')

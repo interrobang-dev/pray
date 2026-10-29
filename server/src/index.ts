@@ -74,6 +74,7 @@ import {
 } from './scratchpad.js'
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
+import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './workspaceChanges.js'
 import { HostClient } from './hostClient.js'
 import { makeVcsCache } from './vcs.js'
 import { attachInstructions, queuedPrompts, withoutQueued, type ChatMessage } from './messages.js'
@@ -610,6 +611,55 @@ app.get('/api/sessions/:id/find', async (req, res) => {
   const { paths, total } = findFiles(index.paths, q, MAX_FIND_RESULTS)
   res.set('Cache-Control', 'no-store')
   res.json({ paths, total, isIndexPartial: index.isPartial, fileCount: index.paths.length, elapsedMs: index.elapsedMs })
+})
+
+const workspaceChangesOf = makeChangesCache()
+
+/**
+ * 작업 폴더의 형상관리 변경 목록 (읽기만, 규칙은 workspaceChanges.ts) → { kind: 'none' } 또는
+ * { kind: git·svn, branch, files: [{ path, status, oldPath }], isTruncated, hiddenCount, error }. 명령이 없거나 실패해도 200 + error
+ */
+app.get('/api/sessions/:id/changes', async (req, res) => {
+  if (!isSessionId(req.params.id)) {
+    res.status(400).json({ message: 'Invalid session ID' })
+    return
+  }
+  const root = await workspaceRootOf(req.params.id)
+  if (!root) {
+    res.status(404).json({ message: 'Session folder not found' })
+    return
+  }
+  res.set('Cache-Control', 'no-store')
+  res.json(await listChanges(workspaceChangesOf, root))
+})
+
+/**
+ * 변경 목록에 있는 파일 하나의 diff (?path= cwd 상대) → { kind: diff·binary·too-large·empty, path, status, oldPath, hunks, encoding, hasPropertyChanges }.
+ * 목록에 없는 경로는 404, diff 명령 실패는 502 + 영어 문구
+ */
+app.get('/api/sessions/:id/changes/diff', async (req, res) => {
+  const { path } = req.query
+  if (!isSessionId(req.params.id) || typeof path !== 'string' || !isValidRequestPath(path, false)) {
+    res.status(400).json({ message: 'Invalid session ID or path' })
+    return
+  }
+  const root = await workspaceRootOf(req.params.id)
+  if (!root) {
+    res.status(404).json({ message: 'Session folder not found' })
+    return
+  }
+  try {
+    const diff = await diffChange(workspaceChangesOf, root, path)
+    if (!diff) {
+      res.status(404).json({ message: 'Not a changed file' })
+      return
+    }
+    res.set('Cache-Control', 'no-store')
+    res.json(diff)
+  } catch (error) {
+    if (!(error instanceof VcsCommandError)) throw error
+    res.status(502).json({ message: error.message })
+  }
 })
 
 /** Claude Code 백그라운드 작업 ID 꼴 (실제는 b + 영문·숫자 8자) */

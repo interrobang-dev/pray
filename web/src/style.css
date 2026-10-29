@@ -83,6 +83,9 @@
   --hl-addition-bg: #f0fff4;
   --hl-deletion: #b31d28;
   --hl-deletion-bg: #ffeef0;
+  /* Changes: diff hunk 머리 바탕, 상태 글자 M(수정) */
+  --diff-hunk-bg: #e8f0fb;
+  --vcs-modified: #9a6700;
   /* 글자 크기 (Appearance 의 Font size, <html data-font-size>). 글자 크기는 모두 calc(Npx * var(--font-scale)) 로 쓴다 —
      그대로인 것: 사무실 자리 카드(캔버스 장면의 일부), 폰 입력칸 16px(아이폰 포커스 확대 방지)와 그에 맞춘 것 */
   --font-scale: 1;
@@ -153,6 +156,8 @@
   --hl-addition-bg: #033a16;
   --hl-deletion: #ffdcd7;
   --hl-deletion-bg: #67060c;
+  --diff-hunk-bg: #243049;
+  --vcs-modified: #d29922;
 }
 html,
 body,
@@ -2461,6 +2466,265 @@ li.group.drop-after::after {
 }
 .code-line.is-selected::before {
   color: var(--accent-text);
+}
+/* Files 탭 왼쪽 칸 위 Files · Changes 전환 (패널 탭처럼 밑줄) */
+.ws-side-tabs {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+}
+.ws-side-tabs button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-side-tabs button.on {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+.ws-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--chip-bg);
+  color: var(--text);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+  line-height: 16px;
+}
+/* 변경 목록: 머리줄(git · 브랜치 · ↻. 개수는 탭 배지) + 줄(상태 글자 · 이름 굵게 · 폴더 회색) */
+.ws-changes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-changes-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 8px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-vcs {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-branch {
+  color: var(--text);
+}
+.ws-changes-reload {
+  flex-shrink: 0;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+}
+.ws-change-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 0 4px;
+}
+.ws-change-list .ws-note {
+  padding: 4px 8px;
+}
+.ws-change {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  font-size: calc(13px * var(--font-scale));
+  white-space: nowrap;
+}
+.ws-change:hover {
+  background: var(--bg);
+}
+.ws-change.selected {
+  background: var(--accent-soft);
+}
+.ws-change-name {
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-change-name.is-gone {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.ws-change-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+/* 상태 글자 M·A·D·R·U·C·! (고정폭, 색은 종류별) */
+.ws-change-letter {
+  flex: 0 0 1.2em;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 700;
+  text-align: center;
+}
+.ws-change-letter.modified {
+  color: var(--vcs-modified);
+}
+.ws-change-letter.added,
+.ws-change-letter.untracked {
+  color: var(--success-text);
+}
+.ws-change-letter.deleted,
+.ws-change-letter.missing,
+.ws-change-letter.conflicted {
+  color: var(--error);
+}
+.ws-change-letter.renamed {
+  color: var(--link);
+}
+/* diff 보기: 머리줄(상태 · 옛 이름 · +/− · Open in Files) + 줄. 줄은 접지 않고 가로·세로 스크롤 (코드 보기와 같다) */
+.ws-diff {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-diff > .hint {
+  margin: auto;
+  text-align: center;
+}
+.ws-diff-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-diff-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-diff-status span {
+  color: var(--muted);
+}
+.ws-diff-stats .added {
+  color: var(--success-text);
+}
+.ws-diff-stats .deleted {
+  color: var(--error);
+}
+.ws-diff-note {
+  color: var(--muted);
+}
+.ws-open-file {
+  margin-left: auto;
+  padding: 2px 10px;
+  font-size: calc(12px * var(--font-scale));
+}
+.diff-view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: calc(12px * var(--font-scale));
+  line-height: 1.5;
+}
+.diff-view > .hint {
+  margin: 8px 12px;
+}
+.diff-lines {
+  min-width: max-content;
+  padding: 0 0 24px;
+}
+.diff-row {
+  display: flex;
+  padding-right: 24px;
+  white-space: pre;
+}
+/* 옛·새 줄 번호 칸: sticky 라 가로 스크롤해도 왼쪽, 누르면 줄 고르기 (복사에 끼지 않게 user-select none) */
+.diff-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.diff-num {
+  width: calc(var(--diff-digits) * 1ch);
+  padding: 0 6px 0 8px;
+  text-align: right;
+}
+.diff-mark {
+  flex-shrink: 0;
+  width: 2ch;
+  text-align: center;
+  user-select: none;
+}
+.diff-eof {
+  margin-left: 6px;
+  color: var(--error);
+  user-select: none;
+}
+.diff-add,
+.diff-add .diff-gutter {
+  background: var(--hl-addition-bg);
+}
+.diff-del,
+.diff-del .diff-gutter {
+  background: var(--hl-deletion-bg);
+}
+.diff-add .diff-mark {
+  color: var(--hl-addition);
+}
+.diff-del .diff-mark {
+  color: var(--hl-deletion);
+}
+.diff-hunk,
+.diff-hunk .diff-gutter {
+  background: var(--diff-hunk-bg);
+  color: var(--muted);
+}
+.diff-hunk .diff-text {
+  padding: 2px 0 2px 2ch;
+}
+/* 고른 줄: 코드 보기처럼 강조색 옅은 바탕 + 번호 칸 왼쪽 강조색 막대·굵은 번호 (옅은 초록인 추가 줄과 바탕만으로는 구분되지 않는다) */
+.diff-row.is-selected,
+.diff-row.is-selected .diff-gutter {
+  background: var(--accent-soft);
+}
+.diff-row.is-selected .diff-gutter {
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
 }
 /* 작업 중 표시기 (Chat.tsx). claude 쪽(왼쪽)의 작은 말풍선에 점 세 개가 차례로 출렁인다. 옆에 [중지] */
 .typing-row {
@@ -5015,6 +5279,21 @@ li.group.drop-after::after {
   .ws-row {
     min-height: 40px;
     font-size: calc(14px * var(--font-scale));
+  }
+  .ws-side-tabs button,
+  .ws-change {
+    min-height: 40px;
+    font-size: calc(14px * var(--font-scale));
+  }
+  .ws-change {
+    align-items: center;
+  }
+  .ws-changes-reload {
+    width: 40px;
+    height: 40px;
+  }
+  .ws-open-file {
+    min-height: 36px;
   }
   /* 제안 Tab 칩: 폰에서는 손가락 폭 40px 에 보내기와 같은 높이 */
   .composer .suggestion-tab {

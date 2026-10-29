@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { diffLineRange, diffRowsOf, STATUS_LABELS, STATUS_LETTERS } from './changes'
 import { CodeView } from './CodeView'
 import { chatLocationText, clampLineRange, lineCountOf, locationText, type LineRange } from './codeSelection'
 import { CopyButton } from './CopyButton'
+import { DiffView } from './DiffView'
 import { formatSize } from './Files'
-import { formatAgo, formatDateTime, type WorkspaceEntry, type WorkspaceFile, type WorkspaceFindResult, type WorkspaceFolder } from './types'
+import {
+  formatAgo,
+  formatDateTime,
+  type ChangedFile,
+  type WorkspaceChanges,
+  type WorkspaceDiff,
+  type WorkspaceEntry,
+  type WorkspaceFile,
+  type WorkspaceFindResult,
+  type WorkspaceFolder,
+} from './types'
 import { ancestorFolders, nameOf, treeRows, type FolderState } from './workspaceTree'
 
 /** 서버 /file/raw 가 주는 그림 (SVG 는 글자로 본다) */
@@ -36,6 +48,10 @@ async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
 
 /** 받은 파일. path 가 지금 고른 파일과 다르면 받는 중으로 본다 (고른 직후 한 번 그릴 때 앞 파일 내용이 보이지 않게) */
 type FileState = { path: string } & ({ status: 'error'; message: string } | { status: 'ok'; file: WorkspaceFile })
+/** 변경 목록 받기 */
+type ChangesState = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ok'; changes: WorkspaceChanges }
+/** 받은 diff. FileState 처럼 path 가 지금 고른 변경 파일과 다르면 받는 중 */
+type DiffState = { path: string } & ({ status: 'error'; message: string } | { status: 'ok'; diff: WorkspaceDiff })
 
 /** 세션별로 기억하는 Files 탭 상태 (이 화면의 메모리. 탭·세션을 바꿔 다시 열어도 펼침·고른 파일이 남고, 새로고침하면 사라진다) */
 interface SessionView {
@@ -44,6 +60,13 @@ interface SessionView {
   selectedPath: string | null
   /** 파일별로 고른 줄 범위 */
   lineRanges: Record<string, LineRange>
+  /** 왼쪽 칸: 파일 트리 · 변경 목록 */
+  sideMode: 'files' | 'changes'
+  selectedChange: string | null
+  /** 변경 파일별로 고른 diff 줄(row) 범위 */
+  diffRanges: Record<string, LineRange>
+  /** 마지막 변경 목록 (다시 열 때 먼저 보이고 다시 받는다) */
+  changes: ChangesState | null
 }
 const sessionViews = new Map<string, SessionView>()
 
@@ -66,6 +89,13 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   const [expanded, setExpanded] = useState<Set<string>>(saved?.expanded ?? new Set())
   const [selectedPath, setSelectedPath] = useState<string | null>(saved?.selectedPath ?? null)
   const [lineRanges, setLineRanges] = useState<Record<string, LineRange>>(saved?.lineRanges ?? {})
+  const [sideMode, setSideMode] = useState<'files' | 'changes'>(saved?.sideMode ?? 'files')
+  const [selectedChange, setSelectedChange] = useState<string | null>(saved?.selectedChange ?? null)
+  const [diffRanges, setDiffRanges] = useState<Record<string, LineRange>>(saved?.diffRanges ?? {})
+  const [changesState, setChangesState] = useState<ChangesState>(saved?.changes ?? { status: 'loading' })
+  const [diffState, setDiffState] = useState<DiffState | null>(null)
+  /** 변경 목록 머리줄 ↻ (목록과 고른 diff 만) */
+  const [changesReloadId, setChangesReloadId] = useState(0)
   const [fileState, setFileState] = useState<FileState | null>(null)
   /** 폰에서 파일 보기를 띄웠는지 (데스크톱은 늘 둘 다 보인다) */
   const [isViewing, setIsViewing] = useState(false)
@@ -79,8 +109,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   const rootName = nameOf(cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/')) || cwd
 
   useEffect(() => {
-    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges })
-  }, [sessionId, folders, expanded, selectedPath, lineRanges])
+    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState })
+  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState])
 
   const loadFolder = useCallback(
     async (path: string) => {
@@ -125,6 +155,57 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
     return () => controller.abort()
   }, [sessionId, selectedPath, reloadId])
   const shownFile = fileState && fileState.path === selectedPath ? fileState : null
+
+  // 변경 목록: 열 때(개수를 탭에 보이려고 Files 쪽을 보고 있어도)·↻. 다시 받는 동안은 앞 목록을 둔다
+  useEffect(() => {
+    const controller = new AbortController()
+    setChangesState((prev) => (prev.status === 'ok' ? prev : { status: 'loading' }))
+    fetchJson<WorkspaceChanges>(apiUrl(sessionId, 'changes', {}), controller.signal).then(
+      (changes) => setChangesState({ status: 'ok', changes }),
+      (error: Error) => error.name !== 'AbortError' && setChangesState({ status: 'error', message: error.message }),
+    )
+    return () => controller.abort()
+  }, [sessionId, reloadId, changesReloadId])
+
+  // 고른 변경 파일의 diff (Changes 를 보고 있을 때만). 다시 받은 diff 의 줄 수가 줄었으면 고른 범위를 자른다
+  useEffect(() => {
+    if (sideMode !== 'changes' || !selectedChange) return
+    const controller = new AbortController()
+    fetchJson<WorkspaceDiff>(apiUrl(sessionId, 'changes/diff', { path: selectedChange }), controller.signal).then(
+      (diff) => {
+        setDiffState({ path: selectedChange, status: 'ok', diff })
+        const rowCount = diffRowsOf(diff.hunks).length
+        setDiffRanges((prev) => {
+          const range = prev[selectedChange]
+          if (!range) return prev
+          const clamped = clampLineRange(range, rowCount)
+          if (clamped === range) return prev
+          const next = { ...prev }
+          if (clamped && rowCount > 0) next[selectedChange] = clamped
+          else delete next[selectedChange]
+          return next
+        })
+      },
+      (error: Error) => error.name !== 'AbortError' && setDiffState({ path: selectedChange, status: 'error', message: error.message }),
+    )
+    return () => controller.abort()
+  }, [sessionId, sideMode, selectedChange, reloadId, changesReloadId])
+  const shownDiff = diffState && diffState.path === selectedChange ? diffState : null
+  const diffRows = useMemo(() => (shownDiff?.status === 'ok' ? diffRowsOf(shownDiff.diff.hunks) : []), [shownDiff])
+  const diffRange = selectedChange ? (diffRanges[selectedChange] ?? null) : null
+
+  const changeDiffRange = useCallback(
+    (range: LineRange | null) => {
+      if (!selectedChange) return
+      setDiffRanges((prev) => {
+        const next = { ...prev }
+        if (range) next[selectedChange] = range
+        else delete next[selectedChange]
+        return next
+      })
+    },
+    [selectedChange],
+  )
   const lineRange = selectedPath ? (lineRanges[selectedPath] ?? null) : null
 
   const changeLineRange = useCallback(
@@ -194,26 +275,47 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
     setRevealPath(path)
   }
 
+  function openChange(path: string) {
+    setSelectedChange(path)
+    setIsViewing(true)
+  }
+
+  /** diff 의 Open in Files: Files 쪽으로 바꿔 그 파일을 연다 (트리를 펼쳐 보이게) */
+  function openInFiles(path: string) {
+    setSideMode('files')
+    revealFile(path)
+  }
+
+  const isChanges = sideMode === 'changes'
+  /** 위 막대가 가리키는 파일과 공유할 줄 (Changes 면 고른 diff 줄의 새 파일 줄 번호) */
+  const shownPath = isChanges ? selectedChange : selectedPath
+  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : lineRange
   const entry = selectedPath ? entryOf(folders, selectedPath) : null
-  const meta = shownFile?.status === 'ok' ? shownFile.file : entry
+  const meta = isChanges ? null : shownFile?.status === 'ok' ? shownFile.file : entry
 
   return (
     <div className={`ws${isViewing ? ' is-viewing' : ''}`}>
       <div className="ws-toolbar">
-        <button type="button" className="ws-back" onClick={() => setIsViewing(false)} title="Back to files" aria-label="Back to files">
+        <button
+          type="button"
+          className="ws-back"
+          onClick={() => setIsViewing(false)}
+          title={isChanges ? 'Back to changes' : 'Back to files'}
+          aria-label={isChanges ? 'Back to changes' : 'Back to files'}
+        >
           ←
         </button>
-        <QuickFind sessionId={sessionId} focusId={findFocusId} onOpen={revealFile} />
+        <QuickFind sessionId={sessionId} focusId={findFocusId} onOpen={(path) => openInFiles(path)} />
         {/* 좁으면 폴더 부분만 말줄임되고 파일 이름은 남는다 */}
-        <nav className="ws-path" aria-label="Path" title={selectedPath ? [cwd.replace(/[\\/]+$/, ''), ...selectedPath.split('/')].join('\\') : cwd}>
-          <span className="ws-path-dir">{[rootName, ...(selectedPath?.split('/').slice(0, -1) ?? [])].join(' / ')}</span>
-          {selectedPath && (
+        <nav className="ws-path" aria-label="Path" title={shownPath ? [cwd.replace(/[\\/]+$/, ''), ...shownPath.split('/')].join('\\') : cwd}>
+          <span className="ws-path-dir">{[rootName, ...(shownPath?.split('/').slice(0, -1) ?? [])].join(' / ')}</span>
+          {shownPath && (
             <>
               <span className="ws-path-sep" aria-hidden="true">
                 /
               </span>
-              <b>{nameOf(selectedPath)}</b>
-              {lineRange && <span className="ws-path-lines">{locationText('', lineRange)}</span>}
+              <b>{nameOf(shownPath)}</b>
+              {shownRange && <span className="ws-path-lines">{locationText('', shownRange)}</span>}
             </>
           )}
         </nav>
@@ -223,19 +325,19 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
             {shownFile?.status === 'ok' && shownFile.file.kind === 'text' && shownFile.file.encoding === 'euc-kr' && ' · EUC-KR'}
           </span>
         )}
-        {selectedPath && (
+        {shownPath && (
           <>
             <button
               type="button"
               className="ws-add-chat"
               disabled={addToChatBlockReason !== null}
-              onClick={() => onAddToChat(chatLocationText(selectedPath, lineRange))}
-              title={addToChatBlockReason ? `Can't add to chat: ${addToChatBlockReason}` : `Add to chat: ${locationText(selectedPath, lineRange)}`}
+              onClick={() => onAddToChat(chatLocationText(shownPath, shownRange))}
+              title={addToChatBlockReason ? `Can't add to chat: ${addToChatBlockReason}` : `Add to chat: ${locationText(shownPath, shownRange)}`}
               aria-label="Add to chat"
             >
               <AddToChatIcon />
             </button>
-            <CopyButton text={locationText(selectedPath, lineRange)} label="Copy path" />
+            <CopyButton text={locationText(shownPath, shownRange)} label="Copy path" />
           </>
         )}
         <button type="button" className="ws-reload" onClick={() => setReloadId((id) => id + 1)} title="Reload" aria-label="Reload">
@@ -243,9 +345,22 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
         </button>
       </div>
       <div className="ws-body">
-        {/* 3단계: 이 왼쪽 칸 위에 Files·Changes 전환이 들어가고 Changes 는 변경 파일 목록을 같은 자리에 그린다 */}
         {/* aside 가 아니다: style.css 의 aside 규칙(왼쪽 목록)이 걸린다 */}
         <div className="ws-side">
+          <div className="ws-side-tabs" role="tablist" aria-label="Side panel">
+            <button type="button" role="tab" aria-selected={!isChanges} className={isChanges ? '' : 'on'} onClick={() => setSideMode('files')}>
+              Files
+            </button>
+            <button type="button" role="tab" aria-selected={isChanges} className={isChanges ? 'on' : ''} onClick={() => setSideMode('changes')}>
+              Changes
+              {changesState.status === 'ok' && changesState.changes.kind !== 'none' && changesState.changes.files.length > 0 && (
+                <span className="ws-count">{changesState.changes.files.length.toLocaleString('en')}{changesState.changes.isTruncated ? '+' : ''}</span>
+              )}
+            </button>
+          </div>
+          {isChanges ? (
+            <ChangesList state={changesState} selectedPath={selectedChange} onOpen={openChange} onReload={() => setChangesReloadId((id) => id + 1)} />
+          ) : (
           <div className="ws-tree" ref={treeRef} role="tree" aria-label="Files">
             {rows.map((row) =>
               row.kind === 'entry' ? (
@@ -278,16 +393,28 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
               ),
             )}
           </div>
+          )}
         </div>
         <section className="ws-view">
-          <FileView
-            sessionId={sessionId}
-            path={selectedPath}
-            state={shownFile}
-            reloadId={reloadId}
-            lineRange={lineRange}
-            onLineRangeChange={changeLineRange}
-          />
+          {isChanges ? (
+            <ChangeView
+              path={selectedChange}
+              state={shownDiff}
+              rows={diffRows}
+              range={diffRange}
+              onRangeChange={changeDiffRange}
+              onOpenInFiles={openInFiles}
+            />
+          ) : (
+            <FileView
+              sessionId={sessionId}
+              path={selectedPath}
+              state={shownFile}
+              reloadId={reloadId}
+              lineRange={lineRange}
+              onLineRangeChange={changeLineRange}
+            />
+          )}
         </section>
       </div>
     </div>
@@ -299,6 +426,92 @@ function entryOf(folders: Record<string, FolderState>, path: string): WorkspaceE
   const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
   const state = folders[parent]
   return state?.status === 'ok' ? (state.listing.entries.find((entry) => entry.name === nameOf(path)) ?? null) : null
+}
+
+/**
+ * 변경 목록 (Changes): 머리줄(git · 브랜치 / SVN · ↻. 개수는 탭 배지) + 상태 글자·이름·폴더 줄. 받는 중·실패·형상관리 없음·명령 실패·변경 없음은 회색 한 줄
+ */
+function ChangesList({ state, selectedPath, onOpen, onReload }: { state: ChangesState; selectedPath: string | null; onOpen: (path: string) => void; onReload: () => void }) {
+  const changes = state.status === 'ok' ? state.changes : null
+  const files: ChangedFile[] = changes && changes.kind !== 'none' ? changes.files : []
+  const note =
+    state.status === 'loading'
+      ? 'Loading…'
+      : state.status === 'error'
+        ? `Couldn't list changes: ${state.message}`
+        : changes?.kind === 'none'
+          ? 'Not a git or SVN working copy'
+          : changes?.error
+            ? changes.error
+            : files.length === 0
+              ? 'No changes'
+              : null
+  const isError = state.status === 'error' || (changes?.kind !== 'none' && Boolean(changes?.error))
+  return (
+    <div className="ws-changes">
+      <div className="ws-changes-head">
+        <span className="ws-vcs" title={changes && changes.kind !== 'none' && changes.branch ? `Branch ${changes.branch}` : undefined}>
+          {changes && changes.kind !== 'none' ? (changes.kind === 'git' ? 'git' : 'SVN') : ''}
+          {changes && changes.kind !== 'none' && changes.branch && <span className="ws-branch"> · {changes.branch}</span>}
+        </span>
+        <button type="button" className="ws-changes-reload" onClick={onReload} title="Refresh changes" aria-label="Refresh changes">
+          ↻
+        </button>
+      </div>
+      <div className="ws-change-list" role="listbox" aria-label="Changes">
+        {files.map((file) => {
+          const slash = file.path.lastIndexOf('/')
+          const title = `${STATUS_LABELS[file.status]}: ${file.path}${file.oldPath ? ` (from ${file.oldPath})` : ''}`
+          return (
+            <button
+              key={file.path}
+              type="button"
+              role="option"
+              aria-selected={file.path === selectedPath}
+              className={`ws-change${file.path === selectedPath ? ' selected' : ''}`}
+              title={title}
+              onClick={() => onOpen(file.path)}
+            >
+              <span className={`ws-change-letter ${file.status}`} aria-label={STATUS_LABELS[file.status]}>
+                {STATUS_LETTERS[file.status]}
+              </span>
+              <span className={`ws-change-name${file.status === 'deleted' || file.status === 'missing' ? ' is-gone' : ''}`}>{file.path.slice(slash + 1)}</span>
+              {slash > 0 && <span className="ws-change-dir">{file.path.slice(0, slash)}</span>}
+            </button>
+          )
+        })}
+        {note && <div className={`ws-note${isError ? ' error' : ''}`}>{note}</div>}
+        {changes && changes.kind !== 'none' && changes.isTruncated && <div className="ws-note">Showing the first 2,000 changes</div>}
+        {changes && changes.kind !== 'none' && changes.hiddenCount > 0 && (
+          <div className="ws-note" title="Untracked files in .git, node_modules, dist, build and similar folders aren't listed">
+            {changes.hiddenCount.toLocaleString('en')} untracked in hidden folders
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Changes 의 오른쪽: 고른 변경 파일의 diff */
+function ChangeView({
+  path,
+  state,
+  rows,
+  range,
+  onRangeChange,
+  onOpenInFiles,
+}: {
+  path: string | null
+  state: DiffState | null
+  rows: ReturnType<typeof diffRowsOf>
+  range: LineRange | null
+  onRangeChange: (range: LineRange | null) => void
+  onOpenInFiles: (path: string) => void
+}) {
+  if (!path) return <p className="hint">Select a changed file to see its diff</p>
+  if (!state) return <p className="hint">Loading…</p>
+  if (state.status === 'error') return <p className="hint ws-error">Couldn't load the diff: {state.message}</p>
+  return <DiffView key={path} diff={state.diff} rows={rows} selection={range} onSelectionChange={onRangeChange} onOpenInFiles={() => onOpenInFiles(path)} />
 }
 
 /** 말풍선 + "+" (Add to chat) */

@@ -468,6 +468,9 @@ export function expandPalette(core: PaletteCore, mode: Mode): Vars {
     'hl-addition-bg': mix(core.syntax.addition, preBg, isDark ? 0.22 : 0.14),
     'hl-deletion': core.syntax.deletion,
     'hl-deletion-bg': mix(core.syntax.deletion, preBg, isDark ? 0.22 : 0.14),
+    'diff-hunk-bg': mix(core.link, panel, isDark ? 0.16 : 0.1),
+    // 노랑은 글자로 쓰기엔 옅어 바탕 대비 4.5 까지 어둡게(다크는 밝게) 한다
+    'vcs-modified': ensureContrast(core.yellow, [panel, bg], 4.5, isDark ? 'lighter' : 'darker'),
   }
 }
 
