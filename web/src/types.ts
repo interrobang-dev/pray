@@ -355,7 +355,7 @@ export interface CommitDetail {
 }
 
 /** 출근 상태. attendance 가 없는 옛 서버 응답은 isAlive 로 본다 (끝난 세션은 퇴근. 다시 출근·기록 지우기는 못 한다) */
-export function attendanceOf(session: Session): Attendance {
+export function attendanceOf(session: Pick<Session, 'attendance' | 'isAlive'>): Attendance {
   return session.attendance ?? (session.isAlive ? 'present' : 'off')
 }
 

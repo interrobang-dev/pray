@@ -15,6 +15,7 @@ import { Chat, type Jump, type JumpTarget } from './Chat'
 import { addToComposerDraft } from './composerDraft'
 import { hasUnsavedEdit, confirmDiscardUnsaved, whenLeavingAllowed } from './unsavedEdits'
 import { sessionIdFromHash } from './sessionLink'
+import { parseCollapsedGroupIds, statusSummary, summaryLabel, toggleCollapsedGroup, type StatusCount } from './listCollapse'
 import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
@@ -76,6 +77,28 @@ function readIsOfficeHidden(): boolean {
     return localStorage.getItem(OFFICE_HIDDEN_KEY) === 'true'
   } catch {
     return false
+  }
+}
+
+/** 목록 접기를 남기는 localStorage 키 (이 브라우저만): 접힌 그룹 ID 배열(JSON)·Focus Zone 접힘·Off Duty 펼침 */
+const COLLAPSED_GROUPS_KEY = 'jk-corp.collapsedGroups'
+const FOCUS_ZONE_COLLAPSED_KEY = 'jk-corp.isFocusZoneCollapsed'
+const OFF_DUTY_OPEN_KEY = 'jk-corp.isOffDutyOpen'
+
+/** 저장된 값. 읽지 못하면(저장소가 막힌 브라우저 등) null — 기본값으로 본다 */
+function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeStored(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // 저장하지 못하면 이 화면에서만 바뀐다
   }
 }
 
@@ -243,8 +266,11 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [transcriptVersions, setTranscriptVersions] = useState<Record<string, number>>({})
   /** 세션 ID → 곁가지 질문(btw) 문답이 바뀐 횟수 (전역 SSE btw 이벤트). 대화 탭의 카드가 바뀌면 다시 받는다 */
   const [btwVersions, setBtwVersions] = useState<Record<string, number>>({})
-  /** 목록 맨 아래 "Off Duty" 구역을 펼쳤는지. 기본 접힘 */
-  const [isOffDutyOpen, setIsOffDutyOpen] = useState(false)
+  /** 목록 맨 아래 "Off Duty" 구역을 펼쳤는지. 기본 접힘 (localStorage) */
+  const [isOffDutyOpen, setIsOffDutyOpen] = useState(() => readStored(OFF_DUTY_OPEN_KEY) === 'true')
+  /** 목록에서 접은 그룹 ID·Focus Zone 을 접었는지. 기본 펼침 (localStorage) */
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState(() => parseCollapsedGroupIds(readStored(COLLAPSED_GROUPS_KEY)))
+  const [isFocusZoneCollapsed, setIsFocusZoneCollapsed] = useState(() => readStored(FOCUS_ZONE_COLLAPSED_KEY) === 'true')
   /** 사무실 퇴근 거리의 "+N" 을 누른 횟수. 바뀌면 펼친 Off Duty 구역으로 목록을 스크롤한다 (펼친 뒤 그려진 다음에) */
   const [offDutyScrollRequest, setOffDutyScrollRequest] = useState(0)
   const offDutyRef = useRef<HTMLLIElement>(null)
@@ -634,6 +660,27 @@ export function App({ isLocal }: { isLocal: boolean }) {
     } catch {
       // 저장하지 못하면 이 화면에서만 바뀐다
     }
+  }
+
+  function changeOffDutyOpen(isOpen: boolean) {
+    setIsOffDutyOpen(isOpen)
+    writeStored(OFF_DUTY_OPEN_KEY, String(isOpen))
+  }
+
+  function toggleFocusZone() {
+    const isCollapsed = !isFocusZoneCollapsed
+    setIsFocusZoneCollapsed(isCollapsed)
+    writeStored(FOCUS_ZONE_COLLAPSED_KEY, String(isCollapsed))
+  }
+
+  function toggleGroup(groupId: string) {
+    const ids = toggleCollapsedGroup(
+      collapsedGroupIds,
+      groupId,
+      office.groups.map((g) => g.id),
+    )
+    setCollapsedGroupIds(ids)
+    writeStored(COLLAPSED_GROUPS_KEY, JSON.stringify(ids))
   }
 
   function cycleTheme() {
@@ -1247,6 +1294,32 @@ export function App({ isLocal }: { isLocal: boolean }) {
     )
   }
 
+  /**
+   * 목록 라벨(그룹·Focus Zone·Off Duty)의 접기 단추: ▾/▸ · 이름 · 개수 · 접혔을 때만 상태 요약 점(승인 대기·내 차례·작업 중 수).
+   * 오른쪽 "+"·"⋯"·⠿ 는 단추 밖(형제)이라 눌러도 접히지 않는다
+   */
+  function renderGroupToggle(name: string, isOpen: boolean, onToggle: () => void, count: number | null, summary: StatusCount[]) {
+    const label = summaryLabel(summary)
+    return (
+      <button className="group-toggle" onClick={onToggle} aria-expanded={isOpen}>
+        <span className="chevron" aria-hidden="true">
+          {isOpen ? '▾' : '▸'}
+        </span>
+        <span className="name">{name}</span>
+        {count !== null && <span className="count">{count}</span>}
+        {summary.length > 0 && (
+          <span className="status-summary" role="img" title={label} aria-label={label}>
+            {summary.map((item) => (
+              <span key={item.status} className={item.status}>
+                {item.count}
+              </span>
+            ))}
+          </span>
+        )}
+      </button>
+    )
+  }
+
   /** 그룹이 지워져 소속 그룹이 없는 팀. 라벨 없이 그대로 보여 준다 */
   const orphanTeams = office.teams.filter((t) => !office.groups.some((g) => g.id === t.groupId))
   /** 팀·로비에는 근무·휴식 세션. 휴식은 호스트가 다시 띄우면 저절로 돌아오므로 자리를 지킨다 */
@@ -1301,6 +1374,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
             {office.groups.map((group, groupIndex) => {
               const teams = office.teams.filter((t) => t.groupId === group.id)
+              const isOpen = !collapsedGroupIds.includes(group.id)
+              const summary = isOpen ? [] : statusSummary(snapshot.sessions.filter((s) => teams.some((t) => t.id === s.teamId)))
               return (
                 <li
                   key={group.id}
@@ -1308,7 +1383,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
                   data-group-id={group.id}
                 >
                   <div className="group-label">
-                    <span className="name">{group.name}</span>
+                    {renderGroupToggle(group.name, isOpen, () => toggleGroup(group.id), null, summary)}
                     <span className="head-actions">
                       <button onClick={() => openTeamForm(group.id)} title="Add team to group">
                         +
@@ -1328,25 +1403,28 @@ export function App({ isLocal }: { isLocal: boolean }) {
                       {renderDragHandle({ kind: 'group' }, group.id)}
                     </span>
                   </div>
-                  {teams.map((team, teamIndex) => renderTeam(team, { index: teamIndex, count: teams.length }))}
+                  {isOpen && teams.map((team, teamIndex) => renderTeam(team, { index: teamIndex, count: teams.length }))}
                 </li>
               )
             })}
             {orphanTeams.length > 0 && <li className="group">{orphanTeams.map((team) => renderTeam(team))}</li>}
             <li className="group">
               <div className="group-label">
-                <span className="name">Focus Zone</span>
-                {lobbySessions.length > 0 && <span className="count">{lobbySessions.length}</span>}
+                {renderGroupToggle(
+                  'Focus Zone',
+                  !isFocusZoneCollapsed,
+                  toggleFocusZone,
+                  lobbySessions.length > 0 ? lobbySessions.length : null,
+                  isFocusZoneCollapsed ? statusSummary(lobbySessions) : [],
+                )}
               </div>
-              {lobbySessions.map((session) => renderSession(session, true))}
+              {!isFocusZoneCollapsed && lobbySessions.map((session) => renderSession(session, true))}
             </li>
             {offDutySessions.length > 0 && (
               <li ref={offDutyRef} className="group">
-                <div className="group-label toggle" onClick={() => setIsOffDutyOpen(!isOffDutyOpen)}>
-                  <span className="name">
-                    {isOffDutyOpen ? '▾' : '▸'} Off Duty
-                  </span>
-                  <span className="count">{offDutySessions.length}</span>
+                <div className="group-label">
+                  {/* 근무가 아니라 상태 요약 없이 개수만 */}
+                  {renderGroupToggle('Off Duty', isOffDutyOpen, () => changeOffDutyOpen(!isOffDutyOpen), offDutySessions.length, [])}
                 </div>
                 {isOffDutyOpen &&
                   offDutySessions.map((session) => {
@@ -1464,7 +1542,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
             hasQuestionCard={Boolean(isSelectedLiveWeb && selected.question?.questions.length)}
             onSelect={(sessionId) => selectSession(sessionId, false)}
             onShowOffDutyList={() => {
-              setIsOffDutyOpen(true)
+              changeOffDutyOpen(true)
               setOffDutyScrollRequest((count) => count + 1)
             }}
             onMoveGroup={moveGroup}

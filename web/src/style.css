@@ -713,10 +713,70 @@ header button.icon svg {
   text-transform: uppercase;
   color: var(--muted);
 }
-/* 접고 펼치는 라벨 (퇴근 구역) */
-.group-label.toggle {
-  cursor: pointer;
+/* 라벨의 접기 단추 (그룹·Focus Zone·Off Duty): ▾/▸ · 이름 · 개수 · 접혔을 때 상태 요약. 라벨 글자 모양 그대로, 남는 폭을 차지해 빈 곳을 눌러도 접힌다 */
+.group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
   user-select: none;
+}
+.group-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.group-toggle .chevron {
+  flex-shrink: 0;
+  width: 1em;
+  text-align: center;
+}
+.group-toggle .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-toggle .count {
+  flex-shrink: 0;
+}
+/* 접힌 라벨의 상태 요약: 아바타 테두리와 같은 색 점 + 수 (승인 대기 빨강·내 차례 주황·작업 중 파랑) */
+.status-summary {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.status-summary > span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.status-summary > span::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.status-summary > .needs-approval::before {
+  background: var(--red-dot);
+}
+.status-summary > .my-turn::before {
+  background: var(--yellow);
+}
+.status-summary > .working::before {
+  background: var(--blue-dot);
 }
 .count {
   padding: 0 6px;
@@ -5406,6 +5466,10 @@ li.group.drop-after::after {
   .toolbar button {
     min-height: 40px;
     padding: 0 14px;
+  }
+  /* 목록 라벨의 접기 단추도 40px (버튼이 없는 Focus Zone·Off Duty 라벨도 같은 높이) */
+  .group-toggle {
+    min-height: 40px;
   }
   /* 헤더 아이콘 버튼(테마): 손가락으로 누르기 쉽게 40×36. 음수 위아래 여백으로 헤더 높이는 그대로 (헤더 위아래 padding 10px 안에 든다) */
   header button.icon {
