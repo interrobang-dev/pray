@@ -16,7 +16,7 @@ Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사
 |---|---|
 | `host.md` | 호스트(pipe·pty·resume·퇴근 기록)·`hq.json`(`hq.ts` 전문)·트레이 앱·스케줄러 스크립트·훅 설치·팀 할 일 저장 규칙 |
 | `team.md` | 팀·파트 판정, 팀장·파트장 지침·MCP 도구, task 상태, 팀원 이름·모델·effort, worktree 파트 |
-| `security.md` | 인증(`auth.ts`)·DNS rebinding 을 막는 Host 검사·CSRF 를 막는 Origin 검사(`requestGuard.ts`)·훅 경로 이 PC 전용·`index.ts` 미들웨어 순서 |
+| `security.md` | 인증(`auth.ts`)·DNS rebinding 을 막는 Host 검사·CSRF 를 막는 Origin 검사(`requestGuard.ts`)·훅 경로와 팀 폴더 열기(`openFolder.ts`) 이 PC 전용·`index.ts` 미들웨어 순서 |
 | `server-api.md` | 서버 API 경로 전부(`index.ts` 전문), 세션 목록·jsonl 요약·훅 상태·표시 상태 계산, shell·작업 파일·첨부·세션 cwd 파일 읽기(`workspaceFiles.ts`)·변경 보기(`workspaceChanges.ts`)·저장(`workspaceSave.ts`), AskUserQuestion, 세션 이름·역할·인물, 폴더 신뢰, 모델·effort 바꾸기 |
 | `queue-interrupt.md` | mod(입력 제안·입력칸 알림·곁가지 질문), 보내기의 함정, 대기열·대기 메시지 취소, 작업 중지, 곁가지 질문 흐름(`btw.ts`) |
 | `accounts.md` | 사용량 조회·사용량 창, Claude 계정 보관·전환·로그인·로그아웃 (서버·화면) |
@@ -90,7 +90,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/shells.ts` — 백그라운드 shell·작업 판정, 출력 끝 N줄 · `scratchpad.ts` — 세션 작업 폴더·첨부 저장
 - `server/src/workspaceFiles.ts` — 세션 cwd 읽기(Files 탭 API): 경로 검증·한 단계 목록·파일 글/바이너리 판정·이름 빠른 찾기 · `workspaceChanges.ts` — 세션 cwd 의 git/SVN 변경 목록·diff(읽기만) · `workspaceSave.ts` — 세션 cwd 글 파일 저장(이 PC 에서만, CSRF·충돌·줄바꿈/BOM)
 - `server/src/askQuestion.ts` — AskUserQuestion 해석·답 · `serialRunner.ts` — 한 번에 하나 실행기 · `hostClient.ts` — pipe 클라이언트
-- `server/src/auth.ts`·`mail.ts`·`config.ts` — 메일 인증·토큰·config.json · `requestGuard.ts` — Host·Origin 머리 판정 (→ `security.md`)
+- `server/src/auth.ts`·`mail.ts`·`config.ts` — 메일 인증·토큰·config.json · `requestGuard.ts` — Host·Origin 머리 판정 · `openFolder.ts` — 팀 폴더를 이 PC 탐색기로 열기 (→ `security.md`)
 - `server/src/messages.ts` — jsonl → 대화 메시지 (→ `chat.md`) · `flow.ts` — 플로우 (→ `flow.md`)
 - `server/src/messageCache.ts` — 대화 API 의 해석 캐시·버전·바뀐 뒤쪽만 보내기
 - `server/src/suggestion.ts`·`unqueue.ts`·`interrupt.ts`·`btw.ts` — 입력 제안·대기 취소·작업 중지·곁가지 질문(`/btw`) (→ `queue-interrupt.md`) · `mod/` — 웹 세션 전용 mod (→ 같은 파일)

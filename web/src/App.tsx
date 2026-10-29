@@ -24,6 +24,7 @@ import { TeamTodosModal } from './TeamTodosModal'
 import { remainingCount, todosOf } from './teamTodos'
 import { Modal, Segmented } from './Modal'
 import { alertDialog, confirmDialog, promptDialog } from './Dialog'
+import { copyText } from './copyText'
 import { ModelSettingModal, useRestartingSessions } from './ModelSettingModal'
 import { nextLabel } from './modelSetting'
 import { sessionMenuEntries } from './sessionMenu'
@@ -182,7 +183,8 @@ function moveTo(ids: string[], id: string, dropIndex: number): string[] {
   return rest
 }
 
-export function App() {
+/** isLocal = 이 PC 에서 연 화면(`/api/auth/me`). 팀 폴더는 이 PC 에서만 탐색기로 열고 다른 PC 는 경로 복사 */
+export function App({ isLocal }: { isLocal: boolean }) {
   const [snapshot, setSnapshot] = useState<Snapshot>({ isHostReachable: false, sessions: [] })
   const [office, setOffice] = useState<OfficeData>(EMPTY_OFFICE)
   const [isConnected, setIsConnected] = useState(false)
@@ -748,6 +750,23 @@ export function App() {
     }
   }
 
+  /** 팀 ⋯ 메뉴의 Open folder. 서버가 이 PC 의 탐색기로 연다 */
+  async function openTeamFolder(team: Team) {
+    try {
+      const response = await fetch(`/api/team/${team.id}/open-folder`, { method: 'POST' })
+      if (response.ok) return
+      const { message } = (await response.json().catch(() => ({}))) as { message?: string }
+      void alertDialog(`Couldn't open folder: ${message ?? `HTTP ${response.status}`}`)
+    } catch {
+      void alertDialog("Couldn't open folder: Network error")
+    }
+  }
+
+  /** 다른 PC 에서 연 화면의 팀 ⋯ 메뉴 Copy folder path */
+  async function copyTeamFolder(team: Team) {
+    if (!(await copyText(team.cwd))) void alertDialog(`Couldn't copy the folder path:\n${team.cwd}`)
+  }
+
   /** 목록 ⋯ 메뉴의 Delete record. 확인 문구는 패널 퇴근 막대와 같다 */
   async function deleteRecord(sessionId: string) {
     const isConfirmed = await confirmDialog("Delete the off duty record? The session leaves the list and can't clock in again.", {
@@ -1000,12 +1019,16 @@ export function App() {
     )
   }
 
-  /** 팀 카드: 헤더(이름·세션 수·hover 버튼) + 팀 직속 세션 + 파트별(소제목 + 세션). 폴더는 툴팁. position 은 그룹 안 순번 (그룹이 없는 팀은 없어 끌기 손잡이도 없다) */
+  /** 팀 카드: 헤더(이름·SVN 칩·hover 버튼) + 팀 직속 세션 + 파트별(소제목 + 세션). 폴더·형상관리 종류는 툴팁. position 은 그룹 안 순번 (그룹이 없는 팀은 없어 끌기 손잡이도 없다) */
   function renderTeam(team: Team, position?: { index: number; count: number }) {
     const scope: ReorderScope = { kind: 'team', groupId: team.groupId }
     // 근무·휴식 세션. 순서는 서버가 준 그대로 (생성순)
     const members = snapshot.sessions.filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off')
+    const vcsName = team.vcs ? (team.vcs.kind === 'git' ? 'git' : 'SVN') : null
     const menuItems: MenuItem[] = [
+      isLocal
+        ? { label: 'Open folder', onClick: () => void openTeamFolder(team) }
+        : { label: 'Copy folder path', onClick: () => void copyTeamFolder(team) },
       { label: 'Rename', onClick: () => void editTeam(team) },
       { label: 'Add part', onClick: () => openPartForm(team.id) },
       ...(team.leadSessionId ? [{ label: 'Remove lead', onClick: () => void releaseLead(team) }] : []),
@@ -1016,17 +1039,17 @@ export function App() {
       <div
         key={team.id}
         className={['team', position ? reorderClass(scope, team.id, position.index, position.count) : ''].join(' ')}
-        title={team.cwd}
+        title={vcsName ? `${team.cwd} · ${vcsName}` : team.cwd}
         data-team-id={position ? team.id : undefined}
       >
         <div className="team-head">
           <span className="name" onClick={() => focusTeam(team.id)}>
             {team.name}
           </span>
-          {members.length > 0 && <span className="count">{members.length}</span>}
-          {team.vcs && (
+          {/* 칩은 SVN 만. 대부분 git 이라 git 칩은 정보가 없다 (git 은 카드 title 로만) */}
+          {team.vcs?.kind === 'svn' && (
             <span className="vcs-chip" role="img" title={vcsLabel(team.vcs)} aria-label={vcsLabel(team.vcs)}>
-              {team.vcs.kind === 'git' ? 'git' : 'SVN'}
+              SVN
             </span>
           )}
           {renderTodoButton(team)}
@@ -1044,7 +1067,7 @@ export function App() {
     )
   }
 
-  /** 파트 소제목(worktree 아이콘·이름·세션 수·hover 버튼) + 파트 세션. 브랜치 이름은 아이콘 툴팁 */
+  /** 파트 소제목(worktree 아이콘·이름·hover 버튼) + 파트 세션. 브랜치 이름은 아이콘 툴팁 */
   function renderPart(team: Team, part: Part, members: Session[]) {
     const menuItems: MenuItem[] = [
       { label: 'Rename', onClick: () => void editPart(team, part) },
@@ -1062,7 +1085,6 @@ export function App() {
             </span>
           )}
           <span className="name">{part.name}</span>
-          {members.length > 0 && <span className="count">{members.length}</span>}
           <span className="head-actions">
             <button onClick={() => openSessionForm(team.id, part.id)} disabled={!snapshot.isHostReachable} title="Add session to part">
               +

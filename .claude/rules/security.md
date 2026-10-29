@@ -4,12 +4,13 @@ paths:
   - "server/src/requestGuard*.ts"
   - "server/src/index.ts"
   - "server/src/workspaceSave*.ts"
+  - "server/src/openFolder*.ts"
   - "hooks/install.mjs"
 ---
 
 # 서버 접근 막기 (인증·Host·Origin·훅)
 
-메일 로그인·쿠키 인증, DNS rebinding 을 막는 Host 검사, CSRF 를 막는 Origin 검사, 훅 경로를 이 PC 로만 받는 규칙과 `index.ts` 미들웨어 순서를 다룬다. 실행·`config.json`·다른 PC 접속 방법은 루트 `CLAUDE.md`, API 경로 전부는 server-api.md 다. 이 영역을 고치면 이 파일의 그 줄을 고쳐 쓴다.
+메일 로그인·쿠키 인증, DNS rebinding 을 막는 Host 검사, CSRF 를 막는 Origin 검사, 훅 경로·팀 폴더 열기를 이 PC 로만 받는 규칙과 `index.ts` 미들웨어 순서를 다룬다. 실행·`config.json`·다른 PC 접속 방법은 루트 `CLAUDE.md`, API 경로 전부는 server-api.md 다. 이 영역을 고치면 이 파일의 그 줄을 고쳐 쓴다.
 
 다른 파일에 있는 항목:
 - 저장 API(`PUT /api/sessions/:id/file`)의 거절 순서·`workspaceSave.ts` 의 저장 규칙 → server-api.md (`isLocalPageRequest` 판정 규칙은 아래)
@@ -19,12 +20,13 @@ paths:
 
 - `server/src/auth.ts` — 메일 인증 코드·로그인 토큰 저장소(순수, 시계 주입. 코드 6자리 10분·5회, 재요청 30초, 토큰 30일 `auth-tokens.json`), 소켓 주소 loopback 판정 `isLoopback`(`127.0.0.1`·`::1`·`::ffff:127.0.0.1` — X-Forwarded-For 같은 머리는 안 본다), 쿠키 파싱
 - `server/src/requestGuard.ts` — 요청 머리 판정 (순수, `requestGuard.test.ts`): `isAllowedHost`(Host 검사), `isSameOriginRequest`(Origin 검사), `isLoopbackUrl`(http(s) 주소의 이름이 loopback 인지. `workspaceSave.ts` 의 `isLocalPageRequest` 가 같이 쓴다)
+- `server/src/openFolder.ts` — 팀 폴더를 이 PC 의 Windows 탐색기로 열기 (`POST /api/team/:teamId/open-folder` → `{}`. 화면은 팀 ⋯ 메뉴 Open folder → web-app.md). 거절 판정 `openFolderRejection`(순수, `openFolder.test.ts`)은 **소켓이 loopback 이 아니면 먼저** 403 "Folders open only on this PC"(로그인한 다른 PC 도 — 이 PC 화면에 창을 띄우는 것이라 의미가 없고, 팀·폴더가 있는지도 알려 주지 않는다), 그다음 팀 없음 404 "Team not found", cwd 가 없거나 폴더가 아니면 404 "Team folder not found". Origin 검사는 전역 미들웨어가 한다. `openInExplorer` 는 셸 없이 `explorer.exe` 하나를 `detached` + `unref` 로 띄우고 기다리지 않는다 — explorer 는 성공해도 종료 코드가 1 이라 종료 코드는 보지 않고, `error` 이벤트는 로그만(안 들으면 서버가 죽는다). 인자 `explorerArgument`: `win32.normalize` 로 `\` 구분자, 끝 `\` 를 떼고(드라이브 루트는 남긴다) **늘 따옴표로 감싸 `windowsVerbatimArguments` 로 넘긴다** — Node 는 공백이 없으면 따옴표를 붙이지 않는데 explorer 는 따옴표 밖 쉼표를 자기 옵션 구분자로 읽는다 (Windows 경로에는 `"` 가 없다). 실측: 창은 사용자 셸(`Explorer.EXE`)이 아니라 DcomLaunch 가 띄운 `explorer.exe /factory,{75dff2b7-…} -Embedding` 새 프로세스에 뜨고, 창을 닫으면 그 프로세스는 1분 안에 저절로 끝난다
 - `server/src/index.ts` 의 미들웨어 — 순서대로, `const app = express()` 바로 뒤라 compression·JSON 파서보다 먼저 돈다 (거절할 요청의 본문을 읽지 않는다):
   1. **Host 검사 — 모든 요청**(정적 파일 `web/dist`·SSE·`/api` 전부). 아니면 403 `{ message: 'Host name not allowed' }`. 정적 파일까지 거는 이유: 공격 사이트 도메인으로는 화면부터 안 뜨게, 그리고 경로마다 따지지 않게
   2. **Origin 검사 — `/api` 의 GET·HEAD·OPTIONS 밖 전부** (`/api/auth/*`·훅 포함). 아니면 403 `{ message: 'Cross-site request blocked' }`
   3. **훅 경로 `/api/hook`·`/api/hook/ask`** (`CLAUDE_HOOK_PATH`, Express 라우팅처럼 대소문자·끝 슬래시 무시): loopback 소켓만. 아니면 로그인 쿠키가 있어도 403 `{ message: 'Hooks are accepted only from this PC' }`
   4. `/api/auth/*` 는 인증 없이 통과. loopback 소켓은 무인증, 그 밖은 쿠키 `jk_session`(HttpOnly·SameSite=Lax·30일. HTTPS 가 아니라 Secure 없음)이 맞아야 하고 아니면 401 `{ message: 'Login required' }`
-  5. 저장 API 는 라우트 안에서 loopback 소켓과 `isLocalPageRequest` 를 더 본다 (아래)
+  5. 저장 API·팀 폴더 열기는 라우트 안에서 loopback 소켓을 더 본다 (저장은 `isLocalPageRequest` 도 — 아래)
 
 ## 핵심 개념
 
@@ -41,3 +43,4 @@ paths:
 - Host·Origin·훅 경로 검사는 단위 테스트와 시험 서버(임시 홈·가짜 pipe·포트 4797·`bind 0.0.0.0`·토큰 파일을 둔 로그인 쿠키)로만 확인했다: Host `evil.com`·`localhost.` 의 GET·POST·정적 `/`·SSE 403, 본문 없는 POST·form 꼴 `text/plain` 의 다른 Origin·`null`·rebinding(Origin·Host 모두 공격 이름) 403, Origin 없는 POST(훅·`/hook/ask`·입력) 200, Vite 꼴(Origin `localhost:4711`·Host `127.0.0.1`) 200, LAN IP 로 `/api/hook`·`/hook/ask`·`/api/HOOK/` 는 쿠키가 있어도 403, LAN 쿠키 + 같은 Origin POST 200·다른 포트 Origin 403, `http://<LAN IP>:포트`·`http://<PC 이름>:포트` 의 화면·SSE·POST 200, Host `[::1]`·`[fe80::1]` 통과, 저장 PUT 은 LAN 에서 그대로 403. 거절된 POST 는 가짜 호스트에 입력이 닿지 않았다. Vite(다른 포트 → 시험 서버) + headless Chrome 으로 화면이 뜨고 페이지 안 POST·PATCH 가 200, 콘솔 오류 없음
 - 실제 claude http 훅·mod 요청의 Origin 은 재지 않았다. Host 는 URL 의 `127.0.0.1:4710` 이라 통과한다. Origin 은 서버 쪽 HTTP 클라이언트(axios·Bun fetch)라 붙이지 않을 것으로 판단했다 — 붙더라도 `http://127.0.0.1:4710` 이면 통과, 다른 값이면 훅이 403 이 되어 상태 점·입력칸 제안이 멈춘다(훅은 non-blocking 이라 claude 는 그대로 돈다). 실행 중인 서버(트레이)에 반영한 뒤 상태 점이 바뀌는지, 입력칸 제안·btw 가 도는지 볼 것
 - 실제 다른 PC 에서 PC 이름·IP 로 접속, 사내 DNS 접미사 이름으로 열 때(403 이 맞다)는 보지 못했다
+- 팀 폴더 열기는 단위 테스트와 시험 서버(임시 홈·가짜 pipe·4785·`bind 0.0.0.0`·로그인 쿠키)로만 확인했다: 이 저장소·임시 폴더·쉼표와 공백이 든 폴더(`a,b team`)가 200 이고 그 경로로 탐색기 창이 떴다, 없는 팀·없는 폴더 404, LAN IP 는 쿠키·같은 Origin 이 있어도 403(없는 팀도 403), 쿠키 없으면 401, 다른 Origin 403. 드라이브 루트·UNC·한글 경로, 트레이 앱(Electron) 창에서 누를 때 새 창이 앞에 뜨는지, 실행 중인 서버는 보지 못했다. 다른 PC 화면의 Copy folder path 는 headless(localhost = secure context)에서만 봤다 — http://<IP> 의 textarea 예비 경로는 보지 못했다

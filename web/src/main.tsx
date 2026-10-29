@@ -25,7 +25,7 @@ function Root() {
   if (!me.isAuthenticated) return <Login canLogin={me.canLogin} onLoggedIn={() => void load()} />
   return (
     <>
-      <App />
+      <App isLocal={me.isLocal} />
       <DialogHost />
     </>
   )

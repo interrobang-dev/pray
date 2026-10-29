@@ -80,6 +80,7 @@ import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './wo
 import { editBlockReason, isLocalPageRequest, isVcsMetaPath, saveTextFile } from './workspaceSave.js'
 import { HostClient } from './hostClient.js'
 import { makeVcsCache } from './vcs.js'
+import { openFolderRejection, openInExplorer } from './openFolder.js'
 import { attachInstructions, queuedPrompts, withoutQueued, type ChatMessage } from './messages.js'
 import { InstructionLogCache, MessageVersions, messageJsons, TranscriptMessageCache } from './messageCache.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
@@ -1678,6 +1679,20 @@ app.delete('/api/team/:teamId', (req, res) => {
   }
   res.json({})
   broadcastOffice()
+})
+
+/** 팀 폴더를 이 PC 의 Windows 탐색기로 연다. Origin 검사는 위 전역 미들웨어가 한다 */
+app.post('/api/team/:teamId/open-folder', async (req, res) => {
+  const isLocal = isLoopback(req.socket.remoteAddress)
+  const team = isLocal ? findTeam(req.params.teamId) : undefined
+  const isDirectory = team ? await stat(team.cwd).then((info) => info.isDirectory(), () => false) : false
+  const rejection = openFolderRejection({ isLocal, hasTeam: team !== undefined, isDirectory })
+  if (rejection) {
+    res.status(rejection.status).json({ message: rejection.message })
+    return
+  }
+  openInExplorer(team!.cwd)
+  res.json({})
 })
 
 app.put('/api/team/:teamId/desks/:sessionId', (req, res) => {
