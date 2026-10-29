@@ -14,6 +14,7 @@ import { FilesTab } from './FilesTab'
 import { Chat, type Jump, type JumpTarget } from './Chat'
 import { addToComposerDraft } from './composerDraft'
 import { hasUnsavedEdit, confirmDiscardUnsaved, whenLeavingAllowed } from './unsavedEdits'
+import { sessionIdFromHash } from './sessionLink'
 import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
@@ -481,6 +482,27 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setTab('chat')
     setShellRequest({ id: nextShellRequestIdRef.current++, sessionId, shell })
   }
+
+  // 트레이 앱 알림을 누르면 `#session=<id>` 로 연다 (처음 열 때 주소에, 떠 있는 창은 hashchange). 읽으면 해시를 지워 같은 알림을 다시 눌러도 바뀌게 한다
+  const selectSessionRef = useRef(selectSession)
+  selectSessionRef.current = selectSession
+  useEffect(() => {
+    const onHash = () => {
+      const sessionId = sessionIdFromHash(window.location.hash)
+      if (!sessionId) return
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+      selectSessionRef.current(sessionId)
+    }
+    onHash()
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  // 트레이 앱이 "그 세션이 지금 열려 있으면 알리지 않기" 에 읽는다
+  useEffect(() => {
+    if (selectedId) document.documentElement.dataset.openSession = selectedId
+    else delete document.documentElement.dataset.openSession
+  }, [selectedId])
 
   /** 돌아가기: 팀장 대화를 다시 열고 점프할 때 누른 그 한 줄로 간다 */
   function returnFromJump() {

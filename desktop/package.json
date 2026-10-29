@@ -4,11 +4,13 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p .",
-    "start": "npm run build && electron ."
+    "start": "npm run build && electron .",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "electron": "^44.9.1",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
   }
 }

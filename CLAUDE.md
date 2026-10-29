@@ -45,7 +45,7 @@ npm run build             # web/dist 생성. 서버가 이걸 정적으로 제�
 npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으로 띄우고 창에 사무실을 연다)
 ```
 
-**평소에는 트레이 앱으로 쓴다.** 바탕화면 `jk-corp.lnk` (= `node_modules\electron\dist\electron.exe desktop`, 작업 폴더 저장소). 바로가기는 빌드하지 않고 `desktop/dist/` 를 그대로 실행하므로 `desktop/src` 를 고치면 `npm run build --workspace desktop` 뒤 트레이 Quit → 다시 켜야 한다 (`npm run desktop` 은 빌드한 뒤 띄우고, 루트 `npm run build` 는 web 만 빌드한다). 트레이 아이콘: 클릭 = 창 열기, 우클릭 = 상태·서버/호스트 재시작·로그 폴더·로그인 시 자동 실행·종료 (메뉴·툴팁·확인 창·알림 글자는 영어: Restart server·Restart host·Open log folder·Launch at login·Quit). 창 X 는 숨기기이고 **트레이 "Quit"만이 진짜 종료**(호스트가 꺼져 웹 세션이 끊기고 다음 실행 때 `--resume`). 승인 대기 세션이 있으면 아이콘에 빨간 점. 자식이 죽으면 3초 뒤 재시작, 1분에 5번 넘으면 포기하고 알림. 설치 파일(electron-builder)은 만들지 않았다 — 저장소에서 실행한다.
+**평소에는 트레이 앱으로 쓴다.** 바탕화면 `jk-corp.lnk` (= `node_modules\electron\dist\electron.exe desktop`, 작업 폴더 저장소). 바로가기는 빌드하지 않고 `desktop/dist/` 를 그대로 실행하므로 `desktop/src` 를 고치면 `npm run build --workspace desktop` 뒤 트레이 Quit → 다시 켜야 한다 (`npm run desktop` 은 빌드한 뒤 띄우고, 루트 `npm run build` 는 web 만 빌드한다). 트레이 아이콘: 클릭 = 창 열기, 우클릭 = 상태·서버/호스트 재시작·로그 폴더·로그인 시 자동 실행·알림 켜기/끄기·종료 (메뉴·툴팁·확인 창·알림 글자는 영어: Restart server·Restart host·Open log folder·Launch at login·Notifications·Quit). 세션이 끝나거나(Done·My turn, 팀원 제외) 승인을 기다리면 Windows 알림, 누르면 그 세션 패널 (→ `host.md`). 창 X 는 숨기기이고 **트레이 "Quit"만이 진짜 종료**(호스트가 꺼져 웹 세션이 끊기고 다음 실행 때 `--resume`). 승인 대기 세션이 있으면 아이콘에 빨간 점. 자식이 죽으면 3초 뒤 재시작, 1분에 5번 넘으면 포기하고 알림. 설치 파일(electron-builder)은 만들지 않았다 — 저장소에서 실행한다.
 
 브라우저로도 `http://127.0.0.1:4710` 접속 가능. 로그: `~/.claude/jk-corp/logs/*.log`. 화면 아래 상태 표시줄의 연결 상태 옆 `↻` 로 재시작한다. 호스트 ↻ = `POST /api/host/restart` → 호스트가 종료 코드 2 로 나감 → 트레이가 새 코드로 다시 띄움. 웹 세션은 끊겼다가 `--resume` 된다. 서버 ↻ = `POST /api/server/restart` → 서버가 응답을 보낸 뒤 종료 코드 2 로 나감 → 트레이가 새 코드로 다시 띄움. 몇 초 끊기고 세션은 그대로지만, 서버 메모리에만 있는 훅 상태(다음 훅부터 다시 보인다)·붙잡은 질문(터미널 탭에서 답한다)·입력칸 제안은 사라진다. **작업 스케줄러 방식에서는 둘 다 종료만 되고 다시 뜨지 않는다** (서버는 `npm run dev` 에서도).
 
@@ -61,7 +61,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 개발 중 화면 작업: 트레이 앱(또는 스케줄러)의 호스트·서버는 그대로 두고 `npm run dev:web` 만 띄워 `http://localhost:4711` 로 본다 (Vite 가 IPv6 localhost 로 열려 `127.0.0.1` 로는 안 열림. `/api` 는 4710 으로 프록시). 서버·호스트 코드를 고쳤으면 트레이 메뉴의 재시작을 쓴다. `npm run dev` (셋 다 tsx 로 실행)는 트레이 앱을 종료한 상태에서만 쓴다. 훅은 Claude Code가 settings.json을 핫리로드하므로 세션 재시작 없이 반영된다.
 
-테스트: `npm test` (host·server·mcp·web 의 vitest. web 은 순수 함수만).
+테스트: `npm test` (host·server·mcp·web·desktop 의 vitest. web·desktop 은 순수 함수만).
 
 **Claude Code 세션 안에서 호스트를 띄우지 말 것.** 띄우더라도 `ptyPool.ts`가 `CLAUDECODE`·`CLAUDE_*` 환경변수를 지우고 자식을 실행한다. 안 지우면 자식 claude가 중첩 실행으로 판단해 종료 코드 1로 죽는다.
 
@@ -72,7 +72,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `host/src/ptyPool.ts` — node-pty 로 `claude.exe` 실행·세션별 링버퍼, extraArgs 저장, 끝나면 퇴근 기록, 모델 바꾸기 재시작, 웹 세션에 mod 불러오기
 - `host/src/hq.ts` — `~/.claude/jk-corp/hq.json` 읽기·쓰기 (웹 세션·퇴근 기록·그룹·팀·이름·인물·성별·역할·팀 할 일·목록 순서)
 - `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=` 파일 로그 · `host/src/protocol.ts` — pipe 메시지 타입·줄 단위 JSON
-- `desktop/src/main.ts`·`children.ts`·`icon.ts` — Electron 트레이 앱, 자식 재시작 정책, 코드로 만든 트레이·창 아이콘
+- `desktop/src/main.ts`·`children.ts`·`icon.ts`·`notify.ts` — Electron 트레이 앱, 자식 재시작 정책, 코드로 만든 트레이·창 아이콘, 세션 알림 판정·글자
 - `scripts/*.ps1` — 작업 스케줄러 등록·중지·제거 · `hooks/install.mjs` — settings.json 훅 설치
 
 팀 → `team.md`
@@ -97,7 +97,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/usage.ts`·`accounts.ts`·`accountStore.ts`·`accountLogin.ts`·`switchImpact.ts` — 사용량·계정 (→ `accounts.md`)
 
 웹 → `web-app.md` · `chat.md` · `workspace.md` · `office.md` · `office-art.md` · `accounts.md` · `flow.md`
-- `web/src/main.tsx` — 로그인 또는 App · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `types.ts` — 응답 타입·공통 문구 함수
+- `web/src/main.tsx` — 로그인 또는 App · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `sessionLink.ts` — 트레이 알림이 여는 `#session=<id>` 읽기 · `types.ts` — 응답 타입·공통 문구 함수
 - `web/src/theme.ts` — 테마·스타일 적용 · `appearance.ts`·`palettes.ts`·`AppearanceModal.tsx`·`ChatStyleTab.tsx` — 스타일 설정(팔레트·강조색·글자 크기·대화 모양) 계산·값·창 · `Modal.tsx` — 모달·세그먼트 · `Dialog.tsx`·`dialogQueue.ts` — 브라우저 confirm·alert·prompt 대신 쓰는 앱 안 확인·알림·입력 창 · `sessionMenu.ts` — 세션 줄 ⋯ 메뉴 · `sessionPosition.ts`·`PositionChip.tsx` — 역할·이름
 - `web/src/NewTeamModal.tsx`·`FolderPicker.tsx`·`folderChoice.ts` — 팀 만들기 창(이 PC 면 폴더 고르기·git init 칸) · `web/src/TeamTodosModal.tsx`·`teamTodos.ts` — 팀 TODO · `ModelSettingModal.tsx`·`modelSetting.ts` — 모델·effort 변경 창
 - `web/src/Chat.tsx`·`chatRows.ts`·`runningTools.ts` — 대화 탭 · `chatWindow.ts`·`chatReuse.ts`·`chatDelta.ts` — 최근 줄만 그리기·다시 받은 대화 재사용·바뀐 뒤쪽만 받기 · `Composer.tsx`·`composerText.ts` — 대화 입력 상자(글·첨부 state) · `BtwCard.tsx` — 곁가지 질문 카드 · `Markdown.tsx` — 마크다운 · `markdownHighlight.ts` — 대화 마크다운 숫자·경로 강조 · `CopyButton.tsx`·`copyText.ts`·`codeText.ts` — 복사 버튼·클립보드·코드 글자 뽑기 · `Files.tsx` — 작업 파일 · `Shells.tsx` — shell 보기 · `Terminal.tsx` — xterm · `chatSearch.ts`·`ChatSearchBar.tsx`·`chatSearchPaint.ts` — 대화 탭 안 검색(찾기·막대·글자 칠하기) (→ `chat.md`)

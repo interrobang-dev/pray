@@ -1,10 +1,11 @@
-import { app, BrowserWindow, Menu, Tray, dialog, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, nativeImage, shell } from 'electron'
 import { execSync } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Child } from './children'
 import { trayIconPng } from './icon'
+import { diffSessions, type NotifySession, type SessionNotice, type StatusBaseline } from './notify'
 
 const SERVER_URL = 'http://127.0.0.1:4710'
 const repoDir = resolve(__dirname, '..', '..')
@@ -14,6 +15,38 @@ let tray: Tray | null = null
 let window: BrowserWindow | null = null
 let isQuitting = false
 let status = { working: 0, needsApproval: 0, isServerUp: false }
+/**
+ * 세션별 직전 표시 상태. null 이면 다음 폴링은 기준만 잡는다: 시작·서버 무응답·호스트나 서버 자식이 바뀐 뒤
+ * (서버가 새로 뜨면 훅 상태가 없어 jsonl 로 다시 만든 상태라 그 전환을 믿지 않는다)
+ */
+let baseline: StatusBaseline | null = null
+/** 한 번 폴링에 이보다 많으면 한 장으로 묶는다 */
+const MAX_SEPARATE_NOTICES = 3
+/** 클릭 처리기가 GC 로 사라지지 않게 떠 있는 알림을 잡아 둔다 */
+const shownNotifications = new Set<Notification>()
+let settings = { isNotifying: true }
+
+/** 트레이 전용 설정 (hq.json·config.json 과 따로) */
+function settingsPath(): string {
+  return join(app.getPath('userData'), 'tray-settings.json')
+}
+
+function loadSettings(): void {
+  try {
+    const saved = JSON.parse(readFileSync(settingsPath(), 'utf8')) as { isNotifying?: unknown }
+    if (typeof saved.isNotifying === 'boolean') settings = { ...settings, isNotifying: saved.isNotifying }
+  } catch {
+    // 없거나 깨졌으면 기본값
+  }
+}
+
+function saveSettings(): void {
+  try {
+    writeFileSync(settingsPath(), JSON.stringify(settings))
+  } catch (error) {
+    console.error('Failed to save tray settings', error)
+  }
+}
 
 function findExe(name: string): string {
   try {
@@ -83,31 +116,76 @@ async function waitForServer(timeoutMs: number): Promise<boolean> {
   return false
 }
 
-async function showWindow(): Promise<void> {
+/** sessionId 가 있으면 그 세션 패널을 연다: 웹 화면이 `#session=<id>` 를 읽어 고르고 해시를 지운다 (떠 있는 창은 hashchange) */
+async function showWindow(sessionId?: string): Promise<void> {
+  const hash = sessionId ? `#session=${encodeURIComponent(sessionId)}` : ''
   if (!window || window.isDestroyed()) {
     window = createWindow()
     const isUp = await waitForServer(15_000)
     if (!isUp) {
       dialog.showErrorBox('jk-corp', `The server didn't start. Check the logs:\n${logDir}`)
     }
-    await window.loadURL(SERVER_URL)
+    await window.loadURL(SERVER_URL + hash)
+  } else if (hash) {
+    void window.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`).catch(() => undefined)
   }
+  if (window.isMinimized()) window.restore()
   window.show()
   window.focus()
+}
+
+/** 창이 앞에 있을 때 화면에 열린 세션 ID (웹이 `<html data-open-session>` 에 둔다). 창이 뒤에 있거나 못 읽으면 null */
+async function focusedSessionId(): Promise<string | null> {
+  if (!window || window.isDestroyed() || !window.isVisible() || window.isMinimized() || !window.isFocused()) return null
+  try {
+    const id: unknown = await window.webContents.executeJavaScript('document.documentElement.dataset.openSession ?? null')
+    return typeof id === 'string' ? id : null
+  } catch {
+    return null
+  }
+}
+
+function showNotification(title: string, body: string, sessionId?: string): void {
+  const notification = new Notification({ title, body, icon: nativeImage.createFromBuffer(trayIconPng(false)) })
+  shownNotifications.add(notification)
+  const release = () => shownNotifications.delete(notification)
+  notification.on('click', () => {
+    release()
+    void showWindow(sessionId)
+  })
+  notification.on('close', release)
+  notification.on('failed', release)
+  notification.show()
+}
+
+/** 창이 앞에 있고 그 세션이 열려 있으면 빼고 띄운다. 많으면 한 장으로 묶고 누르면 창만 연다 */
+async function notify(notices: SessionNotice[]): Promise<void> {
+  if (!settings.isNotifying || notices.length === 0 || !Notification.isSupported()) return
+  const openId = await focusedSessionId()
+  const shown = notices.filter((notice) => notice.sessionId !== openId)
+  if (shown.length > MAX_SEPARATE_NOTICES) {
+    showNotification(`jk-corp · ${shown.length} sessions`, shown.map((notice) => notice.title).join('\n'))
+    return
+  }
+  for (const notice of shown) showNotification(notice.title, notice.body, notice.sessionId)
 }
 
 async function pollStatus(): Promise<void> {
   try {
     const response = await fetch(`${SERVER_URL}/api/sessions`)
-    const data = (await response.json()) as { sessions: { status: string; isAlive: boolean }[] }
+    const data = (await response.json()) as { sessions: NotifySession[] }
     const alive = data.sessions.filter((s) => s.isAlive)
     status = {
       isServerUp: true,
       working: alive.filter((s) => s.status === 'working').length,
       needsApproval: alive.filter((s) => s.status === 'needs-approval').length,
     }
+    const { next, notices } = diffSessions(baseline, data.sessions)
+    baseline = next
+    void notify(notices)
   } catch {
     status = { ...status, isServerUp: false }
+    baseline = null
   }
   refreshTray()
 }
@@ -151,6 +229,15 @@ function refreshTray(): void {
         checked: app.getLoginItemSettings(loginItemOptions()).openAtLogin,
         click: (item) => app.setLoginItemSettings({ ...loginItemOptions(), openAtLogin: item.checked }),
       },
+      {
+        label: 'Notifications',
+        type: 'checkbox',
+        checked: settings.isNotifying,
+        click: (item) => {
+          settings = { ...settings, isNotifying: item.checked }
+          saveSettings()
+        },
+      },
       { type: 'separator' },
       {
         label: 'Quit',
@@ -182,6 +269,10 @@ async function quit(): Promise<void> {
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
+  // 알림을 Windows 에 'jk-corp' ID 로 올린다 (알림 기록·설정이 이 ID 로 묶인다).
+  // 알림 머리의 앱 이름은 그래도 electron.exe 파일 설명 "Electron" 이다 — HKCU\Software\Classes\AppUserModelId 의
+  // DisplayName·시작 메뉴 바로가기(AUMID 포함)로도 바뀌지 않았다(실측). 바꾸려면 exe 이름·설명을 바꾼 설치본이 필요하다
+  app.setAppUserModelId('jk-corp')
   app.on('second-instance', () => void showWindow())
   app.on('window-all-closed', () => {
     // 트레이 앱: 창이 다 닫혀도 종료하지 않는다
@@ -198,10 +289,14 @@ if (!app.requestSingleInstanceLock()) {
       app.quit()
       return
     }
+    loadSettings()
     tray = new Tray(nativeImage.createFromBuffer(trayIconPng(false)))
     tray.on('click', () => void showWindow())
     for (const child of [children.host, children.server]) {
-      child.on('change', refreshTray)
+      child.on('change', () => {
+        baseline = null
+        refreshTray()
+      })
       child.on('gaveUp', (name: string) => {
         dialog.showErrorBox('jk-corp', `The ${name} keeps crashing, so it won't be restarted again. Logs: ${logDir}`)
       })
