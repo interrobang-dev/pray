@@ -98,7 +98,15 @@ export type MessageLine =
   | { type: 'cost-state' }
   | { type: 'queued-command'; uuid: string | undefined; timestamp: string; prompt: HumanContent }
   | { type: 'compact-summary'; uuid: string | undefined; timestamp: string; text: string }
-  | { type: 'user'; uuid: string | undefined; timestamp: string; content: HumanContent; toolResults: ToolResultLine[] }
+  | {
+      type: 'user'
+      uuid: string | undefined
+      /** 대화 사슬의 앞 줄. null = 사슬의 맨 앞(세션 첫 줄), undefined = 필드 없음 (되돌린 글 가리기 restoredPromptLines) */
+      parentUuid: string | null | undefined
+      timestamp: string
+      content: HumanContent
+      toolResults: ToolResultLine[]
+    }
   | { type: 'assistant'; uuid: string | undefined; timestamp: string; messageId: unknown; blocks: Block[] }
 
 /** user 줄의 도구 결과. 앞서 나온 도구 호출(이름을 아는 것)에 붙는 것만 남기고 결과 글은 그 이름으로 이미 잘랐다 */
@@ -174,7 +182,8 @@ export class MessageLineParser {
           })
         }
       }
-      return { type, uuid, timestamp, content: humanContent(content), toolResults }
+      const parentUuid = record.parentUuid === null ? null : typeof record.parentUuid === 'string' ? record.parentUuid : undefined
+      return { type, uuid, parentUuid, timestamp, content: humanContent(content), toolResults }
     }
 
     if (!Array.isArray(content)) return null
@@ -244,6 +253,30 @@ function applyQueueRecord(
   }
 }
 
+/**
+ * 응답 전 중지(Esc)로 Claude Code 입력칸에 되돌아간 사람 글 줄의 번호. 그 줄은 보낼 때 이미 jsonl 에 적혀 남지만 대화에서 빠진다:
+ * 다음 사람 쪽 줄이 그 줄을 건너뛰어 같은 앞 줄(parentUuid)에 붙고(형제), 되돌린 줄 아래에는 첨부만 있고 claude 응답이 없다 (실측 2.1.312).
+ * 그래서 사람 글 줄 R 뒤에 claude 응답 없이 같은 parentUuid 의 user 줄이 오면 R 을 되돌린 글로 본다.
+ * 다음 글을 보내기 전(형제가 아직 없을 때)은 가리지 못한다 — Esc 때는 jsonl 에 아무 줄도 붙지 않는다.
+ * 프로세스가 끝났다 resume 하면 R 아래에 "No response requested." 응답이 붙어 R 이 문맥에 들어가므로(실측) 그때는 가리지 않는다 (응답이 형제보다 먼저 온다)
+ */
+function restoredPromptLines(lines: readonly (MessageLine | null)[]): Set<number> {
+  const restored = new Set<number>()
+  /** 마지막 claude 응답 뒤에 나온 사람 글 줄: parentUuid → 줄 번호 */
+  const prompts = new Map<string | null, number>()
+  for (const [index, line] of lines.entries()) {
+    if (line?.type === 'assistant') prompts.clear()
+    if (line?.type !== 'user' || line.parentUuid === undefined) continue
+    const sibling = prompts.get(line.parentUuid)
+    if (sibling !== undefined) restored.add(sibling)
+    const text = line.toolResults.length === 0 ? userTextMessage('', '', line.content)?.text : undefined
+    const isPrompt = text !== undefined && !isInterruptText(text)
+    if (isPrompt) prompts.set(line.parentUuid, index)
+    else prompts.delete(line.parentUuid)
+  }
+  return restored
+}
+
 /** 사람 쪽 글 → 메시지. 문자열이 `<` 로 시작하면 system (명령 출력·알림 등. 붙여넣기를 풀기 전 글로 본다), 블록 배열이면 text 블록만 (없으면 null) */
 function userTextMessage(id: string, timestamp: string, content: unknown): ChatMessage | null {
   if (typeof content === 'string') {
@@ -277,6 +310,7 @@ export function buildMessages(lines: readonly (MessageLine | null)[]): ChatMessa
   const assistantByMessageId = new Map<unknown, ChatMessage>()
   /** 대기열 (enqueue 순). 글이 없는 enqueue 도 dequeue 순서를 맞추려고 넣고 화면에는 안 낸다 */
   const queue: QueueItem[] = []
+  const restored = restoredPromptLines(lines)
 
   for (const [index, line] of lines.entries()) {
     if (!line) continue
@@ -304,6 +338,8 @@ export function buildMessages(lines: readonly (MessageLine | null)[]): ChatMessa
         toolUse.result = result
         if (answers) toolUse.answers = answers
       }
+      // 응답 전 중지로 입력칸에 되돌아가 대화에서 빠진 글
+      if (restored.has(index)) continue
       const user = userTextMessage(uuid, timestamp, line.content)
       // 중지 기록은 사람 쪽 글 줄로 남지만 사람 말이 아니다
       if (user && isInterruptText(user.text)) messages.push({ ...user, role: 'system', isInterrupt: true })

@@ -56,6 +56,16 @@ describe('TranscriptMessageCache', () => {
     expect((await expectSameAsFull()).filter((m) => m.isQueued).map((m) => m.text)).toEqual(['첫째'])
   })
 
+  it('drops a put-back prompt from the cached result once the next prompt is appended, like a full parse', async () => {
+    const node = (record: Record<string, unknown>) => line({ timestamp: record.uuid, ...record })
+    writeFileSync(path, node({ type: 'user', uuid: 'u1', parentUuid: null, message: { role: 'user', content: '처음' } }))
+    appendFileSync(path, node({ type: 'assistant', uuid: 'a1', parentUuid: 'u1', message: { id: 'm1', content: [{ type: 'text', text: '응' }] } }))
+    appendFileSync(path, node({ type: 'user', uuid: 'r1', parentUuid: 'a1', message: { role: 'user', content: '되돌린 글' } }))
+    expect((await expectSameAsFull()).map((m) => m.text)).toEqual(['처음', '응', '되돌린 글'])
+    appendFileSync(path, node({ type: 'user', uuid: 'u2', parentUuid: 'a1', message: { role: 'user', content: '보낸 글' } }))
+    expect((await expectSameAsFull()).map((m) => m.text)).toEqual(['처음', '응', '보낸 글'])
+  })
+
   it('cuts results of tools named in earlier appends the same way as a full parse', async () => {
     writeFileSync(path, assistant('a1', 'm1', [toolUse('jk', 'mcp__jk-corp__jk_wait'), toolUse('b')]))
     await read()

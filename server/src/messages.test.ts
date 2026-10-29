@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   attachInstructions,
@@ -165,6 +166,58 @@ describe('parseMessages', () => {
       ['i2', 'system', '[Request interrupted by user]', true],
     ])
     expect(messages[1].toolUses[0].result).toBe("The user doesn't want to proceed with this tool use.")
+  })
+})
+
+describe('parseMessages: prompts put back in the input box by a stop before any response', () => {
+  /** parentUuid 가 있는 줄 (되돌린 글 가리기는 사슬로 본다) */
+  const node = (type: string, uuid: string, parentUuid: string | null, extra: Record<string, unknown> = {}) =>
+    line({ type, uuid, parentUuid, timestamp: uuid, ...extra })
+  const prompt = (uuid: string, parentUuid: string | null, text: string) => node('user', uuid, parentUuid, { message: { role: 'user', content: text } })
+  const attachment = (uuid: string, parentUuid: string) => node('attachment', uuid, parentUuid, { attachment: { type: 'total_tokens_reminder' } })
+  const reply = (uuid: string, parentUuid: string, text: string, model = 'claude-haiku-5-5') =>
+    node('assistant', uuid, parentUuid, { message: { id: `m-${uuid}`, model, stop_reason: 'end_turn', content: [{ type: 'text', text }] } })
+  const users = (jsonl: string) => parseMessages(jsonl).filter((m) => m.role === 'user').map((m) => m.text)
+
+  it('drops exactly the prompts that never reached claude in a real session (Claude Code 2.1.312, trimmed copy)', () => {
+    // 실측: 하나 → ALPHA7 되돌림 → 목록 질문 → BRAVO3 되돌림 → 같은 글 다시 보냄 → 목록 질문 → CHARLIE5·DELTA9 되돌림 → /compact → 목록 질문
+    // → ECHO4 되돌림 → 끄고 resume ("No response requested." 가 ECHO4 아래에 붙어 문맥에 들어감) → 목록 질문.
+    // 마지막 목록 질문에 claude 가 답한 것이 하나·BRAVO3·ECHO4 였다 — 화면도 그 셋(과 질문·명령)만 사람 글로 보인다
+    const jsonl = readFileSync(new URL('./testdata/restored-prompts.jsonl', import.meta.url), 'utf8')
+    const labels = users(jsonl).map((text) => text.match(/"하나"|[A-Z]+\d|지금까지|\/compact/)?.[0] ?? text)
+    expect(labels).toEqual(['"하나"', '지금까지', 'BRAVO3', '지금까지', '/compact', '지금까지', 'ECHO4', '지금까지'])
+    expect(jsonl).toContain('ALPHA7')
+  })
+
+  it('drops a put-back prompt once the next line from the person hangs from the same parent, even at the very start', () => {
+    const start = [prompt('r1', null, '되돌린 첫 글'), attachment('t1', 'r1'), prompt('u1', null, '새 글'), attachment('t2', 'u1'), reply('a1', 't2', '네')]
+    expect(users(start.join('\n'))).toEqual(['새 글'])
+    const middle = [prompt('u0', null, '처음'), reply('a0', 'u0', '응'), prompt('r1', 'a0', '되돌린 글'), attachment('t1', 'r1'), prompt('r2', 'a0', '또 되돌린 글'), prompt('u1', 'a0', '보낸 글')]
+    expect(users(middle.join('\n'))).toEqual(['처음', '보낸 글'])
+  })
+
+  it('keeps it until the next line comes: nothing is written when the prompt goes back (unknowable from jsonl)', () => {
+    expect(users([prompt('u0', null, '처음'), reply('a0', 'u0', '응'), prompt('r1', 'a0', '되돌린 글'), attachment('t1', 'r1')].join('\n'))).toEqual(['처음', '되돌린 글'])
+  })
+
+  it('keeps it when a reply comes first: resumed after the stop, or a turn rewound after claude answered', () => {
+    // resume 뒤 Claude Code 가 되돌린 글 아래에 붙이는 자체 응답 — 그 글은 문맥에 들어간다 (실측)
+    const resumed = [prompt('u0', null, '처음'), reply('a0', 'u0', '응'), prompt('r1', 'a0', '되돌린 글'), attachment('t1', 'r1'), reply('s1', 't1', 'No response requested.', '<synthetic>'), prompt('u1', 's1', '다음')]
+    expect(users(resumed.join('\n'))).toEqual(['처음', '되돌린 글', '다음'])
+    const rewound = [prompt('u0', null, '처음'), reply('a0', 'u0', '응'), prompt('u1', 'a0', '답을 받은 글'), reply('a1', 'u1', '답'), prompt('u2', 'a0', '되감고 보낸 글')]
+    expect(users(rewound.join('\n'))).toEqual(['처음', '답을 받은 글', '되감고 보낸 글'])
+  })
+
+  it('looks only at prompts: tool results, interrupt lines and lines without parentUuid are never dropped', () => {
+    const interrupt = node('user', 'i1', 'a0', { message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] } })
+    expect(parseMessages([prompt('u0', null, '처음'), reply('a0', 'u0', '응'), interrupt, prompt('u1', 'a0', '보낸 글')].join('\n')).map((m) => m.text)).toEqual([
+      '처음',
+      '응',
+      '[Request interrupted by user]',
+      '보낸 글',
+    ])
+    const old = [line({ type: 'user', uuid: 'o1', timestamp: 'o1', message: { role: 'user', content: '옛 줄' } }), line({ type: 'user', uuid: 'o2', timestamp: 'o2', message: { role: 'user', content: '옛 줄 2' } })]
+    expect(users(old.join('\n'))).toEqual(['옛 줄', '옛 줄 2'])
   })
 })
 
