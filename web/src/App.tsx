@@ -67,7 +67,7 @@ const NARROW_QUERY = '(max-width: 768px)'
 const TOUCH_QUERY = '(hover: none)'
 
 /** 사무실 숨기기 여부를 남기는 localStorage 키 (이 브라우저만) */
-const OFFICE_HIDDEN_KEY = 'jk-corp.isOfficeHidden'
+const OFFICE_HIDDEN_KEY = 'pray.isOfficeHidden'
 
 /** 저장된 사무실 숨기기 여부. 읽지 못하면(저장소가 막힌 브라우저 등) 보이기 */
 function readIsOfficeHidden(): boolean {
@@ -79,9 +79,9 @@ function readIsOfficeHidden(): boolean {
 }
 
 /** 목록 접기를 남기는 localStorage 키 (이 브라우저만): 접힌 그룹 ID 배열(JSON)·Focus Zone 접힘·Off Duty 펼침 */
-const COLLAPSED_GROUPS_KEY = 'jk-corp.collapsedGroups'
-const FOCUS_ZONE_COLLAPSED_KEY = 'jk-corp.isFocusZoneCollapsed'
-const OFF_DUTY_OPEN_KEY = 'jk-corp.isOffDutyOpen'
+const COLLAPSED_GROUPS_KEY = 'pray.collapsedGroups'
+const FOCUS_ZONE_COLLAPSED_KEY = 'pray.isFocusZoneCollapsed'
+const OFF_DUTY_OPEN_KEY = 'pray.isOffDutyOpen'
 
 /** 저장된 값. 읽지 못하면(저장소가 막힌 브라우저 등) null — 기본값으로 본다 */
 function readStored(key: string): string | null {

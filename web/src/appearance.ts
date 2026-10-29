@@ -22,7 +22,7 @@ export interface Appearance {
 export type ThemeChoice = 'light' | 'dark' | 'system'
 
 /** localStorage 키: 테마 선택 (theme.ts·index.html) */
-export const THEME_KEY = 'jk-corp.theme'
+export const THEME_KEY = 'pray.theme'
 
 /** 저장된 테마 선택. 모르는 값이면 시스템 */
 export function parseThemeChoice(raw: string | null): ThemeChoice {
@@ -192,8 +192,8 @@ export const FONT_SIZE_OPTIONS: { value: FontSize; label: string; px: number }[]
 ]
 
 /** localStorage 키: 고른 값 / index.html 인라인 스크립트가 읽는 계산 결과 (CSS·React 전에 색을 정하려고 미리 계산해 둔다) */
-export const APPEARANCE_KEY = 'jk-corp.appearance'
-export const APPEARANCE_BOOT_KEY = 'jk-corp.appearanceBoot'
+export const APPEARANCE_KEY = 'pray.appearance'
+export const APPEARANCE_BOOT_KEY = 'pray.appearanceBoot'
 
 const HEX_PATTERN = /^#[0-9a-f]{6}$/
 

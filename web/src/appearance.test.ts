@@ -367,7 +367,7 @@ describe('index.html 첫 화면 스크립트', () => {
     for (const appearance of APPEARANCES) {
       for (const choice of CHOICES) {
         for (const isOsDark of [false, true]) {
-          const storage = { 'jk-corp.theme': choice, 'jk-corp.appearanceBoot': JSON.stringify(appearanceBoot(appearance)) }
+          const storage = { 'pray.theme': choice, 'pray.appearanceBoot': JSON.stringify(appearanceBoot(appearance)) }
           const expected = documentState(appearance, resolveMode(choice, isOsDark))
           expect(runInline(storage, isOsDark)).toEqual({ ...expected, colorScheme: expected.theme })
         }
@@ -378,7 +378,17 @@ describe('index.html 첫 화면 스크립트', () => {
   it('저장된 것이 없거나 읽지 못하면 Default·시스템', () => {
     const expected = documentState(DEFAULT_APPEARANCE, 'dark')
     expect(runInline({}, true)).toEqual({ ...expected, colorScheme: 'dark' })
-    expect(runInline({ 'jk-corp.theme': 'light' }, true, true)).toEqual({ ...expected, colorScheme: 'dark' })
-    expect(runInline({ 'jk-corp.theme': 'light', 'jk-corp.appearanceBoot': '{' }, true).theme).toBe('light')
+    expect(runInline({ 'pray.theme': 'light' }, true, true)).toEqual({ ...expected, colorScheme: 'dark' })
+    expect(runInline({ 'pray.theme': 'light', 'pray.appearanceBoot': '{' }, true).theme).toBe('light')
+  })
+
+  it('이름을 바꾸기 전 키(jk-corp.*)만 있으면 그것으로 같은 결과를 걸고, 새 키가 있으면 새 키가 이긴다', () => {
+    const appearance = APPEARANCES[3]
+    const legacy = { 'jk-corp.theme': 'dark', 'jk-corp.appearanceBoot': JSON.stringify(appearanceBoot(appearance)) }
+    const expected = documentState(appearance, 'dark')
+    expect(runInline(legacy, false)).toEqual({ ...expected, colorScheme: 'dark' })
+    const current = { ...legacy, 'pray.theme': 'light', 'pray.appearanceBoot': JSON.stringify(appearanceBoot(DEFAULT_APPEARANCE)) }
+    const expectedCurrent = documentState(DEFAULT_APPEARANCE, 'light')
+    expect(runInline(current, false)).toEqual({ ...expectedCurrent, colorScheme: 'light' })
   })
 })

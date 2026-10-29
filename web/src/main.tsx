@@ -1,3 +1,5 @@
+// 맨 먼저: 아래 모듈들이 불러올 때 localStorage 를 읽기 전에 옛 키를 옮긴다
+import './copyLegacyStorage'
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
