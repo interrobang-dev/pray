@@ -55,7 +55,7 @@ npm run desktop         # 트레이 앱 실행
 - 브라우저로도 `http://127.0.0.1:4710` 에서 같은 화면을 쓴다.
 - 로그: `~/.claude/pray/logs/*.log`
 
-**대안: 작업 스케줄러.** 트레이 앱 없이 로그인 때 자동으로 띄우려면 `npm run startup:install` (`jk-corp-host`·`jk-corp-server` 작업 등록, 관리자 권한 필요). 멈출 때는 `scripts/stop.ps1`, 제거는 `npm run startup:uninstall`. **트레이 앱과 같이 쓰면 포트·pipe 가 충돌한다.**
+**대안: 작업 스케줄러.** 트레이 앱 없이 로그인 때 자동으로 띄우려면 `npm run startup:install` (`pray-host`·`pray-server` 작업 등록, 관리자 권한 필요). 멈출 때는 `scripts/stop.ps1`, 제거는 `npm run startup:uninstall`. **트레이 앱과 같이 쓰면 포트·pipe 가 충돌한다.**
 
 ## 설정 (선택)
 

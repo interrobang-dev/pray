@@ -1,5 +1,6 @@
 ﻿# 로그인 시 세션 호스트와 서버가 자동으로 뜨도록 작업 스케줄러에 등록한다.
 # 다시 실행하면 같은 이름의 작업을 덮어쓴다. 중지는 stop.ps1, 제거는 uninstall-startup.ps1.
+# 옛 이름(jk-corp-*) 작업이 남아 있으면 지운다 — 같이 남으면 로그인 때 둘 다 떠서 pipe·포트가 겹친다 (호환 코드)
 #
 # - 대화형 로그온 + wscript(launch-hidden.vbs) 래퍼. 창 없이 띄우는 다른 방법(S4U)은 관리자 권한이 필요하다
 #   PowerShell -WindowStyle Hidden 은 대화형 작업에서 콘솔 창이 그대로 보여서 사용자가 닫아 버리는 사고가 났다
@@ -26,9 +27,9 @@ $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interac
 
 $launcher = Join-Path $PSScriptRoot 'launch-hidden.vbs'
 
-function Register-JkTask {
-    param([string]$Name, [string]$LogName, [string]$WorkDir, [string[]]$ExtraArgs, [string]$Description)
-    $log = Join-Path $logDir "$LogName.log"
+function Register-PrayTask {
+    param([string]$Name, [string]$WorkDir, [string[]]$ExtraArgs, [string]$Description)
+    $log = Join-Path $logDir "$Name.log"
     # 인자마다 따옴표로 감싸 wscript 에 넘기고, VBS 가 다시 따옴표를 붙여 node 명령줄을 만든다 (중첩 따옴표 회피)
     $pieces = @($launcher, $WorkDir, $node, $tsx, 'src/index.ts', "--log=$log") + $ExtraArgs
     $argument = '//B //Nologo ' + (($pieces | ForEach-Object { '"' + $_ + '"' }) -join ' ')
@@ -37,9 +38,16 @@ function Register-JkTask {
     Write-Host "등록: $Name ($WorkDir)"
 }
 
-Register-JkTask -Name 'jk-corp-host' -LogName 'pray-host' -WorkDir (Join-Path $repo 'host') -ExtraArgs @("--claude=$claude") -Description 'jk-corp 세션 호스트 (claude 프로세스 보관)'
-Register-JkTask -Name 'jk-corp-server' -LogName 'pray-server' -WorkDir (Join-Path $repo 'server') -ExtraArgs @() -Description 'jk-corp 서버 (http://127.0.0.1:4710)'
+foreach ($name in 'jk-corp-server', 'jk-corp-host') {
+    if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) {
+        Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $name -Confirm:$false
+        Write-Host "옛 작업 제거: $name (떠 있던 node 는 stop.ps1 로 멈춘다)"
+    }
+}
+Register-PrayTask -Name 'pray-host' -WorkDir (Join-Path $repo 'host') -ExtraArgs @("--claude=$claude") -Description 'Pray 세션 호스트 (claude 프로세스 보관)'
+Register-PrayTask -Name 'pray-server' -WorkDir (Join-Path $repo 'server') -ExtraArgs @() -Description 'Pray 서버 (http://127.0.0.1:4710)'
 
 Write-Host "로그: $logDir"
-Write-Host '지금 시작: Start-ScheduledTask jk-corp-host; Start-ScheduledTask jk-corp-server'
+Write-Host '지금 시작: Start-ScheduledTask pray-host; Start-ScheduledTask pray-server'
 Write-Host '중지: scripts\stop.ps1'

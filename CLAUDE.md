@@ -57,7 +57,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP 또는 PC 이름>:4710` (도메인 이름은 Host 검사로 403 → `security.md`) → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 토큰은 `~/.claude/pray/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
 
-**트레이 앱 없이 쓰는 대안: 작업 스케줄러.** `npm run startup:install` 이 `jk-corp-host`/`jk-corp-server` 작업을 등록한다(`wscript launch-hidden.vbs` 래퍼로 창 없이. S4U 는 관리자 권한 필요. PowerShell `-WindowStyle Hidden` 은 대화형 작업에서 콘솔 창이 보여 사용자가 닫는 사고가 두 번 났다). 멈출 때는 반드시 `scripts/stop.ps1` (`Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남는다). **트레이 앱과 스케줄러를 같이 쓰면 pipe·포트가 충돌한다** — 지금은 스케줄러 작업을 제거한 상태.
+**트레이 앱 없이 쓰는 대안: 작업 스케줄러.** `npm run startup:install` 이 `pray-host`/`pray-server` 작업을 등록한다(옛 이름 `jk-corp-*` 작업이 있으면 지우고, `stop.ps1`·`uninstall-startup.ps1` 도 옛 이름까지 멈추고 지운다. `wscript launch-hidden.vbs` 래퍼로 창 없이. S4U 는 관리자 권한 필요. PowerShell `-WindowStyle Hidden` 은 대화형 작업에서 콘솔 창이 보여 사용자가 닫는 사고가 두 번 났다). 멈출 때는 반드시 `scripts/stop.ps1` (`Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남는다). **트레이 앱과 스케줄러를 같이 쓰면 pipe·포트가 충돌한다** — 지금은 스케줄러 작업을 제거한 상태.
 
 개발 중 화면 작업: 트레이 앱(또는 스케줄러)의 호스트·서버는 그대로 두고 `npm run dev:web` 만 띄워 `http://localhost:4711` 로 본다 (Vite 가 IPv6 localhost 로 열려 `127.0.0.1` 로는 안 열림. `/api` 는 4710 으로 프록시). 서버·호스트 코드를 고쳤으면 트레이 메뉴의 재시작을 쓴다. `npm run dev` (셋 다 tsx 로 실행)는 트레이 앱을 종료한 상태에서만 쓴다. 훅은 Claude Code가 settings.json을 핫리로드하므로 세션 재시작 없이 반영된다.
 
