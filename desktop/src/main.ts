@@ -1,11 +1,11 @@
-import { app, BrowserWindow, Menu, Notification, Tray, dialog, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, nativeImage, shell, type NativeImage } from 'electron'
 import { execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Child } from './children'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
-import { trayIconPng } from './icon'
+import { appIconIco, trayIconPng } from './icon'
 import { isPipeAlive, LEGACY_PIPE_PATH } from './legacyHost'
 import { isLaunchAtLogin, LOGIN_ITEM_NAME } from './loginItem'
 import { diffSessions, type NotifySession, type SessionNotice, type StatusBaseline } from './notify'
@@ -88,13 +88,29 @@ function createChildren(): { host: Child; server: Child } {
   return { host, server }
 }
 
+/**
+ * 창 아이콘. .ico 파일 경로로 줘야 Electron 이 작은(제목 표시줄)·큰(작업 표시줄) 아이콘을 ico 안의 그 크기 항목에서 고른다 —
+ * PNG 버퍼는 여러 배율을 넣어도 1배 한 장을 둘 다에 쓴다 (사본 electron.exe 로 WM_GETICON 실측: 버퍼 32·32, ico 32·16).
+ * 코드가 바뀌면 따라가게 띄울 때마다 앱 데이터 폴더에 새로 쓴다
+ */
+function windowIcon(): string | NativeImage {
+  const path = join(app.getPath('userData'), 'icon.ico')
+  try {
+    writeFileSync(path, appIconIco())
+    return path
+  } catch (error) {
+    console.warn(`창 아이콘 ${path} 를 못 써서 32px PNG 로 띄운다: ${String(error)}`)
+    return nativeImage.createFromBuffer(trayIconPng(false))
+  }
+}
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
     title: 'Pray',
     autoHideMenuBar: true,
-    icon: nativeImage.createFromBuffer(trayIconPng(false)),
+    icon: windowIcon(),
     show: false,
   })
   win.once('ready-to-show', () => win.show())

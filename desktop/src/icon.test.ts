@@ -1,0 +1,99 @@
+import { inflateSync } from 'node:zlib'
+import { describe, expect, it } from 'vitest'
+import { APP_ICON_SIZES, appIconIco, appIconPng, icoFromPngs, trayIconPng } from './icon'
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+function pngSize(png: Buffer): { width: number; height: number } {
+  return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) }
+}
+
+/** RGBA 픽셀 (filter 0 만 쓰는 이 모듈의 PNG 전용) */
+function pngPixels(png: Buffer): { size: number; pixels: Buffer } {
+  const size = png.readUInt32BE(16)
+  const chunks: Buffer[] = []
+  for (let offset = 8; offset < png.length; ) {
+    const length = png.readUInt32BE(offset)
+    if (png.toString('ascii', offset + 4, offset + 8) === 'IDAT') chunks.push(png.subarray(offset + 8, offset + 8 + length))
+    offset += 12 + length
+  }
+  const raw = inflateSync(Buffer.concat(chunks))
+  const pixels = Buffer.alloc(size * size * 4)
+  for (let y = 0; y < size; y++) raw.copy(pixels, y * size * 4, y * (size * 4 + 1) + 1, (y + 1) * (size * 4 + 1))
+  return { size, pixels }
+}
+
+function pixelAt(image: { size: number; pixels: Buffer }, x: number, y: number): number[] {
+  const offset = (y * image.size + x) * 4
+  return [...image.pixels.subarray(offset, offset + 4)]
+}
+
+describe('appIconPng', () => {
+  it('makes a PNG of each size', () => {
+    for (const size of APP_ICON_SIZES) {
+      const png = appIconPng(size)
+      expect(png.subarray(0, 8).equals(PNG_SIGNATURE)).toBe(true)
+      expect(pngSize(png)).toEqual({ width: size, height: size })
+    }
+  })
+
+  it('draws the 32 grid one to one, the same as the tray icon', () => {
+    expect(appIconPng(32).equals(trayIconPng(false))).toBe(true)
+  })
+
+  it('scales by whole cells so each grid cell stays one solid block', () => {
+    const base = pngPixels(appIconPng(32))
+    const large = pngPixels(appIconPng(256))
+    for (const [x, y] of [[0, 0], [5, 0], [10, 6], [12, 15], [19, 23], [31, 31]]) {
+      const color = pixelAt(base, x, y)
+      for (const [dx, dy] of [[0, 0], [7, 0], [0, 7], [7, 7]]) expect(pixelAt(large, x * 8 + dx, y * 8 + dy)).toEqual(color)
+    }
+  })
+
+  it('uses no colors that are not in the 32 grid for 24 and 48', () => {
+    const colors = new Set<string>()
+    const base = pngPixels(appIconPng(32))
+    for (let i = 0; i < base.pixels.length; i += 4) colors.add(base.pixels.subarray(i, i + 4).join())
+    for (const size of [24, 48]) {
+      const image = pngPixels(appIconPng(size))
+      for (let i = 0; i < image.pixels.length; i += 4) expect(colors.has(image.pixels.subarray(i, i + 4).join())).toBe(true)
+    }
+  })
+})
+
+describe('icoFromPngs', () => {
+  it('writes the header, one entry per PNG and the PNGs after the entries', () => {
+    const pngs = [appIconPng(16), appIconPng(48), appIconPng(256)]
+    const ico = icoFromPngs(pngs)
+    expect(ico.readUInt16LE(0)).toBe(0)
+    expect(ico.readUInt16LE(2)).toBe(1)
+    expect(ico.readUInt16LE(4)).toBe(3)
+    let expectedOffset = 6 + 3 * 16
+    pngs.forEach((png, index) => {
+      const entry = 6 + index * 16
+      const size = pngSize(png).width
+      expect(ico[entry]).toBe(size === 256 ? 0 : size)
+      expect(ico[entry + 1]).toBe(size === 256 ? 0 : size)
+      expect(ico.readUInt16LE(entry + 4)).toBe(1)
+      expect(ico.readUInt16LE(entry + 6)).toBe(32)
+      expect(ico.readUInt32LE(entry + 8)).toBe(png.length)
+      expect(ico.readUInt32LE(entry + 12)).toBe(expectedOffset)
+      expect(ico.subarray(expectedOffset, expectedOffset + png.length).equals(png)).toBe(true)
+      expectedOffset += png.length
+    })
+    expect(ico.length).toBe(expectedOffset)
+  })
+})
+
+describe('appIconIco', () => {
+  it('holds every app icon size in order', () => {
+    const ico = appIconIco()
+    expect(ico.readUInt16LE(4)).toBe(APP_ICON_SIZES.length)
+    APP_ICON_SIZES.forEach((size, index) => {
+      const entry = 6 + index * 16
+      const png = ico.subarray(ico.readUInt32LE(entry + 12), ico.readUInt32LE(entry + 12) + ico.readUInt32LE(entry + 8))
+      expect(png.subarray(0, 8).equals(PNG_SIGNATURE)).toBe(true)
+      expect(pngSize(png)).toEqual({ width: size, height: size })
+    })
+  })
+})
