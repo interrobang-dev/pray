@@ -1,6 +1,6 @@
 # 내부 이름 jk-corp → pray 이전 설계 (2단계)
 
-상태: 결정됨 · 구현 전
+상태: 구현됨 · main 반영 전 (part/design `359cf79`…`38623f7`)
 
 ## 목적과 범위
 
@@ -41,7 +41,8 @@
 | localStorage | `jk-corp.*` 7개 (#13) | `pray.*` 같은 뒷부분 |
 | 임시 파일·폴더 | `<tmp>/jk-corp-account-*`, `.credentials.json.jk-corp.<pid>.tmp` | `pray-account-*`, `.pray.<pid>.tmp` |
 | Electron 앱 데이터 | `%APPDATA%\@jk-corp\desktop` | `%APPDATA%\@pray\desktop` (D7) |
-| Electron 알림 ID | `app.setAppUserModelId('jk-corp')` | `pray` (#17, 남은 일 1) |
+| Electron 알림 ID | `app.setAppUserModelId('jk-corp')` | `pray` (#17. 보이는 이름은 "Electron" 그대로 — 아래 D10) |
+| 곁 질문 명령 (조사 뒤 찾음) | `/jk-btw` (서버가 pty 에 치고 mod 가 등록) | `/pray-btw` (서버·mod 같이) |
 
 `pray` 는 흔한 낱말이지만 위 이름들은 모두 이 PC 안에서만 쓰이는 이 앱 전용 자리(pipe·폴더·env·localStorage)다. 충돌이 문제 될 수 있는 곳은 MCP 도구 이름뿐인데, 도구는 서버 키로 이름공간이 나뉘어(`mcp__pray__…`) 다른 MCP 와 겹치지 않는다.
 
@@ -67,7 +68,7 @@
 | 14 | 인증 쿠키 `jk_session` | server index.ts 1, 테스트 2 | 바꾸면 다른 PC 가 모두 로그아웃된다 (토큰 30일) | 유지 |
 | 15 | 스프라이트 메타 `jkCorp` | 아틀라스 JSON 12, web·tools·server 수십 줄. `meta.app` 문구 `jk-corp tools/sprites/build.py` | 바꾸면 아틀라스 JSON 을 다시 만들거나 손으로 고쳐야 하고, "옵션을 더해도 기존 결과는 바이트 단위로 같다" 는 build.py 약속을 깬다. 얻는 것이 없다 | 유지 (`meta.app` 문구도) |
 | 16 | 임시 이름 | accountStore 접두사 2 (`jk-corp-account-`, `.jk-corp.<pid>.tmp`), 테스트의 `mkdtemp` 접두사 여럿 | 로그인 관리자는 뜰 때 15분 넘은 `jk-corp-account-*` 폴더(토큰이 들어 있을 수 있음)를 지운다. 접두사만 바꾸면 서버가 죽어 남은 옛 폴더를 영영 안 지운다 | 바꾸고 한동안 옛 접두사도 지운다. 테스트 접두사는 기능과 무관해 같이 바꾼다 |
-| 17 | Electron 알림 ID | `desktop/src/main.ts` `app.setAppUserModelId('jk-corp')` 1 (조사 뒤 추가된 코드) | Windows 알림 기록·알림 설정(끄기 등)이 이 ID 에 묶여 바꾸면 처음 상태가 된다. Electron 은 로그인 항목의 기본 이름에 이 ID 를 쓸 수 있어 "Launch at login" 체크 표시가 기존 Run 값을 못 찾을 수 있다 (확인 안 함) | 남은 일 1 |
+| 17 | Electron 알림 ID | `desktop/src/main.ts` `app.setAppUserModelId('jk-corp')` 1 (조사 뒤 추가된 코드) | Windows 알림 기록·알림 설정(끄기 등)이 이 ID 에 묶여 바꾸면 처음 상태가 된다. Electron 은 로그인 항목의 기본 이름에 이 ID 를 쓸 수 있어 "Launch at login" 체크 표시가 기존 Run 값을 못 찾을 수 있다 (확인함 → D10) | 바꿈. 로그인 항목 값 이름은 고정 (D10) |
 
 ### 실제 설정 폴더 (읽기만 함)
 
@@ -140,7 +141,7 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 
 ### D7. Electron 앱 데이터 폴더는 `@pray\desktop`, 트레이가 시작할 때 옮긴다 — 결정
 
-선택지는 ① 패키지 이름을 따라 `@pray\desktop` + 옛 폴더 rename ② `app.setName('Pray')` 로 `%APPDATA%\Pray` ③ `app.setPath('userData')` 로 옛 폴더 계속 쓰기였고 **①로 정했다**. D1 과 같은 규칙(새 폴더가 없을 때만 rename)을 `requestSingleInstanceLock` 전에 한다. 옛 트레이가 살아 있으면 잠금 파일 때문에 rename 이 실패하고, 그때는 D3 이 막는다.
+선택지는 ① 패키지 이름을 따라 `@pray\desktop` + 옛 폴더 rename ② `app.setName('Pray')` 로 `%APPDATA%\Pray` ③ `app.setPath('userData')` 로 옛 폴더 계속 쓰기였고 **①로 정했다**. D1 과 같은 규칙(새 폴더가 없을 때만 rename)을 `requestSingleInstanceLock` 전에 한다. 옛 트레이가 살아 있으면 잠금 파일 때문에 rename 이 실패하고, 그때는 D3 이 막는다. 구현 때 잰 것: **Electron 은 main 스크립트보다 먼저 새 userData 폴더를 빈 채로 만든다** — 그래서 옛 폴더가 있고 새 폴더가 비어 있으면 새 폴더를 지우고 옮긴다 (`moveAppDataOnce`). 못 옮기면 `app.setPath('userData', 옛 폴더)` 로 옛 잠금을 써서 옛 트레이와 같이 뜨지 않는다 (Electron 시험 앱으로 실측).
 
 ### D8. localStorage 는 복사, 옛 키는 남긴다 — 결정
 
@@ -150,25 +151,38 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 
 쿠키 `jk_session`(#14), 스프라이트 `jkCorp`·`meta.app`(#15), 포트·훅 주소(#9), 지난 설계 문서(`docs/plans/2026-10-2*`)의 옛 이름 — 그때의 기록이라 고치지 않는다. `CLAUDE.md`·`.claude/rules/*.md`·`README.md`·`tools/sprites/README.md`·레시피 설명의 이름·경로는 지금 상태 문서라 고친다.
 
+### D10. 알림 ID 는 `pray`, 로그인 시 자동 실행 값 이름은 고정 — 결정·결과
+
+- 알림 ID 를 `pray` 로 바꿨다. Windows 는 ID 의 대소문자를 가리지 않는다 (알림 설정 레지스트리 키 `Pray`·`pray` 가 같은 키). 옛 `jk-corp` 키에 꺼 둔 설정은 없어 잃는 것이 없다
+- **알림 머리에 보이는 앱 이름은 "Electron" 그대로다** — electron.exe 의 파일 설명이고, AUMID 레지스트리 DisplayName·시작 메뉴 바로가기로도 바뀌지 않았다(1단계 실측). "Pray" 로 보이려면 exe 이름·설명을 바꾼 설치본이 필요하다 (설치 파일은 범위 밖)
+- Electron 44 `browser_win.cc`: `setLoginItemSettings` 는 `name` 이 없으면 알림 ID 를 Run 값 이름으로 쓰고, `getLoginItemSettings().openAtLogin` 도 그 이름의 값만 본다. 실제 Run 값은 `electron.app.Electron` 이고 `openAtLogin` 은 ID 와 상관없이 false 였다(실측 — 바꾸기 전부터 체크 표시가 어긋나 있었다). 그래서 쓸 때 `name: 'electron.app.Electron'` 으로 고정하고, 체크 표시는 `launchItems` 중 그 이름·같은 인자·enabled 인 값으로 본다 (`desktop/src/loginItem.ts`)
+
 ## 이전 순서
 
-커밋은 기능 단위로 나누고, **main 반영은 두 번**에 나눈다 (결정): 데이터를 건드리는 1차(설정 폴더)를 먼저 따로 확인하고, 나머지를 2차로 한꺼번에. 각 커밋은 그 갈래의 `CLAUDE.md`·`.claude/rules` 줄을 같이 고친다.
+커밋은 기능 단위로 나눴고, **main 반영은 한 번**에 한다 (처음 결정한 두 번 나누기에서 바꿈). 데이터를 건드리는 설정 폴더 이전은 단위 테스트·시험 홈으로 따로 확인했다. 각 커밋은 그 갈래의 `CLAUDE.md`·`.claude/rules` 줄을 같이 고쳤다.
 
-| 차 | 커밋 | 내용 | 반영 뒤 사용자가 할 일 |
-|---|---|---|---|
-| 0 | — | (코드 없음) | `~/.claude/jk-corp/` 의 sprite-src 를 뺀 파일을 따로 백업 (zip 하나). config.json·accounts.json 에 비밀이 있으니 저장소·공유 폴더에 두지 않는다 |
-| 1차 | `feat(data-dir): 설정 폴더를 ~/.claude/pray 로 옮기고 시작 때 한 번 자동 이전` | D1·D2 규칙, hq.ts·config.ts·accountStore.ts·트레이 logDir·install-startup.ps1, 로그 이름 `pray-*.log`, tools 문서·레시피 설명의 sprite-src 경로 | 트레이 Quit → main 반영 → `npm run build --workspace desktop` → 트레이 켜기 → `~/.claude/pray/`(sprite-src 포함) 생김·`jk-corp/` 사라짐·팀·세션·로그인·계정 그대로인지 확인 |
-| 2차 | `refactor(*): 패키지 이름을 @pray/* 로 바꾸기` | package.json·import(server·web)·package-lock, D7 트레이 앱 데이터 이전 | (2차 끝에 한꺼번에) |
-| 2차 | `refactor(host): 호스트 pipe·환경변수 이름을 pray 로 바꾸기` | pipe, `PRAY_SESSION`·`PRAY_CLAUDE`, D3 막이(호스트·트레이), mod 의 env 대체 읽기, 로그 첫 줄 | |
-| 2차 | `refactor(mod): 플러그인 이름을 pray 로 바꾸기` | plugin.json 이름·설명·`PLUGIN_NAME`·곁 질문 description·테스트, `btw.ts` 시간 초과 문구 | |
-| 2차 | `feat(mcp): MCP 서버 pray·도구 team_* 로 바꾸고 옛 리드는 옛 이름으로` | D4·D5: mcp 모드·teamApi 오류 글, lead.ts, messages.ts, Chat.tsx, modelSetting.ts 안내, 테스트·주석 | |
-| 2차 | `feat(web): localStorage 키를 pray.* 로 옮기기` | D8 | |
-| 2차 | `refactor(desktop): 알림 ID·알림 제목을 pray 로 바꾸기` | #17 (남은 일 1 이 정해진 뒤), 알림 제목 `Pray · N sessions` | |
-| 2차 | `chore(scripts): 스케줄러 작업 이름을 pray-* 로 바꾸기` | #10, 옛 이름도 지우기 | |
-| 2차 | `chore(*): 임시 이름·주석의 jk-corp 정리` | #16, 남은 주석, `hooks/install.mjs` 주석 | |
-| 2차 반영 | — | — | 트레이 Quit → main 반영 → `npm install` → `npm run build` → `npm run build --workspace desktop` → 트레이 켜기 → 웹 세션이 `--resume` 되고 제안·대기 취소·곁 질문이 되는지, 옛 팀장 하나에게 `jk_status` 를 시켜 도구가 살아 있는지, 새 팀장을 만들어 `team_*` 가 보이는지, 트레이 창 테마·Appearance 가 남았는지, 알림이 뜨는지. `jk-corp.lnk` 이름은 원하면 손으로 |
+| 커밋 | 내용 |
+|---|---|
+| — | 0단계 백업: `~/.claude/jk-corp.backup-20261030/` (파트장이 함. config.json·accounts.json 에 비밀이 있어 저장소·공유 폴더에 두지 않는다) |
+| `359cf79` feat(data-dir) | D1·D2: `dataDir()`(호스트, 서버가 import)·트레이 사본, hq.ts·config.ts·accountStore.ts·트레이 logDir·install-startup.ps1(로그 폴더를 미리 만들지 않음), 로그 이름 `pray-*.log`, sprite-src 경로 |
+| `2690b98` refactor(*) | 패키지 `@pray/*`·루트 `pray`, import·package-lock, D7 앱 데이터 폴더 이전 |
+| `df4eae3` refactor(host) | pipe `pray-host`, `PRAY_SESSION`·`PRAY_CLAUDE`, D3 막이(호스트 종료 코드 0, 트레이 "Quit the old tray first" 창 — 옛 잠금 실패·옛 pipe 둘 다), mod 의 `JK_CORP_SESSION` 대체 읽기, 로그 첫 줄 |
+| `53a782e` refactor(mod) | plugin 이름 `pray`·설명·`PLUGIN_NAME`·곁 질문 description, `btw.ts` 시간 초과 문구 |
+| `a9d7d97` feat(mcp) | D4·D5: mcp 모드(`teamServer.ts`)·teamApi 오류 글, lead.ts, messages.ts, Chat.tsx(`teamTools.ts`), modelSetting.ts |
+| `ae046aa` feat(web) | D8: localStorage 7개 키 복사(`legacyStorage.ts`·`copyLegacyStorage.ts`), index.html 옛 키 읽기 |
+| `bf58b6e` refactor(desktop) | D10: 알림 ID `pray`, 로그인 시 자동 실행 값 이름 고정 (알림 제목 `Pray · N sessions` 는 1단계에서 이미 됨) |
+| `99eef87` chore(scripts) | 작업 이름 `pray-host`·`pray-server`. install·stop·uninstall 모두 옛 `jk-corp-*` 작업도 멈추고 지운다 |
+| `38623f7` chore(*) | #16 임시 접두사 `pray-account-`·`.pray.<pid>.tmp`(뜰 때 15분 넘은 옛 `jk-corp-account-*` 도 지움), 곁 질문 명령 `/pray-btw`, 주석·테스트 접두사·문서 |
 
-주의: **2차 커밋들을 main 에 따로따로 반영하지 않는다** — 반영하는 순간 mod 가 다시 읽히고, 트레이 메뉴의 호스트·서버 재시작이 새 코드를 섞어 띄운다(pipe 가 다른 호스트·서버). 반영은 늘 트레이 Quit 상태에서 하고 다 끝난 뒤 켠다. 다른 worktree(파트)의 리드도 MCP 는 본 저장소 `mcp/src/index.ts` 를 띄우므로 기준은 본 저장소 main 이다.
+반영 (한 번, 사용자가 반영 스크립트로): 트레이 Quit → main 반영 → `npm install` → `npm run build` → `npm run build --workspace desktop` → 트레이 켜기. 확인할 것:
+
+- `~/.claude/pray/`(sprite-src 포함)가 생기고 `~/.claude/jk-corp/` 가 사라짐, `%APPDATA%\@pray\desktop` 이 생기고 트레이 창 테마·Appearance·접기 상태가 남음
+- 팀·세션·다른 PC 로그인·계정 보관함이 그대로, 웹 세션이 `--resume` 되고 제안·대기 취소·곁 질문(`/pray-btw`)이 됨
+- 옛 팀장 하나에게 `jk_status` 를 시켜 도구가 살아 있는지, 새 팀장을 만들어 `team_*` 가 보이는지
+- 알림이 뜨는지, 트레이 메뉴 "Launch at login" 체크가 실제 등록과 맞는지
+- `jk-corp.lnk` 이름은 원하면 손으로
+
+주의: **반영은 트레이 Quit 상태에서만 한다** — 트레이가 떠 있는 채 반영하면 mod 가 바로 다시 읽히고, 트레이 메뉴의 호스트·서버 재시작이 pipe 가 다른 새 코드를 섞어 띄운다. 다른 worktree(파트)의 리드도 MCP 는 본 저장소 `mcp/src/index.ts` 를 띄우므로 기준은 본 저장소 main 이다.
 
 ## 되돌리기
 
@@ -178,7 +192,7 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 | 설정 폴더 | 옛 코드는 `jk-corp/` 만 보므로 **코드를 되돌리기 전에** 트레이 Quit 상태에서 `~/.claude/pray` 를 `~/.claude/jk-corp` 로 손으로 rename 한다 (`jk-corp/` 가 다시 생겨 있으면 안을 보고 로그 외에 없으면 지운다). 안 하면 옛 코드가 빈 폴더로 떠 휴식 세션이 resume 되지 않는다 — 기록은 `pray/` 에 남아 있어 잃지는 않는다 |
 | Electron 앱 데이터 | `%APPDATA%\@pray\desktop` → `%APPDATA%\@jk-corp\desktop` (안 하면 트레이 창 설정만 기본값) |
 | localStorage | 옛 키가 남아 있어 할 일 없음 |
-| 이전 뒤 만든 리드 | `PRAY_*` env 로 저장돼 옛 mcp(옛 env 만 읽음)에서는 MCP 가 바로 끝난다 → 그 리드들은 새로 만들어야 한다. 되돌릴 가능성이 있으면 2차 반영 뒤 며칠은 새 리드를 만들지 않는다 |
+| 이전 뒤 만든 리드 | `PRAY_*` env 로 저장돼 옛 mcp(옛 env 만 읽음)에서는 MCP 가 바로 끝난다 → 그 리드들은 새로 만들어야 한다. 되돌릴 가능성이 있으면 반영 뒤 며칠은 새 리드를 만들지 않는다 |
 | 백업 | 0단계 zip |
 
 ## 확인 방법
@@ -206,20 +220,20 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 ## 남는 위험
 
 - 옛 이름 읽기 코드가 영구로 남는다 (화면·서버의 MCP 이름 판정). mcp 옛 모드는 옛 리드가 정리될 때까지
-- 2차를 트레이 Quit 없이 반영하면 옛·새가 섞여 뜬다. D3 막이가 세션 중복은 막지만 서버가 호스트에 못 붙는 상태는 사용자가 트레이를 다시 켜야 풀린다
+- 트레이 Quit 없이 반영하면 옛·새가 섞여 뜬다. D3 막이가 세션 중복은 막지만 서버가 호스트에 못 붙는 상태는 사용자가 트레이를 다시 켜야 풀린다
 - `jk-corp/` 와 `pray/` 가 둘 다 있는 상태(되돌렸다 다시 올릴 때 등)는 합치지 않고 `pray/` 를 쓴다 — `jk-corp/` 에만 있는 새 기록은 손으로 옮겨야 한다
-- 조사 뒤에도 코드가 계속 바뀌고 있다 (조사 사이에 localStorage 키 4개·알림 ID·곁 질문이 늘었다). 구현 첫 단계에서 `git grep -i "jk-corp\|jk_corp\|JK_CORP\|jk_"` 을 다시 돌려 이 표와 맞춘다
 
 ## 남은 일
 
-1. **알림 ID(#17)를 바꿀지 정한다.** 바꾸면 Windows 알림 설정·기록이 처음 상태가 되고 "Launch at login" 표시가 어긋날 수 있다. 바꾸기 전에 `setLoginItemSettings` 가 이 ID 를 이름으로 쓰는지 확인하고, 쓰면 `name` 을 기존 값으로 명시한다. 정해지기 전에는 `jk-corp` 그대로 두고 그 커밋만 미룬다
-2. 옛 이름 호환 코드를 지울 시점 (나중에 정하기로 함): mcp 옛 모드(D5), D3 막이, 옛 임시 폴더 접두사 지우기, 스케줄러 옛 이름 지우기, mod 의 `JK_CORP_SESSION` 대체 읽기. 화면·서버의 옛 MCP 이름 판정은 지우지 않는다 (옛 jsonl)
-3. 바탕화면 바로가기 `jk-corp.lnk` 이름 바꾸기 (사용자 손)
+1. 옛 이름 호환 코드를 지울 시점 (나중에 정하기로 함): mcp 옛 모드(D5), D3 막이(호스트·트레이), 옛 임시 폴더 접두사 지우기, 스케줄러 옛 이름 지우기, mod 의 `JK_CORP_SESSION` 대체 읽기, localStorage 옛 키 읽기(D8), 설정 폴더·앱 데이터 폴더 이전. 화면·서버의 옛 MCP 이름 판정은 지우지 않는다 (옛 jsonl)
+2. 바탕화면 바로가기 `jk-corp.lnk` 이름 바꾸기 (사용자 손)
+3. 알림 머리 이름을 "Pray" 로 보이게 하려면 설치본(exe 이름·설명)이 필요하다 — 하려면 따로 정한다
 
 ## 확인하지 못한 것
 
-- 폴더 rename 실측은 임시 폴더에서 Node 로만 했다 (열린 파일 EPERM, 동시 rename 하나만 성공). Electron 이 잠금 파일을 쥔 userData 폴더 rename 은 재지 않았다
-- `app.setAppUserModelId` 가 로그인 항목(Run 값) 이름에 쓰이는지, 바꾸면 알림 설정이 어떻게 되는지
+- 실제 트레이로 실제 `~/.claude/jk-corp/`(sprite-src 353MB)·`%APPDATA%\@jk-corp\desktop` 을 옮기는 것 (단위 테스트·시험 홈·Electron 시험 앱으로만 확인)
+- 트레이의 D3 창(옛 잠금 실패·옛 pipe)을 실제 트레이 앱으로 보는 것 (호스트 쪽 막이는 시험 호스트로 확인: 가짜 옛 pipe·실제 옛 호스트 둘 다 종료 코드 0)
+- 알림 머리 이름을 새 ID 로 다시 재는 것 (시험 알림 배너가 화면에 뜨지 않았다)
 - 실행 중인 웹 세션에서 mod 의 plugin.json 이름이 바뀔 때 Claude Code 가 그대로 다시 읽는지 (다른 플러그인으로 보고 옛 것을 남기는지)
 - `claude --resume` 이 cwd 와 다른 프로젝트 슬러그의 jsonl 을 찾는지 (범위 밖 저장소 이전 때 필요)
 - npm 레지스트리에 `@pray` 범위가 있는지 (배포하지 않아 영향 없다고 판단)
