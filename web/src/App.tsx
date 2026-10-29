@@ -20,6 +20,7 @@ import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { FlowPanel } from './FlowPanel'
+import { NewTeamModal } from './NewTeamModal'
 import { TeamTodosModal } from './TeamTodosModal'
 import { remainingCount, todosOf } from './teamTodos'
 import { Modal, Segmented } from './Modal'
@@ -513,18 +514,17 @@ export function App({ isLocal }: { isLocal: boolean }) {
     if (isTrustFailed) void alertDialog(SESSION_TRUST_FAILED_MESSAGE)
   }
 
-  async function createTeam(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!teamForm) return
-    const form = new FormData(event.currentTarget)
+  /** 성공하면 true (창이 닫는다). gitInit 은 이 PC 화면에서만 실린다 */
+  async function createTeam(team: { name: string; cwd: string; gitInit?: boolean }): Promise<boolean> {
+    if (!teamForm) return false
     // 섬 크기는 화면 배치에서 정해져서 빈 자리도 화면이 찾아 넘긴다 (사무실을 안 띄운 폰에서도 같은 배치로)
     const anchor = spotForNewTeam(layoutOffice(office, snapshot.sessions), teamForm.groupId)
-    const response = await postJson('/api/team', 'POST', { name: form.get('name'), cwd: form.get('cwd'), groupId: teamForm.groupId, ...anchor })
+    const response = await postJson('/api/team', 'POST', { ...team, groupId: teamForm.groupId, ...anchor })
     if (!response.ok) {
       void alertDialog((await response.json()).message ?? "Couldn't create team")
-      return
+      return false
     }
-    setTeamForm(null)
+    return true
   }
 
   /** 파트를 만들고, 고르면 그 파트의 파트장을 바로 띄운다 (파트 API 와 세션 API 두 번 호출) */
@@ -1351,23 +1351,12 @@ export function App({ isLocal }: { isLocal: boolean }) {
           </Modal>
         )}
         {teamForm && (
-          <Modal
-            title={`New team — Group "${office.groups.find((g) => g.id === teamForm.groupId)?.name ?? ''}"`}
+          <NewTeamModal
+            groupName={office.groups.find((g) => g.id === teamForm.groupId)?.name ?? ''}
+            isLocal={isLocal}
             onClose={() => setTeamForm(null)}
-          >
-            <form className="create" onSubmit={createTeam}>
-              <input name="name" placeholder="Team name" required autoFocus />
-              <input name="cwd" placeholder="Work folder (e.g. D:\workspace\foo). Sessions in this folder join the team" required />
-              <div className="actions">
-                <button type="submit" className="primary">
-                  Create
-                </button>
-                <button type="button" onClick={() => setTeamForm(null)}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </Modal>
+            onCreate={createTeam}
+          />
         )}
         {sessionForm && renderSessionModal(sessionForm.teamId, sessionForm.partId)}
         {todoTeam && <TeamTodosModal key={todoTeam.id} team={todoTeam} onClose={() => setTodoTeamId(null)} onChangeTodos={changeTodos} />}

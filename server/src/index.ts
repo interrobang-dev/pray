@@ -79,7 +79,20 @@ import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, readWork
 import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './workspaceChanges.js'
 import { editBlockReason, isLocalPageRequest, isVcsMetaPath, saveTextFile } from './workspaceSave.js'
 import { HostClient } from './hostClient.js'
-import { makeVcsCache } from './vcs.js'
+import { detectVcs, makeVcsCache } from './vcs.js'
+import {
+  createFolder,
+  folderNameError,
+  folderState,
+  GitInitError,
+  gitInitRejection,
+  listDrives,
+  listSubfolders,
+  normalizeFolderPath,
+  parentFolderOf,
+  runGitInit,
+  teamNameMap,
+} from './folderPicker.js'
 import { openFolderRejection, openInExplorer } from './openFolder.js'
 import { attachInstructions, queuedPrompts, withoutQueued, type ChatMessage } from './messages.js'
 import { InstructionLogCache, MessageVersions, messageJsons, TranscriptMessageCache } from './messageCache.js'
@@ -1610,12 +1623,43 @@ async function assignTask(team: Team, part: Part | null, sessionId: string, inst
   res.json(task)
 }
 
-/** x·y(섬 앵커)는 화면이 빈 자리를 찾아 준다. 없으면 hq 가 정한다 */
-app.post('/api/team', (req, res) => {
-  const { name, cwd, groupId, x, y } = req.body as { name?: string; cwd?: string; groupId?: string; x?: unknown; y?: unknown }
-  if (!name?.trim() || !cwd?.trim() || !groupId) {
+/**
+ * x·y(섬 앵커)는 화면이 빈 자리를 찾아 준다. 없으면 hq 가 정한다.
+ * gitInit 이 true 면 (이 PC 에서만) 팀 폴더에 `git init -b main` 을 하고 성공해야 팀을 만든다. 거절 순서는 gitInitRejection
+ */
+app.post('/api/team', async (req, res) => {
+  const { name, cwd, groupId, x, y, gitInit } = req.body as { name?: string; cwd?: string; groupId?: string; x?: unknown; y?: unknown; gitInit?: unknown }
+  if (!name?.trim() || !cwd?.trim() || !groupId || (gitInit !== undefined && typeof gitInit !== 'boolean')) {
     res.status(400).json({ message: 'name, cwd and groupId required' })
     return
+  }
+  if (gitInit) {
+    const isLocal = isLoopback(req.socket.remoteAddress)
+    const folder = isLocal ? normalizeFolderPath(cwd.trim()) : null
+    const state = folder ? await folderState(folder) : 'missing'
+    const office = isLocal ? readOffice() : { groups: [], teams: [] }
+    const rejection = gitInitRejection({
+      isLocal,
+      folder,
+      state,
+      hasGroup: office.groups.some((group) => group.id === groupId),
+      hasTeam: folder !== null && office.teams.some((team) => normalizeCwd(team.cwd) === normalizeCwd(folder)),
+      vcs: state === 'folder' && folder ? detectVcs(folder) : null,
+    })
+    if (rejection) {
+      res.status(rejection.status).json({ message: rejection.message })
+      return
+    }
+    try {
+      await runGitInit(folder!)
+    } catch (error) {
+      if (error instanceof GitInitError) {
+        res.status(500).json({ message: error.message })
+        return
+      }
+      throw error
+    }
+    vcsOf.forget(folder!)
   }
   try {
     res.json(addTeam({ name: name.trim(), cwd: cwd.trim(), groupId, x, y }))
@@ -1693,6 +1737,74 @@ app.post('/api/team/:teamId/open-folder', async (req, res) => {
   }
   openInExplorer(team!.cwd)
   res.json({})
+})
+
+/**
+ * 팀 만들기 창의 폴더 고르기 (이 PC 전용 — 다른 PC 는 경로를 직접 적는다). `?path=` 가 비면 드라이브 목록, 있으면 그 폴더의 하위 폴더.
+ * parent: 위 폴더, ''(드라이브 루트 → 드라이브 목록), null(드라이브 목록 자체). vcsAbove: 이 폴더나 그 위의 저장소(git init 가능 여부)
+ */
+app.get('/api/fs/dirs', async (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress)) {
+    res.status(403).json({ message: 'Folder browsing works only on this PC' })
+    return
+  }
+  res.set('Cache-Control', 'no-store')
+  const raw = req.query.path
+  const teamNames = teamNameMap(readOffice().teams)
+  if (raw === undefined || raw === '') {
+    res.json({ path: null, parent: null, entries: await listDrives(teamNames), isTruncated: false, hiddenCount: 0, vcsAbove: null, teamName: null })
+    return
+  }
+  const folder = normalizeFolderPath(raw)
+  if (!folder) {
+    res.status(400).json({ message: 'Path must be an absolute folder path like D:\\work' })
+    return
+  }
+  const state = await folderState(folder)
+  if (state !== 'folder') {
+    res.status(404).json({ message: state === 'missing' ? `Folder not found: ${folder}` : `Not a folder: ${folder}` })
+    return
+  }
+  try {
+    // skipEntries=1: 목록 없이 이 폴더 판정만 (팀 만들기 창이 적힌 경로의 git init 가능 여부를 물을 때)
+    const listing = req.query.skipEntries === '1' ? { entries: [], isTruncated: false, hiddenCount: 0 } : await listSubfolders(folder, teamNames)
+    res.json({ path: folder, parent: parentFolderOf(folder), ...listing, vcsAbove: detectVcs(folder), teamName: teamNames.get(normalizeCwd(folder)) ?? null })
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') res.status(404).json({ message: `Folder not found: ${folder}` })
+    else res.status(code === 'EPERM' || code === 'EACCES' ? 403 : 500).json({ message: `Couldn't read this folder (${code ?? 'error'})` })
+  }
+})
+
+/** 폴더 고르기 창의 New folder (이 PC 전용). parent 안에 하나만 만든다 — parent 가 없으면 404 */
+app.post('/api/fs/mkdir', async (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress)) {
+    res.status(403).json({ message: 'Folders can be created only on this PC' })
+    return
+  }
+  const { parent, name } = req.body as { parent?: unknown; name?: unknown }
+  const folder = normalizeFolderPath(parent)
+  if (!folder) {
+    res.status(400).json({ message: 'Parent must be an absolute folder path like D:\\work' })
+    return
+  }
+  const nameError = folderNameError(name)
+  if (nameError) {
+    res.status(400).json({ message: nameError })
+    return
+  }
+  if ((await folderState(folder)) !== 'folder') {
+    res.status(404).json({ message: `Folder not found: ${folder}` })
+    return
+  }
+  try {
+    res.json({ path: await createFolder(folder, name as string) })
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'EEXIST') res.status(409).json({ message: `"${name as string}" already exists in this folder` })
+    else if (code === 'ENOENT') res.status(404).json({ message: `Folder not found: ${folder}` })
+    else res.status(500).json({ message: `Couldn't create the folder (${code ?? 'error'})` })
+  }
 })
 
 app.put('/api/team/:teamId/desks/:sessionId', (req, res) => {

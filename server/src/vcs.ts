@@ -28,11 +28,14 @@ export function detectVcs(cwd: string, exists: (path: string) => boolean = exist
   }
 }
 
-/** 팀 폴더별 판정을 ttlMs 동안 메모리에 둔다. 서버를 다시 켜면 비고, 새 팀·바뀐 폴더는 키가 달라 바로 새로 판정한다 */
+/**
+ * 팀 폴더별 판정을 ttlMs 동안 메모리에 둔다. 서버를 다시 켜면 비고, 새 팀·바뀐 폴더는 키가 달라 바로 새로 판정한다.
+ * `forget(cwd)` 은 그 폴더 판정을 지운다 (서버가 git init 한 뒤 — 지운 팀 폴더였으면 옛 null 이 남아 있을 수 있다)
+ */
 export function makeVcsCache(options: { ttlMs: number; detect?: (cwd: string) => Vcs | null; now?: () => number }) {
   const { ttlMs, detect = detectVcs, now = Date.now } = options
   const cache = new Map<string, { at: number; vcs: Vcs | null }>()
-  return (cwd: string): Vcs | null => {
+  const vcsOf = (cwd: string): Vcs | null => {
     const key = normalizeCwd(cwd)
     const cached = cache.get(key)
     if (cached && now() - cached.at < ttlMs) return cached.vcs
@@ -40,4 +43,5 @@ export function makeVcsCache(options: { ttlMs: number; detect?: (cwd: string) =>
     cache.set(key, { at: now(), vcs })
     return vcs
   }
+  return Object.assign(vcsOf, { forget: (cwd: string) => void cache.delete(normalizeCwd(cwd)) })
 }

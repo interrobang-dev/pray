@@ -561,6 +561,130 @@ header button.icon svg {
   font-size: calc(11px * var(--font-scale));
   color: var(--muted);
 }
+/* 팀 만들기 창: 작업 폴더 칸 + Browse… */
+.create .path-row {
+  display: flex;
+  gap: 6px;
+}
+.create .path-row input {
+  flex: 1;
+  min-width: 0;
+}
+.create .path-row button {
+  flex-shrink: 0;
+}
+.create .folder-error,
+.folder-picker .folder-error {
+  font-size: calc(11px * var(--font-scale));
+  color: var(--error);
+  overflow-wrap: anywhere;
+}
+/* 폴더 고르기 (팀 만들기 창 안에 펼친다): 경로 막대 · 폴더 목록 · 고른 경로 · 버튼 */
+.modal.folder-picker-modal {
+  width: 520px;
+}
+.folder-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.folder-picker-bar {
+  display: flex;
+  gap: 6px;
+}
+.folder-picker-bar .folder-path {
+  flex: 1;
+  min-width: 0;
+}
+.folder-picker-bar .folder-up {
+  flex-shrink: 0;
+  width: 34px;
+  padding: 0;
+}
+.folder-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+.folder-list[aria-busy='true'] {
+  opacity: 0.6;
+}
+.folder-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: default;
+  user-select: none;
+}
+.folder-list li:hover {
+  background: var(--chip-bg);
+}
+.folder-list li.is-selected {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.folder-list li:focus {
+  outline: none;
+}
+.folder-list li:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.folder-list .folder-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-list .vcs-chip {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: calc(10px * var(--font-scale));
+  line-height: 14px;
+}
+.folder-picker .folder-team {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+}
+.folder-list .folder-empty {
+  color: var(--muted);
+}
+.folder-chosen {
+  min-width: 0;
+  font-size: calc(12px * var(--font-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-chosen-label {
+  color: var(--muted);
+}
+.folder-actions {
+  display: flex;
+  gap: 6px;
+}
+.folder-actions .folder-actions-gap {
+  flex: 1;
+}
+.folder-picker button.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
 /* 좌측 목록: 그룹 라벨 → 팀 카드 → 세션 줄. 로비는 라벨 아래 세션이 바로 온다 */
 .sessions {
   list-style: none;
@@ -5082,6 +5206,26 @@ li.group.drop-after::after {
     box-sizing: border-box;
     width: calc(100vw - 32px);
     max-width: none;
+  }
+  /* 팀 만들기 창·폴더 고르기: 손가락으로 누르기 쉽게 40px, 목록은 주소창이 보여도 화면 안 */
+  .modal.folder-picker-modal {
+    width: calc(100vw - 32px);
+  }
+  .create .path-row button,
+  .folder-picker button {
+    min-height: 40px;
+  }
+  .folder-picker-bar .folder-up {
+    width: 40px;
+  }
+  .folder-list {
+    height: auto;
+    max-height: calc(100dvh - 300px);
+    min-height: 160px;
+  }
+  .folder-list li {
+    min-height: 40px;
+    box-sizing: border-box;
   }
   /* TODO 모달: 주소창이 보여도 화면 안. 줄·체크박스를 손가락으로 누르기 쉽게 */
   .todo-modal {
