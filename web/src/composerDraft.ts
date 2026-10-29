@@ -34,3 +34,14 @@ export function addToComposerDraft(snippet: string): void {
   composerDraft.selection = { start: result.caret, end: result.caret }
   composerDraft.isFocusPending = true
 }
+
+/**
+ * 되돌아온 글(응답 전 중지로 돌아온 글·취소한 대기 메시지)을 입력칸(언마운트돼 있어도) 맨 앞에 넣는다.
+ * 쓰던 글이 있으면 `되돌린 글\n쓰던 글` (Claude Code 가 ↑ 로 대기열을 꺼낼 때와 같은 순서), 커서는 되돌린 글 끝. 다음에 그려질 때 포커스한다
+ */
+export function restoreToComposerDraft(restored: string): void {
+  const { text } = composerDraft
+  composerDraft.text = text === '' ? restored : `${restored}\n${text}`
+  composerDraft.selection = { start: restored.length, end: restored.length }
+  composerDraft.isFocusPending = true
+}

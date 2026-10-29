@@ -48,11 +48,13 @@ function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRe
   )
 }
 
-/** Chat 이 입력 상자에 시키는 것: 제안을 채운다, 포커스 */
+/** Chat 이 입력 상자에 시키는 것: 제안을 채운다, 포커스, 저장소의 글 다시 읽기 */
 export interface ComposerHandle {
   fill: (text: string) => void
   /** 입력칸에 포커스한다 (곁가지 질문 카드를 Esc 로 닫았을 때) */
   focus: () => void
+  /** composerDraft 의 글·커서로 다시 그리고 포커스한다 (되돌아온 글을 저장소에 넣은 뒤. restoreToComposerDraft) */
+  reload: () => void
 }
 
 interface Props {
@@ -132,7 +134,17 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
     textarea?.setSelectionRange(text.length, text.length)
     composerDraft.selection = { start: text.length, end: text.length }
   }
-  useImperativeHandle(ref, () => ({ fill, focus: () => composerRef.current?.focus() }))
+  /** 저장소에 넣은 글을 그린다. 입력칸이 없으면(쓸 수 없는 동안) 포커스는 다시 그려질 때 위 효과가 한다 */
+  function reload() {
+    flushSync(() => changeDraft(composerDraft.text))
+    const textarea = composerRef.current
+    if (!textarea) return
+    composerDraft.isFocusPending = false
+    textarea.focus()
+    const { selection } = composerDraft
+    if (selection) textarea.setSelectionRange(selection.start, selection.end)
+  }
+  useImperativeHandle(ref, () => ({ fill, focus: () => composerRef.current?.focus(), reload }))
 
   function submit(event?: FormEvent) {
     event?.preventDefault()

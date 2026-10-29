@@ -7,6 +7,7 @@ import { expandedStartIndex, resolveStartIndex, startIndexRevealing, windowStart
 import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
 import { Composer, type ComposerHandle } from './Composer'
+import { restoreToComposerDraft } from './composerDraft'
 import { isSuggestionVisible } from './composerText'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
 import { runningToolNames, shortToolName } from './runningTools'
@@ -752,7 +753,8 @@ const SUBMIT_ENTER_DELAY_MS = 300
 
 /** 대기 메시지 취소 결과 (서버 outcome) → 대화 맨 아래 한 줄 */
 const CANCEL_OUTCOME_LABELS: Record<string, string> = {
-  cancelled: 'cancelled',
+  // 취소한 글은 웹 입력칸에 넣는다
+  cancelled: 'cancelled · moved to the input box',
   accepted: 'already taken by claude',
   stuck: "couldn't cancel: check the Terminal tab",
   failed: 'failed: check the Terminal tab',
@@ -767,6 +769,8 @@ const INTERRUPT_OUTCOME_LABELS: Record<string, string | null> = {
   restored: "Stopped · no response yet, so your message is back in claude's input box (it will join your next message): check the Terminal tab",
   unknown: 'May not have stopped: check the Terminal tab',
 }
+/** 응답 전 중지로 돌아온 글을 서버가 Claude Code 입력칸에서 비우고 넘겨 줘(text) 웹 입력칸에 넣었을 때. 위 restored 는 넘겨받지 못했을 때다 (mod 가 안 붙음 등) */
+const RESTORED_TO_INPUT_LABEL = 'Stopped · no response yet, so your message was moved to the input box'
 /** 중지 결과 한 줄을 보여 주는 시간. 입력칸에 남은 글 안내는 읽을 시간이 더 필요하다 */
 const INTERRUPT_NOTICE_MS = 10_000
 /** "중지 중…" 을 [중지] 로 되돌리기까지 (서버가 결말을 최대 3초 기다리므로 그보다 길게) */
@@ -1580,39 +1584,58 @@ export function Chat({
     return () => clearTimeout(timer)
   }, [interruptNotice])
 
-  /** 작업 중인 claude 를 멈춘다. 서버가 Esc 를 보내고 jsonl 로 결말을 확인해 준다 (최대 몇 초). 확인 창 없음 */
+  /** 되돌아온 글(응답 전 중지·취소한 대기 메시지)을 웹 입력칸 맨 앞에 넣는다. 대화 탭을 떠나 Composer 가 없으면 저장소에만 넣고 다시 그려질 때 보인다 */
+  function restoreToComposer(text: string) {
+    restoreToComposerDraft(text)
+    composerRef.current?.reload()
+  }
+
+  /**
+   * 작업 중인 claude 를 멈춘다. 서버가 Esc 를 보내고 jsonl 로 결말을 확인해 준다 (최대 몇 초). 확인 창 없음.
+   * 응답 전에 멈춰 보낸 글이 Claude Code 입력칸에 돌아왔으면 서버가 그 입력칸을 비우고 글(text)을 준다 — 웹 입력칸에 넣는다
+   */
   async function interrupt() {
     const requestSessionId = sessionId
     setIsInterrupting(true)
     setInterruptNotice(null)
     let notice: string | null
     let isStopped = false
+    let restoredText: string | null = null
     try {
       const response = await fetch(`/api/sessions/${sessionId}/interrupt`, { method: 'POST' })
-      const body = (await response.json().catch(() => ({}))) as { outcome?: string; message?: string }
+      const body = (await response.json().catch(() => ({}))) as { outcome?: string; text?: unknown; message?: string }
       const outcome = body.outcome ?? ''
       isStopped = response.ok && (outcome === 'stopped' || outcome === 'restored')
+      if (response.ok && typeof body.text === 'string' && body.text) restoredText = body.text
       // stopped 의 null(알리지 않음)이 ?? 로 unknown 문구가 되지 않게 키가 있는지로 본다
-      notice = response.ok
-        ? Object.hasOwn(INTERRUPT_OUTCOME_LABELS, outcome)
-          ? INTERRUPT_OUTCOME_LABELS[outcome]
-          : INTERRUPT_OUTCOME_LABELS.unknown
-        : `Couldn't stop: ${body.message ?? `HTTP ${response.status}`}`
+      notice = !response.ok
+        ? `Couldn't stop: ${body.message ?? `HTTP ${response.status}`}`
+        : outcome === 'restored' && restoredText !== null
+          ? RESTORED_TO_INPUT_LABEL
+          : Object.hasOwn(INTERRUPT_OUTCOME_LABELS, outcome)
+            ? INTERRUPT_OUTCOME_LABELS[outcome]
+            : INTERRUPT_OUTCOME_LABELS.unknown
     } catch {
       notice = 'Stop failed: network error'
     }
+    // 세션을 바꿨으면 넣지 않는다 (입력칸은 세션마다가 아니라 한 벌이라 다른 세션으로 보내게 된다)
     if (sessionIdRef.current !== requestSessionId) return
+    if (restoredText !== null) restoreToComposer(restoredText)
     // 멈췄으면 서버가 바꾼 상태가 와서 표시기가 사라질 때까지 "중지 중…" 그대로 (응답과 상태 갱신 사이에 [중지] 가 깜박이지 않게)
     if (!isStopped) setIsInterrupting(false)
     setInterruptNotice(notice)
   }
 
-  /** 마지막 대기 메시지를 Claude Code 대기열에서 뺀다. 서버가 ↑ 로 전부 꺼내고 나머지를 다시 넣은 뒤 결과를 준다 (몇 초 걸린다) */
+  /**
+   * 마지막 대기 메시지를 Claude Code 대기열에서 뺀다. 서버가 ↑ 로 전부 꺼내고 나머지를 다시 넣은 뒤 결과를 준다 (몇 초 걸린다).
+   * 뺐으면(cancelled) 그 글을 웹 입력칸에 넣는다
+   */
   const cancelQueued = useCallback(async (message: ChatMessage) => {
     const requestSessionId = sessionId
     setCancellingId(message.id)
     setCancelNotice(null)
     let notice: string
+    let isCancelled = false
     try {
       const response = await fetch(`/api/sessions/${sessionId}/queue/cancel-last`, {
         method: 'POST',
@@ -1620,6 +1643,7 @@ export function Chat({
         body: JSON.stringify({ text: message.text }),
       })
       const body = (await response.json().catch(() => ({}))) as { outcome?: string; message?: string }
+      isCancelled = response.ok && body.outcome === 'cancelled'
       notice = response.ok
         ? (CANCEL_OUTCOME_LABELS[body.outcome ?? ''] ?? CANCEL_OUTCOME_LABELS.failed)
         : `couldn't cancel: ${body.message ?? `HTTP ${response.status}`}`
@@ -1627,6 +1651,8 @@ export function Chat({
       notice = 'failed: network error'
     }
     if (sessionIdRef.current !== requestSessionId) return
+    // 대기열에서 뺀 글은 고쳐 보낼 수 있게 웹 입력칸으로
+    if (isCancelled) restoreToComposer(message.text)
     setCancellingId(null)
     setCancelNotice(notice)
   }, [sessionId])

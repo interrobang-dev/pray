@@ -63,7 +63,7 @@ import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js
 import { isAllowedHost, isSameOriginRequest } from './requestGuard.js'
 import { makeSendCode } from './mail.js'
 import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
-import { decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptJudgement } from './interrupt.js'
+import { answerInterruptBox, decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptBox, type InterruptJudgement } from './interrupt.js'
 import { findLiveSession, findTranscript, findTranscriptAnalysis, findTranscriptFile, findTranscriptSummary, isLiveSession, listSessions, projectsDir, sessionStatus } from './sessions.js'
 import {
   contentTypeOf,
@@ -160,8 +160,11 @@ const heldQuestions = new Map<
 const suggestions = new Map<string, string>()
 /** 진행 중인 대기 메시지 취소 (세션당 하나). mod 의 입력칸 알림(POST /api/hook/prompt-box)이 단계를 넘긴다. 메모리에만 */
 const unqueues = new Map<string, UnqueueProgress>()
-/** 진행 중인 중지 (Esc 를 보내고 jsonl 결말을 기다리는 세션). 그동안 같은 세션의 중지·대기 메시지 취소를 막는다. 메모리에만 */
-const interrupts = new Set<string>()
+/**
+ * 진행 중인 중지 (Esc 를 보내고 jsonl 결말을 기다리는 세션)와 그 사이 입력칸 상태 (응답 전 중지로 돌아온 글. interrupt.ts).
+ * 그동안 같은 세션의 중지·대기 메시지 취소를 막는다. 메모리에만
+ */
+const interrupts = new Map<string, InterruptBox>()
 /** 곁가지 질문(btw) 문답 (btw.ts). 세션마다 최근 20개. 메모리에만 */
 const btw = new BtwStore()
 /** 답을 기다리는 btw 요청의 시간 초과 타이머 (요청 ID → 세션·타이머) */
@@ -1212,7 +1215,9 @@ const INTERRUPT_POLL_MS = 100
  * 작업 중인 claude 를 멈춘다 (pty 에 Esc 하나). 근무 중인 웹 세션이 working 이고 승인 대기·질문 중·대기 메시지 취소 중이 아닐 때만
  * (승인 대기·질문에서 Esc 는 도구 거부·질문 거절이다). Claude Code 는 중지에 Stop 훅을 보내지 않으므로 jsonl 로 결말을 보고
  * 멈췄으면(stopped·restored) 서버가 상태를 my-turn 으로 돌린다. 팀원이면 running task 를 실패로 끝낸다.
- * 끝나면 { outcome: stopped·continued·restored·unknown } (interrupt.ts). 화면은 /input 으로 Esc 를 직접 보내지 않는다
+ * 응답 전에 멈춰 보낸 글이 Claude Code 입력칸에 돌아오면 mod 의 입력칸 알림에 답해 그 입력칸을 비우고, 비운 것이 확인되면 그 글을 text 로 준다
+ * (화면이 웹 입력칸에 넣는다. 안 비우면 다음에 보내는 글과 이어 붙는다).
+ * 끝나면 { outcome: stopped·continued·restored·unknown, text? } (interrupt.ts). 화면은 /input 으로 Esc 를 직접 보내지 않는다
  */
 app.post('/api/sessions/:id/interrupt', async (req, res) => {
   const sessionId = req.params.id
@@ -1225,7 +1230,8 @@ app.post('/api/sessions/:id/interrupt', async (req, res) => {
     res.status(409).json({ message: conflict })
     return
   }
-  interrupts.add(sessionId)
+  const box: InterruptBox = { restoredText: null, isCleared: false }
+  interrupts.set(sessionId, box)
   try {
     const jsonl = (await findTranscript(sessionId)) ?? ''
     // 위 await 사이에 차례가 끝났거나 질문·대기 취소가 시작됐을 수 있어 다시 본다
@@ -1244,19 +1250,23 @@ app.post('/api/sessions/:id/interrupt', async (req, res) => {
     }
     let judgement: InterruptJudgement = 'unknown'
     const deadline = Date.now() + INTERRUPT_RECORD_TIMEOUT_MS
-    while (true) {
+    // 돌아온 글을 비웠으면 jsonl 에 남을 것이 없어 기다리지 않는다
+    while (!box.isCleared) {
       judgement = judgeInterrupt((await findTranscript(sessionId)) ?? '', fromLine)
       if (judgement !== 'unknown' || Date.now() >= deadline) break
       await sleep(INTERRUPT_POLL_MS)
     }
-    const outcome = decideInterrupt(judgement, wasAwaitingFirstResponse)
+    // 여기서 비워야 늦게 온 알림에 비우라고 답하지 않는다
+    interrupts.delete(sessionId)
+    const outcome = decideInterrupt(judgement, wasAwaitingFirstResponse, box.isCleared)
     // 대기 메시지로 이어서 일해도(continued) 지시받은 일은 멈췄다. 기록이 없으면(unknown) 멈췄는지 몰라 그대로 둔다
     if (outcome !== 'unknown') tasks.markInterrupted(sessionId)
     if (outcome === 'stopped' || outcome === 'restored') {
       const next = applyInterrupted(hookStates.get(sessionId), turnStartedAt)
       if (next) hookStates.set(sessionId, next)
     }
-    res.json({ outcome })
+    // 비운 것이 확인된 글만 준다 (비우지 못했으면 아직 Claude Code 입력칸에 있어 화면에 넣으면 두 곳에 있게 된다)
+    res.json(box.isCleared && box.restoredText !== null ? { outcome, text: box.restoredText } : { outcome })
     void broadcast()
   } finally {
     interrupts.delete(sessionId)
@@ -2531,9 +2541,10 @@ app.post('/api/hook/suggestion', (req, res) => {
 })
 
 /**
- * mod 가 알리는 입력칸 변경 (↑ 로 꺼냄·자기 fill·빈 입력칸) `{ sessionId, text, origin }`. 대기 메시지 취소가 진행 중일 때만 답한다:
- * { fill } = 입력칸을 그 글로 바꿔라. fill 한 글이 그대로 들어온 것을 확인하면 서버가 pty 에 Enter 를 보낸다.
- * 진행 중인 취소가 없으면 {} (평소에는 아무 일도 없다). suggestion 과 같은 이유로 인증 예외가 아니다 (mod 는 loopback 으로 통과)
+ * mod 가 알리는 입력칸 변경 (↑ 로 꺼냄·응답 전 중지로 글이 돌아옴(engine)·자기 fill·빈 입력칸) `{ sessionId, text, origin }`.
+ * 대기 메시지 취소나 중지가 진행 중일 때만 답한다: { fill } = 입력칸을 그 글로 바꿔라.
+ * 대기 취소는 fill 한 글이 그대로 들어온 것을 확인하면 서버가 pty 에 Enter 를 보낸다. 중지는 돌아온 글을 기억하고 { fill: '' } 로 비운다.
+ * 진행 중인 것이 없으면 {} (평소에는 아무 일도 없다). suggestion 과 같은 이유로 인증 예외가 아니다 (mod 는 loopback 으로 통과)
  */
 app.post('/api/hook/prompt-box', (req, res) => {
   const { sessionId, text, origin } = (req.body ?? {}) as { sessionId?: unknown; text?: unknown; origin?: unknown }
@@ -2543,7 +2554,15 @@ app.post('/api/hook/prompt-box', (req, res) => {
   }
   const progress = unqueues.get(sessionId)
   if (!progress) {
-    res.json({})
+    const box = interrupts.get(sessionId)
+    if (!box) {
+      res.json({})
+      return
+    }
+    const answer = answerInterruptBox(box, text, origin)
+    // 중지 라우트가 같은 객체를 지켜본다
+    Object.assign(box, answer.box)
+    res.json(answer.reply)
     return
   }
   const answer = answerBox(progress, text, origin)

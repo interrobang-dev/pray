@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { addToComposerDraft, composerDraft, insertSnippet } from './composerDraft'
+import { addToComposerDraft, composerDraft, insertSnippet, restoreToComposerDraft } from './composerDraft'
 
 describe('composerDraft', () => {
   beforeEach(() => {
@@ -41,5 +41,16 @@ describe('composerDraft', () => {
     composerDraft.selection = { start: 40, end: 40 }
     addToComposerDraft('`a.ts`')
     expect(composerDraft.text).toBe('`a.ts` ')
+  })
+
+  it('puts restored text in front of the draft with the caret at its end, and asks for focus', () => {
+    restoreToComposerDraft('sent\nline two')
+    expect(composerDraft).toEqual({ text: 'sent\nline two', selection: { start: 13, end: 13 }, isFocusPending: true })
+
+    composerDraft.text = 'typing'
+    composerDraft.selection = { start: 2, end: 2 }
+    composerDraft.isFocusPending = false
+    restoreToComposerDraft('queued')
+    expect(composerDraft).toEqual({ text: 'queued\ntyping', selection: { start: 6, end: 6 }, isFocusPending: true })
   })
 })

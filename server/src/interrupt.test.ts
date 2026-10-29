@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decideInterrupt, isAwaitingFirstResponse, isInterruptText, judgeInterrupt } from './interrupt.js'
+import { answerInterruptBox, decideInterrupt, isAwaitingFirstResponse, isInterruptText, judgeInterrupt, type InterruptBox } from './interrupt.js'
 
 const line = (record: Record<string, unknown>) => JSON.stringify(record)
 const prompt = (text: string) => line({ type: 'user', message: { role: 'user', content: text } })
@@ -89,5 +89,35 @@ describe('decideInterrupt', () => {
   it('treats no record before any response as the prompt going back to the input box', () => {
     expect(decideInterrupt('unknown', true)).toBe('restored')
     expect(decideInterrupt('unknown', false)).toBe('unknown')
+  })
+
+  it('treats an emptied put-back prompt as restored even if jsonl had no prompt line yet', () => {
+    expect(decideInterrupt('unknown', false, true)).toBe('restored')
+    expect(decideInterrupt('stopped', false, true)).toBe('stopped')
+  })
+})
+
+describe('answerInterruptBox', () => {
+  const awaiting: InterruptBox = { restoredText: null, isCleared: false }
+
+  it('remembers the prompt put back in the box, asks to empty it, then sees the empty box', () => {
+    const first = answerInterruptBox(awaiting, '보낸 글\n둘째 줄', 'engine')
+    expect(first).toEqual({ box: { ...awaiting, restoredText: '보낸 글\n둘째 줄' }, reply: { fill: '' } })
+    const cleared = answerInterruptBox(first.box, '', 'plugin')
+    expect(cleared).toEqual({ box: { ...awaiting, restoredText: '보낸 글\n둘째 줄', isCleared: true }, reply: {} })
+    // 그 뒤의 변경에는 더 지시하지 않는다
+    expect(answerInterruptBox(cleared.box, '다른 글', 'engine')).toEqual({ box: cleared.box, reply: {} })
+  })
+
+  it('ignores changes that are not the engine putting text back', () => {
+    for (const [text, origin] of [['', 'clear'], ['', 'engine'], ['예전 글', 'history'], ['남의 글', 'plugin']]) {
+      expect(answerInterruptBox(awaiting, text, origin)).toEqual({ box: awaiting, reply: {} })
+    }
+  })
+
+  it('waits for its own empty fill, not another change, before calling the box cleared', () => {
+    const asked: InterruptBox = { ...awaiting, restoredText: '보낸 글' }
+    expect(answerInterruptBox(asked, '보낸 글x', 'engine')).toEqual({ box: asked, reply: {} })
+    expect(answerInterruptBox(asked, '', 'clear')).toEqual({ box: asked, reply: {} })
   })
 })
