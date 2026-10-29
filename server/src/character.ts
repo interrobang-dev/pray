@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from 'node:fs'
-import type { DotCharacter } from '@jk-corp/host/dotCharacter'
-import type { SessionCharacter } from '@jk-corp/host/hq'
+import type { DotCharacter } from '@pray/host/dotCharacter'
+import type { SessionCharacter } from '@pray/host/hq'
 
 /** 인물 프리셋 id 꼴 (아틀라스 meta.jkCorp.characters 의 id). 서버는 아틀라스를 읽지 않아 꼴만 본다 */
 const CHARACTER_ID = /^[a-z0-9][a-z0-9-]{0,39}$/

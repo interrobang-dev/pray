@@ -1,4 +1,4 @@
-import { hashOf } from '@jk-corp/host/dotCharacter'
+import { hashOf } from '@pray/host/dotCharacter'
 import type { OfficeLayout, Rect } from './officeLayout'
 
 /**

@@ -9,8 +9,8 @@ import { hasWakingTask, runningBackgroundTasks, runningShells, type BackgroundTa
 import { turnEndStatus, type TurnEndFacts } from './turnEnd.js'
 import { readLiveSessions, type LiveSession } from './liveSessions.js'
 import { modelSettingOf } from './memberModel.js'
-import { partOfSession, roleOf, teamOf, type Team } from '@jk-corp/host/team'
-import type { OffDutyRecord, SessionCharacter, SessionGender, WebSessionRecord } from '@jk-corp/host/hq'
+import { partOfSession, roleOf, teamOf, type Team } from '@pray/host/team'
+import type { OffDutyRecord, SessionCharacter, SessionGender, WebSessionRecord } from '@pray/host/hq'
 
 const claudeDir = join(homedir(), '.claude')
 export const projectsDir = join(claudeDir, 'projects')

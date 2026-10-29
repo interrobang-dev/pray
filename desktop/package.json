@@ -1,5 +1,5 @@
 {
-  "name": "@jk-corp/desktop",
+  "name": "@pray/desktop",
   "private": true,
   "main": "dist/main.js",
   "scripts": {

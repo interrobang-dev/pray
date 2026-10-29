@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { getArg } from '@jk-corp/host/runtime'
+import { getArg } from '@pray/host/runtime'
 import { checkAuthCode, loginFailureOf, parseLoginUrl, stateOfUrl, stripAnsi, type Account } from './accounts.js'
 import {
   AccountError,

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Child } from './children'
-import { resolveDataDir } from './dataDir'
+import { moveAppDataOnce, resolveDataDir } from './dataDir'
 import { trayIconPng } from './icon'
 import { diffSessions, type NotifySession, type SessionNotice, type StatusBaseline } from './notify'
 
@@ -267,6 +267,12 @@ async function quit(): Promise<void> {
   if (children) await Promise.all([children.server.stop(), children.host.stop()])
   app.quit()
 }
+
+// 앱 데이터 폴더는 패키지 이름을 따라 %APPDATA%\@pray\desktop 이다. 옛 @jk-corp\desktop(창 설정·tray-settings.json)을 잠금 전에 옮긴다.
+// 못 옮기면(옛 트레이가 잠금을 쥐고 있음) 옛 폴더를 그대로 써서 같은 잠금으로 옛 트레이와 같이 뜨지 않는다
+const appData = moveAppDataOnce(join(app.getPath('appData'), '@jk-corp', 'desktop'), app.getPath('userData'))
+if (appData.dir !== app.getPath('userData')) app.setPath('userData', appData.dir)
+if (appData.warning) console.warn(appData.warning)
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()

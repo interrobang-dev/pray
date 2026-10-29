@@ -1,5 +1,5 @@
 {
-  "name": "@jk-corp/host",
+  "name": "@pray/host",
   "private": true,
   "type": "module",
   "exports": {

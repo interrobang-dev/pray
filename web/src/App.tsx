@@ -34,7 +34,7 @@ import { LEAD_POSITION, MEMBER_POSITION, editableNameOf, modalName, modalPositio
 import { PositionChip } from './PositionChip'
 import { CharacterPicker, type CharacterChoice } from './CharacterPicker'
 import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, type RecolorArt } from './characterArt'
-import { assignCharacter, charactersInUse, dotLookOf, type DotCharacter, type DotLook } from '@jk-corp/host/dotCharacter'
+import { assignCharacter, charactersInUse, dotLookOf, type DotCharacter, type DotLook } from '@pray/host/dotCharacter'
 import {
   attendanceOf,
   formatDateTime,

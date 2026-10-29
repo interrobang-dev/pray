@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { dataDir } from '@jk-corp/host/dataDir'
+import { dataDir } from '@pray/host/dataDir'
 
 export interface SmtpConfig {
   host: string

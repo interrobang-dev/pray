@@ -1,4 +1,4 @@
-import { CHARACTER_SHEET, type DotCharacter, type DotLook } from '@jk-corp/host/dotCharacter'
+import { CHARACTER_SHEET, type DotCharacter, type DotLook } from '@pray/host/dotCharacter'
 import { parseHex, recolorPixels, type RecolorSlot } from './recolor'
 
 /** 인물을 그리는 방향. left 는 right 를 좌우로 뒤집어 그려 아틀라스가 없다 */

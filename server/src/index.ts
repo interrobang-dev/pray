@@ -6,7 +6,7 @@ import { basename, join, relative } from 'node:path'
 import compression from 'compression'
 import express from 'express'
 import type { Request, Response } from 'express'
-import type { HostMessage } from '@jk-corp/host/protocol'
+import type { HostMessage } from '@pray/host/protocol'
 import {
   addGroup,
   addPart,
@@ -56,10 +56,10 @@ import {
   type SessionGender,
   type Team,
   type TeamPatch,
-} from '@jk-corp/host/hq'
-import { normalizeCwd } from '@jk-corp/host/team'
-import { setupFileLog } from '@jk-corp/host/runtime'
-import { dataDir } from '@jk-corp/host/dataDir'
+} from '@pray/host/hq'
+import { normalizeCwd } from '@pray/host/team'
+import { setupFileLog } from '@pray/host/runtime'
+import { dataDir } from '@pray/host/dataDir'
 import { readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
 import { isAllowedHost, isSameOriginRequest } from './requestGuard.js'
@@ -140,7 +140,7 @@ import type { AskQuestion } from './types.js'
 import { serialRunner } from './serialRunner.js'
 import { applySuggestion } from './suggestion.js'
 import { makeCharacterSheetReader, parseCharacter } from './character.js'
-import { assignCharacter, CHARACTER_SHEET, charactersInUse, type CharacterInUse } from '@jk-corp/host/dotCharacter'
+import { assignCharacter, CHARACTER_SHEET, charactersInUse, type CharacterInUse } from '@pray/host/dotCharacter'
 import { answerBox, decideOutcome, judgeQueue, type QueueJudgement, type UnqueueProgress } from './unqueue.js'
 import { hasBusyWebSessions, switchImpact } from './switchImpact.js'
 import { BTW_TIMEOUT_MESSAGE, BTW_TIMEOUT_MS, BtwStore, parseBtwQuestion, parseBtwResult } from './btw.js'

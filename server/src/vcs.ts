@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { win32 } from 'node:path'
-import { normalizeCwd } from '@jk-corp/host/team'
+import { normalizeCwd } from '@pray/host/team'
 
 export interface Vcs {
   kind: 'git' | 'svn'

@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { Part, Team } from '@jk-corp/host/hq'
+import type { Part, Team } from '@pray/host/hq'
 
 const repoRoot = join(import.meta.dirname, '..', '..')
 

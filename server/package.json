@@ -1,5 +1,5 @@
 {
-  "name": "@jk-corp/server",
+  "name": "@pray/server",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@jk-corp/host": "*",
+    "@pray/host": "*",
     "compression": "^1.8.2",
     "express": "^5.1.0",
     "nodemailer": "^7.0.0",

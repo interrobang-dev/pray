@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resolveDataDir } from './dataDir'
+import { moveAppDataOnce, resolveDataDir } from './dataDir'
 
 // 규칙 전체(ENOENT·재시도·동시 경쟁)는 host/src/dataDir.test.ts 가 본다. 여기는 트레이 쪽 사본이 같은 답을 내는지만
 let claudeDir: string
@@ -64,5 +64,31 @@ describe('resolveDataDir (tray)', () => {
         holder.kill()
       })
     }
+  })
+})
+
+describe('moveAppDataOnce', () => {
+  it('replaces the empty folder Electron made first with the old one', () => {
+    seedLegacy()
+    mkdirSync(dir)
+    expect(moveAppDataOnce(legacyDir, dir)).toEqual({ dir, warning: null })
+    expect(readFileSync(join(dir, 'hq.json'), 'utf8')).toBe('{}')
+    expect(existsSync(legacyDir)).toBe(false)
+  })
+
+  it('keeps a new folder that already has data', () => {
+    seedLegacy()
+    mkdirSync(dir)
+    writeFileSync(join(dir, 'lockfile'), '')
+    const result = moveAppDataOnce(legacyDir, dir)
+    expect(result.dir).toBe(dir)
+    expect(result.warning).toContain(legacyDir)
+    expect(existsSync(join(legacyDir, 'hq.json'))).toBe(true)
+  })
+
+  it('leaves the empty new folder alone without an old one', () => {
+    mkdirSync(dir)
+    expect(moveAppDataOnce(legacyDir, dir)).toEqual({ dir, warning: null })
+    expect(existsSync(dir)).toBe(true)
   })
 })

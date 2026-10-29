@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CHARACTER_ATLAS, loadCharacterSheet, loadRecolorArt, paintCharacter, type CharacterSheet, type Rect, type RecolorArt } from './characterArt'
-import { HAIR_COLORS, TOP_COLORS, type DotCharacter, type DotLook } from '@jk-corp/host/dotCharacter'
+import { HAIR_COLORS, TOP_COLORS, type DotCharacter, type DotLook } from '@pray/host/dotCharacter'
 
 /** 도트 사무실이 읽는 정면 인물 아틀라스 그림 */
 const IMAGE_URL = `/office/${CHARACTER_ATLAS.down}.png`

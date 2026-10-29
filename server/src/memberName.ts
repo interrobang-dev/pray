@@ -1,4 +1,4 @@
-import { parsePosition, splitPositionName, type SessionGender } from '@jk-corp/host/hq'
+import { parsePosition, splitPositionName, type SessionGender } from '@pray/host/hq'
 
 /**
  * 팀원 이름. 역할(FE 등)은 이름에 붙이지 않고 따로 저장한다(hq positions). 한국 이름 로마자와 영미 이름을 섞고, 성별이 이름에서 자연스럽게 읽히는 것만 둔다

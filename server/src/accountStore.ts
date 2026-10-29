@@ -15,7 +15,7 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { lock, type LockOptions } from 'proper-lockfile'
-import { DATA_DIR_NAME, dataDir } from '@jk-corp/host/dataDir'
+import { DATA_DIR_NAME, dataDir } from '@pray/host/dataDir'
 import {
   accessTokenOf,
   findByRefreshToken,

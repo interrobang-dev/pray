@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { access, mkdir, opendir, readdir, stat } from 'node:fs/promises'
 import { win32 } from 'node:path'
-import { normalizeCwd } from '@jk-corp/host/team'
+import { normalizeCwd } from '@pray/host/team'
 import type { Vcs } from './vcs.js'
 import { compareEntries } from './workspaceFiles.js'
 

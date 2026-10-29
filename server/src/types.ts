@@ -1,4 +1,4 @@
-import type { SessionCharacter, SessionGender } from '@jk-corp/host/hq'
+import type { SessionCharacter, SessionGender } from '@pray/host/hq'
 import type { ModelSetting } from './memberModel.js'
 
 /**

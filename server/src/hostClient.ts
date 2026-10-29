@@ -7,7 +7,7 @@ import {
   type ClientMessage,
   type HostMessage,
   type HostSession,
-} from '@jk-corp/host/protocol'
+} from '@pray/host/protocol'
 
 const RECONNECT_MS = 3000
 

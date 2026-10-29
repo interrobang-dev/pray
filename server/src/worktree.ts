@@ -3,7 +3,7 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, posix } from 'node:path'
 import { promisify } from 'node:util'
-import { normalizeCwd } from '@jk-corp/host/team'
+import { normalizeCwd } from '@pray/host/team'
 
 const run = promisify(execFile)
 
