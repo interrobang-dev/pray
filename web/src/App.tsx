@@ -35,7 +35,7 @@ import { LEAD_POSITION, MEMBER_POSITION, editableNameOf, modalName, modalPositio
 import { PositionChip } from './PositionChip'
 import { CharacterPicker, type CharacterChoice } from './CharacterPicker'
 import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, type RecolorArt } from './characterArt'
-import { dotLookOf } from './dotCharacter'
+import { assignCharacter, charactersInUse, dotLookOf, type DotCharacter, type DotLook } from '@jk-corp/host/dotCharacter'
 import {
   attendanceOf,
   formatDateTime,
@@ -700,7 +700,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
         return
       }
     }
-    const current = renameTarget.character ?? null
+    // 자동 배정은 "Auto"(id null) 로 본다
+    const current = renameTarget.character?.isAuto ? null : (renameTarget.character ?? null)
     const isCharacterChanged =
       renameCharacter.id !== (current?.id ?? null) || renameCharacter.hair !== (current?.hair ?? null) || renameCharacter.top !== (current?.top ?? null)
     if (renameTarget.role === 'lead' && isCharacterChanged) {
@@ -714,8 +715,18 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setRenameTarget(null)
   }
 
+  /**
+   * 인물 고르기 창의 "Auto" 가 보일 인물: 지금 자동(배정·해시)이면 지금 보이는 것, 고른 인물이면 Auto 로 돌아갈 때 서버가 새로 배정할 것을 같은 규칙으로 미리 본다
+   */
+  function autoLookOf(session: Session, characters: DotCharacter[]): DotLook | null {
+    if (!session.character || session.character.isAuto) return dotLookOf(session, characters)
+    const inUse = charactersInUse(snapshot.sessions.filter((other) => attendanceOf(other) !== 'off'), characters)
+    return assignCharacter({ id: session.id, isLead: session.role === 'lead', gender: session.gender ?? null, teamId: session.teamId }, characters, inUse)
+  }
+
   function openRename(session: Session) {
-    setRenameCharacter(session.character ? { ...session.character } : { id: null, hair: null, top: null })
+    const { character } = session
+    setRenameCharacter(character && !character.isAuto ? { id: character.id, hair: character.hair, top: character.top } : { id: null, hair: null, top: null })
     setRenameTarget(session)
   }
 
@@ -1513,8 +1524,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 <>
                   <span className="form-hint">Office character (shown at the desk, as the list avatar and on the Off Duty street)</span>
                   <CharacterPicker
-                    sessionId={renameTarget.id}
-                    gender={renameTarget.gender ?? null}
+                    autoLook={(characters) => autoLookOf(renameTarget, characters)}
                     value={renameCharacter}
                     onChange={setRenameCharacter}
                   />

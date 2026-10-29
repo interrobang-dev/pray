@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@jk-corp/host": "*",
     "@codemirror/commands": "^6.11.1",
     "@codemirror/language": "^6.13.1",
     "@codemirror/language-data": "^6.5.2",

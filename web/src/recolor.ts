@@ -6,11 +6,6 @@
 
 export type Rgb = [number, number, number]
 
-/** 머리 고르기 칸 (기본색 다음) */
-export const HAIR_COLORS = ['#2a2522', '#4a3226', '#7b4a2a', '#e3b860', '#b4462a', '#a9a9ad', '#e27aa4', '#4a6ad2']
-/** 윗옷 고르기 칸 (기본색 다음) */
-export const TOP_COLORS = ['#f2f2f0', '#2f2f34', '#2e3a66', '#4a7ad2', '#9cc8f0', '#3c8a4a', '#f2c230', '#e8782a', '#c83a3a', '#8a5ac8']
-
 export function parseHex(hex: string): Rgb {
   const value = parseInt(hex.slice(1), 16)
   return [(value >> 16) & 255, (value >> 8) & 255, value & 255]

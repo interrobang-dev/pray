@@ -49,7 +49,7 @@ export interface Session {
   suggestion?: string | null
   /** claude 가 백그라운드로 띄워 아직 실행 중인 Bash 명령. 근무 중이 아니면 [], 옛 서버 응답에는 빠져 있다 (없는 것으로 본다) */
   shells?: Shell[]
-  /** 사용자가 고른 도트 사무실 인물. 없으면 null (세션 ID 해시로 고른다). 옛 서버 응답에는 빠져 있다 */
+  /** 도트 사무실 인물: 사용자가 고른 것 또는 서버가 새 세션에 배정한 것(isAuto). 없으면 null (세션 ID 해시로 고른다). 옛 서버 응답에는 빠져 있다 */
   character?: SessionCharacter | null
   /** 서버가 이름을 지을 때 정한 성별. 직접 지은 이름이면 null (성별 없이 인물을 고른다). 옛 서버 응답에는 빠져 있다 */
   gender?: 'male' | 'female' | null
@@ -59,11 +59,12 @@ export interface Session {
   contextTokens?: number | null
 }
 
-/** 도트 인물 프리셋 id 와 머리·윗옷 색 ('#rrggbb', null = 그 인물 기본색) */
+/** 도트 인물 프리셋 id 와 머리·윗옷 색 ('#rrggbb', null = 그 인물 기본색). isAuto = 서버가 새 세션에 배정한 것 (인물 고르기 창의 "Auto"), 옛 서버 응답·사용자가 고른 것에는 없다 */
 export interface SessionCharacter {
   id: string
   hair: string | null
   top: string | null
+  isAuto?: boolean
 }
 
 /** 백그라운드 shell 하나 (Session.shells) */

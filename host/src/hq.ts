@@ -52,11 +52,15 @@ export interface Office {
   teams: Team[]
 }
 
-/** 사용자가 고른 도트 사무실 인물 (프리셋 id). 머리·윗옷 색은 '#rrggbb', null 이면 그 인물 기본색 */
+/**
+ * 도트 사무실 인물 (프리셋 id). 머리·윗옷 색은 '#rrggbb', null 이면 그 인물 기본색.
+ * isAuto = 서버가 새 세션에 배정한 것 (없으면 사용자가 고른 것). 옛 코드는 이 칸을 모르고 인물·색만 쓴다
+ */
 export interface SessionCharacter {
   id: string
   hair: string | null
   top: string | null
+  isAuto?: boolean
 }
 
 /** 서버가 지은 이름의 성별. 도트 사무실이 그 성별 인물을 고른다 */

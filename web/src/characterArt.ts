@@ -1,11 +1,11 @@
-import type { DotCharacter, DotLook } from './dotCharacter'
+import { CHARACTER_SHEET, type DotCharacter, type DotLook } from '@jk-corp/host/dotCharacter'
 import { parseHex, recolorPixels, type RecolorSlot } from './recolor'
 
 /** 인물을 그리는 방향. left 는 right 를 좌우로 뒤집어 그려 아틀라스가 없다 */
 export type CharacterDirection = 'down' | 'up' | 'right'
 
 /** 방향별 인물 아틀라스 판 이름 (office-v5). 색 바꾸기 마스크는 `<판>-recolor` (tools/sprites/mask.py) */
-export const CHARACTER_ATLAS: Record<CharacterDirection, string> = { down: 'office-v5-down', up: 'office-v5-up', right: 'office-v5-right' }
+export const CHARACTER_ATLAS: Record<CharacterDirection, string> = { down: CHARACTER_SHEET, up: 'office-v5-up', right: 'office-v5-right' }
 /** 인물 목록·목록 머리·인물 고르기는 정면(down) 아틀라스 */
 const ATLAS_SHEET_URL = `/office/${CHARACTER_ATLAS.down}.json`
 /** 머리 그림: 정면 셀(80×132, 인물은 가운데 64 폭에 위 4 내려 있다) 안 정사각형. 목록 아바타(22px)는 그 절반 */

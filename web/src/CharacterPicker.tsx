@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CHARACTER_ATLAS, loadCharacterSheet, loadRecolorArt, paintCharacter, type CharacterSheet, type Rect, type RecolorArt } from './characterArt'
-import { pickDotCharacter, type DotCharacter } from './dotCharacter'
-import { HAIR_COLORS, TOP_COLORS } from './recolor'
+import { HAIR_COLORS, TOP_COLORS, type DotCharacter, type DotLook } from '@jk-corp/host/dotCharacter'
 
 /** 도트 사무실이 읽는 정면 인물 아틀라스 그림 */
 const IMAGE_URL = `/office/${CHARACTER_ATLAS.down}.png`
@@ -68,18 +67,16 @@ function Thumb({ frame }: { frame: Rect | undefined }) {
 }
 
 /**
- * 지시자(팀장·파트장)의 도트 사무실 인물 고르기: "자동"(세션 ID 해시로 리더 풀에서 고른 인물) + 인물 프리셋 전부.
- * 인물을 고르면 머리·윗옷 색 칸과 큰 미리보기가 나온다 (인물을 바꾸면 색은 기본색으로)
+ * 지시자(팀장·파트장)의 도트 사무실 인물 고르기: "Auto"(서버의 자동 배정, 없으면 세션 ID 해시) + 인물 프리셋 전부.
+ * 인물을 고르면 머리·윗옷 색 칸과 큰 미리보기가 나온다 (인물을 바꾸면 색은 기본색으로). Auto 는 그 인물·색의 미리보기만
  */
 export function CharacterPicker({
-  sessionId,
-  gender,
+  autoLook,
   value,
   onChange,
 }: {
-  sessionId: string
-  /** 세션 성별. "자동" 이 사무실과 같은 인물을 보이게 */
-  gender: 'male' | 'female' | null
+  /** "Auto" 일 때 보일 인물과 색 (아틀라스 인물 목록 → 결과). 사무실과 같은 인물을 보이게 부른 쪽이 정한다 */
+  autoLook: (characters: DotCharacter[]) => DotLook | null
   value: CharacterChoice
   onChange: (choice: CharacterChoice) => void
 }) {
@@ -104,7 +101,8 @@ export function CharacterPicker({
   }, [])
   if (error) return <p className="form-hint">{error}</p>
   if (!sheet) return <p className="form-hint">Loading characters…</p>
-  const autoId = pickDotCharacter(sessionId, true, sheet.characters, gender)
+  const auto = autoLook(sheet.characters)
+  const autoId = auto?.id ?? null
   const options: { id: string | null; label: string; frameId: string | null }[] = [
     { id: null, label: 'Auto', frameId: autoId },
     ...sheet.characters.map((character) => ({ id: character.id, label: character.id, frameId: character.id })),
@@ -121,7 +119,7 @@ export function CharacterPicker({
             role="radio"
             aria-checked={value.id === option.id}
             className={value.id === option.id ? 'is-selected' : undefined}
-            title={option.id === null ? `Auto: picked per session (${autoId ?? 'none'})` : option.id}
+            title={option.id === null ? `Auto: picked so look-alikes are rare (${autoId ?? 'none'})` : option.id}
             onClick={() => option.id !== value.id && onChange({ id: option.id, hair: null, top: null })}
           >
             <Thumb frame={option.frameId ? sheet.frames.get(option.frameId) : undefined} />
@@ -129,7 +127,13 @@ export function CharacterPicker({
           </button>
         ))}
       </div>
-      {value.id && artError && <p className="form-hint">{artError}</p>}
+      {artError && <p className="form-hint">{artError}</p>}
+      {!value.id && art && auto && sheet.frames.get(auto.id) && (
+        <div className="character-colors">
+          <Preview art={art} character={auto.id} frame={sheet.frames.get(auto.id)!} hair={auto.hair} top={auto.top} />
+          <p className="form-hint">Picked automatically so look-alikes are rare. Choose a character to set colors yourself.</p>
+        </div>
+      )}
       {value.id && art && bases && chosenFrame && (
         <div className="character-colors">
           <Preview art={art} character={value.id} frame={chosenFrame} hair={value.hair} top={value.top} />

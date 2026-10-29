@@ -71,7 +71,7 @@ export interface Session {
   suggestion: string | null
   /** claude 가 백그라운드로 돌리고 있는 shell (시작 순). 근무 중이 아니면 []. 출력은 GET /api/sessions/:id/shells/:shellId/output */
   shells: Shell[]
-  /** 사용자가 고른 도트 사무실 인물 (hq.json characters). 없으면 null — 화면이 세션 ID 해시로 고른다. 바꾸기는 PUT /api/sessions/:id/character */
+  /** 도트 사무실 인물 (hq.json characters): 사용자가 고른 것 또는 새 세션에 서버가 배정한 것(isAuto). 없으면 null — 화면이 세션 ID 해시로 고른다. 바꾸기는 PUT /api/sessions/:id/character */
   character: SessionCharacter | null
   /** 서버가 이름을 지을 때 정한 성별 (hq.json genders). 직접 지은 이름이면 null — 도트 인물을 성별 없이 고른다 */
   gender: SessionGender | null

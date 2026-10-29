@@ -18,7 +18,7 @@ import {
 } from 'pixi.js'
 import { attendanceOf, offDutyLabel, statusLabel, type Office as OfficeData, type Session, type Team } from './types'
 import { remainingCount } from './teamTodos'
-import { dotLookOf, type DotCharacter, type DotLook } from './dotCharacter'
+import { dotLookOf, type DotCharacter, type DotLook } from '@jk-corp/host/dotCharacter'
 import { dotStateOf, loungeLabel, seatPlaceKey, seatPlaceOf, turnEndedAtOf, type DotState } from './dotState'
 import { overflowNames, planLounge, type LoungeDirection, type LoungeMeta, type LoungePerson, type LoungePlan } from './lounge'
 import { CHARACTER_ATLAS, loadRecolorArt, paintCharacter, type CharacterDirection, type RecolorArt } from './characterArt'

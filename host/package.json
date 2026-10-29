@@ -6,7 +6,8 @@
     "./protocol": "./src/protocol.ts",
     "./hq": "./src/hq.ts",
     "./runtime": "./src/runtime.ts",
-    "./team": "./src/team.ts"
+    "./team": "./src/team.ts",
+    "./dotCharacter": "./src/dotCharacter.ts"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

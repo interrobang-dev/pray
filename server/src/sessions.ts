@@ -218,7 +218,7 @@ export async function listSessions(
   recorded: WebSessionRecord[] = [],
   /** hq.json offDuty (퇴근) */
   offDuty: OffDutyRecord[] = [],
-  /** hq.json characters (사용자가 고른 도트 인물) */
+  /** hq.json characters (사용자가 고른 도트 인물·자동 배정) */
   characters: Record<string, SessionCharacter> = {},
   /** hq.json genders (서버가 이름을 지은 세션의 성별) */
   genders: Record<string, SessionGender> = {},

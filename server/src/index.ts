@@ -52,6 +52,7 @@ import {
   type Group,
   type Part,
   type PartPatch,
+  type SessionCharacter,
   type SessionGender,
   type Team,
   type TeamPatch,
@@ -137,7 +138,8 @@ import {
 import type { AskQuestion } from './types.js'
 import { serialRunner } from './serialRunner.js'
 import { applySuggestion } from './suggestion.js'
-import { parseCharacter } from './character.js'
+import { makeCharacterSheetReader, parseCharacter } from './character.js'
+import { assignCharacter, CHARACTER_SHEET, charactersInUse, type CharacterInUse } from '@jk-corp/host/dotCharacter'
 import { answerBox, decideOutcome, judgeQueue, type QueueJudgement, type UnqueueProgress } from './unqueue.js'
 import { hasBusyWebSessions, switchImpact } from './switchImpact.js'
 import { BTW_TIMEOUT_MESSAGE, BTW_TIMEOUT_MS, BtwStore, parseBtwQuestion, parseBtwResult } from './btw.js'
@@ -369,6 +371,39 @@ app.get('/api/sessions', async (_req, res) => {
   res.json(await snapshotPayload())
 })
 
+/** 화면과 같은 인물 목록 (정면 아틀라스 meta). 빌드 결과가 아니라 원본을 읽는다 — 서버는 web/dist 없이도 뜬다 */
+const readCharacterSheet = makeCharacterSheetReader(join(import.meta.dirname, '..', '..', 'web', 'public', 'office', `${CHARACTER_SHEET}.json`))
+/** 방금 배정한 인물. 호스트가 띄워 세션 목록에 들기 전에 다음 배정이 오면(팀장이 팀원을 연달아 띄움) 같은 인물을 주지 않게 */
+const recentCharacters = new Map<string, CharacterInUse>()
+const RECENT_CHARACTER_MS = 60_000
+
+/**
+ * 새 세션(또는 인물 고르기에서 "Auto" 로 돌아간 세션)에 줄 도트 인물: 근무·휴식 세션(외부 포함)이 지금 보이는 인물 + 방금 배정한 것을 피해 고른다 (규칙은 assignCharacter).
+ * 아틀라스를 못 읽거나 목록을 못 읽으면 null (배정 없이 화면이 해시로 고른다 — 세션 띄우기를 막지 않는다).
+ * 고른 것은 recentCharacters 에 넣는다 — 띄우지 못하면 부른 쪽이 지운다
+ */
+async function autoCharacterFor(target: { id: string; isLead: boolean; gender: SessionGender | null; teamId: string | null }): Promise<SessionCharacter | null> {
+  const characters = readCharacterSheet()
+  if (!characters) return null
+  try {
+    const { sessions } = await snapshotPayload()
+    const listed = new Set(sessions.map((s) => s.id))
+    const inUse = [
+      ...charactersInUse(sessions.filter((s) => s.attendance !== 'off'), characters),
+      ...[...recentCharacters.values()].filter((recent) => !listed.has(recent.sessionId)),
+    ]
+    // 목록을 기다린 뒤 고르고 넣기까지는 동기라 동시에 온 요청도 서로의 배정을 본다
+    const look = assignCharacter(target, characters, inUse)
+    if (!look) return null
+    recentCharacters.set(target.id, { sessionId: target.id, teamId: target.teamId, look })
+    setTimeout(() => recentCharacters.delete(target.id), RECENT_CHARACTER_MS)
+    return { ...look, isAuto: true }
+  } catch (error) {
+    console.error(`인물 자동 배정 실패 (${target.id.slice(0, 8)}): ${error}`)
+    return null
+  }
+}
+
 /**
  * teamId 가 있으면 그 팀 폴더로 띄운다. partId 가 있으면 그 파트로 (worktree 파트면 그 폴더).
  * isLead 면 그 지휘 단위의 지시자로 (팀장 또는 파트장. 살아 있는 지시자가 이미 있으면 거부).
@@ -438,12 +473,14 @@ app.post('/api/sessions', async (req, res) => {
   // worktree 없는 파트는 폴더로 구분이 안 되므로 소속을 기록한다
   if (team && part && !part.worktree) setPartOf(team.id, sessionId, part.id)
   const label = nameAndPosition(typeof name === 'string' ? name : null, parsedPosition)
+  const sessionGender = label.name ? (parseGender(gender) ?? null) : null
   if (label.name) {
     setSessionName(sessionId, label.name)
-    const parsedGender = parseGender(gender)
-    if (parsedGender) setGender(sessionId, parsedGender)
+    if (sessionGender) setGender(sessionId, sessionGender)
   }
   if (label.position) setPosition(sessionId, label.position)
+  const character = await autoCharacterFor({ id: sessionId, isLead: Boolean(isLead && team), gender: sessionGender, teamId: team?.id ?? null })
+  if (character) setCharacter(sessionId, character)
   // 신뢰 확인 창(기본 "No, exit")에 막혀 세션이 꺼지지 않게 띄우기 전에 폴더를 신뢰로 기록한다. 실패해도 띄우고 화면이 경고한다
   const isTrustFailed = markFolderTrusted(cwd) === false
   host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
@@ -1032,14 +1069,23 @@ app.patch('/api/sessions/:id', (req, res) => {
   void broadcast()
 })
 
-/** 도트 사무실 인물 고르기 `{ id, hair?, top? }` (색은 '#rrggbb' 또는 null = 기본색). `{ id: null }` 이면 자동(세션 ID 해시)으로. 화면은 지시자에게만 연다 */
-app.put('/api/sessions/:id/character', (req, res) => {
+/**
+ * 도트 사무실 인물 고르기 `{ id, hair?, top? }` (색은 '#rrggbb' 또는 null = 기본색). 화면은 지시자에게만 연다.
+ * `{ id: null }` 이면 "Auto": 지금 목록 기준으로 새로 배정한다 (목록에 없거나 아틀라스를 못 읽으면 기록을 지워 화면이 해시로 고른다)
+ */
+app.put('/api/sessions/:id/character', async (req, res) => {
   const character = parseCharacter(req.body)
   if (character === undefined) {
     res.status(400).json({ message: 'id (1–40 lowercase letters, digits or hyphens, or null) and hair/top (#rrggbb or null) required' })
     return
   }
-  setCharacter(req.params.id, character)
+  const sessionId = req.params.id
+  if (character) setCharacter(sessionId, character)
+  else {
+    const session = (await snapshotPayload()).sessions.find((s) => s.id === sessionId)
+    const auto = session ? await autoCharacterFor({ id: sessionId, isLead: session.role === 'lead', gender: session.gender, teamId: session.teamId }) : null
+    setCharacter(sessionId, auto)
+  }
   res.json({})
   void broadcast()
 })
@@ -2062,11 +2108,16 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   // claude 쪽 세션 이름(터미널 제목·resume 목록)에는 역할을 붙여 둔다. jk-corp 화면은 이 값을 읽지 않는다
   const claudeName = memberName ? withPosition(memberName, memberPosition) : `[${memberPosition}]`
   const extraArgs = memberExtraArgs(claudeName, permissionMode ?? 'bypassPermissions', modelChoice)
+  const character = await autoCharacterFor({ id: sessionId, isLead: false, gender: memberGender, teamId: team.id })
+  // 인물은 spawn 을 보내기 전에 쓴다 — 뒤에 쓰면 호스트가 같은 때 webSessions 를 쓰며(Windows rename 재시도로 길어진다) 덮어써 사라진다(시험 서버 실측)
+  if (character) setCharacter(sessionId, character)
   if (part && !part.worktree) setPartOf(team.id, sessionId, part.id)
   // 신뢰 기록은 POST /api/sessions 와 같다. 실패는 결과로 지시자에게 알린다
   const isTrustFailed = markFolderTrusted(cwd) === false
   if (!host.send({ type: 'spawn', sessionId, cwd, extraArgs })) {
     if (part && !part.worktree) setPartOf(team.id, sessionId, null)
+    recentCharacters.delete(sessionId)
+    if (character) setCharacter(sessionId, null)
     res.status(503).json({ message: 'Not connected to session host' })
     return
   }
