@@ -256,21 +256,28 @@ header {
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
 }
+/* 앱 이름 "Pray" 글자 로고: Fraunces(index.html 의 Google Fonts) 500, SOFT 50, 본문색.
+   글자 크기는 마크 높이에 대해 대문자 높이가 같은 비율이 되게 정했다 (헤더 마크 16 : 대문자 10.5 → 15px, 로그인 마크 32 : 18.5 → 26.5px. 글자 크기 설정 --font-scale 을 따른다). 색은 강조색이 아니라 본문색 */
 h1 {
-  font-family: 'Silkscreen', system-ui, sans-serif;
+  font-family: 'Fraunces', Georgia, serif;
   font-size: calc(15px * var(--font-scale));
-  letter-spacing: 1px;
-  color: var(--accent);
+  font-weight: 500;
+  font-variation-settings: 'SOFT' 50;
+  letter-spacing: -0.01em;
+  color: var(--text);
   margin: 0;
   margin-right: auto;
 }
-/* 앱 제목(목록 헤더·로그인) = 로고 마크(App.tsx·Login.tsx 의 .logo = web/public/favicon.svg, 16×16 도트 격자) + "jk-corp".
-   마크는 정수배(16·32)로만 그린다 */
+/* 앱 제목(목록 헤더·로그인) = 로고 마크(.logo: 헤더는 web/public/favicon.svg 16px 픽셀판, 로그인은 logo.svg 32 격자 벡터판) + "Pray".
+   헤더 줄 높이 20px 은 아이콘 버튼과 같아 헤더 높이(41px)를 그대로 둔다 */
 header h1,
 .login h1 {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+header h1 {
+  line-height: 20px;
 }
 .logo {
   display: block;
@@ -3428,10 +3435,12 @@ li.group.drop-after::after {
   line-height: 1.35;
   font-size: calc(14px * var(--font-scale));
 }
-/* 전역 h1(앱 제목 도트 폰트·초록)을 되돌린다 */
+/* 전역 h1(앱 제목 Fraunces·굵기·자간)을 되돌린다 */
 .markdown h1 {
   font-family: inherit;
   font-size: calc(16px * var(--font-scale));
+  font-weight: bold;
+  font-variation-settings: normal;
   letter-spacing: normal;
   color: inherit;
 }
@@ -4479,10 +4488,20 @@ li.group.drop-after::after {
   border: 1px solid var(--line);
   border-radius: 12px;
 }
-/* 로그인 제목은 크게: 마크 32px(2배) + 글자 24px (Silkscreen 8px 격자의 3배라 또렷하다) */
+/* 로그인 제목은 크게: 마크 32px + 글자 26.5px, 줄 높이 = 마크 높이 */
 .login h1 {
-  font-size: calc(24px * var(--font-scale));
+  font-size: calc(26.5px * var(--font-scale));
+  line-height: 32px;
   gap: 10px;
+}
+/* 제목 아래 문구: 이름 글자 왼쪽(마크 32 + 간격 10)에 맞춘 Fraunces 이탤릭 */
+.login .tagline {
+  margin: -4px 0 4px 42px;
+  font-family: 'Fraunces', Georgia, serif;
+  font-style: italic;
+  font-size: calc(13.5px * var(--font-scale));
+  font-variation-settings: 'SOFT' 50;
+  color: var(--muted);
 }
 .login form {
   display: flex;

@@ -88,7 +88,7 @@ function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: 'jk-corp',
+    title: 'Pray',
     autoHideMenuBar: true,
     icon: nativeImage.createFromBuffer(trayIconPng(false)),
     show: false,
@@ -123,7 +123,7 @@ async function showWindow(sessionId?: string): Promise<void> {
     window = createWindow()
     const isUp = await waitForServer(15_000)
     if (!isUp) {
-      dialog.showErrorBox('jk-corp', `The server didn't start. Check the logs:\n${logDir}`)
+      dialog.showErrorBox('Pray', `The server didn't start. Check the logs:\n${logDir}`)
     }
     await window.loadURL(SERVER_URL + hash)
   } else if (hash) {
@@ -164,7 +164,7 @@ async function notify(notices: SessionNotice[]): Promise<void> {
   const openId = await focusedSessionId()
   const shown = notices.filter((notice) => notice.sessionId !== openId)
   if (shown.length > MAX_SEPARATE_NOTICES) {
-    showNotification(`jk-corp · ${shown.length} sessions`, shown.map((notice) => notice.title).join('\n'))
+    showNotification(`Pray · ${shown.length} sessions`, shown.map((notice) => notice.title).join('\n'))
     return
   }
   for (const notice of shown) showNotification(notice.title, notice.body, notice.sessionId)
@@ -199,7 +199,7 @@ function refreshTray(): void {
   const summary = status.isServerUp
     ? `Working ${status.working} · Needs approval ${status.needsApproval}`
     : 'Server not responding'
-  tray.setToolTip(`jk-corp · ${summary}`)
+  tray.setToolTip(`Pray · ${summary}`)
   const { host, server } = children
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -285,7 +285,7 @@ if (!app.requestSingleInstanceLock()) {
     try {
       children = createChildren()
     } catch (error) {
-      dialog.showErrorBox('jk-corp', String(error))
+      dialog.showErrorBox('Pray', String(error))
       app.quit()
       return
     }
@@ -298,7 +298,7 @@ if (!app.requestSingleInstanceLock()) {
         refreshTray()
       })
       child.on('gaveUp', (name: string) => {
-        dialog.showErrorBox('jk-corp', `The ${name} keeps crashing, so it won't be restarted again. Logs: ${logDir}`)
+        dialog.showErrorBox('Pray', `The ${name} keeps crashing, so it won't be restarted again. Logs: ${logDir}`)
       })
     }
     children.host.start()
@@ -306,7 +306,7 @@ if (!app.requestSingleInstanceLock()) {
     refreshTray()
     setInterval(() => void pollStatus(), 5000)
     if (!existsSync(join(repoDir, 'web', 'dist'))) {
-      dialog.showErrorBox('jk-corp', 'web/dist not found. Run npm run build first.')
+      dialog.showErrorBox('Pray', 'web/dist not found. Run npm run build first.')
     }
     await showWindow()
   })

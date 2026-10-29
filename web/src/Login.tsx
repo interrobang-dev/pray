@@ -50,9 +50,10 @@ export function Login({ canLogin, onLoggedIn }: Props) {
   return (
     <main className="login">
       <h1>
-        <img className="logo" src="/favicon.svg" width={32} height={32} alt="" />
-        jk-corp
+        <img className="logo" src="/logo.svg" width={32} height={32} alt="" />
+        Pray
       </h1>
+      <p className="tagline">Do your best. Then pray.</p>
       {!canLogin && <p>Remote login isn't set up. Open 127.0.0.1 on this PC.</p>}
       {canLogin && !isCodeSent && (
         <form onSubmit={requestCode}>

@@ -1,10 +1,14 @@
-# jk-corp
+# <img src="web/public/logo.svg" width="32" height="32" alt=""> Pray
+
+*Do your best. Then pray.*
 
 Windows PC에서 돌아가는 **Claude Code 세션 관제판**. 세션을 픽셀 사무실의 직원으로 보여 주고, 웹에서 띄운 세션은 조작하고 터미널·IDE 에서 띄운 세션은 관찰만 한다.
 
-![jk-corp 전체 화면: 왼쪽 목록, 가운데 사무실, 오른쪽 대화 패널](docs/images/overview.png)
+![Pray 전체 화면: 왼쪽 목록, 가운데 사무실, 오른쪽 대화 패널](docs/images/overview.png)
 
 > 스크린샷은 가짜 데이터로 찍었다.
+
+앱 이름은 Pray 이고, 저장소·패키지·설정 폴더(`~/.claude/jk-corp/`)·pipe 같은 내부 이름은 jk-corp 그대로다. 로고는 책상 섬(금색 팀장 막대 + 흰 책상 셋)이 선 P 로 읽히는 마크다. 에이전트에게 맡기는 개발은 기도와 닮았다 — 할 수 있는 최선을 다한 뒤에 하는 것이라는 뜻이다.
 
 하지 않는 것: 클라우드 서비스가 아니다 (이 PC 에서만 돈다). 터미널·IDE 세션은 입력·승인·종료를 대신하지 못한다. Claude Code 를 대체하지 않고 그 위에 얹는 화면이다.
 

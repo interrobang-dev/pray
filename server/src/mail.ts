@@ -13,9 +13,9 @@ export function makeSendCode(smtp: SmtpConfig | null): SendCode | null {
   })
   return async (email, code) => {
     await transport.sendMail({
-      from: `"jk-corp" <${smtp.user}>`,
+      from: `"Pray" <${smtp.user}>`,
       to: email,
-      subject: `[jk-corp] Login code ${code}`,
+      subject: `[Pray] Login code ${code}`,
       text: `Your login code: ${code}\n\nEnter it within 10 minutes. If you didn't request it, ignore this email.`,
     })
   }

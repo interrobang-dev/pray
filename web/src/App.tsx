@@ -1339,7 +1339,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
           <header>
             <h1>
               <img className="logo" src="/favicon.svg" width={16} height={16} alt="" />
-              jk-corp
+              Pray
             </h1>
             <button className="icon" onClick={() => setIsAppearanceOpen(true)} title="Appearance" aria-label="Appearance">
               <AppearanceIcon />
