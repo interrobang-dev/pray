@@ -8,6 +8,7 @@ import { indentWithTab } from '@codemirror/commands'
 import { Compartment, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from '@codemirror/language'
+import { openSearchPanel, search } from '@codemirror/search'
 import { languages } from '@codemirror/language-data'
 import { tags } from '@lezer/highlight'
 import type { LineRange } from './codeSelection'
@@ -53,10 +54,41 @@ const theme = EditorView.theme({
   '&.cm-focused .cm-matchingBracket': { backgroundColor: 'var(--accent-soft)', outline: '1px solid var(--accent-line)' },
   '&.cm-focused .cm-nonmatchingBracket': { backgroundColor: 'var(--red-soft)' },
   '.cm-foldPlaceholder': { backgroundColor: 'var(--chip-bg)', color: 'var(--muted)', border: '1px solid var(--line)' },
-  '.cm-panels': { backgroundColor: 'var(--bg)', color: 'var(--text)' },
+  '.cm-panels': { backgroundColor: 'var(--panel)', color: 'var(--text)' },
   '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--line)' },
   '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--line)' },
+  // 찾기·바꾸기 패널 (basicSetup 의 Ctrl+F): 코드 보기 찾기 막대(.chat-search)와 같은 바탕·입력칸·버튼 색. 기본 테마의 회색 그라데이션 버튼을 지운다
+  '.cm-panel.cm-search': { padding: '6px 32px 6px 10px', fontFamily: 'inherit', fontSize: 'calc(12px * var(--font-scale))' },
   '.cm-panel input, .cm-panel button': { fontSize: 'inherit' },
+  '.cm-textfield': {
+    margin: '0 6px 0 0',
+    padding: '3px 8px',
+    border: '1px solid var(--line-strong)',
+    borderRadius: '6px',
+    backgroundColor: 'var(--bg)',
+    color: 'var(--text)',
+    fontFamily: 'inherit',
+    verticalAlign: 'middle',
+  },
+  '.cm-textfield:focus': { outline: 'none', borderColor: 'var(--accent)' },
+  '.cm-button': {
+    margin: '0 4px 0 0',
+    padding: '3px 9px',
+    border: '1px solid var(--line-strong)',
+    borderRadius: '6px',
+    backgroundColor: 'var(--panel)',
+    backgroundImage: 'none',
+    color: 'var(--text)',
+    fontFamily: 'inherit',
+    verticalAlign: 'middle',
+    cursor: 'pointer',
+  },
+  '.cm-button:hover': { borderColor: 'var(--accent)' },
+  '.cm-button:active': { backgroundColor: 'var(--accent-soft)', backgroundImage: 'none' },
+  '.cm-panel.cm-search label': { margin: '0 8px 0 2px', color: 'var(--muted)', fontSize: 'inherit', whiteSpace: 'nowrap', verticalAlign: 'middle' },
+  '.cm-panel.cm-search input[type=checkbox]': { margin: '0 4px 0 0', accentColor: 'var(--accent)', verticalAlign: 'middle' },
+  '.cm-panel.cm-search [name=close]': { top: '6px', right: '8px', width: '22px', height: '22px', padding: '0', color: 'var(--muted)', fontSize: '18px', lineHeight: '18px', borderRadius: '6px' },
+  '.cm-panel.cm-search [name=close]:hover': { color: 'var(--text)', backgroundColor: 'var(--bg)' },
   '.cm-tooltip': { backgroundColor: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--line)' },
   '.cm-tooltip-autocomplete > ul > li[aria-selected]': { backgroundColor: 'var(--accent-soft)', color: 'var(--text)' },
 })
@@ -69,6 +101,12 @@ export interface EditorHandle {
   markSaved(text: string): void
   /** 고른 글자가 걸친 줄 (1부터). 고른 것이 없으면 null */
   selectionLines(): LineRange | null
+  /** 고른 글자 (없으면 빈 글. Ctrl+Shift+F 가 검색어로 쓴다) */
+  selectedText(): string
+  /** 찾기·바꾸기 패널을 연다 (편집기 밖에서 Ctrl+F 를 눌렀을 때) */
+  openSearch(): void
+  /** 그 줄(1부터)을 고르고 가운데로 스크롤한다 (Search 결과를 눌렀을 때) */
+  revealLine(line: number): void
   focus(): void
   destroy(): void
 }
@@ -104,6 +142,8 @@ export function createEditor(parent: HTMLElement, { text, path, onDirtyChange, o
       extensions: [
         Prec.highest(keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => (onSave(), true) }])),
         basicSetup,
+        // 찾기·바꾸기 패널을 위에 (코드 보기의 찾기 막대와 같은 자리)
+        search({ top: true }),
         keymap.of([indentWithTab]),
         syntaxHighlighting(highlightStyle),
         theme,
@@ -140,6 +180,18 @@ export function createEditor(parent: HTMLElement, { text, path, onDirtyChange, o
       const endLine = view.state.doc.lineAt(main.to)
       const end = main.to === endLine.from && endLine.number > start ? endLine.number - 1 : endLine.number
       return { start, end }
+    },
+    selectedText() {
+      const { main } = view.state.selection
+      return view.state.sliceDoc(main.from, main.to)
+    },
+    openSearch() {
+      openSearchPanel(view)
+    },
+    revealLine(number) {
+      const line = view.state.doc.line(Math.min(Math.max(number, 1), view.state.doc.lines))
+      view.dispatch({ selection: { anchor: line.from, head: line.to }, effects: EditorView.scrollIntoView(line.from, { y: 'center' }) })
+      view.focus()
     },
     focus: () => view.focus(),
     destroy: () => view.destroy(),

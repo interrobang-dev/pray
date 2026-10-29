@@ -77,6 +77,7 @@ import {
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
 import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './workspaceChanges.js'
+import { buildSearchPattern, MAX_MATCHES, parseSearchQuery, runSearchWorker, SEARCH_TIME_LIMIT_MS, SearchPatternError } from './workspaceSearch.js'
 import { editBlockReason, isLocalPageRequest, isVcsMetaPath, saveTextFile } from './workspaceSave.js'
 import { HostClient } from './hostClient.js'
 import { detectVcs, makeVcsCache } from './vcs.js'
@@ -712,6 +713,84 @@ app.get('/api/sessions/:id/find', async (req, res) => {
   const { paths, total } = findFiles(index.paths, q, MAX_FIND_RESULTS)
   res.set('Cache-Control', 'no-store')
   res.json({ paths, total, isIndexPartial: index.isPartial, fileCount: index.paths.length, elapsedMs: index.elapsedMs })
+})
+
+/** 세션별로 도는 내용 찾기 (새 검색이 오면 앞 것을 끊는다) */
+const runningSearches = new Map<string, AbortController>()
+/** 여러 세션이 동시에 찾을 수 있는 수 (찾기 하나가 CPU 코어 하나를 쓴다) */
+const MAX_RUNNING_SEARCHES = 4
+/** worker 에 남겨 주는 최소 시간 (파일 목록 받기가 상한을 거의 다 썼어도) */
+const MIN_SEARCH_WORKER_MS = 500
+
+/**
+ * 작업 폴더 전체 내용 찾기 (?q=&case=&word=&regex=) → { files: [{ path, matchCount, matches: [{ line, column, text, ranges, hasMoreAfter }] }],
+ * matchCount, fileCount, searchedFileCount, isTruncated, isIndexPartial, elapsedMs }. 규칙은 workspaceSearch.ts.
+ * 파일은 빠른 찾기와 같은 목록(숨긴 폴더·링크 제외, 5만 개)에서 1MB 넘는 것·바이너리를 뺀 것. 찾기는 worker 스레드라 나쁜 정규식도 이벤트 루프를 막지 않는다.
+ * 같은 세션의 새 검색이 오면 앞 요청은 409, 요청이 끊기면 worker 를 끝낸다
+ */
+app.get('/api/sessions/:id/search', async (req, res) => {
+  const startedAt = Date.now()
+  if (!isSessionId(req.params.id)) {
+    res.status(400).json({ message: 'Invalid session ID' })
+    return
+  }
+  const options = parseSearchQuery(req.query)
+  if ('message' in options) {
+    res.status(400).json({ message: options.message })
+    return
+  }
+  try {
+    buildSearchPattern(options)
+  } catch (error) {
+    if (!(error instanceof SearchPatternError)) throw error
+    res.status(400).json({ message: error.message })
+    return
+  }
+  const root = await workspaceRootOf(req.params.id)
+  if (!root) {
+    res.status(404).json({ message: 'Session folder not found' })
+    return
+  }
+  const sessionId = req.params.id
+  runningSearches.get(sessionId)?.abort()
+  runningSearches.delete(sessionId)
+  if (runningSearches.size >= MAX_RUNNING_SEARCHES) {
+    res.status(503).json({ message: 'Too many searches are running. Try again in a moment' })
+    return
+  }
+  const controller = new AbortController()
+  runningSearches.set(sessionId, controller)
+  // 화면이 요청을 끊으면(새 글자·탭 닫기) worker 도 끝낸다. req 의 close 는 GET 본문을 다 읽으면 바로 와서 res 로 본다
+  res.on('close', () => !res.writableFinished && controller.abort())
+  try {
+    const index = await workspaceIndexOf(root)
+    if (controller.signal.aborted) {
+      if (!res.writableEnded) res.status(409).json({ message: 'A newer search replaced this one' })
+      return
+    }
+    const timeLimitMs = Math.max(MIN_SEARCH_WORKER_MS, SEARCH_TIME_LIMIT_MS - (Date.now() - startedAt))
+    const result = await runSearchWorker({ root, paths: index.paths, options, maxMatches: MAX_MATCHES, timeLimitMs }, controller.signal)
+    if (res.writableEnded || res.destroyed) return
+    if (result.isCancelled) {
+      res.status(409).json({ message: 'A newer search replaced this one' })
+      return
+    }
+    res.set('Cache-Control', 'no-store')
+    res.json({
+      files: result.files,
+      matchCount: result.matchCount,
+      fileCount: result.files.length,
+      searchedFileCount: result.searchedFileCount,
+      isTruncated: result.isTruncated,
+      isIndexPartial: index.isPartial,
+      elapsedMs: Date.now() - startedAt,
+    })
+  } catch (error) {
+    console.error('작업 폴더 내용 찾기 실패', root, error)
+    if (!res.writableEnded) res.status(500).json({ message: 'Search failed' })
+  } finally {
+    if (runningSearches.get(sessionId) === controller) runningSearches.delete(sessionId)
+  }
 })
 
 const workspaceChangesOf = makeChangesCache()

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type Ref } from 'react'
 import { diffLineRange, diffRowsOf, STATUS_LABELS, STATUS_LETTERS } from './changes'
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor'
-import { CodeView } from './CodeView'
+import { CodeView, type CodeFindState } from './CodeView'
 import { chatLocationText, clampLineRange, lineCountOf, locationText, type LineRange } from './codeSelection'
 import { CopyButton } from './CopyButton'
 import { alertDialog, choiceDialog } from './Dialog'
@@ -18,7 +18,10 @@ import {
   type WorkspaceFindResult,
   type WorkspaceFolder,
 } from './types'
+import { SearchPanel, EMPTY_SEARCH, type SearchState } from './SearchPanel'
 import { setUnsavedEdit, whenLeavingAllowed } from './unsavedEdits'
+import { apiUrl, fetchJson } from './workspaceApi'
+import { selectionQuery } from './workspaceSearch'
 import { ancestorFolders, nameOf, treeRows, type FolderState } from './workspaceTree'
 
 /** 서버 /file/raw 가 주는 그림 (SVG 는 글자로 본다) */
@@ -29,24 +32,6 @@ function isImagePath(path: string): boolean {
   const name = nameOf(path)
   const dot = name.lastIndexOf('.')
   return dot > 0 && IMAGE_EXTENSIONS.has(name.slice(dot + 1).toLowerCase())
-}
-
-const apiUrl = (sessionId: string, route: string, params: Record<string, string>) => `/api/sessions/${sessionId}/${route}?${new URLSearchParams(params)}`
-
-/** JSON 받기. 실패는 서버 message → HTTP 코드 → "Network error" 를 담은 Error */
-async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  let response: Response
-  try {
-    response = await fetch(url, { cache: 'no-store', signal })
-  } catch (error) {
-    if ((error as Error).name === 'AbortError') throw error
-    throw new Error('Network error')
-  }
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { message?: unknown } | null
-    throw new Error(typeof body?.message === 'string' ? body.message : `HTTP ${response.status}`)
-  }
-  return (await response.json()) as T
 }
 
 /** 받은 파일. path 가 지금 고른 파일과 다르면 받는 중으로 본다 (고른 직후 한 번 그릴 때 앞 파일 내용이 보이지 않게) */
@@ -63,14 +48,17 @@ interface SessionView {
   selectedPath: string | null
   /** 파일별로 고른 줄 범위 */
   lineRanges: Record<string, LineRange>
-  /** 왼쪽 칸: 파일 트리 · 변경 목록 */
-  sideMode: 'files' | 'changes'
+  /** 왼쪽 칸: 파일 트리 · 변경 목록 · 내용 찾기 */
+  sideMode: SideMode
   selectedChange: string | null
   /** 변경 파일별로 고른 diff 줄(row) 범위 */
   diffRanges: Record<string, LineRange>
   /** 마지막 변경 목록 (다시 열 때 먼저 보이고 다시 받는다) */
   changes: ChangesState | null
+  /** 내용 찾기 입력·결과 */
+  search: SearchState
 }
+type SideMode = 'files' | 'changes' | 'search'
 const sessionViews = new Map<string, SessionView>()
 
 interface Props {
@@ -93,11 +81,18 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   const [expanded, setExpanded] = useState<Set<string>>(saved?.expanded ?? new Set())
   const [selectedPath, setSelectedPath] = useState<string | null>(saved?.selectedPath ?? null)
   const [lineRanges, setLineRanges] = useState<Record<string, LineRange>>(saved?.lineRanges ?? {})
-  const [sideMode, setSideMode] = useState<'files' | 'changes'>(saved?.sideMode ?? 'files')
+  const [sideMode, setSideMode] = useState<SideMode>(saved?.sideMode ?? 'files')
   const [selectedChange, setSelectedChange] = useState<string | null>(saved?.selectedChange ?? null)
   const [diffRanges, setDiffRanges] = useState<Record<string, LineRange>>(saved?.diffRanges ?? {})
   const [changesState, setChangesState] = useState<ChangesState>(saved?.changes ?? { status: 'loading' })
   const [diffState, setDiffState] = useState<DiffState | null>(null)
+  const [search, setSearch] = useState<SearchState>(saved?.search ?? EMPTY_SEARCH)
+  /** Ctrl+Shift+F: Search 입력칸에 포커스 (text 가 있으면 그 글로 찾기) */
+  const [searchFocus, setSearchFocus] = useState<{ id: number; text: string | null } | null>(null)
+  /** Search 결과에서 마지막으로 연 줄 (표시)과 코드 보기를 그 줄로 스크롤할 요청 */
+  const [openedMatch, setOpenedMatch] = useState<{ path: string; line: number; stamp: number } | null>(null)
+  /** 코드 보기 찾기 막대 (Ctrl+F). 다른 파일을 열어도 같은 글로 이어진다 */
+  const [codeFind, setCodeFind] = useState<CodeFindState>({ isOpen: false, focusId: 0, query: '', isCaseSensitive: false })
   /** 변경 목록 머리줄 ↻ (목록과 고른 diff 만) */
   const [changesReloadId, setChangesReloadId] = useState(0)
   const [fileState, setFileState] = useState<FileState | null>(null)
@@ -111,6 +106,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   const isSavingRef = useRef(false)
   const editorRef = useRef<CodeEditorHandle>(null)
   const wsRef = useRef<HTMLDivElement>(null)
+  /** 오른쪽 보기 칸 (Ctrl+Shift+F 가 여기서 골라 둔 글자를 쓴다) */
+  const viewRef = useRef<HTMLElement>(null)
   /** 폰에서 파일 보기를 띄웠는지 (데스크톱은 늘 둘 다 보인다) */
   const [isViewing, setIsViewing] = useState(false)
   const [reloadId, setReloadId] = useState(0)
@@ -123,8 +120,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   const rootName = nameOf(cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/')) || cwd
 
   useEffect(() => {
-    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState })
-  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState])
+    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState, search })
+  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState, search])
 
   const loadFolder = useCallback(
     async (path: string) => {
@@ -237,11 +234,17 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
     [selectedPath],
   )
 
-  // Ctrl+P (맥 Meta+P): Files 탭이 열려 있고 모달이 없을 때만 브라우저 인쇄 대신 빠른 찾기. 한글 자판에서도 되게 code 로도 본다
+  // Ctrl+P (맥 Meta+P): Files 탭이 열려 있고 모달이 없을 때만 브라우저 인쇄 대신 빠른 찾기. 한글 자판에서도 되게 code 로도 본다.
+  // Ctrl+F·Ctrl+Shift+F 도 같은 조건 (onFindKeyRef). 편집기 안 Ctrl+F 는 편집기 키맵이 먼저 받아 defaultPrevented 다
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      const isPKey = event.code === 'KeyP' || event.key.toLowerCase() === 'p'
-      if (!isPKey || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || document.querySelector('.modal-overlay')) return
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.defaultPrevented || document.querySelector('.modal-overlay')) return
+      const key = event.key.toLowerCase()
+      if (event.code === 'KeyF' || key === 'f') {
+        onFindKeyRef.current(event)
+        return
+      }
+      if (!(event.code === 'KeyP' || key === 'p') || event.shiftKey) return
       event.preventDefault()
       setFindFocusId((id) => id + 1)
     }
@@ -309,6 +312,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   }
 
   const isChanges = sideMode === 'changes'
+  const backLabel = isChanges ? 'Back to changes' : sideMode === 'search' ? 'Back to search' : 'Back to files'
   const textFile = !isChanges && shownFile?.status === 'ok' && shownFile.file.kind === 'text' ? shownFile.file : null
   const isEditing = textFile !== null && editingPath !== null && editingPath === selectedPath
   /** 편집을 막는 이유 (서버가 파일마다 준다. 필드가 없는 옛 서버는 저장 API 도 없다) */
@@ -423,6 +427,55 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
     guardEdit(() => setEditingPath(null))
   }
 
+  /**
+   * Ctrl+F: 글 파일을 보고 있으면 코드 보기 찾기 막대(편집 중이면 편집기 찾기 패널), 아니면 브라우저 찾기 그대로 (diff·트리).
+   * Ctrl+Shift+F: Search 로 바꿔 입력칸에 포커스. 코드·diff·편집기에서 한 줄 글자를 골라 두었으면 그 글로 바로 찾는다
+   */
+  const onFindKeyRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {})
+  onFindKeyRef.current = (event) => {
+    if (!event.shiftKey) {
+      if (!textFile) return
+      event.preventDefault()
+      setIsViewing(true)
+      if (isEditing) editorRef.current?.openSearch()
+      else setCodeFind((previous) => ({ ...previous, isOpen: true, focusId: previous.focusId + 1 }))
+      return
+    }
+    event.preventDefault()
+    const selection = document.getSelection()
+    const selected = isEditing
+      ? (editorRef.current?.selectedText() ?? '')
+      : selection && !selection.isCollapsed && selection.anchorNode && viewRef.current?.contains(selection.anchorNode)
+        ? selection.toString()
+        : ''
+    setSideMode('search')
+    setIsViewing(false)
+    setSearchFocus((previous) => ({ id: (previous?.id ?? 0) + 1, text: selectionQuery(selected, search.isRegex) }))
+  }
+
+  /** Search 결과 줄: 그 파일을 열고 그 줄을 골라 두고(Add to chat 바로 가능) 그 줄로 스크롤한다. 편집 중인 그 파일이면 편집기에서 그 줄로 */
+  function openMatch(path: string, line: number) {
+    if (isEditing && path === selectedPath) {
+      setOpenedMatch({ path, line, stamp: Date.now() })
+      editorRef.current?.revealLine(line)
+      setIsViewing(true)
+      return
+    }
+    const open = () => {
+      setOpenedMatch({ path, line, stamp: Date.now() })
+      openFile(path)
+      setLineRanges((previous) => ({ ...previous, [path]: { start: line, end: line } }))
+    }
+    if (path === selectedPath) open()
+    else guardEdit(open)
+  }
+  const closeCodeFind = useCallback(() => setCodeFind((previous) => ({ ...previous, isOpen: false })), [])
+  const changeCodeFind = useCallback(
+    (query: string, isCaseSensitive: boolean) =>
+      setCodeFind((previous) => (previous.query === query && previous.isCaseSensitive === isCaseSensitive ? previous : { ...previous, query, isCaseSensitive })),
+    [],
+  )
+
   return (
     <div className={`ws${isViewing ? ' is-viewing' : ''}${isEditing ? ' is-editing' : ''}`} ref={wsRef}>
       <div className="ws-toolbar">
@@ -430,8 +483,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
           type="button"
           className="ws-back"
           onClick={() => setIsViewing(false)}
-          title={isChanges ? 'Back to changes' : 'Back to files'}
-          aria-label={isChanges ? 'Back to changes' : 'Back to files'}
+          title={backLabel}
+          aria-label={backLabel}
         >
           ←
         </button>
@@ -507,7 +560,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
         {/* aside 가 아니다: style.css 의 aside 규칙(왼쪽 목록)이 걸린다 */}
         <div className="ws-side">
           <div className="ws-side-tabs" role="tablist" aria-label="Side panel">
-            <button type="button" role="tab" aria-selected={!isChanges} className={isChanges ? '' : 'on'} onClick={() => setSideMode('files')}>
+            <button type="button" role="tab" aria-selected={sideMode === 'files'} className={sideMode === 'files' ? 'on' : ''} onClick={() => setSideMode('files')}>
               Files
             </button>
             <button
@@ -528,9 +581,30 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
                 <span className="ws-count">{changesState.changes.files.length.toLocaleString('en')}{changesState.changes.isTruncated ? '+' : ''}</span>
               )}
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sideMode === 'search'}
+              className={`ws-side-search${sideMode === 'search' ? ' on' : ''}`}
+              onClick={() => setSideMode('search')}
+              title="Search (Ctrl+Shift+F)"
+              aria-label="Search"
+            >
+              <SearchSideIcon />
+            </button>
           </div>
           {isChanges ? (
             <ChangesList state={changesState} selectedPath={selectedChange} onOpen={openChange} onReload={() => setChangesReloadId((id) => id + 1)} />
+          ) : sideMode === 'search' ? (
+            <SearchPanel
+              sessionId={sessionId}
+              state={search}
+              onStateChange={setSearch}
+              focusRequest={searchFocus}
+              onFocusRequestHandled={() => setSearchFocus(null)}
+              openedMatch={openedMatch}
+              onOpenMatch={openMatch}
+            />
           ) : (
           <div className="ws-tree" ref={treeRef} role="tree" aria-label="Files">
             {rows.map((row) =>
@@ -566,7 +640,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
           </div>
           )}
         </div>
-        <section className="ws-view">
+        <section className="ws-view" ref={viewRef}>
           {isChanges ? (
             <ChangeView
               path={selectedChange}
@@ -584,6 +658,10 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
               reloadId={reloadId}
               lineRange={lineRange}
               onLineRangeChange={changeLineRange}
+              revealLine={openedMatch && openedMatch.path === selectedPath ? openedMatch : null}
+              find={codeFind}
+              onFindChange={changeCodeFind}
+              onFindClose={closeCodeFind}
               editor={isEditing ? { ref: editorRef, onDirtyChange: setIsDirty, onSave: () => void saveRef.current() } : null}
             />
           )}
@@ -686,6 +764,16 @@ function ChangeView({
   return <DiffView key={path} diff={state.diff} rows={rows} selection={range} onSelectionChange={onRangeChange} onOpenInFiles={() => onOpenInFiles(path)} />
 }
 
+/** 돋보기 (왼쪽 칸 Search 전환) */
+function SearchSideIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10.5 10.5L14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 /** 연필 (Edit) */
 function PencilIcon() {
   return (
@@ -720,6 +808,10 @@ function FileView({
   reloadId,
   lineRange,
   onLineRangeChange,
+  revealLine,
+  find,
+  onFindChange,
+  onFindClose,
   editor,
 }: {
   sessionId: string
@@ -728,6 +820,10 @@ function FileView({
   reloadId: number
   lineRange: LineRange | null
   onLineRangeChange: (range: LineRange | null) => void
+  revealLine: { line: number; stamp: number } | null
+  find: CodeFindState
+  onFindChange: (query: string, isCaseSensitive: boolean) => void
+  onFindClose: () => void
   /** 편집 모드면 편집기에 줄 것 */
   editor: { ref: Ref<CodeEditorHandle>; onDirtyChange: (isDirty: boolean) => void; onSave: () => void } | null
 }) {
@@ -745,7 +841,19 @@ function FileView({
   if (file.kind === 'binary') return <p className="hint">Binary file · {formatSize(file.size)} · No preview</p>
   if (file.kind === 'too-large') return <p className="hint">Too large to show · {formatSize(file.size)} (limit 1 MB)</p>
   if (editor) return <CodeEditor key={path} ref={editor.ref} text={file.text} path={path} onDirtyChange={editor.onDirtyChange} onSave={editor.onSave} />
-  return <CodeView key={path} text={file.text} language={file.language} selection={lineRange} onSelectionChange={onLineRangeChange} />
+  return (
+    <CodeView
+      key={path}
+      text={file.text}
+      language={file.language}
+      selection={lineRange}
+      onSelectionChange={onLineRangeChange}
+      revealLine={revealLine}
+      find={find}
+      onFindChange={onFindChange}
+      onFindClose={onFindClose}
+    />
+  )
 }
 
 /**

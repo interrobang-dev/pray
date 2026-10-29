@@ -242,6 +242,38 @@ export interface WorkspaceFindResult {
   elapsedMs: number
 }
 
+/** 내용 찾기 결과 한 줄. text 는 원래 줄의 column 번째 글자부터(긴 줄은 맞은 곳 근처 300자), ranges 는 text 안 [시작, 끝) */
+export interface WorkspaceSearchLine {
+  line: number
+  column: number
+  text: string
+  ranges: [number, number][]
+  /** 줄이 text 뒤로 더 있다 */
+  hasMoreAfter: boolean
+}
+
+export interface WorkspaceSearchFile {
+  path: string
+  matchCount: number
+  matches: WorkspaceSearchLine[]
+}
+
+/** `GET /api/sessions/:id/search?q=&case=&word=&regex=` (server workspaceSearch.ts 와 손으로 맞춘다) */
+export interface WorkspaceSearchResult {
+  /** 경로순 */
+  files: WorkspaceSearchFile[]
+  matchCount: number
+  /** 맞은 곳이 있는 파일 수 */
+  fileCount: number
+  /** 실제로 찾아 본 파일 수 (1MB 넘는 것·바이너리 제외) */
+  searchedFileCount: number
+  /** 맞은 곳 2,000개·5초 상한에서 멈췄다 */
+  isTruncated: boolean
+  /** 파일 목록이 5만 개·3초 상한에서 멈췄다 (빠른 찾기와 같은 목록) */
+  isIndexPartial: boolean
+  elapsedMs: number
+}
+
 /** 변경 파일 상태 (HEAD·BASE 대비 작업 트리). missing = SVN 에서 svn delete 없이 지운 파일 */
 export type ChangeStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflicted' | 'missing'
 

@@ -30,7 +30,7 @@ interface Current {
   stamp: number
 }
 
-function SearchIcon({ direction }: { direction: 'up' | 'down' | 'close' }) {
+export function SearchIcon({ direction }: { direction: 'up' | 'down' | 'close' }) {
   const path = direction === 'up' ? 'M4 10l4-4 4 4' : direction === 'down' ? 'M4 6l4 4 4-4' : 'M4 4l8 8M12 4l-8 8'
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">

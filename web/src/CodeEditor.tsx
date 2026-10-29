@@ -8,6 +8,10 @@ export interface CodeEditorHandle {
   setText(text: string): void
   markSaved(text: string): void
   selectionLines(): LineRange | null
+  /** 고른 글자 (편집기를 받는 중이면 빈 글) */
+  selectedText(): string
+  openSearch(): void
+  revealLine(line: number): void
   focus(): void
 }
 
@@ -58,6 +62,9 @@ export function CodeEditor({ ref, text, path, onDirtyChange, onSave }: Props) {
     setText: (next) => editorRef.current?.setText(next),
     markSaved: (next) => editorRef.current?.markSaved(next),
     selectionLines: () => editorRef.current?.selectionLines() ?? null,
+    selectedText: () => editorRef.current?.selectedText() ?? '',
+    openSearch: () => editorRef.current?.openSearch(),
+    revealLine: (line) => editorRef.current?.revealLine(line),
     focus: () => editorRef.current?.focus(),
   }))
 

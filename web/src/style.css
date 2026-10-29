@@ -2680,6 +2680,169 @@ li.group.drop-after::after {
   font-weight: 600;
   line-height: 16px;
 }
+/* 왼쪽 칸 전환의 Search(돋보기): 글자 탭 둘 옆에 아이콘만 (160px 칸에 셋이 들어가게) */
+.ws-side-tabs button.ws-side-search {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+}
+.ws-side-search svg {
+  display: block;
+}
+/* 찾기 토글 (코드 보기 찾기 막대 Aa · Search 의 Aa ab .*): 켜면 강조색 테두리·옅은 바탕 */
+.find-toggle {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: calc(12px * var(--font-scale));
+}
+.chat-search button.find-toggle,
+.ws-search-box .find-toggle {
+  color: var(--muted);
+}
+.chat-search button.find-toggle.on,
+.ws-search-box .find-toggle.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+/* 코드 보기 찾기 막대 (CodeFindBar.tsx): 코드 바로 위 한 줄, 대화 검색 막대와 같은 모양 */
+.chat-search.code-find {
+  flex-shrink: 0;
+  padding: 5px 8px;
+}
+/* 코드 보기 찾기 칠하기 (codeViewDom.ts, CSS Custom Highlight API). 대화 검색과 같은 색 */
+::highlight(code-find) {
+  background-color: var(--search-match-bg);
+}
+::highlight(code-find-current) {
+  background-color: var(--search-current-bg);
+  color: var(--search-current-text);
+}
+/* 작업 폴더 내용 찾기 (SearchPanel.tsx): 입력 상자(입력칸 + 토글 셋) · 요약 · 파일별 결과 */
+.ws-search {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-search-box {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 6px 6px 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.ws-search-box:focus-within {
+  border-color: var(--accent);
+}
+.ws-search-box input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 5px;
+  border: 0;
+  background: transparent;
+  font-size: calc(13px * var(--font-scale));
+}
+.ws-search-box .find-toggle {
+  flex-shrink: 0;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 3px;
+  border-color: transparent;
+  background: transparent;
+  font-size: calc(11px * var(--font-scale));
+}
+.ws-search-box .find-toggle:hover {
+  border-color: var(--line-strong);
+}
+.ws-search-summary,
+.ws-search-note {
+  padding: 2px 8px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-search-summary.error {
+  color: var(--error);
+  overflow-wrap: anywhere;
+}
+.ws-search-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 0 6px;
+}
+/* 찾는 중에는 지난 결과를 흐리게 둔다 */
+.ws-search-results.is-stale {
+  opacity: 0.55;
+}
+.ws-search-file,
+.ws-search-match {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+}
+.ws-search-file {
+  padding: 2px 8px 2px 6px;
+  font-size: calc(13px * var(--font-scale));
+}
+.ws-search-file .ws-chevron {
+  align-self: center;
+}
+.ws-search-file .ws-count {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.ws-search-name {
+  flex-shrink: 0;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.ws-search-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-search-match {
+  padding: 1px 8px 1px 22px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-search-file:hover,
+.ws-search-match:hover {
+  background: var(--bg);
+}
+.ws-search-match.selected {
+  background: var(--accent-soft);
+}
+.ws-search-line {
+  flex-shrink: 0;
+  min-width: 2.5ch;
+  color: var(--muted);
+  text-align: right;
+}
+.ws-search-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+.ws-search-hit {
+  border-radius: 2px;
+  background: var(--search-match-bg);
+  color: inherit;
+}
 /* 변경 목록: 머리줄(git · 브랜치 · ↻. 개수는 탭 배지) + 줄(상태 글자 · 이름 굵게 · 폴더 회색) */
 .ws-changes {
   flex: 1;
@@ -5497,6 +5660,27 @@ li.group.drop-after::after {
   .ws-changes-reload {
     width: 40px;
     height: 40px;
+  }
+  .ws-search-box input {
+    min-height: 34px;
+    font-size: 16px;
+  }
+  .ws-search-box .find-toggle {
+    min-width: 34px;
+    height: 34px;
+  }
+  .ws-search-file,
+  .ws-search-match {
+    min-height: 40px;
+    align-items: center;
+    font-size: calc(14px * var(--font-scale));
+  }
+  .chat-search.code-find input {
+    font-size: 16px;
+  }
+  .chat-search button.find-toggle {
+    width: 36px;
+    height: 36px;
   }
   .ws-open-file {
     min-height: 36px;
