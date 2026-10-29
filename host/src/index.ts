@@ -1,6 +1,7 @@
 import { createServer, type Socket } from 'node:net'
 import { existsSync } from 'node:fs'
-import { PIPE_PATH, LineDecoder, encode, type ClientMessage, type HostMessage } from './protocol.js'
+import { LEGACY_PIPE_PATH, PIPE_PATH, LineDecoder, encode, type ClientMessage, type HostMessage } from './protocol.js'
+import { isPipeAlive } from './legacyHost.js'
 import { PtyPool } from './ptyPool.js'
 import { listOffDuty, listWebSessions, pruneOffDuty, removeOffDuty, removeWebSession, returnFromOffDuty } from './hq.js'
 import { setupFileLog } from './runtime.js'
@@ -172,9 +173,17 @@ function pruneExpiredOffDuty(): void {
   broadcast({ type: 'sessions', sessions: pool.list() })
 }
 
-server.listen(PIPE_PATH, () => {
-  console.log(`jk-corp host listening on ${PIPE_PATH}`)
-  pruneExpiredOffDuty()
-  setInterval(pruneExpiredOffDuty, PRUNE_INTERVAL_MS)
-  resumeWebSessions()
+// 옛 이름의 호스트가 떠 있으면 뜨지 않는다 — pipe 이름이 달라 둘 다 떠서 같은 웹 세션을 두 번 resume 한다.
+// 종료 코드 0 은 "의도한 중지" 라 트레이가 다시 띄우지 않는다
+void isPipeAlive(LEGACY_PIPE_PATH).then((isLegacyAlive) => {
+  if (isLegacyAlive) {
+    console.error(`옛 호스트(${LEGACY_PIPE_PATH})가 떠 있어 뜨지 않고 끝냄. 옛 트레이를 Quit 한 뒤 다시 켠다`)
+    process.exit(0)
+  }
+  server.listen(PIPE_PATH, () => {
+    console.log(`Pray host listening on ${PIPE_PATH}`)
+    pruneExpiredOffDuty()
+    setInterval(pruneExpiredOffDuty, PRUNE_INTERVAL_MS)
+    resumeWebSessions()
+  })
 })

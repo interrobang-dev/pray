@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { Child } from './children'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
 import { trayIconPng } from './icon'
+import { isPipeAlive, LEGACY_PIPE_PATH } from './legacyHost'
 import { diffSessions, type NotifySession, type SessionNotice, type StatusBaseline } from './notify'
 
 const SERVER_URL = 'http://127.0.0.1:4710'
@@ -271,16 +272,16 @@ async function quit(): Promise<void> {
 // 앱 데이터 폴더는 패키지 이름을 따라 %APPDATA%\@pray\desktop 이다. 옛 @jk-corp\desktop(창 설정·tray-settings.json)을 잠금 전에 옮긴다.
 // 못 옮기면(옛 트레이가 잠금을 쥐고 있음) 옛 폴더를 그대로 써서 같은 잠금으로 옛 트레이와 같이 뜨지 않는다
 const appData = moveAppDataOnce(join(app.getPath('appData'), '@jk-corp', 'desktop'), app.getPath('userData'))
-if (appData.dir !== app.getPath('userData')) app.setPath('userData', appData.dir)
+const isLegacyAppData = appData.dir !== app.getPath('userData')
+if (isLegacyAppData) app.setPath('userData', appData.dir)
 if (appData.warning) console.warn(appData.warning)
+const OLD_TRAY_MESSAGE = 'An older version is still running. Quit the old tray first, then start Pray again.'
 
 if (!app.requestSingleInstanceLock()) {
+  // 옛 폴더의 잠금을 못 얻었으면 옛 트레이가 떠 있다 (옛 트레이는 second-instance 로 자기 창을 연다)
+  if (isLegacyAppData) dialog.showErrorBox('Pray', OLD_TRAY_MESSAGE)
   app.quit()
 } else {
-  // 호스트·서버보다 먼저 옛 설정 폴더 ~/.claude/jk-corp 를 옮긴다 (자식은 --log 로 받은 폴더에 로그를 연다)
-  const dataDir = resolveDataDir(join(homedir(), '.claude'))
-  if (dataDir.warning) console.warn(dataDir.warning)
-  logDir = join(dataDir.dir, 'logs')
   // 알림을 Windows 에 'jk-corp' ID 로 올린다 (알림 기록·설정이 이 ID 로 묶인다).
   // 알림 머리의 앱 이름은 그래도 electron.exe 파일 설명 "Electron" 이다 — HKCU\Software\Classes\AppUserModelId 의
   // DisplayName·시작 메뉴 바로가기(AUMID 포함)로도 바뀌지 않았다(실측). 바꾸려면 exe 이름·설명을 바꾼 설치본이 필요하다
@@ -294,6 +295,16 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(async () => {
+    // 옛 이름의 트레이(또는 스케줄러 호스트)가 떠 있으면 뜨지 않는다 — pipe·잠금 폴더 이름이 달라 서로를 못 보고 같은 웹 세션을 두 번 resume 한다
+    if (await isPipeAlive(LEGACY_PIPE_PATH)) {
+      dialog.showErrorBox('Pray', OLD_TRAY_MESSAGE)
+      app.quit()
+      return
+    }
+    // 호스트·서버보다 먼저 옛 설정 폴더 ~/.claude/jk-corp 를 옮긴다 (자식은 --log 로 받은 폴더에 로그를 연다)
+    const dataDir = resolveDataDir(join(homedir(), '.claude'))
+    if (dataDir.warning) console.warn(dataDir.warning)
+    logDir = join(dataDir.dir, 'logs')
     try {
       children = createChildren()
     } catch (error) {

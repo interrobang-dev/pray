@@ -52,7 +52,7 @@ const settle = () => new Promise<void>(resolve => setTimeout(resolve, 100))
 
 test('웹 세션: 시작할 때 /jk-btw 를 숨겨 등록하고, 요청 ID 로 질문을 받아 fork 한 답을 보낸다', async ($, on) => {
   const record = newRecord()
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   mock.clock(on)
   engine(on, record)
 
@@ -86,7 +86,7 @@ test('웹 세션: 시작할 때 /jk-btw 를 숨겨 등록하고, 요청 ID 로 �
 
 test('사람이 직접 친 /jk-btw (인자 없음·요청 ID 꼴이 아님)는 아무것도 안 한다', async ($, on) => {
   const record = newRecord()
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   mock.clock(on)
   engine(on, record)
 
@@ -97,7 +97,7 @@ test('사람이 직접 친 /jk-btw (인자 없음·요청 ID 꼴이 아님)는 �
   expect(record.prompts).toEqual([])
 })
 
-test('외부 세션(JK_CORP_SESSION 없음)은 등록하지 않고 실행돼도 아무것도 안 한다', async ($, on) => {
+test('외부 세션(PRAY_SESSION 없음)은 등록하지 않고 실행돼도 아무것도 안 한다', async ($, on) => {
   const record = newRecord()
   mock.env(on, {})
   mock.clock(on)
@@ -113,7 +113,7 @@ test('외부 세션(JK_CORP_SESSION 없음)은 등록하지 않고 실행돼도 
 for (const fetch of ['broken', 'missing'] as const) {
   test(`서버가 꺼졌거나 모르는 요청이면 fork 하지 않고 조용하다 (${fetch})`, async ($, on) => {
     const record = newRecord()
-    mock.env(on, { JK_CORP_SESSION: 'abc' })
+    mock.env(on, { PRAY_SESSION: 'abc' })
     mock.clock(on)
     engine(on, record, fetch)
 
@@ -126,7 +126,7 @@ for (const fetch of ['broken', 'missing'] as const) {
 
 test('서버 답을 5초까지만 기다린다', async ($, on) => {
   const record = newRecord()
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   const clock = mock.clock(on)
   engine(on, record, 'late')
 

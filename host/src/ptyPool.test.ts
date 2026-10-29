@@ -70,7 +70,7 @@ describe('PtyPool child env', () => {
       expect(isAbsolute(env.CLAUDE_CODE_PLUGIN_DIRS)).toBe(true)
       expect(existsSync(join(modDir, '.claude-plugin', 'plugin.json'))).toBe(true)
       expect(env.CLAUDECODE).toBeUndefined()
-      expect(env.JK_CORP_SESSION).toBe(SESSION_ID)
+      expect(env.PRAY_SESSION).toBe(SESSION_ID)
     } finally {
       vi.unstubAllEnvs()
     }

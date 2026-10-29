@@ -12,7 +12,7 @@ import {
 } from './accountStore.js'
 
 /** 호스트와 같은 규칙 (작업 스케줄러 환경엔 사용자 PATH 가 없을 수 있다) */
-const CLAUDE_COMMAND = getArg('claude') ?? process.env.JK_CORP_CLAUDE ?? 'claude.exe'
+const CLAUDE_COMMAND = getArg('claude') ?? process.env.PRAY_CLAUDE ?? 'claude.exe'
 /**
  * 로그인 때 claude 가 브라우저를 여는 프로그램. claude 는 BROWSER 를 셸 없이 URL 인자 하나로 실행한다 (없으면 `rundll32 url,OpenURL`).
  * where.exe 는 받은 URL 을 검색 패턴으로 읽다가 "path:pattern 꼴이 잘못됨" 으로 바로(종료 코드 2) 끝나는 조회 도구라 아무것도 열지도 실행하지도 않는다

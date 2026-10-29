@@ -49,10 +49,19 @@ function btwPrompt(question: string, history: readonly BtwExchange[]): string {
   return `${BTW_REMINDER}\n\nEarlier side questions from the user and your answers to them, oldest first (context for this question only):\n${earlier}\n\n${question}`
 }
 
+/**
+ * 호스트가 웹 세션 claude 에 넣는 세션 ID (`PRAY_SESSION`). 없으면 외부 세션이다.
+ * 옛 이름 `JK_CORP_SESSION` 도 한동안 읽는다 — mod 는 파일이 바뀌면 바로 다시 읽혀, 호스트를 재시작하기 전의 웹 세션에는 옛 이름만 있다.
+ * `$.env.get` 은 글자 그대로의 이름만 받아 두 번 부른다
+ */
+async function sessionIdOf($: EngineInterface): Promise<string | undefined> {
+  return (await $.env.get('PRAY_SESSION')) ?? (await $.env.get('JK_CORP_SESSION'))
+}
+
 /** 웹 세션에만 /jk-btw 를 등록한다. 실패는 조용히 넘어간다 (곁가지 질문만 안 된다. 서버가 시간 초과로 실패를 알린다) */
 async function registerBtw($: EngineInterface): Promise<void> {
   try {
-    if ((await $.env.get('JK_CORP_SESSION')) === undefined) return
+    if ((await sessionIdOf($)) === undefined) return
     await $.command.register({
       name: BTW_COMMAND,
       description: 'jk-corp side question (sent by the web chat tab)',
@@ -84,7 +93,7 @@ async function btwFetch($: EngineInterface, url: string, body?: unknown): Promis
  */
 async function answerBtw($: EngineInterface, requestId: string): Promise<void> {
   try {
-    const sessionId = await $.env.get('JK_CORP_SESSION')
+    const sessionId = await sessionIdOf($)
     if (sessionId === undefined) return
     const url = `${BTW_ENDPOINT}${requestId}?sessionId=${encodeURIComponent(sessionId)}`
     const text = await btwFetch($, url)
@@ -98,12 +107,12 @@ async function answerBtw($: EngineInterface, requestId: string): Promise<void> {
   }
 }
 
-// 웹 세션(호스트가 JK_CORP_SESSION 을 넣어 띄운 claude)만 보낸다. 서버가 꺼져 있거나 거절해도 조용히 넘어간다 —
+// 웹 세션(호스트가 PRAY_SESSION 을 넣어 띄운 claude)만 보낸다. 서버가 꺼져 있거나 거절해도 조용히 넘어간다 —
 // 훅이 던지면 Claude Code 가 대화에 흐린 오류 줄을 남긴다.
 // 엔진 검사가 `$` 를 파일 최상위에 선언한 함수에만 넘기게 해서 register 밖에 둔다
 async function post($: EngineInterface, text: string | null): Promise<void> {
   try {
-    const sessionId = await $.env.get('JK_CORP_SESSION')
+    const sessionId = await sessionIdOf($)
     if (sessionId === undefined) return
     await $.http.fetch(ENDPOINT, {
       method: 'POST',
@@ -121,7 +130,7 @@ async function post($: EngineInterface, text: string | null): Promise<void> {
  */
 async function reportBox($: EngineInterface, text: string, origin: string): Promise<void> {
   try {
-    const sessionId = await $.env.get('JK_CORP_SESSION')
+    const sessionId = await sessionIdOf($)
     if (sessionId === undefined) return
     const response = await Promise.race([
       $.http.fetch(BOX_ENDPOINT, {

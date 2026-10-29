@@ -2763,5 +2763,5 @@ if (existsSync(webDist)) {
 }
 
 app.listen(PORT, config.bind, () => {
-  console.log(`jk-corp server http://${config.bind}:${PORT} (메일 로그인 ${sendCode ? '사용' : '미설정'})`)
+  console.log(`Pray server http://${config.bind}:${PORT} (메일 로그인 ${sendCode ? '사용' : '미설정'})`)
 })

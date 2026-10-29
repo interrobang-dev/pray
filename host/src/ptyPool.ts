@@ -10,7 +10,7 @@ import { getArg } from './runtime.js'
 
 const RING_LIMIT = 200_000
 /** 작업 스케줄러 환경에는 사용자 PATH 가 없을 수 있어 설치 스크립트가 `--claude=<exe>` 로 넘긴다 */
-const CLAUDE_COMMAND = getArg('claude') ?? process.env.JK_CORP_CLAUDE ?? 'claude.exe'
+const CLAUDE_COMMAND = getArg('claude') ?? process.env.PRAY_CLAUDE ?? 'claude.exe'
 /** 웹 세션에만 불러오는 저장소의 mod (입력칸 제안을 서버로 보낸다). 절대 경로 */
 const MOD_DIR = join(import.meta.dirname, '..', '..', 'mod')
 
@@ -26,7 +26,7 @@ function childEnv(sessionId: string): Record<string, string> {
     if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_') || key === 'NO_COLOR') continue
     env[key] = value
   }
-  env.JK_CORP_SESSION = sessionId
+  env.PRAY_SESSION = sessionId
   env.CLAUDE_CODE_PLUGIN_DIRS = MOD_DIR
   return env
 }

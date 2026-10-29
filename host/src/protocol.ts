@@ -1,4 +1,6 @@
-export const PIPE_PATH = '\\\\.\\pipe\\jk-corp-host'
+export const PIPE_PATH = '\\\\.\\pipe\\pray-host'
+/** 옛 이름(jk-corp) 호스트의 pipe. 새 호스트·트레이는 여기에 붙으면 뜨지 않는다 (옛 호스트와 같은 웹 세션을 두 번 resume 하지 않게) */
+export const LEGACY_PIPE_PATH = '\\\\.\\pipe\\jk-corp-host'
 
 export interface HostSession {
   sessionId: string

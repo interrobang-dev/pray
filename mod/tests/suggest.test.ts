@@ -26,7 +26,7 @@ const submit = (text: string) => ({ text, wait: false, origin: { kind: 'composer
 
 test('웹 세션: 놓인 제안을 보내고, 제출하면 비운다', async ($, on) => {
   const sent: Sent[] = []
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   engine(on, true, sent)
 
   expect((await $.prompt.suggest(suggest('테스트 돌려줘'))).isShown).toBe(true)
@@ -41,9 +41,29 @@ test('웹 세션: 놓인 제안을 보내고, 제출하면 비운다', async ($,
   ])
 })
 
+test('호스트를 재시작하기 전의 웹 세션(옛 이름 JK_CORP_SESSION 만)도 보낸다', async ($, on) => {
+  const sent: Sent[] = []
+  mock.env(on, { JK_CORP_SESSION: 'old' })
+  engine(on, true, sent)
+
+  await $.prompt.suggest(suggest('x'))
+  await settle()
+  expect(sent.map(s => s.body)).toEqual([{ sessionId: 'old', text: 'x' }])
+})
+
+test('두 이름이 다 있으면 PRAY_SESSION 을 쓴다', async ($, on) => {
+  const sent: Sent[] = []
+  mock.env(on, { PRAY_SESSION: 'new', JK_CORP_SESSION: 'old' })
+  engine(on, true, sent)
+
+  await $.prompt.suggest(suggest('x'))
+  await settle()
+  expect(sent.map(s => s.body)).toEqual([{ sessionId: 'new', text: 'x' }])
+})
+
 test('놓이지 않은 제안은 보내지 않는다', async ($, on) => {
   const sent: Sent[] = []
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   engine(on, false, sent)
 
   expect((await $.prompt.suggest(suggest('x'))).isShown).toBe(false)
@@ -51,7 +71,7 @@ test('놓이지 않은 제안은 보내지 않는다', async ($, on) => {
   expect(sent).toEqual([])
 })
 
-test('외부 세션(JK_CORP_SESSION 없음)은 보내지 않는다', async ($, on) => {
+test('외부 세션(PRAY_SESSION 없음)은 보내지 않는다', async ($, on) => {
   const sent: Sent[] = []
   mock.env(on, {})
   engine(on, true, sent)
@@ -64,7 +84,7 @@ test('외부 세션(JK_CORP_SESSION 없음)은 보내지 않는다', async ($, o
 
 test('서버가 꺼져 있어도 제안과 제출은 그대로다', async ($, on) => {
   const sent: Sent[] = []
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   engine(on, true, sent, true)
 
   expect((await $.prompt.suggest(suggest('x'))).isShown).toBe(true)

@@ -46,7 +46,7 @@ const BOX = 'http://127.0.0.1:4710/api/hook/prompt-box'
 test('웹 세션: 꺼냄·자기 fill·빈 입력칸만 알리고, 서버가 준 fill 만 입력칸에 넣는다', async ($, on) => {
   const sent: Sent[] = []
   const filled: string[] = []
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   mock.clock(on)
   engine(on, sent, filled)
 
@@ -72,7 +72,7 @@ test('웹 세션: 꺼냄·자기 fill·빈 입력칸만 알리고, 서버가 준
   expect(filled).toEqual(['대기1'])
 })
 
-test('외부 세션(JK_CORP_SESSION 없음)은 알리지 않는다', async ($, on) => {
+test('외부 세션(PRAY_SESSION 없음)은 알리지 않는다', async ($, on) => {
   const sent: Sent[] = []
   const filled: string[] = []
   mock.env(on, {})
@@ -89,7 +89,7 @@ test('외부 세션(JK_CORP_SESSION 없음)은 알리지 않는다', async ($, o
 test('서버 답을 2초까지만 기다린다: 그 뒤에 온 fill 은 넣지 않는다', async ($, on) => {
   const sent: Sent[] = []
   const filled: string[] = []
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   const clock = mock.clock(on)
   engine(on, sent, filled, 'late')
 
@@ -113,7 +113,7 @@ test('서버 답을 2초까지만 기다린다: 그 뒤에 온 fill 은 넣지 �
 test('서버가 꺼져 있어도 입력칸 변경은 그대로다', async ($, on) => {
   const sent: Sent[] = []
   const filled: string[] = []
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   mock.clock(on)
   engine(on, sent, filled, 'broken')
 
@@ -126,7 +126,7 @@ test('서버가 꺼져 있어도 입력칸 변경은 그대로다', async ($, on
 test('fill 이 거절돼도(대화상자) 조용하다', async ($, on) => {
   const sent: Sent[] = []
   const filled: string[] = []
-  mock.env(on, { JK_CORP_SESSION: 'abc' })
+  mock.env(on, { PRAY_SESSION: 'abc' })
   mock.clock(on)
   engine(on, sent, filled, 'answer', true)
 
