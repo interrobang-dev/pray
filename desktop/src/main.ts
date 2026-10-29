@@ -300,8 +300,8 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   // 알림을 Windows 에 'pray' ID 로 올린다 (알림 기록·설정이 이 ID 로 묶인다. 대소문자는 가리지 않는다).
-  // 알림 머리의 앱 이름은 그래도 electron.exe 파일 설명 "Electron" 이다 — HKCU\Software\Classes\AppUserModelId 의
-  // DisplayName·시작 메뉴 바로가기(AUMID 포함)로도 바뀌지 않았다(실측). 바꾸려면 exe 이름·설명을 바꾼 설치본이 필요하다.
+  // 알림 머리의 앱 이름은 이 ID 를 가진 시작 메뉴 바로가기 이름, 아이콘은 exe 아이콘이다 — Electron 이 알림을 띄울 때
+  // `<exe 제품 이름>.lnk` 를 만들어 ID 를 넣는다(실측). 제품 이름·아이콘은 postinstall 의 scripts/brand-electron.mts 가 Pray 로 바꾼다.
   // 로그인 시 자동 실행의 Run 값 이름은 이 ID 를 따르지 않게 LOGIN_ITEM_NAME 으로 고정한다
   app.setAppUserModelId('pray')
   app.on('second-instance', () => void showWindow())

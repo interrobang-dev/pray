@@ -41,7 +41,7 @@
 | localStorage | `jk-corp.*` 7개 (#13) | `pray.*` 같은 뒷부분 |
 | 임시 파일·폴더 | `<tmp>/jk-corp-account-*`, `.credentials.json.jk-corp.<pid>.tmp` | `pray-account-*`, `.pray.<pid>.tmp` |
 | Electron 앱 데이터 | `%APPDATA%\@jk-corp\desktop` | `%APPDATA%\@pray\desktop` (D7) |
-| Electron 알림 ID | `app.setAppUserModelId('jk-corp')` | `pray` (#17. 보이는 이름은 "Electron" 그대로 — 아래 D10) |
+| Electron 알림 ID | `app.setAppUserModelId('jk-corp')` | `pray` (#17. 보이는 이름은 시작 메뉴 바로가기 이름 — 아래 D10) |
 | 곁 질문 명령 (조사 뒤 찾음) | `/jk-btw` (서버가 pty 에 치고 mod 가 등록) | `/pray-btw` (서버·mod 같이) |
 
 `pray` 는 흔한 낱말이지만 위 이름들은 모두 이 PC 안에서만 쓰이는 이 앱 전용 자리(pipe·폴더·env·localStorage)다. 충돌이 문제 될 수 있는 곳은 MCP 도구 이름뿐인데, 도구는 서버 키로 이름공간이 나뉘어(`mcp__pray__…`) 다른 MCP 와 겹치지 않는다.
@@ -151,10 +151,11 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 
 쿠키 `jk_session`(#14), 스프라이트 `jkCorp`·`meta.app`(#15), 포트·훅 주소(#9), 지난 설계 문서(`docs/plans/2026-10-2*`)의 옛 이름 — 그때의 기록이라 고치지 않는다. `CLAUDE.md`·`.claude/rules/*.md`·`README.md`·`tools/sprites/README.md`·레시피 설명의 이름·경로는 지금 상태 문서라 고친다.
 
-### D10. 알림 ID 는 `pray`, 로그인 시 자동 실행 값 이름은 고정 — 결정·결과
+### D10. 알림 ID 는 `pray`, exe 이름·아이콘은 Pray, 로그인 시 자동 실행 값 이름은 고정 — 결정·결과
 
 - 알림 ID 를 `pray` 로 바꿨다. Windows 는 ID 의 대소문자를 가리지 않는다 (알림 설정 레지스트리 키 `Pray`·`pray` 가 같은 키). 옛 `jk-corp` 키에 꺼 둔 설정은 없어 잃는 것이 없다
-- **알림 머리에 보이는 앱 이름은 "Electron" 그대로다** — electron.exe 의 파일 설명이고, AUMID 레지스트리 DisplayName·시작 메뉴 바로가기로도 바뀌지 않았다(1단계 실측). "Pray" 로 보이려면 exe 이름·설명을 바꾼 설치본이 필요하다 (설치 파일은 범위 밖)
+- **알림 머리의 앱 이름은 그 ID 를 가진 시작 메뉴 바로가기 이름, 아이콘은 exe 아이콘이다** (구현 때 electron dist 사본으로 실측). Electron 이 알림을 띄울 때 `Start Menu\Programs\<exe 제품 이름>.lnk` 가 없으면 만들어 ID 를 넣는다 — 1단계에서 "바로가기로도 안 바뀐다" 고 본 것은 그때 Electron 이 만든 `Electron.lnk`(ID `Pray`)가 같이 있어서였다. 설치본 대신 **postinstall 에서 rcedit 로 저장소의 electron.exe 아이콘·파일 설명·제품 이름을 Pray 로 바꾼다** (`scripts/brand-electron.mts`). 사본 결과: 새 시험 ID 로 머리 "Pray"·Pray 아이콘, 같은 ID 의 옛 이름 바로가기를 같이 두면 머리는 그 이름·아이콘만 Pray, 바로가기가 막 생긴 첫 알림은 배너 없음. 그래서 이 PC 는 반영 뒤 옛 `Electron.lnk` 를 지워야 ID `pray` 머리가 "Pray" 가 된다 (스크립트는 시작 메뉴를 건드리지 않는다)
+- `rcedit` 는 npm 에서 모든 버전이 "Package no longer supported" 로 표시되고 GitHub 저장소는 2026-04 에 보관됐다. registry 서명·provenance, bin 의 exe 가 electron/rcedit v2.0.0 릴리스와 같은 것(sha256)을 확인하고 5.0.2 를 쓴다
 - Electron 44 `browser_win.cc`: `setLoginItemSettings` 는 `name` 이 없으면 알림 ID 를 Run 값 이름으로 쓰고, `getLoginItemSettings().openAtLogin` 도 그 이름의 값만 본다. 실제 Run 값은 `electron.app.Electron` 이고 `openAtLogin` 은 ID 와 상관없이 false 였다(실측 — 바꾸기 전부터 체크 표시가 어긋나 있었다). 그래서 쓸 때 `name: 'electron.app.Electron'` 으로 고정하고, 체크 표시는 `launchItems` 중 그 이름·같은 인자·enabled 인 값으로 본다 (`desktop/src/loginItem.ts`)
 
 ## 이전 순서
@@ -173,13 +174,17 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 | `bf58b6e` refactor(desktop) | D10: 알림 ID `pray`, 로그인 시 자동 실행 값 이름 고정 (알림 제목 `Pray · N sessions` 는 1단계에서 이미 됨) |
 | `99eef87` chore(scripts) | 작업 이름 `pray-host`·`pray-server`. install·stop·uninstall 모두 옛 `jk-corp-*` 작업도 멈추고 지운다 |
 | `38623f7` chore(*) | #16 임시 접두사 `pray-account-`·`.pray.<pid>.tmp`(뜰 때 15분 넘은 옛 `jk-corp-account-*` 도 지움), 곁 질문 명령 `/pray-btw`, 주석·테스트 접두사·문서 |
-| refactor(logs) | 로그 이름 `host.log`·`server.log` (트레이·`install-startup.ps1`. 스케줄러 작업 이름은 `pray-*` 그대로) |
+| `efd17d8` refactor(logs) | 로그 이름 `host.log`·`server.log` (트레이·`install-startup.ps1`. 스케줄러 작업 이름은 `pray-*` 그대로) |
+| `36609aa` feat(desktop) | 창 아이콘 16~256 `.ico`(경로로 줘야 크기별 항목을 쓴다) |
+| chore(desktop) | D10: postinstall 이 electron.exe 아이콘·파일 설명·제품 이름을 Pray 로 (`scripts/brand-electron.mts`, devDependency `rcedit`) |
 
 반영 (한 번, 사용자가 반영 스크립트로): 트레이 Quit → main 반영 → `npm install` → `npm run build` → `npm run build --workspace desktop` → 트레이 켜기. 확인할 것:
 
 - `~/.claude/pray/`(sprite-src 포함)가 생기고 `~/.claude/jk-corp/` 가 사라짐, `%APPDATA%\@pray\desktop` 이 생기고 트레이 창 테마·Appearance·접기 상태가 남음
 - 팀·세션·다른 PC 로그인·계정 보관함이 그대로, 웹 세션이 `--resume` 되고 제안·대기 취소·곁 질문(`/pray-btw`)이 됨
 - 옛 팀장 하나에게 `jk_status` 를 시켜 도구가 살아 있는지, 새 팀장을 만들어 `team_*` 가 보이는지
+- `npm install` 끝에 "brand-electron: … Pray 로 바꿨다" 가 찍히는지 (경고면 트레이가 떠 있던 것 — Quit 뒤 `npm run brand:electron`), 작업 표시줄·바탕화면 바로가기 아이콘이 Pray 인지 (아이콘 캐시로 늦을 수 있다)
+- 시작 메뉴 `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Electron.lnk`(실제 exe 를 가리키는 옛 바로가기)를 지운 뒤 알림 머리가 "Pray"·Pray 아이콘인지 (바로가기가 새로 생기는 첫 알림은 배너가 안 뜰 수 있다)
 - 알림이 뜨는지, 트레이 메뉴 "Launch at login" 체크가 실제 등록과 맞는지
 - `jk-corp.lnk` 이름은 원하면 손으로
 
@@ -228,13 +233,13 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 
 1. 옛 이름 호환 코드를 지울 시점 (나중에 정하기로 함): mcp 옛 모드(D5), D3 막이(호스트·트레이), 옛 임시 폴더 접두사 지우기, 스케줄러 옛 이름 지우기, mod 의 `JK_CORP_SESSION` 대체 읽기, localStorage 옛 키 읽기(D8), 설정 폴더·앱 데이터 폴더 이전. 화면·서버의 옛 MCP 이름 판정은 지우지 않는다 (옛 jsonl)
 2. 바탕화면 바로가기 `jk-corp.lnk` 이름 바꾸기 (사용자 손)
-3. 알림 머리 이름을 "Pray" 로 보이게 하려면 설치본(exe 이름·설명)이 필요하다 — 하려면 따로 정한다
+3. 시작 메뉴의 옛 `Electron.lnk` 지우기 (사용자 손, 반영 뒤. 남아 있으면 알림 머리 이름이 "Electron")
 
 ## 확인하지 못한 것
 
 - 실제 트레이로 실제 `~/.claude/jk-corp/`(sprite-src 353MB)·`%APPDATA%\@jk-corp\desktop` 을 옮기는 것 (단위 테스트·시험 홈·Electron 시험 앱으로만 확인)
 - 트레이의 D3 창(옛 잠금 실패·옛 pipe)을 실제 트레이 앱으로 보는 것 (호스트 쪽 막이는 시험 호스트로 확인: 가짜 옛 pipe·실제 옛 호스트 둘 다 종료 코드 0)
-- 알림 머리 이름을 새 ID 로 다시 재는 것 (시험 알림 배너가 화면에 뜨지 않았다)
+- 실제 exe·실제 트레이로 본 알림 머리 이름(ID `pray`)·작업 표시줄·바로가기 아이콘 (electron dist 사본으로만 확인)
 - 실행 중인 웹 세션에서 mod 의 plugin.json 이름이 바뀔 때 Claude Code 가 그대로 다시 읽는지 (다른 플러그인으로 보고 옛 것을 남기는지)
 - `claude --resume` 이 cwd 와 다른 프로젝트 슬러그의 jsonl 을 찾는지 (범위 밖 저장소 이전 때 필요)
 - npm 레지스트리에 `@pray` 범위가 있는지 (배포하지 않아 영향 없다고 판단)

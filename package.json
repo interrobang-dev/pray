@@ -18,10 +18,13 @@
     "desktop": "npm run start --workspace desktop",
     "hooks:install": "node hooks/install.mjs",
     "startup:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-startup.ps1",
-    "startup:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-startup.ps1"
+    "startup:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-startup.ps1",
+    "postinstall": "node --import tsx scripts/brand-electron.mts",
+    "brand:electron": "node --import tsx scripts/brand-electron.mts"
   },
   "devDependencies": {
-    "concurrently": "^9.2.0"
+    "concurrently": "^9.2.0",
+    "rcedit": "^5.0.2"
   },
   "allowScripts": {
     "node-pty@1.1.0": true,
