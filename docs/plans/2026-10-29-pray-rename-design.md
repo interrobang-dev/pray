@@ -22,7 +22,7 @@
 | 로그 첫 줄 `jk-corp host listening`·`jk-corp server http://…` | **이 작업** |
 | claude 가 읽는 MCP 오류 글 "jk-corp 서버(…)에 연결 실패" 등 3 (`mcp/src/teamApi.ts`) | **이 작업** ("Pray 서버") |
 | mod 설명·백그라운드 질문 description "jk-corp side question" | **이 작업** |
-| 바탕화면 바로가기 파일 이름 `jk-corp.lnk` | 저장소 밖 — 사용자가 손으로 |
+| 바탕화면 바로가기 파일 이름 `jk-corp.lnk` | 저장소 밖 — 반영 뒤 `Pray.lnk` 로 바꿈 |
 
 ## 새 이름
 
@@ -186,7 +186,7 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 - `npm install` 끝에 "brand-electron: … Pray 로 바꿨다" 가 찍히는지 (경고면 트레이가 떠 있던 것 — Quit 뒤 `npm run brand:electron`), 작업 표시줄·바탕화면 바로가기 아이콘이 Pray 인지 (아이콘 캐시로 늦을 수 있다)
 - 시작 메뉴 `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Electron.lnk`(실제 exe 를 가리키는 옛 바로가기)를 지운 뒤 알림 머리가 "Pray"·Pray 아이콘인지 (바로가기가 새로 생기는 첫 알림은 배너가 안 뜰 수 있다)
 - 알림이 뜨는지, 트레이 메뉴 "Launch at login" 체크가 실제 등록과 맞는지
-- `jk-corp.lnk` 이름은 원하면 손으로
+- `jk-corp.lnk` → `Pray.lnk` 로 바꿈 (반영 뒤)
 
 주의: **반영은 트레이 Quit 상태에서만 한다** — 트레이가 떠 있는 채 반영하면 mod 가 바로 다시 읽히고, 트레이 메뉴의 호스트·서버 재시작이 pipe 가 다른 새 코드를 섞어 띄운다. 다른 worktree(파트)의 리드도 MCP 는 본 저장소 `mcp/src/index.ts` 를 띄우므로 기준은 본 저장소 main 이다.
 
@@ -219,9 +219,9 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 - `~/.claude.json` 신뢰 키 `projects["D:/workspace/@private/jk-corp…"]`
 - git worktree 등록 경로(`git worktree repair` 필요), worktree 폴더 이름 `jk-corp.worktrees`(worktree.ts 가 저장소 폴더 이름에서 만든다)
 - 바탕화면 바로가기·레지스트리 Run 값의 electron.exe 경로
-- GitHub `interrobang-dev/jk-corp`: 이름을 바꾸면 GitHub 가 옛 주소를 넘겨주지만 `origin` 은 고친다. 조직 이름 규칙(제품명만, 소문자)으로는 `pray`
+- ~~GitHub `interrobang-dev/jk-corp`~~ — 반영 뒤 `interrobang-dev/pray` 로 바꾸고 `origin` 도 고쳤다 (옛 주소는 GitHub 가 넘겨준다)
 
-나중에 할 때 필요한 것: 모든 프로세스 정지 → 폴더 이동 → worktree repair → hq.json 의 경로 일괄 치환(위 다섯 곳) → 프로젝트 슬러그 폴더 이동(메모리 포함) → `~/.claude.json` 신뢰 키 추가 → 바로가기·자동 실행 다시 등록 → 원격 주소 변경. 별도 설계 문서로 한다.
+나중에 할 때 필요한 것: 모든 프로세스 정지 → 폴더 이동 → worktree repair → hq.json 의 경로 일괄 치환(위 다섯 곳) → 프로젝트 슬러그 폴더 이동(메모리 포함) → `~/.claude.json` 신뢰 키 추가 → 바로가기·자동 실행 다시 등록. 별도 설계 문서로 한다.
 
 ## 남는 위험
 
@@ -232,7 +232,7 @@ pipe 이름(#2)과 Electron 잠금 폴더(#12)가 바뀌면 옛·새가 서로�
 ## 남은 일
 
 1. 옛 이름 호환 코드를 지울 시점 (나중에 정하기로 함): mcp 옛 모드(D5), D3 막이(호스트·트레이), 옛 임시 폴더 접두사 지우기, 스케줄러 옛 이름 지우기, mod 의 `JK_CORP_SESSION` 대체 읽기, localStorage 옛 키 읽기(D8), 설정 폴더·앱 데이터 폴더 이전. 화면·서버의 옛 MCP 이름 판정은 지우지 않는다 (옛 jsonl)
-2. 바탕화면 바로가기 `jk-corp.lnk` 이름 바꾸기 (사용자 손)
+2. ~~바탕화면 바로가기 `jk-corp.lnk` 이름 바꾸기~~ — `Pray.lnk` 로 바꿈
 3. 시작 메뉴의 옛 `Electron.lnk` 지우기 (사용자 손, 반영 뒤. 남아 있으면 알림 머리 이름이 "Electron")
 
 ## 확인하지 못한 것
