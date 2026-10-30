@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
-import { hostname } from 'node:os'
+import { freemem, hostname, totalmem } from 'node:os'
 import { basename, join, relative } from 'node:path'
 import compression from 'compression'
 import express from 'express'
@@ -368,6 +368,11 @@ async function broadcastOnce(): Promise<void> {
   isBroadcastFailing = false
   for (const res of subscribers) sendSse(res, 'sessions', payload)
 }
+
+app.get('/api/system/memory', (_req, res) => {
+  res.set('Cache-Control', 'no-store')
+  res.json({ totalBytes: totalmem(), freeBytes: freemem() })
+})
 
 app.get('/api/sessions', async (_req, res) => {
   res.json(await snapshotPayload())

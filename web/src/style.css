@@ -4537,6 +4537,10 @@ li.group.drop-after::after {
   align-items: center;
   gap: 12px;
 }
+/* 이 PC 메모리 사용률 "RAM 62%" (App.tsx). 폰에서는 숨긴다 */
+.status-memory {
+  font-variant-numeric: tabular-nums;
+}
 .status-link {
   display: flex;
   align-items: center;
@@ -5510,6 +5514,7 @@ li.group.drop-after::after {
   .layout.with-panel + .status-bar,
   .usage-prefix,
   .status-link-label,
+  .status-memory,
   .status-counts {
     display: none;
   }

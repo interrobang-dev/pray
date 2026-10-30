@@ -534,3 +534,9 @@ export interface FlowAlarmPage {
 export function vcsLabel(vcs: { kind: 'git' | 'svn'; root: string }): string {
   return `${vcs.kind === 'git' ? 'Git' : 'SVN'} · ${vcs.root}`
 }
+
+/** GET /api/system/memory — 이 PC(서버가 도는 PC)의 메모리 */
+export interface SystemMemory {
+  totalBytes: number
+  freeBytes: number
+}

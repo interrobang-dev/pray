@@ -19,6 +19,7 @@ import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
+import { memoryLabel, memoryPercent, parseSystemMemory } from './systemMemory'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { FlowPanel } from './FlowPanel'
 import { NewTeamModal } from './NewTeamModal'
@@ -49,6 +50,7 @@ import {
   type Part,
   type Session,
   type Shell,
+  type SystemMemory,
   type Team,
 } from './types'
 import { AppearanceModal } from './AppearanceModal'
@@ -274,6 +276,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [returningSessions, setReturningSessions] = useState<Record<string, string>>({})
   /** 목록의 경과 시간을 1분마다 다시 계산하기 위한 현재 시각 */
   const [now, setNow] = useState(() => Date.now())
+  /** 이 PC 메모리 (상태 표시줄 RAM). 5초마다 받고 실패하면 null 이라 칸을 숨긴다 */
+  const [systemMemory, setSystemMemory] = useState<SystemMemory | null>(null)
   /**
    * 목록에서 끌고 있는 그룹·팀과 놓일 자리 (끌기로 판정된 뒤에만).
    * dropIndex 는 형제 목록에서 이 순번 앞(길이면 맨 끝)이고, 놓아도 순서가 그대로인 자리면 null (선을 안 그린다)
@@ -308,6 +312,25 @@ export function App({ isLocal }: { isLocal: boolean }) {
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    let isStopped = false
+    async function load() {
+      try {
+        const response = await fetch('/api/system/memory')
+        const memory = response.ok ? parseSystemMemory(await response.json()) : null
+        if (!isStopped) setSystemMemory(memory)
+      } catch {
+        if (!isStopped) setSystemMemory(null)
+      }
+    }
+    void load()
+    const timer = setInterval(() => void load(), 5000)
+    return () => {
+      isStopped = true
+      clearInterval(timer)
+    }
   }, [])
 
   // 목록만 스크롤한다 (scrollIntoView 는 overflow hidden 인 조상까지 움직인다)
@@ -1724,6 +1747,11 @@ export function App({ isLocal }: { isLocal: boolean }) {
             </button>
           )}
           <ShellsStatus lines={shellLines(office, snapshot.sessions)} onOpen={openShell} />
+          {systemMemory && memoryPercent(systemMemory) !== null && (
+            <span className="status-memory" role="img" title={memoryLabel(systemMemory)} aria-label={memoryLabel(systemMemory)}>
+              RAM {memoryPercent(systemMemory)}%
+            </span>
+          )}
           <span className="status-counts">
             Working {workingCount} · On duty {presentSessions.length}
           </span>
