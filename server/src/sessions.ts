@@ -1,11 +1,29 @@
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { open, readdir, readFile, stat, type FileHandle } from 'node:fs/promises'
 import type { Stats } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { AskQuestion, HookStatus, Session, SessionStatus, Shell } from './types.js'
 import type { HookState } from './hookState.js'
-import { summarizeTranscript, type TranscriptSummary, type TurnOutcome } from './transcript.js'
-import { hasWakingTask, runningBackgroundTasks, runningShells, type BackgroundTask } from './shells.js'
+import {
+  applyTranscriptRecord,
+  copyTranscriptState,
+  newTranscriptState,
+  parseRecord,
+  summaryOf,
+  type TranscriptState,
+  type TranscriptSummary,
+  type TurnOutcome,
+} from './transcript.js'
+import {
+  applyBackgroundRecord,
+  copyBackgroundState,
+  hasWakingTask,
+  newBackgroundState,
+  runningBackgroundTasksOf,
+  runningShellsOf,
+  type BackgroundState,
+  type BackgroundTask,
+} from './shells.js'
 import { turnEndStatus, type TurnEndFacts } from './turnEnd.js'
 import { readLiveSessions, type LiveSession } from './liveSessions.js'
 import { modelSettingOf } from './memberModel.js'
@@ -23,24 +41,80 @@ export interface TranscriptAnalysis {
   backgroundTasks: BackgroundTask[]
 }
 
-interface CachedSummary extends TranscriptAnalysis {
+/** 덧붙은 것만 읽을 때 앞부분이 그대로인지(다른 파일로 바뀌지 않았는지) 보려고 같이 다시 읽는, 지난번에 넣은 끝 바로 앞 바이트 수 */
+const GUARD_BYTES = 256
+/** 한 번에 읽는 바이트. 조각 사이에 이벤트 루프가 돈다 (처음 읽는 큰 jsonl 이 다른 요청을 오래 막지 않게) */
+const READ_CHUNK_BYTES = 4 * 1024 * 1024
+const NEWLINE = 0x0a
+
+interface CachedSummary {
+  /** 읽기 직전 stat 값 (파일이 읽는 사이 줄었으면 실제로 읽은 끝) */
   size: number
   mtimeMs: number
+  /** 끝난 줄(줄바꿈까지)만 상태에 넣은 바이트 수. 그 뒤(덜 쓰였을 수 있는 마지막 줄)는 다음 번에 다시 읽는다 */
+  committedBytes: number
+  /** committedBytes 바로 앞 최대 GUARD_BYTES 바이트 (복사본) */
+  guard: Buffer
+  transcript: TranscriptState
+  background: BackgroundState
+  analysis: TranscriptAnalysis
+}
+
+/** 파일의 [start, end) 를 조각으로 읽어 끝난 줄마다 onLine. 반환: 마지막 줄바꿈 다음 위치와 그 뒤 남은 바이트, 실제로 읽은 끝 */
+async function readLines(
+  handle: FileHandle,
+  start: number,
+  end: number,
+  chunkBytes: number,
+  onLine: (line: string) => void,
+): Promise<{ committedBytes: number; tail: Buffer; readEnd: number }> {
+  let position = start
+  /** 아직 줄바꿈을 못 본 앞 조각들 (한 줄이 조각보다 길 수 있다) */
+  let pending: Buffer[] = []
+  let committedBytes = start
+  while (position < end) {
+    const chunk = Buffer.alloc(Math.min(chunkBytes, end - position))
+    const { bytesRead } = await handle.read(chunk, 0, chunk.length, position)
+    if (bytesRead === 0) break
+    const bytes = chunk.subarray(0, bytesRead)
+    position += bytesRead
+    const lastNewline = bytes.lastIndexOf(NEWLINE)
+    if (lastNewline < 0) {
+      pending.push(bytes)
+      continue
+    }
+    // 줄바꿈은 UTF-8 여러 바이트 글자 안에 나오지 않아 줄바꿈 바이트로 잘라 풀면 글자가 깨지지 않는다
+    const lines = Buffer.concat([...pending, bytes.subarray(0, lastNewline)]).toString('utf8')
+    for (const line of lines.split('\n')) onLine(line)
+    committedBytes = position - bytesRead + lastNewline + 1
+    pending = [Buffer.from(bytes.subarray(lastNewline + 1))]
+  }
+  return { committedBytes, tail: Buffer.concat(pending), readEnd: position }
 }
 
 /**
  * 세션 jsonl 의 경로와 요약·백그라운드 shell 을 서버 메모리에 둔다. 세션 목록은 5초마다 다시 만드는데
- * 끝난 세션의 파일은 바뀌지 않으므로, 크기·수정 시각이 그대로면 다시 읽지 않고 재사용한다
+ * 끝난 세션의 파일은 바뀌지 않으므로, 크기·수정 시각이 그대로면 다시 읽지 않고 재사용한다.
+ * 일하는 세션의 jsonl 은 계속 덧붙고 수백 MB 가 되기도 해서, 커졌고 지난번 끝 바로 앞 바이트(GUARD_BYTES)가 그대로면
+ * 덧붙은 바이트만 읽어 줄 단위 중간 상태(TranscriptState·BackgroundState)에 이어서 넣는다. 줄었거나 앞이 바뀌었으면 처음부터 읽는다.
+ * 덜 쓰인 마지막 줄은 상태에 넣지 않고, 해석이 되면 상태 복사본에 넣어 결과만 만든다 (전체를 한 번에 해석한 것과 같다).
+ * 크기·수정 시각이 같은데 내용만 바뀐 파일은 모른다 (jsonl 은 덧붙기만 한다)
  */
 export class TranscriptCache {
   private readonly projectsDir: string
   /** 세션 ID → jsonl 경로. 찾은 것만 둔다 (새 세션은 잠시 뒤 파일이 생긴다) */
   private readonly paths = new Map<string, string>()
-  /** jsonl 경로 → 읽기 직전의 크기·수정 시각과 그때의 요약·shell */
+  /** jsonl 경로 → 읽기 직전의 크기·수정 시각과 그때까지의 중간 상태·결과 */
   private readonly summaries = new Map<string, CachedSummary>()
+  /** jsonl 경로 → 읽는 중인 작업. 같은 파일을 동시에 읽으면 같은 줄이 상태에 두 번 들어가서 끝나기를 기다린다 */
+  private readonly updating = new Map<string, Promise<unknown>>()
 
-  constructor(projectsDir: string) {
+  private readonly readChunkBytes: number
+
+  /** readChunkBytes 는 테스트가 줄보다 작은 조각을 시험하려고 준다 */
+  constructor(projectsDir: string, readChunkBytes = READ_CHUNK_BYTES) {
     this.projectsDir = projectsDir
+    this.readChunkBytes = readChunkBytes
   }
 
   /** 파일 내용 전체. 없으면 null */
@@ -68,26 +142,90 @@ export class TranscriptCache {
   async analyze(sessionId: string): Promise<TranscriptAnalysis | null> {
     const found = await this.locate(sessionId)
     if (!found) return null
+    const { path } = found
     const { size, mtimeMs } = found.stats
-    const cached = this.summaries.get(found.path)
-    if (cached && cached.size === size && cached.mtimeMs === mtimeMs) return cached
-    let jsonl: string
+    const cached = this.summaries.get(path)
+    if (cached && cached.size === size && cached.mtimeMs === mtimeMs) return cached.analysis
+    const running = this.updating.get(path)
+    if (running) {
+      await running
+      return this.analyze(sessionId)
+    }
+    // 읽다 실패해도 반쯤 바뀐 상태가 남지 않게 먼저 뺀다
+    this.summaries.delete(path)
+    const update = this.update(path, size, mtimeMs, cached)
+    this.updating.set(path, update)
+    let entry: CachedSummary
     try {
-      jsonl = await readFile(found.path, 'utf8')
+      entry = await update
     } catch {
       this.forget(sessionId)
       return null
+    } finally {
+      this.updating.delete(path)
     }
-    // stat 을 읽기 전에 했으므로 그 사이 덧붙은 내용은 다음 번에 크기가 달라 다시 읽는다
-    const analysis: CachedSummary = {
-      size,
-      mtimeMs,
-      summary: summarizeTranscript(jsonl),
-      shells: runningShells(jsonl),
-      backgroundTasks: runningBackgroundTasks(jsonl),
+    // 읽는 사이 retain 이 지운 세션이면 두지 않는다 (경로 Map 에 없으면 다시 지울 길이 없다)
+    if (this.paths.get(sessionId) === path) this.summaries.set(path, entry)
+    return entry.analysis
+  }
+
+  /** stat 크기까지 읽어 상태를 만든다. cached 를 이어 쓸 수 있으면 덧붙은 것만 읽는다. 읽기 실패는 던진다 */
+  private async update(path: string, size: number, mtimeMs: number, cached: CachedSummary | undefined): Promise<CachedSummary> {
+    const handle = await open(path, 'r')
+    try {
+      if (cached && size >= cached.committedBytes) {
+        const guard = Buffer.alloc(cached.guard.length)
+        const { bytesRead } = await handle.read(guard, 0, guard.length, cached.committedBytes - guard.length)
+        if (bytesRead === guard.length && guard.equals(cached.guard)) return await this.append(handle, cached, size, mtimeMs)
+      }
+      const fresh: CachedSummary = {
+        size: 0,
+        mtimeMs: 0,
+        committedBytes: 0,
+        guard: Buffer.alloc(0),
+        transcript: newTranscriptState(),
+        background: newBackgroundState(),
+        analysis: { summary: summaryOf(newTranscriptState()), shells: [], backgroundTasks: [] },
+      }
+      return await this.append(handle, fresh, size, mtimeMs)
+    } finally {
+      await handle.close()
     }
-    this.summaries.set(found.path, analysis)
-    return analysis
+  }
+
+  /** entry.committedBytes 부터 size 까지 읽어 끝난 줄은 상태에 넣고, 덜 쓰인 마지막 줄은 복사본에만 넣어 결과를 만든다 */
+  private async append(handle: FileHandle, entry: CachedSummary, size: number, mtimeMs: number): Promise<CachedSummary> {
+    const { transcript, background } = entry
+    const { committedBytes, tail, readEnd } = await readLines(handle, entry.committedBytes, size, this.readChunkBytes, (line) => {
+      const record = parseRecord(line)
+      if (!record) return
+      applyTranscriptRecord(transcript, record)
+      applyBackgroundRecord(background, record)
+    })
+    if (committedBytes > entry.committedBytes) {
+      const guard = Buffer.alloc(Math.min(GUARD_BYTES, committedBytes))
+      const { bytesRead } = await handle.read(guard, 0, guard.length, committedBytes - guard.length)
+      entry.guard = guard.subarray(0, bytesRead)
+    }
+    entry.committedBytes = committedBytes
+    const lastRecord = parseRecord(tail.toString('utf8'))
+    let finalTranscript = transcript
+    let finalBackground = background
+    if (lastRecord) {
+      finalTranscript = copyTranscriptState(transcript)
+      finalBackground = copyBackgroundState(background)
+      applyTranscriptRecord(finalTranscript, lastRecord)
+      applyBackgroundRecord(finalBackground, lastRecord)
+    }
+    entry.analysis = {
+      summary: summaryOf(finalTranscript),
+      shells: runningShellsOf(finalBackground),
+      backgroundTasks: runningBackgroundTasksOf(finalBackground),
+    }
+    // 읽는 사이 파일이 줄었으면 실제로 읽은 끝을 크기로 둔다 (다음 번에 크기가 달라 다시 본다)
+    entry.size = readEnd
+    entry.mtimeMs = mtimeMs
+    return entry
   }
 
   /** ids 에 없는 세션의 캐시를 지운다 (메모리가 계속 늘지 않게) */

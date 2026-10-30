@@ -1,5 +1,6 @@
 import { open } from 'node:fs/promises'
 import type { Shell } from './types.js'
+import { parseRecord } from './transcript.js'
 
 /** 백그라운드 shell 하나. outputPath 는 Claude Code 가 출력을 쓰는 파일이라 서버 안에서만 쓴다 (Session.shells 에는 없다) */
 export interface ShellRecord extends Shell {
@@ -76,107 +77,142 @@ const MCP_BACKGROUND = /^MCP tool "[^"]+" is still running after \d+s\. It was m
  * 에이전트는 toolUseResult 의 isAsync·status async_launched·agentId 와 SendMessage 결과의 resumedAgentId (멈춘 에이전트를 다시 깨운다).
  * 끝: 상태가 있는 task-notification(completed·failed·killed·stopped. task-id 가 위 ID 들과 같다), 성공한 TaskStop·KillShell,
  * 프로세스 경계 cost-state (Claude Code 프로세스가 세션을 떠날 때 남긴다. 그 프로세스가 띄운 작업은 같이 죽었다 — messages.ts 의 대기열 규칙과 같은 이유).
- * 사이드체인·메타 줄은 뺀다. 모니터(Monitor)는 끝 알림에 상태가 없어(만료도 상태 없는 이벤트) 넣지 않는다
+ * 사이드체인·메타 줄은 뺀다. 모니터(Monitor)는 끝 알림에 상태가 없어(만료도 상태 없는 이벤트) 넣지 않는다.
+ * 줄 단위로 이어서 만드는 중간 상태가 BackgroundState 다 (큰 jsonl 은 덧붙은 줄만 applyBackgroundRecord 로 넣는다 — sessions.ts 의 TranscriptCache)
  */
-function scanBackground(jsonl: string): { tasks: Map<string, BackgroundTask>; shells: Map<string, ShellRecord> } {
-  const tasks = new Map<string, BackgroundTask>()
-  const shells = new Map<string, ShellRecord>()
+export interface BackgroundState {
+  tasks: Map<string, BackgroundTask>
+  shells: Map<string, ShellRecord>
   /** shell 도구 호출 (tool_use ID → 시작 정보). 결과가 백그라운드 시작이면 shell 이 된다 */
-  const shellCalls = new Map<string, Omit<Shell, 'id'>>()
+  shellCalls: Map<string, Omit<Shell, 'id'>>
   /** MCP 도구 호출 (tool_use ID). 결과가 백그라운드로 넘어간 글이면 작업이 된다 */
-  const mcpCalls = new Set<string>()
+  mcpCalls: Set<string>
   /** 멈추기 도구 호출 (tool_use ID → 멈출 작업 ID) */
-  const stopCalls = new Map<string, string>()
-  const begin = (id: string, kind: BackgroundTask['kind']) => {
-    // 같은 ID 로 다시 시작하면(에이전트 다시 깨우기) 시작 순서를 새로 한다
-    tasks.delete(id)
-    tasks.set(id, { id, kind, isRunning: true })
-  }
-  const end = (id: string) => {
-    const task = tasks.get(id)
-    if (task) task.isRunning = false
-    const shell = shells.get(id)
-    if (shell) shell.isRunning = false
-  }
+  stopCalls: Map<string, string>
+}
 
+export function newBackgroundState(): BackgroundState {
+  return { tasks: new Map(), shells: new Map(), shellCalls: new Map(), mcpCalls: new Set(), stopCalls: new Map() }
+}
+
+/** 상태 복사본 (덜 쓰인 마지막 줄을 넣어 볼 때 원래 상태를 남긴다). 작업·shell 은 isRunning 을 바꾸므로 객체도 복사한다 */
+export function copyBackgroundState(state: BackgroundState): BackgroundState {
+  return {
+    tasks: new Map([...state.tasks].map(([id, task]) => [id, { ...task }])),
+    shells: new Map([...state.shells].map(([id, shell]) => [id, { ...shell }])),
+    shellCalls: new Map(state.shellCalls),
+    mcpCalls: new Set(state.mcpCalls),
+    stopCalls: new Map(state.stopCalls),
+  }
+}
+
+function begin(state: BackgroundState, id: string, kind: BackgroundTask['kind']): void {
+  // 같은 ID 로 다시 시작하면(에이전트 다시 깨우기) 시작 순서를 새로 한다
+  state.tasks.delete(id)
+  state.tasks.set(id, { id, kind, isRunning: true })
+}
+
+function end(state: BackgroundState, id: string): void {
+  const task = state.tasks.get(id)
+  if (task) task.isRunning = false
+  const shell = state.shells.get(id)
+  if (shell) shell.isRunning = false
+}
+
+/** 줄 하나를 상태에 넣는다. 규칙은 위 */
+export function applyBackgroundRecord(state: BackgroundState, record: Record<string, unknown>): void {
+  if (record.isSidechain || record.isMeta) return
+  const timestamp = typeof record.timestamp === 'string' ? record.timestamp : ''
+  if (record.type === 'cost-state') {
+    for (const id of state.tasks.keys()) end(state, id)
+    state.shellCalls.clear()
+    state.mcpCalls.clear()
+    state.stopCalls.clear()
+    return
+  }
+  for (const id of endedTaskIds(deliveredText(record))) end(state, id)
+
+  const content = (record.message as { content?: unknown } | undefined)?.content
+  if (!Array.isArray(content)) return
+  for (const block of content as Block[]) {
+    if (record.type === 'assistant' && block.type === 'tool_use' && block.id && block.name) {
+      const input = block.input ?? {}
+      if (SHELL_TOOLS.has(block.name) && typeof input.command === 'string') {
+        const description = typeof input.description === 'string' && input.description.trim() ? input.description : null
+        state.shellCalls.set(block.id, { command: input.command, description, startedAt: timestamp })
+      }
+      if (block.name.startsWith('mcp__')) state.mcpCalls.add(block.id)
+      const stopId = input.task_id ?? input.shell_id
+      if (STOP_TOOLS.has(block.name) && typeof stopId === 'string') state.stopCalls.set(block.id, stopId)
+    }
+    if (record.type !== 'user' || block.type !== 'tool_result' || !block.tool_use_id) continue
+    const text = resultText(block.content)
+    const toolUseResult = record.toolUseResult as Record<string, unknown> | undefined
+    const call = state.shellCalls.get(block.tool_use_id)
+    if (call) {
+      state.shellCalls.delete(block.tool_use_id)
+      const id = toolUseResult?.backgroundTaskId
+      // 한 줄에 결과가 여럿이어도 이 결과의 것인지 글로 한 번 더 맞춘다
+      if (typeof id !== 'string' || !id || !text.includes(id)) continue
+      const outputPath = text.match(new RegExp(`Output is being written to: (.+?[\\\\/]${escapeRegExp(id)}\\.output)`))?.[1] ?? null
+      begin(state, id, 'shell')
+      state.shells.set(id, { ...call, id, outputPath, isRunning: true })
+    }
+    if (state.mcpCalls.delete(block.tool_use_id)) {
+      const id = text.match(MCP_BACKGROUND)?.[1]
+      if (id) begin(state, id, 'mcp')
+    }
+    // 에이전트 결과는 한 줄에 하나뿐이지만 shell 처럼 글로 한 번 더 맞춘다
+    const agentId = toolUseResult?.agentId
+    if (toolUseResult?.isAsync === true && toolUseResult.status === 'async_launched' && typeof agentId === 'string' && agentId && text.includes(agentId)) {
+      begin(state, agentId, 'agent')
+    }
+    const resumedId = toolUseResult?.resumedAgentId
+    if (typeof resumedId === 'string' && resumedId && text.includes(resumedId)) begin(state, resumedId, 'agent')
+    const stopId = state.stopCalls.get(block.tool_use_id)
+    if (stopId !== undefined) {
+      state.stopCalls.delete(block.tool_use_id)
+      if (block.is_error !== true && !text.startsWith('<tool_use_error>')) end(state, stopId)
+    }
+  }
+}
+
+function scanBackground(jsonl: string): BackgroundState {
+  const state = newBackgroundState()
   for (const line of jsonl.split('\n')) {
-    if (!line.trim()) continue
-    let record: Record<string, unknown>
-    try {
-      record = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (record.isSidechain || record.isMeta) continue
-    const timestamp = typeof record.timestamp === 'string' ? record.timestamp : ''
-    if (record.type === 'cost-state') {
-      for (const id of tasks.keys()) end(id)
-      shellCalls.clear()
-      mcpCalls.clear()
-      stopCalls.clear()
-      continue
-    }
-    for (const id of endedTaskIds(deliveredText(record))) end(id)
-
-    const content = (record.message as { content?: unknown } | undefined)?.content
-    if (!Array.isArray(content)) continue
-    for (const block of content as Block[]) {
-      if (record.type === 'assistant' && block.type === 'tool_use' && block.id && block.name) {
-        const input = block.input ?? {}
-        if (SHELL_TOOLS.has(block.name) && typeof input.command === 'string') {
-          const description = typeof input.description === 'string' && input.description.trim() ? input.description : null
-          shellCalls.set(block.id, { command: input.command, description, startedAt: timestamp })
-        }
-        if (block.name.startsWith('mcp__')) mcpCalls.add(block.id)
-        const stopId = input.task_id ?? input.shell_id
-        if (STOP_TOOLS.has(block.name) && typeof stopId === 'string') stopCalls.set(block.id, stopId)
-      }
-      if (record.type !== 'user' || block.type !== 'tool_result' || !block.tool_use_id) continue
-      const text = resultText(block.content)
-      const toolUseResult = record.toolUseResult as Record<string, unknown> | undefined
-      const call = shellCalls.get(block.tool_use_id)
-      if (call) {
-        shellCalls.delete(block.tool_use_id)
-        const id = toolUseResult?.backgroundTaskId
-        // 한 줄에 결과가 여럿이어도 이 결과의 것인지 글로 한 번 더 맞춘다
-        if (typeof id !== 'string' || !id || !text.includes(id)) continue
-        const outputPath = text.match(new RegExp(`Output is being written to: (.+?[\\\\/]${escapeRegExp(id)}\\.output)`))?.[1] ?? null
-        begin(id, 'shell')
-        shells.set(id, { ...call, id, outputPath, isRunning: true })
-      }
-      if (mcpCalls.delete(block.tool_use_id)) {
-        const id = text.match(MCP_BACKGROUND)?.[1]
-        if (id) begin(id, 'mcp')
-      }
-      // 에이전트 결과는 한 줄에 하나뿐이지만 shell 처럼 글로 한 번 더 맞춘다
-      const agentId = toolUseResult?.agentId
-      if (toolUseResult?.isAsync === true && toolUseResult.status === 'async_launched' && typeof agentId === 'string' && agentId && text.includes(agentId)) {
-        begin(agentId, 'agent')
-      }
-      const resumedId = toolUseResult?.resumedAgentId
-      if (typeof resumedId === 'string' && resumedId && text.includes(resumedId)) begin(resumedId, 'agent')
-      const stopId = stopCalls.get(block.tool_use_id)
-      if (stopId !== undefined) {
-        stopCalls.delete(block.tool_use_id)
-        if (block.is_error !== true && !text.startsWith('<tool_use_error>')) end(stopId)
-      }
-    }
+    const record = parseRecord(line)
+    if (record) applyBackgroundRecord(state, record)
   }
-  return { tasks, shells }
+  return state
+}
+
+/** 상태의 shell 들 (시작 순, 복사본) */
+function shellsOf(state: BackgroundState): ShellRecord[] {
+  return [...state.shells.values()].map((shell) => ({ ...shell }))
+}
+
+/** 상태에서 지금 도는 shell (Session.shells 꼴) */
+export function runningShellsOf(state: BackgroundState): Shell[] {
+  return [...state.shells.values()]
+    .filter((shell) => shell.isRunning)
+    .map(({ id, command, description, startedAt }) => ({ id, command, description, startedAt }))
+}
+
+/** 상태에서 지금 도는 백그라운드 작업 (시작 순, 복사본 — 상태의 객체는 다음 줄에 isRunning 이 바뀐다) */
+export function runningBackgroundTasksOf(state: BackgroundState): BackgroundTask[] {
+  return [...state.tasks.values()].filter((task) => task.isRunning).map((task) => ({ ...task }))
 }
 
 /** jsonl → 이 세션에서 백그라운드로 돈 shell 들 (시작 순). 규칙은 scanBackground. 백그라운드 에이전트·모니터·MCP 호출은 shell 이 아니라 빠진다 */
 export function parseShells(jsonl: string): ShellRecord[] {
-  return [...scanBackground(jsonl).shells.values()]
+  return shellsOf(scanBackground(jsonl))
 }
 
 /** 지금 도는 shell (Session.shells 꼴). 근무 중인 세션에만 쓴다 — 프로세스가 없으면 shell 도 없다 */
 export function runningShells(jsonl: string): Shell[] {
   // 백그라운드 shell 이 한 번도 없던 jsonl 은 다시 해석하지 않는다 (세션 목록이 5초마다 돈다)
   if (!jsonl.includes('backgroundTaskId')) return []
-  return parseShells(jsonl)
-    .filter((shell) => shell.isRunning)
-    .map(({ id, command, description, startedAt }) => ({ id, command, description, startedAt }))
+  return runningShellsOf(scanBackground(jsonl))
 }
 
 /**
@@ -186,7 +222,7 @@ export function runningShells(jsonl: string): Shell[] {
 export function runningBackgroundTasks(jsonl: string): BackgroundTask[] {
   // 백그라운드 작업이 한 번도 없던 jsonl 은 다시 해석하지 않는다
   if (!/backgroundTaskId|moved to the background as task|async_launched|resumedAgentId/.test(jsonl)) return []
-  return [...scanBackground(jsonl).tasks.values()].filter((task) => task.isRunning)
+  return runningBackgroundTasksOf(scanBackground(jsonl))
 }
 
 /**

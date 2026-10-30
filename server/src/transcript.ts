@@ -102,64 +102,99 @@ function isConversationLine(record: Record<string, unknown>): boolean {
   return typeof content === 'string' ? !content.startsWith('<') : Array.isArray(content)
 }
 
+/** jsonl 한 줄 → 기록 객체. 빈 줄·해석이 안 되는 줄·객체가 아닌 줄은 null */
+export function parseRecord(line: string): Record<string, unknown> | null {
+  if (!line.trim()) return null
+  try {
+    const record: unknown = JSON.parse(line)
+    return typeof record === 'object' && record !== null ? (record as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 요약을 줄 단위로 이어서 만드는 중간 상태. 큰 jsonl 은 덧붙은 줄만 applyTranscriptRecord 로 넣고 summaryOf 로 꺼낸다
+ * (sessions.ts 의 TranscriptCache). turn 은 summaryOf 가 phase·hasBoundary·turnText 로 정한다
+ */
+export interface TranscriptState {
+  summary: Omit<TranscriptSummary, 'turn'>
+  phase: 'none' | 'ended' | 'interrupted' | 'working'
+  hasBoundary: boolean
+  turnText: string | null
+}
+
+export function newTranscriptState(): TranscriptState {
+  return {
+    summary: {
+      title: null,
+      startedAt: null,
+      lastAt: null,
+      turnEndedAt: null,
+      lastAssistantText: null,
+      model: null,
+      effort: null,
+      contextTokens: null,
+    },
+    phase: 'none',
+    hasBoundary: false,
+    turnText: null,
+  }
+}
+
+/** 상태 복사본 (덜 쓰인 마지막 줄을 넣어 볼 때 원래 상태를 남긴다) */
+export function copyTranscriptState(state: TranscriptState): TranscriptState {
+  return { ...state, summary: { ...state.summary } }
+}
+
+export function applyTranscriptRecord(state: TranscriptState, record: Record<string, unknown>): void {
+  const { summary } = state
+  if (record.type === 'ai-title' && typeof record.aiTitle === 'string') {
+    summary.title = record.aiTitle
+  }
+  if (typeof record.timestamp === 'string') {
+    summary.startedAt ??= record.timestamp
+    summary.lastAt = record.timestamp
+    if (isConversationLine(record)) summary.turnEndedAt = record.timestamp
+  }
+  if (record.type === 'cost-state') state.hasBoundary = true
+  const event = turnEventOf(record)
+  if (event) {
+    state.phase = event === 'input' ? 'working' : event === 'interrupt' ? 'interrupted' : event
+    state.hasBoundary = false
+    if (event === 'input') state.turnText = null
+  }
+  if (record.type === 'system' && record.subtype === 'compact_boundary') summary.contextTokens = null
+  if (record.type === 'assistant') {
+    const message = record.message as { content?: ContentBlock[]; model?: unknown; usage?: unknown } | undefined
+    const text = message?.content
+      ?.filter((block) => block.type === 'text' && block.text)
+      .map((block) => (block.text ?? '').trim())
+      .join('\n')
+    if (text) {
+      summary.lastAssistantText = text
+      if (message?.model !== SYNTHETIC_MODEL && !record.isSidechain && !record.isMeta) state.turnText = text
+    }
+    if (typeof message?.model === 'string' && message.model !== SYNTHETIC_MODEL) {
+      summary.model = message.model
+      const effort = record.perTurnEffort ?? record.effort
+      summary.effort = typeof effort === 'string' ? effort : null
+      summary.contextTokens = contextTokensOf(message.usage)
+    }
+  }
+}
+
+/** 지금까지 넣은 줄의 요약 (새 객체. 상태는 그대로라 줄을 더 넣고 다시 꺼낼 수 있다) */
+export function summaryOf(state: TranscriptState): TranscriptSummary {
+  const kind: TurnKind = state.phase === 'working' ? (state.hasBoundary ? 'cut' : 'in-progress') : state.phase
+  return { ...state.summary, turn: { kind, text: kind === 'ended' ? state.turnText : null } }
+}
+
 export function summarizeTranscript(jsonl: string): TranscriptSummary {
-  const summary: TranscriptSummary = {
-    title: null,
-    startedAt: null,
-    lastAt: null,
-    turnEndedAt: null,
-    lastAssistantText: null,
-    model: null,
-    effort: null,
-    contextTokens: null,
-    turn: { kind: 'none', text: null },
-  }
-  let phase: 'none' | 'ended' | 'interrupted' | 'working' = 'none'
-  let hasBoundary = false
-  let turnText: string | null = null
+  const state = newTranscriptState()
   for (const line of jsonl.split('\n')) {
-    if (!line.trim()) continue
-    let record: Record<string, unknown>
-    try {
-      record = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (record.type === 'ai-title' && typeof record.aiTitle === 'string') {
-      summary.title = record.aiTitle
-    }
-    if (typeof record.timestamp === 'string') {
-      summary.startedAt ??= record.timestamp
-      summary.lastAt = record.timestamp
-      if (isConversationLine(record)) summary.turnEndedAt = record.timestamp
-    }
-    if (record.type === 'cost-state') hasBoundary = true
-    const event = turnEventOf(record)
-    if (event) {
-      phase = event === 'input' ? 'working' : event === 'interrupt' ? 'interrupted' : event
-      hasBoundary = false
-      if (event === 'input') turnText = null
-    }
-    if (record.type === 'system' && record.subtype === 'compact_boundary') summary.contextTokens = null
-    if (record.type === 'assistant') {
-      const message = record.message as { content?: ContentBlock[]; model?: unknown; usage?: unknown } | undefined
-      const text = message?.content
-        ?.filter((block) => block.type === 'text' && block.text)
-        .map((block) => (block.text ?? '').trim())
-        .join('\n')
-      if (text) {
-        summary.lastAssistantText = text
-        if (message?.model !== SYNTHETIC_MODEL && !record.isSidechain && !record.isMeta) turnText = text
-      }
-      if (typeof message?.model === 'string' && message.model !== SYNTHETIC_MODEL) {
-        summary.model = message.model
-        const effort = record.perTurnEffort ?? record.effort
-        summary.effort = typeof effort === 'string' ? effort : null
-        summary.contextTokens = contextTokensOf(message.usage)
-      }
-    }
+    const record = parseRecord(line)
+    if (record) applyTranscriptRecord(state, record)
   }
-  const kind: TurnKind = phase === 'working' ? (hasBoundary ? 'cut' : 'in-progress') : phase
-  summary.turn = { kind, text: kind === 'ended' ? turnText : null }
-  return summary
+  return summaryOf(state)
 }

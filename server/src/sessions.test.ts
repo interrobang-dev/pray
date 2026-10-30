@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { isBusy } from './switchImpact.js'
 import type { TurnEndFacts } from './turnEnd.js'
-import type { TurnOutcome } from './transcript.js'
+import { summarizeTranscript, type TurnOutcome } from './transcript.js'
+import { runningBackgroundTasks, runningShells } from './shells.js'
 import { compareByCreatedAt, displayStatus, sessionStatus, TranscriptCache } from './sessions.js'
 import type { HookState } from './hookState.js'
 
@@ -108,6 +109,180 @@ describe('TranscriptCache', () => {
     appendFileSync(path, `${JSON.stringify({ type: 'user', message: { content: done } })}\n`)
     expect((await cache.analyze(SESSION))?.shells).toEqual([])
     expect((await cache.analyze(SESSION))?.backgroundTasks).toEqual([])
+  })
+})
+
+/** 덧붙여 읽기 시험용 jsonl: 한국어·이모지(멀티바이트)·백그라운드 shell·MCP·에이전트·끝 알림·프로세스 경계·압축·스트리밍 조각 */
+function sampleJsonl(): string {
+  const lines: unknown[] = [
+    { type: 'ai-title', aiTitle: '긴 한국어 제목 🙂' },
+    { type: 'user', timestamp: '2026-10-30T01:00:00Z', message: { role: 'user', content: '안녕하세요 — 서버를 띄워 줘' } },
+    {
+      type: 'assistant',
+      timestamp: '2026-10-30T01:00:01Z',
+      message: {
+        model: 'claude-opus-5-5',
+        stop_reason: 'tool_use',
+        content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npx vite', description: '개발 서버 띄우기', run_in_background: true } }],
+      },
+    },
+    {
+      type: 'user',
+      timestamp: '2026-10-30T01:00:02Z',
+      message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'Command running in background with ID: b1. Output is being written to: C:\\t\\b1.output' }] },
+      toolUseResult: { backgroundTaskId: 'b1' },
+    },
+    {
+      type: 'assistant',
+      timestamp: '2026-10-30T01:00:03Z',
+      message: {
+        model: 'claude-opus-5-5',
+        stop_reason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'm1', name: 'mcp__pray__team_wait', input: {} },
+          { type: 'tool_use', id: 'a1', name: 'Agent', input: {} },
+        ],
+      },
+    },
+    {
+      type: 'user',
+      timestamp: '2026-10-30T01:02:03Z',
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'm1', content: 'MCP tool "pray/team_wait" is still running after 120s. It was moved to the background as task w1 and keeps running' },
+        ],
+      },
+    },
+    {
+      type: 'user',
+      timestamp: '2026-10-30T01:02:04Z',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'a1', content: '에이전트 시작 g1' }] },
+      toolUseResult: { isAsync: true, status: 'async_launched', agentId: 'g1' },
+    },
+    {
+      type: 'assistant',
+      timestamp: '2026-10-30T01:02:05Z',
+      perTurnEffort: 'high',
+      message: {
+        model: 'claude-opus-5-5',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 3, cache_read_input_tokens: 1000 },
+        content: [{ type: 'text', text: '띄웠습니다. 다음은 무엇을 할까요? 🚀' }],
+      },
+    },
+    { type: 'queue-operation', operation: 'enqueue', content: '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>' },
+    { type: 'user', timestamp: '2026-10-30T01:03:00Z', message: { content: '<task-notification>\n<task-id>g1</task-id>\n<status>completed</status>\n</task-notification>' } },
+    { type: 'cost-state', timestamp: '2026-10-30T01:04:00Z' },
+    { type: 'user', timestamp: '2026-10-30T02:00:00Z', message: { role: 'user', content: '다시 이어서 — 한글 ✓' } },
+    { type: 'system', subtype: 'compact_boundary', timestamp: '2026-10-30T02:00:01Z' },
+    { type: 'assistant', timestamp: '2026-10-30T02:00:02Z', message: { model: 'claude-haiku-5-5', stop_reason: null, content: [{ type: 'text', text: '조각 응답' }] } },
+  ]
+  return `${lines.map((line) => JSON.stringify(line)).join('\n')}\n{"broken\n`
+}
+
+/** 내용 전체를 한 번에 해석한 결과 (TranscriptCache.analyze 와 같아야 한다) */
+function analyzeWhole(jsonl: string) {
+  return { summary: summarizeTranscript(jsonl), shells: runningShells(jsonl), backgroundTasks: runningBackgroundTasks(jsonl) }
+}
+
+describe('TranscriptCache appends', () => {
+  let projects: string
+  let path: string
+
+  beforeEach(() => {
+    projects = mkdtempSync(join(tmpdir(), 'pray-transcripts-'))
+    mkdirSync(join(projects, 'D--a'))
+    path = join(projects, 'D--a', `${SESSION}.jsonl`)
+  })
+
+  afterEach(() => {
+    rmSync(projects, { recursive: true, force: true })
+  })
+
+  /** bytes 를 cuts 위치에서 잘라 덧붙여 가며 매번 analyze 가 지금까지 내용을 한 번에 해석한 것과 같은지 본다 */
+  async function expectSameAsWhole(cache: TranscriptCache, bytes: Buffer, cuts: number[]): Promise<void> {
+    writeFileSync(path, '')
+    let written = 0
+    for (const cut of [...cuts, bytes.length]) {
+      appendFileSync(path, bytes.subarray(written, cut))
+      written = cut
+      expect(await cache.analyze(SESSION)).toEqual(analyzeWhole(bytes.subarray(0, cut).toString('utf8')))
+    }
+  }
+
+  it('matches a whole read when the file grows a few bytes at a time, cutting lines and multibyte characters', async () => {
+    const bytes = Buffer.from(sampleJsonl())
+    const cuts = Array.from({ length: Math.floor(bytes.length / 7) }, (_, index) => (index + 1) * 7)
+    // 읽는 조각(5바이트)보다 긴 줄도 이어 붙여 읽는다
+    await expectSameAsWhole(new TranscriptCache(projects, 5), bytes, cuts)
+  })
+
+  it('matches a whole read when cut right inside multibyte characters and at line ends', async () => {
+    const text = sampleJsonl()
+    const bytes = Buffer.from(text)
+    const insideCharacters = ['안', '🙂', '—', '✓', '🚀'].flatMap((character) => {
+      const start = Buffer.byteLength(text.slice(0, text.indexOf(character)))
+      return Array.from({ length: Buffer.byteLength(character) - 1 }, (_, offset) => start + offset + 1)
+    })
+    const lineEnds = [...text.matchAll(/\n/g)].map((match) => Buffer.byteLength(text.slice(0, match.index)) + 1)
+    await expectSameAsWhole(new TranscriptCache(projects), bytes, [...insideCharacters, ...lineEnds].sort((a, b) => a - b))
+  })
+
+  it('reads only the appended bytes when the bytes before the last end are unchanged', async () => {
+    const cache = new TranscriptCache(projects)
+    const padLine = `{"pad":"${'x'.repeat(400)}"}\n`
+    writeFileSync(path, `${titleLine('AAAA')}${padLine}`)
+    expect((await cache.summarize(SESSION))?.title).toBe('AAAA')
+    // 앞 줄을 같은 길이로 바꾸고 덧붙인다 — 덧붙은 것만 읽으므로 바뀐 앞 줄은 모른다 (jsonl 은 덧붙기만 한다)
+    const appended = `${JSON.stringify({ type: 'user', timestamp: '2026-10-30T03:00:00Z', message: { content: 'hi' } })}\n`
+    writeFileSync(path, `${titleLine('BBBB')}${padLine}${appended}`)
+    const summary = await cache.summarize(SESSION)
+    expect(summary?.title).toBe('AAAA')
+    expect(summary?.lastAt).toBe('2026-10-30T03:00:00Z')
+  })
+
+  it('reads from the start when the file shrank', async () => {
+    const cache = new TranscriptCache(projects)
+    const text = sampleJsonl()
+    writeFileSync(path, text)
+    expect(await cache.analyze(SESSION)).toEqual(analyzeWhole(text))
+    const shorter = titleLine('짧은 파일')
+    writeFileSync(path, shorter)
+    expect(await cache.analyze(SESSION)).toEqual(analyzeWhole(shorter))
+  })
+
+  it('reads from the start when the bytes before the last end changed (another file)', async () => {
+    const cache = new TranscriptCache(projects)
+    writeFileSync(path, titleLine('first'))
+    expect((await cache.summarize(SESSION))?.title).toBe('first')
+    const other = sampleJsonl()
+    writeFileSync(path, other)
+    expect(await cache.analyze(SESSION)).toEqual(analyzeWhole(other))
+  })
+
+  it('applies appended lines once when two reads run at the same time', async () => {
+    const cache = new TranscriptCache(projects)
+    const bytes = Buffer.from(sampleJsonl())
+    const half = bytes.indexOf('\n', bytes.length / 2) + 1
+    writeFileSync(path, bytes.subarray(0, half))
+    await cache.analyze(SESSION)
+    appendFileSync(path, bytes.subarray(half))
+    const [first, second] = await Promise.all([cache.analyze(SESSION), cache.analyze(SESSION)])
+    expect(first).toEqual(analyzeWhole(bytes.toString('utf8')))
+    expect(second).toEqual(first)
+  })
+
+  it('does not change a result it gave earlier when later lines end running tasks', async () => {
+    const cache = new TranscriptCache(projects)
+    const text = sampleJsonl()
+    const beforeNotification = text.indexOf('{"type":"queue-operation"')
+    writeFileSync(path, text.slice(0, beforeNotification))
+    const earlier = await cache.analyze(SESSION)
+    expect(earlier?.backgroundTasks.map((task) => task.id)).toEqual(['b1', 'w1', 'g1'])
+    const snapshot = structuredClone(earlier)
+    appendFileSync(path, text.slice(beforeNotification))
+    expect((await cache.analyze(SESSION))?.backgroundTasks).toEqual([])
+    expect(earlier).toEqual(snapshot)
   })
 })
 
