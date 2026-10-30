@@ -76,7 +76,7 @@ function askAnswers(toolUseResult: unknown): Record<string, string> | null {
  */
 const PASTE_BLOCK = /\n{0,2}<pasted_content id="([0-9a-f]{4})">\n([\s\S]*?)\n<\/pasted_content id="\1">\n{0,2}/g
 
-function unwrapPastes(text: string): string {
+export function unwrapPastes(text: string): string {
   return text.replace(PASTE_BLOCK, '$2')
 }
 

@@ -108,6 +108,7 @@ import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './fl
 import { TaskConflictError, TaskStore } from './teamState.js'
 import { parseWaitRequest, respondJsonAfter } from './taskWait.js'
 import { leadExtraArgs } from './lead.js'
+import { formatHandoff, HANDOFF_LIMIT, handoffMessage, leadTranscriptPath, readHandoffSource, type LeadKind } from './leadHandoff.js'
 import {
   givenNameOf,
   nameAndPosition,
@@ -408,10 +409,11 @@ async function autoCharacterFor(target: { id: string; isLead: boolean; gender: S
 /**
  * teamId 가 있으면 그 팀 폴더로 띄운다. partId 가 있으면 그 파트로 (worktree 파트면 그 폴더).
  * isLead 면 그 지휘 단위의 지시자로 (팀장 또는 파트장. 살아 있는 지시자가 이미 있으면 거부).
- * name·position 은 세션 이름과 역할 (빼거나 빈 글이면 없음. 이름이 옛 꼴 "[역할] 이름" 이면 나눈다)
+ * name·position 은 세션 이름과 역할 (빼거나 빈 글이면 없음. 이름이 옛 꼴 "[역할] 이름" 이면 나눈다).
+ * carryOverHistory 면 지시자로 띄운 뒤 직전 지시자의 인계 글을 첫 메시지로 보낸다 (handOverHistory)
  */
 app.post('/api/sessions', async (req, res) => {
-  const { cwd: rawCwd, teamId, partId, prompt, isLead, name, gender, position } = req.body as {
+  const { cwd: rawCwd, teamId, partId, prompt, isLead, name, gender, position, carryOverHistory } = req.body as {
     cwd?: string
     teamId?: string
     partId?: string
@@ -421,6 +423,11 @@ app.post('/api/sessions', async (req, res) => {
     /** 이름 추천 API 가 준 성별. 화면은 추천 이름을 그대로 쓸 때만 넘긴다 */
     gender?: unknown
     position?: unknown
+    carryOverHistory?: unknown
+  }
+  if (carryOverHistory !== undefined && typeof carryOverHistory !== 'boolean') {
+    res.status(400).json({ message: 'carryOverHistory must be true or false' })
+    return
   }
   const team = teamId ? findTeam(teamId) : undefined
   if (teamId && !team) {
@@ -447,12 +454,15 @@ app.post('/api/sessions', async (req, res) => {
     return
   }
   let extraArgs: string[] | undefined
+  // 직전 지시자: 아래에서 leadSessionId 를 새 ID 로 바꾸기 전에 잡아 둔다 (살아 있으면 409 라 여기까지 오면 끝난 세션이다)
+  let previousLeadId: string | null = null
   if (isLead) {
     if (!team) {
       res.status(400).json({ message: 'Choose a team for the lead' })
       return
     }
     const currentLeadId = part ? part.leadSessionId : team.leadSessionId
+    previousLeadId = currentLeadId ?? null
     if (currentLeadId) {
       const { sessions } = await snapshotPayload()
       if (sessions.some((s) => s.id === currentLeadId && s.isAlive)) {
@@ -484,10 +494,35 @@ app.post('/api/sessions', async (req, res) => {
   if (character) setCharacter(sessionId, character)
   // 신뢰 확인 창(기본 "No, exit")에 막혀 세션이 꺼지지 않게 띄우기 전에 폴더를 신뢰로 기록한다. 실패해도 띄우고 화면이 경고한다
   const isTrustFailed = markFolderTrusted(cwd) === false
-  host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
+  const isSpawnSent = host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
   res.json({ sessionId, isTrustFailed })
   if (isLead || part) broadcastOffice()
+  if (isSpawnSent && carryOverHistory === true && previousLeadId) void handOverHistory(sessionId, previousLeadId, part ? 'part-lead' : 'lead')
 })
+
+/**
+ * 새 지시자에게 직전 지시자 jsonl 로 만든 인계 글(leadHandoff.ts)을 첫 메시지로 보낸다. 팀원 첫 지시처럼 spawn 뒤 MEMBER_FIRST_INPUT_DELAY_MS 를
+ * 기다리고(jsonl 읽기와 겹친다) instructions.jsonl 에 남겨 새 지시자 대화에 직전 지시자가 보낸 지시 말풍선으로 보인다.
+ * jsonl 이 없거나 인계할 글이 없으면 아무것도 안 보낸다. 응답을 보낸 뒤 도니 예외는 로그만 (던지면 서버가 죽는다)
+ */
+async function handOverHistory(sessionId: string, previousLeadId: string, kind: LeadKind): Promise<void> {
+  const spawnedAt = Date.now()
+  try {
+    const file = await findTranscriptFile(previousLeadId)
+    const source = file ? await readHandoffSource(file.path) : null
+    // 이름은 역할 없이 (글 안에서 "이전 팀장(Pray)" 로 읽히게)
+    const previousName = await displayNameOf(previousLeadId, listSessionNames(), {})
+    const body = source ? formatHandoff(source, HANDOFF_LIMIT) : null
+    console.log(`인계 글 (${sessionId.slice(0, 8)} ← ${previousLeadId.slice(0, 8)}): ${body ? `${body.length}자` : '없음'}, ${Date.now() - spawnedAt}ms`)
+    if (!body) return
+    const message = handoffMessage(kind, previousName, body)
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, MEMBER_FIRST_INPUT_DELAY_MS - (Date.now() - spawnedAt))))
+    recordInstruction(sessionId, previousLeadId, message)
+    if (!submitInstruction(sessionId, message)) console.error(`인계 글 보내기 실패 (${sessionId.slice(0, 8)}): 호스트 연결 없음`)
+  } catch (error) {
+    console.error(`인계 글 실패 (${sessionId.slice(0, 8)}): ${error}`)
+  }
+}
 
 /**
  * 세션 화면 이름: 사용자 지정 → 자동 제목(ai-title) → ID 앞 8자리. 역할이 있으면 앞에 "[역할] " 을 붙인다
@@ -1543,9 +1578,25 @@ app.get('/api/sessions/:id/stream', (req, res) => {
 /** 팀 폴더의 형상관리 판정(5분 캐시). 화면 전용 파생 필드라 hq.json 에는 저장하지 않는다 */
 const vcsOf = makeVcsCache({ ttlMs: 5 * 60_000 })
 
+/**
+ * 팀·파트의 직전 지시자 jsonl 이 있는지 (화면이 "Carry over previous lead's history" 칸을 보일지. 파생 필드라 hq.json 에는 저장하지 않는다).
+ * broadcast 마다 불려서 projects 폴더를 훑지 않고 지시자 폴더의 프로젝트 폴더에 파일이 있는지만 본다 (실제 인계는 handOverHistory 가 다시 찾는다)
+ */
+function hasPreviousLead(leadSessionId: string | undefined, cwd: string): boolean {
+  return Boolean(leadSessionId) && existsSync(leadTranscriptPath(projectsDir, cwd, leadSessionId!))
+}
+
 function readOfficeWithVcs() {
   const office = readOffice()
-  return { ...office, teams: office.teams.map((team) => ({ ...team, vcs: vcsOf(team.cwd) })) }
+  return {
+    ...office,
+    teams: office.teams.map((team) => ({
+      ...team,
+      vcs: vcsOf(team.cwd),
+      hasPreviousLead: hasPreviousLead(team.leadSessionId, team.cwd),
+      parts: team.parts.map((part) => ({ ...part, hasPreviousLead: hasPreviousLead(part.leadSessionId, part.worktree?.cwd ?? team.cwd) })),
+    })),
+  }
 }
 
 function broadcastOffice(): void {

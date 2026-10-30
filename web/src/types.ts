@@ -118,6 +118,8 @@ export interface Part {
   leadSessionId?: string
   worktree?: { cwd: string; branch: string }
   createdAt: string
+  /** 직전 파트장 jsonl 이 있는지 (서버 파생값. 옛 서버 응답에는 없다) */
+  hasPreviousLead?: boolean
 }
 
 /** 팀 = 같은 폴더의 세션 묶음. 그룹 안의 책상 섬. 소속은 서버가 cwd 로 판정해 Session.teamId 로 준다 */
@@ -138,6 +140,8 @@ export interface Team {
   createdAt: string
   /** 팀 폴더의 형상관리 (서버가 판정해 주는 파생값. 옛 서버 응답에는 없다) */
   vcs?: { kind: 'git' | 'svn'; root: string } | null
+  /** 직전 팀장 jsonl 이 있는지 (서버 파생값. 옛 서버 응답에는 없다) */
+  hasPreviousLead?: boolean
   /** 팀 TODO. 서버 순서 = [할 일(사용자가 정한 순서)…, 완료(완료한 순서, 오래된 것 먼저)…]. 옛 서버 응답은 없다 (teamTodos.ts todosOf) */
   todos?: TeamTodo[]
 }

@@ -218,6 +218,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
   /** 세션 추가 모달. 팀 헤더의 "+" 면 그 팀 직속, 파트 소제목의 "+" 면 그 파트, 툴바의 "New Session" 이면 로비(폴더 직접 입력) */
   const [sessionForm, setSessionForm] = useState<{ teamId: string | null; partId: string | null } | null>(null)
   const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
+  /** 세션 추가 모달의 "Carry over previous lead's history" 칸 (직전 지시자 기록이 있는 팀·파트에서 Lead 를 고를 때만 보인다) */
+  const [isCarryOverChecked, setIsCarryOverChecked] = useState(true)
   /**
    * 팀·파트 세션 추가 모달에 미리 채울 이름(이름만)과 그 성별. 성별은 이 이름을 그대로 쓸 때만 세션 생성에 넘긴다.
    * Role 칸은 세그먼트(Member/Lead)에 따라 Dev/Lead 로 채운다
@@ -535,6 +537,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
     const form = new FormData(event.currentTarget)
     // 추천 이름을 그대로 쓸 때만 그 성별을 넘긴다 (직접 고친 이름은 성별 없음)
     const isSuggestedName = Boolean(sessionForm.teamId) && typedSessionName === null && suggestedSessionName !== null
+    const isCarryingOver = isCarryOverShown(sessionForm.teamId, sessionForm.partId) && isCarryOverChecked
     const response = await postJson('/api/sessions', 'POST', {
       cwd: sessionForm.teamId ? undefined : form.get('cwd'),
       teamId: sessionForm.teamId ?? undefined,
@@ -543,6 +546,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
       position: String(form.get('position') ?? '').trim() || undefined,
       gender: isSuggestedName ? suggestedSessionName?.gender : undefined,
       isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
+      carryOverHistory: isCarryingOver || undefined,
     })
     if (!response.ok) {
       void alertDialog((await response.json()).message ?? "Couldn't create session")
@@ -728,6 +732,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setTeamForm(null)
     setPartForm(null)
     setSessionRole('member')
+    setIsCarryOverChecked(true)
     setSuggestedSessionName(null)
     setTypedSessionName(null)
     setTypedSessionPosition(null)
@@ -1018,6 +1023,13 @@ export function App({ isLocal }: { isLocal: boolean }) {
     )
   }
 
+  /** 인계 칸을 보일지: Lead·Part lead 를 골랐고 그 팀·파트에 직전 지시자 기록이 있을 때 (서버 파생 필드 hasPreviousLead. 옛 서버 응답은 없다) */
+  function isCarryOverShown(teamId: string | null, partId: string | null): boolean {
+    const team = teamId ? office.teams.find((t) => t.id === teamId) : undefined
+    const unit = partId ? team?.parts.find((p) => p.id === partId) : team
+    return sessionRole === 'lead' && Boolean(unit?.hasPreviousLead)
+  }
+
   function renderSessionModal(teamId: string | null, partId: string | null) {
     const team = teamId ? office.teams.find((t) => t.id === teamId) : undefined
     const part = team?.parts.find((p) => p.id === partId)
@@ -1051,6 +1063,12 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 },
               ]}
             />
+          )}
+          {isCarryOverShown(teamId, partId) && (
+            <label className="check" title={`Sends the previous ${leadLabel.toLowerCase()}'s last compact summary and recent requests and replies as the first message`}>
+              <input type="checkbox" checked={isCarryOverChecked} onChange={(event) => setIsCarryOverChecked(event.target.checked)} />
+              Carry over previous lead's history
+            </label>
           )}
           {!team && <input name="cwd" placeholder="Folder path (e.g. D:\workspace\foo)" required autoFocus />}
           <div className="field-row">
