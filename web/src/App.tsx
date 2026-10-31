@@ -57,6 +57,7 @@ import {
   type Team,
 } from './types'
 import { AppearanceModal } from './AppearanceModal'
+import { contextSizeOf } from './contextSize'
 
 interface Snapshot {
   isHostReachable: boolean
@@ -419,6 +420,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const isSelectedPresent = selected !== null && attendanceOf(selected) === 'present'
   /** 근무 중인 웹 세션. 터미널·입력·승인·종료는 이때만 (휴식·퇴근 세션 pty 에 키·resize 를 보내지 않게) */
   const isSelectedLiveWeb = isSelectedPresent && selected.kind === 'web'
+  const selectedContext = selected ? contextSizeOf(selected.contextTokens) : null
   /** 터미널을 못 여는 세션이면 보던 탭이 터미널이어도 대화. Files 는 읽기만 해서 모든 세션(휴식·퇴근·외부 포함)에 있다 */
   const shownTab = tab === 'terminal' && !isSelectedLiveWeb ? 'chat' : tab
   /** 대화 안 검색을 쓸 수 있는 때: 세션 패널의 대화 탭 (터미널 탭은 범위 밖) */
@@ -1676,27 +1678,34 @@ export function App({ isLocal }: { isLocal: boolean }) {
               <button className="rename" title="Rename" onClick={() => openRename(selected)}>
                 ✎
               </button>
-              {restartingIds.has(selected.id) ? (
-                <span className="model-chip" title="Restarting with the new model / effort">
-                  Restarting…
-                </span>
-              ) : isSelectedLiveWeb ? (
-                <button
-                  type="button"
-                  className="model-chip is-button"
-                  title={[selected.model, nextLabel(selected) && `Next: ${nextLabel(selected)}`, 'Change model & effort'].filter(Boolean).join('\n')}
-                  onClick={() => setModelModalSessionId(selected.id)}
-                >
-                  {modelLabel(selected) ?? 'Model'}
-                  {nextLabel(selected) && <span className="model-next"> → {nextLabel(selected)}</span>}
-                </button>
-              ) : (
-                modelLabel(selected) && (
-                  <span className="model-chip" title={selected.model ?? undefined}>
-                    {modelLabel(selected)}
+              <span className="model-info">
+                {restartingIds.has(selected.id) ? (
+                  <span className="model-chip" title="Restarting with the new model / effort">
+                    Restarting…
                   </span>
-                )
-              )}
+                ) : isSelectedLiveWeb ? (
+                  <button
+                    type="button"
+                    className="model-chip is-button"
+                    title={[selected.model, nextLabel(selected) && `Next: ${nextLabel(selected)}`, 'Change model & effort'].filter(Boolean).join('\n')}
+                    onClick={() => setModelModalSessionId(selected.id)}
+                  >
+                    {modelLabel(selected) ?? 'Model'}
+                    {nextLabel(selected) && <span className="model-next"> → {nextLabel(selected)}</span>}
+                  </button>
+                ) : (
+                  modelLabel(selected) && (
+                    <span className="model-chip" title={selected.model ?? undefined}>
+                      {modelLabel(selected)}
+                    </span>
+                  )
+                )}
+                {selectedContext && (
+                  <span className={`context-size ${selectedContext.level}`} role="img" title={selectedContext.title} aria-label={selectedContext.title}>
+                    {selectedContext.text}
+                  </span>
+                )}
+              </span>
               <span className="cwd">{selected.cwd}</span>
               <nav className="tabs">
                 <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => whenLeavingAllowed(() => setTab('chat'))} title="Chat" aria-label="Chat">

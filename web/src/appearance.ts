@@ -471,6 +471,7 @@ export function expandPalette(core: PaletteCore, mode: Mode): Vars {
     'diff-hunk-bg': mix(core.link, panel, isDark ? 0.16 : 0.1),
     // 노랑은 글자로 쓰기엔 옅어 바탕 대비 4.5 까지 어둡게(다크는 밝게) 한다
     'vcs-modified': ensureContrast(core.yellow, [panel, bg], 4.5, isDark ? 'lighter' : 'darker'),
+    'caution-text': ensureContrast(core.yellow, [panel, bg], 4.5, isDark ? 'lighter' : 'darker'),
   }
 }
 

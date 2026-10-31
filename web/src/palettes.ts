@@ -68,6 +68,7 @@ const DEFAULT_LIGHT = {
   'hl-deletion-bg': '#ffeef0',
   'diff-hunk-bg': '#e8f0fb',
   'vcs-modified': '#9a6700',
+  'caution-text': '#9a6700',
 }
 
 export type VarName = keyof typeof DEFAULT_LIGHT
@@ -132,6 +133,7 @@ export const DEFAULT_VARS: Record<'light' | 'dark', Vars> = {
     'hl-deletion-bg': '#67060c',
     'diff-hunk-bg': '#243049',
     'vcs-modified': '#d29922',
+    'caution-text': '#d29922',
   },
 }
 
