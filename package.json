@@ -16,6 +16,7 @@
     "test": "npm test --workspaces --if-present",
     "build": "npm run build --workspace web",
     "desktop": "npm run start --workspace desktop",
+    "shot": "node scripts/shot.mjs",
     "hooks:install": "node hooks/install.mjs",
     "startup:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-startup.ps1",
     "startup:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-startup.ps1",
