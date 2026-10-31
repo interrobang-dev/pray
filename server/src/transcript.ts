@@ -175,7 +175,8 @@ export function applyTranscriptRecord(state: TranscriptState, record: Record<str
       summary.lastAssistantText = text
       if (message?.model !== SYNTHETIC_MODEL && !record.isSidechain && !record.isMeta) state.turnText = text
     }
-    if (typeof message?.model === 'string' && message.model !== SYNTHETIC_MODEL) {
+    // 모델·effort·문맥 크기는 주 대화 응답만 (사이드체인은 다른 모델·작은 문맥일 수 있다)
+    if (typeof message?.model === 'string' && message.model !== SYNTHETIC_MODEL && !record.isSidechain && !record.isMeta) {
       summary.model = message.model
       const effort = record.perTurnEffort ?? record.effort
       summary.effort = typeof effort === 'string' ? effort : null

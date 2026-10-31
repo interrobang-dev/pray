@@ -151,7 +151,7 @@ export function createTeamServer(mode: McpMode, api: TeamApi): McpServer {
     names.status,
     {
       description:
-        '팀의 세션 목록(role = 지휘자·팀원 구분, position = 역할 약어, 웹/외부·상태·모델·effort·마지막 말)과 task 목록을 본다. 모델·effort 는 마지막 응답 기준이라 아직 대화가 없으면 null 이다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다.',
+        '팀의 세션 목록(role = 지휘자·팀원 구분, position = 역할 약어, 웹/외부·상태·모델·effort·마지막 말)과 task 목록을 본다. 모델·effort 는 마지막 응답 기준이라 아직 대화가 없으면 null 이다. contextTokens = 팀원의 지금 문맥 크기(토큰, 마지막 응답 기준. 모르면 null), idleSince = 차례를 끝내고 쉬기 시작한 시각(ISO. 일하는 중이면 null) — 팀원을 다시 쓸지 정리할지 볼 때 쓴다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다.',
       inputSchema: {},
     },
     async () => {
@@ -166,7 +166,7 @@ export function createTeamServer(mode: McpMode, api: TeamApi): McpServer {
   server.registerTool(
     names.dismiss,
     {
-      description: '팀원 세션을 종료하고 팀에서 뺀다. 일이 끝난 팀원은 정리해라.',
+      description: '팀원 세션을 종료하고 팀에서 뺀다. 같은 영역 일이 남았으면 정리하지 말고 다시 쓴다. 정리할 때: contextTokens 가 15만을 넘음, 60분 넘게 쉼(idleSince), 계획에 그 영역 일이 더 없음, 실패·엉뚱한 방향. 문맥 때문에 정리하면 먼저 그 팀원에게 알게 된 것·고친 파일·남은 일 요약을 받아 새 팀원 첫 지시에 붙인다. 네가 만들지 않은 세션은 정리하지 않는다.',
       inputSchema: { sessionId: z.string().describe('팀원 세션 ID') },
     },
     async ({ sessionId }) => {

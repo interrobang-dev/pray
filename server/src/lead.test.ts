@@ -9,7 +9,17 @@ describe('lead', () => {
     expect(prompt).toContain('"개발" 팀 팀장')
     expect(prompt).toContain('abc12345')
     expect(prompt).toContain('마지막 메시지')
-    expect(prompt).toContain('팀원 정리 규칙')
+    expect(prompt).toContain('팀원 배치·재사용·정리 규칙')
+  })
+
+  it('prompt keeps members per role and dismisses them on context size or long idle', () => {
+    const prompt = leadSystemPrompt(team)
+    expect(prompt).toContain('contextTokens 가 15만을 넘었다')
+    expect(prompt).toContain('60분 넘게 쉬었다')
+    expect(prompt).toContain('같은 영역의 일이면 있는 팀원에게 team_assign')
+    expect(prompt).toContain('알게 된 것·고친 파일·남은 일')
+    expect(prompt).not.toContain('30분')
+    expect(prompt).not.toContain('5개쯤')
   })
 
   it('prompt uses the Pray office and team_* tool names only', () => {

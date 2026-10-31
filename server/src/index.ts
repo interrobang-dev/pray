@@ -106,6 +106,7 @@ import { AccountError, accountErrorBody, makeAccountStore } from './accountStore
 import { makeLoginManager, runClaudeAuth } from './accountLogin.js'
 import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
 import { TaskConflictError, TaskStore } from './teamState.js'
+import { teamMemberOf } from './teamMembers.js'
 import { parseWaitRequest, respondJsonAfter } from './taskWait.js'
 import { leadExtraArgs } from './lead.js'
 import { formatHandoff, HANDOFF_LIMIT, handoffMessage, leadTranscriptPath, readHandoffSource, type LeadKind } from './leadHandoff.js'
@@ -1954,20 +1955,7 @@ app.get('/api/team/:teamId', async (req, res) => {
   const { sessions } = await snapshotPayload()
   const members = sessions
     .filter((s) => s.teamId === team.id && s.partId === (part?.id ?? null))
-    .map((s) => ({
-      sessionId: s.id,
-      name: s.name ?? s.title ?? s.id.slice(0, 8),
-      position: s.position,
-      kind: s.kind,
-      role: s.role,
-      status: s.status,
-      isAlive: s.isAlive,
-      // 마지막 claude 응답 기준 (jsonl). 대화가 아직 없으면 null
-      model: s.model,
-      effort: s.effort,
-      lastAssistantText: s.lastAssistantText,
-      pendingTool: s.pendingTool,
-    }))
+    .map(teamMemberOf)
   // 할 일은 싣지 않는다 (팀장 토큰 절약)
   const { todos: _todos, ...teamWithoutTodos } = team
   res.json({ ...teamWithoutTodos, vcs: vcsOf(team.cwd), part, members, tasks: tasks.listByUnit(team.id, part?.id ?? null) })

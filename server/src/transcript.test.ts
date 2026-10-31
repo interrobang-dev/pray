@@ -110,6 +110,17 @@ describe('summarizeTranscript', () => {
       expect(summarizeTranscript(jsonl).contextTokens).toBe(1002)
     })
 
+    it('skips sidechain and meta responses (model, effort and context stay from the main conversation)', () => {
+      const side = JSON.stringify({
+        type: 'assistant',
+        isSidechain: true,
+        effort: 'low',
+        message: { model: 'claude-haiku-5-5', content: [{ type: 'text', text: '서브' }], usage: usage(1, 2, 3) },
+      })
+      const jsonl = [reply({ usage: usage(2, 150000, 1000) }), side].join('\n')
+      expect(summarizeTranscript(jsonl)).toMatchObject({ model: 'claude-opus-5-5', contextTokens: 151002 })
+    })
+
     it('counts missing fields as 0 and is null without usage or any number', () => {
       expect(summarizeTranscript(reply({ usage: { input_tokens: 7 } })).contextTokens).toBe(7)
       expect(summarizeTranscript(reply({ usage: usage(null, '3', undefined) })).contextTokens).toBeNull()
