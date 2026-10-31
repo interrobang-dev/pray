@@ -59,6 +59,7 @@ import {
 } from './types'
 import { AppearanceModal } from './AppearanceModal'
 import { contextSizeOf } from './contextSize'
+import { handOverUnit } from './handOver'
 
 interface Snapshot {
   isHostReachable: boolean
@@ -425,6 +426,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
   /** 근무 중인 웹 세션. 터미널·입력·승인·종료는 이때만 (휴식·퇴근 세션 pty 에 키·resize 를 보내지 않게) */
   const isSelectedLiveWeb = isSelectedPresent && selected.kind === 'web'
   const selectedContext = selected ? contextSizeOf(selected.contextTokens) : null
+  /** 팀장 교대 지름길: 문맥이 경고 단계인 지금의 팀장·파트장이면 그 팀·파트 (패널 머리 Hand over) */
+  const selectedHandOver = selected ? handOverUnit(selected, office.teams) : null
   /** 터미널을 못 여는 세션이면 보던 탭이 터미널이어도 대화. Files 는 읽기만 해서 모든 세션(휴식·퇴근·외부 포함)에 있다 */
   const shownTab = tab === 'terminal' && !isSelectedLiveWeb ? 'chat' : tab
   /** 대화 안 검색을 쓸 수 있는 때: 세션 패널의 대화 탭 (터미널 탭은 범위 밖) */
@@ -821,6 +824,12 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setSessionForm({ teamId, partId })
   }
 
+  /** Hand over: 그 팀·파트의 세션 추가 창을 Lead·인계 칸 켜짐으로 연다. 옛 지시자는 끄지 않는다 (사람이 창에서 보고 만든다) */
+  function openHandOver(teamId: string, partId: string | null) {
+    openSessionForm(teamId, partId)
+    setSessionRole('lead')
+  }
+
   function openPartForm(teamId: string) {
     setTeamForm(null)
     setSessionForm(null)
@@ -1118,6 +1127,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
     const leadSessionId = part ? part.leadSessionId : team?.leadSessionId
     const hasLiveLead = Boolean(leadSessionId && snapshot.sessions.some((s) => s.id === leadSessionId && s.isAlive))
     const leadLabel = part ? 'Part lead' : 'Lead'
+    /** Hand over 로 열면 옛 지시자가 아직 근무 중일 수 있다: 서버가 409 로 막으므로 먼저 끄라고 알리고 Start 를 막는다 (끄면 SSE 로 풀린다) */
+    const liveLeadToEnd = team && sessionRole === 'lead' && hasLiveLead ? snapshot.sessions.find((s) => s.id === leadSessionId) : undefined
     const sessionPosition = modalPosition(typedSessionPosition, sessionRole, Boolean(team))
     const sessionName = modalName(typedSessionName, suggestedSessionName?.name ?? null, Boolean(team))
     return (
@@ -1152,6 +1163,11 @@ export function App({ isLocal }: { isLocal: boolean }) {
               Carry over previous lead's history
             </label>
           )}
+          {liveLeadToEnd && (
+            <p className="hand-over-note">
+              End {displayName(liveLeadToEnd)} first. A {part ? 'part' : 'team'} has one {leadLabel.toLowerCase()} at a time.
+            </p>
+          )}
           {!team && <input name="cwd" placeholder="Folder path (e.g. D:\workspace\foo)" required autoFocus />}
           <div className="field-row">
             <label className="field role">
@@ -1175,7 +1191,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
             </label>
           </div>
           <div className="actions">
-            <button type="submit" className="primary">
+            <button type="submit" className="primary" disabled={Boolean(liveLeadToEnd)}>
               Start
             </button>
             <button type="button" onClick={() => setSessionForm(null)}>
@@ -1710,6 +1726,16 @@ export function App({ isLocal }: { isLocal: boolean }) {
                   <span className={`context-size ${selectedContext.level}`} role="img" title={selectedContext.title} aria-label={selectedContext.title}>
                     {selectedContext.text}
                   </span>
+                )}
+                {selectedHandOver && (
+                  <button
+                    type="button"
+                    className="hand-over"
+                    title={`Start a new ${selectedHandOver.partId ? 'part lead' : 'lead'} with this one's history`}
+                    onClick={() => openHandOver(selectedHandOver.teamId, selectedHandOver.partId)}
+                  >
+                    Hand over
+                  </button>
                 )}
               </span>
               <span className="cwd">{selected.cwd}</span>
