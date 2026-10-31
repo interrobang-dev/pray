@@ -234,13 +234,55 @@ textarea:focus {
   height: 100%;
 }
 .layout {
+  position: relative;
   display: grid;
   grid-template-columns: 300px 1fr;
   flex: 1;
   min-height: 0;
+  /* 오른쪽 패널 폭: 사용자가 끈 폭(--panel-width, App.tsx)을 목록 300px + 사무실 최소 320px 이 남도록 줄이고 최소 360px.
+     값은 panelWidth.ts 와 같다. % 는 쓰는 곳(grid 칸·끌기 손잡이 right)에서 둘 다 .layout 폭으로 풀린다 */
+  --panel-track: max(360px, min(var(--panel-width, 520px), calc(100% - 620px)));
 }
 .layout.with-panel {
-  grid-template-columns: 300px 1fr 520px;
+  grid-template-columns: 300px minmax(0, 1fr) var(--panel-track);
+}
+/* 패널 왼쪽 가장자리 끌기 손잡이 (사무실이 보일 때만 그린다). grid 칸을 차지하지 않게 absolute */
+.panel-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: var(--panel-track);
+  width: 7px;
+  margin-right: -4px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+.panel-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 3px;
+  background: transparent;
+  transition: background 0.12s;
+}
+.panel-resizer:hover::after,
+.panel-resizer:focus-visible::after,
+.layout.panel-resizing .panel-resizer::after {
+  background: var(--accent);
+}
+.panel-resizer:focus-visible {
+  outline: none;
+}
+/* 끄는 동안: 글자 선택·캔버스·iframe 이 포인터를 먹지 않게 */
+.layout.panel-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.layout.panel-resizing > :not(.panel-resizer) {
+  pointer-events: none;
 }
 aside {
   background: var(--panel);

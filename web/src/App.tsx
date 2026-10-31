@@ -4,7 +4,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
@@ -22,6 +24,7 @@ import { UsagePanel } from './UsagePanel'
 import { memoryLabel, memoryPercent, parseSystemMemory } from './systemMemory'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { FlowPanel } from './FlowPanel'
+import { KEY_STEP, clampPanelWidth, parsePanelWidth } from './panelWidth'
 import { NewTeamModal } from './NewTeamModal'
 import { TeamTodosModal } from './TeamTodosModal'
 import { remainingCount, todosOf } from './teamTodos'
@@ -79,6 +82,9 @@ function readIsOfficeHidden(): boolean {
     return false
   }
 }
+
+/** 사무실이 보일 때 오른쪽 패널 폭(px)을 남기는 localStorage 키 (이 브라우저만) */
+const PANEL_WIDTH_KEY = 'pray.panelWidth'
 
 /** 목록 접기를 남기는 localStorage 키 (이 브라우저만): 접힌 그룹 ID 배열(JSON)·Focus Zone 접힘·Off Duty 펼침 */
 const COLLAPSED_GROUPS_KEY = 'pray.collapsedGroups'
@@ -293,6 +299,10 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [dotHeadArt, setDotHeadArt] = useState<{ sheet: CharacterSheet; art: RecolorArt } | null>(null)
   /** 데스크톱에서 사무실을 숨긴 화면: 패널이 목록 오른쪽 폭을 다 쓰고, 세션을 안 골랐으면 그 자리에 안내 */
   const isOfficeHiddenLayout = !isNarrow && isOfficeHidden
+  /** 사무실이 보일 때 오른쪽 패널 폭. 패널 왼쪽 가장자리를 끌어 바꾼다 (CSS 가 창 폭에 맞춰 다시 줄인다) */
+  const [panelWidth, setPanelWidth] = useState(() => parsePanelWidth(readStored(PANEL_WIDTH_KEY)))
+  const [isPanelResizing, setIsPanelResizing] = useState(false)
+  const layoutRef = useRef<HTMLElement>(null)
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
   /** TODO 모달을 연 팀. 목록 팀 머리줄의 버튼과 사무실 팀 명판 옆 버튼이 같은 모달을 연다 */
   const [todoTeamId, setTodoTeamId] = useState<string | null>(null)
@@ -669,6 +679,49 @@ export function App({ isLocal }: { isLocal: boolean }) {
     } catch {
       void alertDialog("Couldn't restart server: Network error")
     }
+  }
+
+  /** 패널 폭을 바꾸고 남긴다. 목록·사무실 칸이 남도록 지금 화면 폭으로 줄인다 */
+  function changePanelWidth(width: number, isSaved: boolean) {
+    const layout = layoutRef.current
+    const next = layout ? clampPanelWidth(width, layout.getBoundingClientRect().width) : width
+    setPanelWidth(next)
+    if (isSaved) writeStored(PANEL_WIDTH_KEY, String(next))
+    return next
+  }
+
+  function startPanelResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return
+    const layout = layoutRef.current
+    if (!layout) return
+    event.preventDefault()
+    const handle = event.currentTarget
+    handle.setPointerCapture(event.pointerId)
+    setIsPanelResizing(true)
+    let last = panelWidth
+    const widthAt = (clientX: number) => layout.getBoundingClientRect().right - clientX
+    const onMove = (move: PointerEvent) => {
+      last = changePanelWidth(widthAt(move.clientX), false)
+    }
+    const onEnd = () => {
+      handle.removeEventListener('pointermove', onMove)
+      handle.removeEventListener('pointerup', onEnd)
+      handle.removeEventListener('pointercancel', onEnd)
+      setIsPanelResizing(false)
+      writeStored(PANEL_WIDTH_KEY, String(last))
+    }
+    handle.addEventListener('pointermove', onMove)
+    handle.addEventListener('pointerup', onEnd)
+    handle.addEventListener('pointercancel', onEnd)
+  }
+
+  function resizePanelByKey(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    // 화면에 보이는 폭(창이 좁아 CSS 가 줄인 폭일 수 있다)에서 시작한다
+    const panel = event.currentTarget.nextElementSibling
+    const current = panel instanceof HTMLElement ? panel.getBoundingClientRect().width : panelWidth
+    changePanelWidth(current + (event.key === 'ArrowLeft' ? KEY_STEP : -KEY_STEP), true)
   }
 
   function toggleOffice() {
@@ -1375,7 +1428,11 @@ export function App({ isLocal }: { isLocal: boolean }) {
 
   return (
     <div className="app">
-      <main className={`layout${hasPanel ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}`}>
+      <main
+        ref={layoutRef}
+        className={`layout${hasPanel ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}${isPanelResizing ? ' panel-resizing' : ''}`}
+        style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
+      >
         <aside>
           <header>
             <h1>
@@ -1585,6 +1642,19 @@ export function App({ isLocal }: { isLocal: boolean }) {
             onMoveTeam={moveTeam}
             onEditTeam={(team) => void editTeam(team)}
             onOpenTeamTodos={setTodoTeamId}
+          />
+        )}
+        {/* 사무실이 보일 때만 패널 폭을 끈다 (숨기면 패널이 남는 폭을 다 쓰고, 폰은 한 열). 패널 바로 앞 형제라 키보드 폭 계산이 패널을 잰다 */}
+        {hasPanel && !isNarrow && !isOfficeHidden && (
+          <div
+            className="panel-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize panel"
+            title="Drag to resize"
+            tabIndex={0}
+            onPointerDown={startPanelResize}
+            onKeyDown={resizePanelByKey}
           />
         )}
         {isFlowOpen && !selected && (

@@ -53,7 +53,11 @@ describe('copyLegacyKeys', () => {
     const keys = LEGACY_STORAGE_NAMES.map((name) => STORAGE_PREFIX + name)
     for (const key of [THEME_KEY, APPEARANCE_KEY, APPEARANCE_BOOT_KEY]) expect(keys).toContain(key)
     const appSource = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
-    const appKeys = [...appSource.matchAll(/_KEY = '([^']+)'/g)].map((match) => match[1])
+    // 이름을 바꾼 뒤 새로 생긴 키는 옛 키가 없어 옮길 것도 없다
+    const keysAddedAfterRename = ['pray.panelWidth']
+    const appKeys = [...appSource.matchAll(/_KEY = '([^']+)'/g)]
+      .map((match) => match[1])
+      .filter((key) => !keysAddedAfterRename.includes(key))
     expect(appKeys.sort()).toEqual(keys.filter((key) => ![THEME_KEY, APPEARANCE_KEY, APPEARANCE_BOOT_KEY].includes(key)).sort())
   })
 })
