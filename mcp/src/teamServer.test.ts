@@ -73,6 +73,7 @@ describe('createTeamServer', () => {
     const { tools } = await listTools(mcpModeOf({ PRAY_TEAM_ID: 'T1', PRAY_SERVER: 'http://127.0.0.1:1' })!)
     const status = tools.find((tool) => tool.name === 'team_status')!.description
     expect(status).toContain('최근 5개')
+    expect(status).toContain('inactiveMembers')
     expect(status).toContain('앞 200자')
     expect(status).toContain('team_wait 를 그 taskId 로')
   })

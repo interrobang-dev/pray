@@ -106,7 +106,8 @@ import { AccountError, accountErrorBody, makeAccountStore } from './accountStore
 import { makeLoginManager, runClaudeAuth } from './accountLogin.js'
 import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
 import { TaskConflictError, TaskStore, type RestoredMember } from './teamState.js'
-import { idleSinceOf, teamMemberOf, teamStatusTasks } from './teamMembers.js'
+import { idleSinceOf, teamStatusMembers, teamStatusTasks } from './teamMembers.js'
+import { type MemberLookup, taskDetailOf, taskHistoryOf } from './teamTaskHistory.js'
 import { TeamTaskLog } from './teamTaskFile.js'
 import { parseWaitRequest, respondJsonAfter } from './taskWait.js'
 import { leadExtraArgs } from './lead.js'
@@ -1970,12 +1971,11 @@ app.get('/api/team/:teamId', async (req, res) => {
   if (!unit) return
   const { team, part } = unit
   const { sessions } = await snapshotPayload()
-  const members = sessions
-    .filter((s) => s.teamId === team.id && s.partId === (part?.id ?? null))
-    .map(teamMemberOf)
+  // 근무 중인 세션만 전체 꼴, 휴식·퇴근은 짧은 꼴 (teamStatusMembers)
+  const members = teamStatusMembers(sessions.filter((s) => s.teamId === team.id && s.partId === (part?.id ?? null)))
   // 할 일은 싣지 않는다 (팀장 토큰 절약)
   const { todos: _todos, ...teamWithoutTodos } = team
-  res.json({ ...teamWithoutTodos, vcs: vcsOf(team.cwd), part, members, tasks: teamStatusTasks(tasks.listByUnit(team.id, part?.id ?? null)) })
+  res.json({ ...teamWithoutTodos, vcs: vcsOf(team.cwd), part, ...members, tasks: teamStatusTasks(tasks.listByUnit(team.id, part?.id ?? null)) })
 })
 
 app.patch('/api/team/:teamId', (req, res) => {
@@ -2262,6 +2262,40 @@ app.post('/api/team/:teamId/tasks', async (req, res) => {
     return
   }
   await assignTask(unit.team, unit.part, sessionId, instruction.trim(), res)
+})
+
+/** 화면 Tasks 창용 이름 찾기. 세션 목록(근무·휴식·퇴근)에 있는 것만 */
+async function memberLookup(): Promise<MemberLookup> {
+  const { sessions } = await snapshotPayload()
+  const byId = new Map(sessions.map((s) => [s.id, { name: s.name ?? s.title ?? s.id.slice(0, 8), position: s.position }]))
+  return (sessionId) => byId.get(sessionId) ?? null
+}
+
+/** 화면 Tasks 창: 팀 하나(모든 파트)의 task 목록(지시 앞부분만)과 팀원 spawn·dismiss 기록 → TaskHistory */
+app.get('/api/team/:teamId/tasks', async (req, res) => {
+  const team = findTeam(req.params.teamId)
+  if (!team) {
+    res.status(404).json({ message: 'Team not found' })
+    return
+  }
+  res.set('Cache-Control', 'no-store')
+  res.json(taskHistoryOf(team.id, tasks.list(), taskLog.listEvents(), await memberLookup()))
+})
+
+/** 화면 Tasks 창: task 하나 전문 (지시·결과) → { task } */
+app.get('/api/team/:teamId/tasks/:taskId', async (req, res) => {
+  const team = findTeam(req.params.teamId)
+  if (!team) {
+    res.status(404).json({ message: 'Team not found' })
+    return
+  }
+  const task = taskDetailOf(team.id, tasks.get(req.params.taskId), await memberLookup())
+  if (!task) {
+    res.status(404).json({ message: 'Task not found' })
+    return
+  }
+  res.set('Cache-Control', 'no-store')
+  res.json({ task })
 })
 
 /**

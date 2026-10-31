@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clipStatusText, idleSinceOf, teamMemberOf, teamStatusTasks } from './teamMembers.js'
+import { clipStatusText, idleSinceOf, STATUS_INACTIVE_MEMBER_LIMIT, teamMemberOf, teamStatusMembers, teamStatusTasks } from './teamMembers.js'
 import type { Task } from './teamState.js'
 import type { Session } from './types.js'
 
@@ -81,6 +81,35 @@ describe('teamMemberOf', () => {
   it('carries only the head of a long last message', () => {
     expect(teamMemberOf(session({ lastAssistantText: 'a'.repeat(500) })).lastAssistantText).toBe(`${'a'.repeat(200)}…`)
     expect(teamMemberOf(session({ lastAssistantText: null })).lastAssistantText).toBeNull()
+  })
+})
+
+describe('teamStatusMembers', () => {
+  const off = (id: string, endedAt: string, reason: 'released' | 'error' = 'released') =>
+    session({ id, name: id, attendance: 'off', isAlive: false, offDuty: { endedAt, reason, exitCode: null } })
+
+  it('keeps live sessions in full and the rest in short form, break first then latest off duty', () => {
+    const lead = session({ id: 'lead', role: 'lead', name: 'Lead' })
+    const live = session({ id: 'm1', name: 'Jisoo' })
+    const onBreak = session({ id: 'b1', name: 'Minji', attendance: 'break', isAlive: false })
+    const result = teamStatusMembers([off('o1', '2026-10-31T01:00:00Z'), lead, onBreak, live, off('o2', '2026-10-31T02:00:00Z', 'error')])
+    expect(result.members.map((m) => m.sessionId)).toEqual(['lead', 'm1'])
+    expect(result.members[1]).toEqual(teamMemberOf(live))
+    expect(result.inactiveMembers).toEqual([
+      { sessionId: 'b1', name: 'Minji', position: 'FE', attendance: 'break', endedAt: null, reason: null },
+      { sessionId: 'o2', name: 'o2', position: 'FE', attendance: 'off', endedAt: '2026-10-31T02:00:00Z', reason: 'error' },
+      { sessionId: 'o1', name: 'o1', position: 'FE', attendance: 'off', endedAt: '2026-10-31T01:00:00Z', reason: 'released' },
+    ])
+    expect(result.inactiveMemberCount).toBe(3)
+  })
+
+  it('cuts inactive sessions at the limit but counts them all', () => {
+    const many = Array.from({ length: STATUS_INACTIVE_MEMBER_LIMIT + 3 }, (_, i) => off(`o${i}`, `2026-10-31T${String(i).padStart(2, '0')}:00:00Z`))
+    const result = teamStatusMembers(many)
+    expect(result.inactiveMembers).toHaveLength(STATUS_INACTIVE_MEMBER_LIMIT)
+    expect(result.inactiveMembers[0].sessionId).toBe(`o${STATUS_INACTIVE_MEMBER_LIMIT + 2}`)
+    expect(result.inactiveMemberCount).toBe(STATUS_INACTIVE_MEMBER_LIMIT + 3)
+    expect(result.members).toEqual([])
   })
 })
 

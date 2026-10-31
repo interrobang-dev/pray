@@ -151,7 +151,7 @@ export function createTeamServer(mode: McpMode, api: TeamApi): McpServer {
     names.status,
     {
       description:
-        `팀의 세션 목록(role = 지휘자·팀원 구분, position = 역할 약어, 웹/외부·상태·모델·effort·마지막 말)과 task 목록을 본다. 모델·effort 는 마지막 응답 기준이라 아직 대화가 없으면 null 이다. contextTokens = 팀원의 지금 문맥 크기(토큰, 마지막 응답 기준. 모르면 null), idleSince = 차례를 끝내고 쉬기 시작한 시각(ISO. 일하는 중이면 null) — 팀원을 다시 쓸지 정리할지 볼 때 쓴다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다. 응답을 줄이려고 tasks 는 진행 중·결과를 아직 안 받은 것 전부와 끝나고 받은 것 중 최근 5개만 싣고, task 의 instruction·result 와 팀원의 마지막 말은 앞 200자만(넘으면 "…") 싣는다. 결과 전문은 ${names.wait} 를 그 taskId 로 부르면 다시 받는다.`,
+        `팀의 세션 목록(role = 지휘자·팀원 구분, position = 역할 약어, 웹/외부·상태·모델·effort·마지막 말)과 task 목록을 본다. 모델·effort 는 마지막 응답 기준이라 아직 대화가 없으면 null 이다. contextTokens = 팀원의 지금 문맥 크기(토큰, 마지막 응답 기준. 모르면 null), idleSince = 차례를 끝내고 쉬기 시작한 시각(ISO. 일하는 중이면 null) — 팀원을 다시 쓸지 정리할지 볼 때 쓴다. 지시할 수 있는 대상은 members 에 있는 role 이 member 인 세션뿐이다. members 에는 근무 중인 세션만 싣고, 휴식·퇴근한 세션은 inactiveMembers 에 짧게(sessionId·name·position·attendance(break = 호스트 재시작 중이라 곧 돌아옴, off = 퇴근)·endedAt·reason(released = 정리함, dismissed = 사람이 종료, exit·error = 스스로 끝남)) 휴식·최근 퇴근부터 10명만 싣고 전체 수는 inactiveMemberCount 다 — 여기 있는 세션에는 지시할 수 없다 (task 의 memberSessionId 가 누구인지 볼 때 쓴다). 응답을 줄이려고 tasks 는 진행 중·결과를 아직 안 받은 것 전부와 끝나고 받은 것 중 최근 5개만 싣고, task 의 instruction·result 와 팀원의 마지막 말은 앞 200자만(넘으면 "…") 싣는다. 결과 전문은 ${names.wait} 를 그 taskId 로 부르면 다시 받는다.`,
       inputSchema: {},
     },
     async () => {

@@ -27,6 +27,7 @@ import { FlowPanel } from './FlowPanel'
 import { KEY_STEP, clampPanelWidth, parsePanelWidth } from './panelWidth'
 import { NewTeamModal } from './NewTeamModal'
 import { TeamTodosModal } from './TeamTodosModal'
+import { TeamTasksModal } from './TeamTasksModal'
 import { remainingCount, todosOf } from './teamTodos'
 import { Modal, Segmented } from './Modal'
 import { alertDialog, confirmDialog, promptDialog } from './Dialog'
@@ -308,6 +309,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
   /** TODO 모달을 연 팀. 목록 팀 머리줄의 버튼과 사무실 팀 명판 옆 버튼이 같은 모달을 연다 */
   const [todoTeamId, setTodoTeamId] = useState<string | null>(null)
   const todoTeam = todoTeamId ? office.teams.find((t) => t.id === todoTeamId) : undefined
+  /** Tasks 창을 연 팀 (팀 ⋯ 메뉴 Tasks). 팀이 사라지면 그리지 않아 닫힌다 */
+  const [tasksTeamId, setTasksTeamId] = useState<string | null>(null)
+  const tasksTeam = tasksTeamId ? office.teams.find((t) => t.id === tasksTeamId) : undefined
 
   useEffect(() => {
     let isCurrent = true
@@ -1194,6 +1198,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
         ? { label: 'Open folder', onClick: () => void openTeamFolder(team) }
         : { label: 'Copy folder path', onClick: () => void copyTeamFolder(team) },
       { label: 'Rename', onClick: () => void editTeam(team) },
+      { label: 'Tasks', onClick: () => setTasksTeamId(team.id) },
       { label: 'Add part', onClick: () => openPartForm(team.id) },
       ...(team.leadSessionId ? [{ label: 'Remove lead', onClick: () => void releaseLead(team) }] : []),
       'separator',
@@ -1556,6 +1561,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
         )}
         {sessionForm && renderSessionModal(sessionForm.teamId, sessionForm.partId)}
         {todoTeam && <TeamTodosModal key={todoTeam.id} team={todoTeam} onClose={() => setTodoTeamId(null)} onChangeTodos={changeTodos} />}
+        {tasksTeam && <TeamTasksModal key={tasksTeam.id} team={tasksTeam} onClose={() => setTasksTeamId(null)} />}
         {partForm && (
           <Modal
             title={`New part — Team "${office.teams.find((t) => t.id === partForm.teamId)?.name ?? ''}"`}
