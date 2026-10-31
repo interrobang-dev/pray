@@ -66,5 +66,14 @@ describe('createTeamServer', () => {
     expect(tools.map((tool) => tool.name).sort()).toEqual(['jk_assign', 'jk_dismiss', 'jk_spawn_member', 'jk_status', 'jk_wait'])
     expect(JSON.stringify(tools)).not.toContain('team_')
     expect(tools.find((tool) => tool.name === 'jk_assign')!.description).toContain('jk_wait')
+    expect(tools.find((tool) => tool.name === 'jk_status')!.description).toContain('jk_wait 를 그 taskId 로')
+  })
+
+  it('team_status 설명은 줄인 규칙과 전문 받는 법을 적는다', async () => {
+    const { tools } = await listTools(mcpModeOf({ PRAY_TEAM_ID: 'T1', PRAY_SERVER: 'http://127.0.0.1:1' })!)
+    const status = tools.find((tool) => tool.name === 'team_status')!.description
+    expect(status).toContain('최근 5개')
+    expect(status).toContain('앞 200자')
+    expect(status).toContain('team_wait 를 그 taskId 로')
   })
 })

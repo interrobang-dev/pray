@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { HookPayload } from './hookState.js'
+import type { TurnOutcome } from './transcript.js'
 
 export type TaskStatus = 'running' | 'done' | 'failed'
 
@@ -20,6 +21,61 @@ export interface Task {
   finishedAt: string | null
   /** wait 가 이 task 를 한 번 돌려줬는지. taskId 없는 wait·여러 task wait 가 같은 결과를 두 번 주지 않게 */
   isDelivered: boolean
+  /** 운영 기록: 지시할 때 팀원의 문맥 크기 (세션 목록의 contextTokens. 새 팀원·모르면 null) */
+  startContextTokens: number | null
+  /** 운영 기록: 지시할 때 팀원이 쉬기 시작한 시각 (team_status 의 idleSince. 일하는 중·새 팀원이면 null) */
+  startIdleSince: string | null
+  /** 운영 기록: 끝난 뒤 읽은 팀원의 문맥 크기 (끝난 직후 jsonl 요약. 못 읽었으면 null) */
+  endContextTokens: number | null
+}
+
+/** 지시할 때의 팀원 상태 (운영 기록) */
+export interface TaskStart {
+  contextTokens: number | null
+  idleSince: string | null
+}
+
+const UNKNOWN_START: TaskStart = { contextTokens: null, idleSince: null }
+
+/** 서버 재시작 전에 running 이던 task 를 정리할 때 보는 팀원 상태. 세션 목록에 없으면 null */
+export interface RestoredMember {
+  isAlive: boolean
+  /** jsonl 마지막 대화 줄 시각 (transcript.ts turnEndedAt) */
+  turnEndedAt: string | null
+  /** jsonl 마지막 차례. jsonl 이 없으면 null */
+  turn: TurnOutcome | null
+}
+
+export type RestoredOutcome =
+  | { status: 'running'; isAcknowledged: boolean }
+  | { status: 'done'; result: string }
+  | { status: 'failed'; error: string }
+
+export const RESTORED_GONE_ERROR = '서버가 재시작하는 동안 팀원 세션이 끝남'
+export const RESTORED_CUT_ERROR = '서버가 재시작하는 동안 팀원의 차례가 끊김'
+
+/**
+ * 서버 재시작 전에 running 이던 task 의 결말 (순수). 그 사이 훅(Stop·UserPromptSubmit)은 서버가 못 받았으므로 jsonl 로 메운다.
+ * 팀원이 근무 중이 아니면 failed (프로세스가 없으니 Stop 이 영영 안 온다).
+ * 근무 중이고 jsonl 의 마지막 대화 줄이 지시 뒤(turnEndedAt ≥ createdAt)면 그 차례는 이 지시의 것이다:
+ * ended → done(그 차례의 마지막 글), interrupted·cut → failed, in-progress → running 이고 접수된 것으로 본다.
+ * 지시 뒤 대화 줄이 없으면 running 그대로 (평소처럼 다음 Stop·접수 시간 초과가 끝낸다)
+ */
+export function restoredOutcome(task: Pick<Task, 'createdAt' | 'isAcknowledged'>, member: RestoredMember | null): RestoredOutcome {
+  if (!member?.isAlive) return { status: 'failed', error: RESTORED_GONE_ERROR }
+  const endedAt = member.turnEndedAt === null ? Number.NaN : new Date(member.turnEndedAt).getTime()
+  const isAfter = endedAt >= new Date(task.createdAt).getTime()
+  if (!isAfter || !member.turn) return { status: 'running', isAcknowledged: task.isAcknowledged }
+  if (member.turn.kind === 'ended') return { status: 'done', result: member.turn.text ?? '' }
+  if (member.turn.kind === 'interrupted' || member.turn.kind === 'cut') return { status: 'failed', error: RESTORED_CUT_ERROR }
+  return { status: 'running', isAcknowledged: true }
+}
+
+export interface TaskStoreHooks {
+  /** task 가 만들어지거나 바뀌면 (파일 저장용). 던지지 않아야 한다 */
+  onChange?: () => void
+  /** task 가 끝나면 (끝난 뒤 문맥 크기 기록용). 던지지 않아야 한다 */
+  onFinish?: (task: Task) => void
 }
 
 /**
@@ -41,14 +97,74 @@ type Waiter = {
 }
 
 /**
- * 팀장이 팀원에게 준 task 의 상태 기계. 서버 메모리에만 있다 (훅 상태와 같은 수명).
- * 전이: assign → running → (Stop) done | (ack 없음·exit·중지) failed
+ * 팀장이 팀원에게 준 task 의 상태 기계. 파일 저장은 밖(teamTaskFile.ts)이 onChange 로 하고 서버 시작 때 restore 로 되살린다.
+ * 전이: assign → running → (Stop) done | (ack 없음·exit·중지) failed. 되살린 running 은 reconcileRestored 가 jsonl 로 정리한다
  */
 export class TaskStore {
   private readonly tasks = new Map<string, Task>()
   private readonly waiters = new Set<Waiter>()
+  /** 되살렸는데 아직 jsonl 로 정리하지 않은 running task. 정리 전에는 접수 시간 초과로 끝내지 않는다 (그 사이 접수됐을 수 있다) */
+  private readonly unreconciled = new Set<string>()
 
-  constructor(private readonly now: () => Date = () => new Date()) {}
+  constructor(
+    private readonly now: () => Date = () => new Date(),
+    private readonly hooks: TaskStoreHooks = {},
+  ) {}
+
+  /** 저장된 task 를 넣는다 (서버 시작 때 한 번, 넣은 순서 = 오래된 것 먼저). running 은 reconcileRestored 를 기다린다 */
+  restore(tasks: readonly Task[]): void {
+    for (const task of tasks) {
+      this.tasks.set(task.id, { ...task })
+      if (task.status === 'running') this.unreconciled.add(task.id)
+    }
+  }
+
+  /** 저장할 task 전부 (넣은 순서) */
+  list(): Task[] {
+    return [...this.tasks.values()]
+  }
+
+  hasUnreconciled(): boolean {
+    return this.unreconciled.size > 0
+  }
+
+  /** 되살린 running task 를 restoredOutcome 규칙으로 정리한다. lookup 은 팀원 세션 ID → 상태(목록에 없으면 null) */
+  reconcileRestored(lookup: (memberSessionId: string) => RestoredMember | null): void {
+    let isChanged = false
+    for (const id of [...this.unreconciled]) {
+      this.unreconciled.delete(id)
+      const task = this.tasks.get(id)
+      if (!task || task.status !== 'running') continue
+      const outcome = restoredOutcome(task, lookup(task.memberSessionId))
+      if (outcome.status === 'done') this.finish(task, 'done', outcome.result, null)
+      else if (outcome.status === 'failed') this.finish(task, 'failed', null, outcome.error)
+      else if (outcome.isAcknowledged !== task.isAcknowledged) {
+        task.isAcknowledged = outcome.isAcknowledged
+        isChanged = true
+      }
+    }
+    if (isChanged) this.changed()
+  }
+
+  /** 끝난 지 retentionMs 가 지난 task 를 지운다 (running 은 두고). 지운 개수. onChange 를 부르지 않는다 (저장하는 쪽이 부른다) */
+  prune(retentionMs: number): number {
+    const limit = this.now().getTime() - retentionMs
+    let count = 0
+    for (const [id, task] of this.tasks) {
+      if (task.finishedAt === null || new Date(task.finishedAt).getTime() >= limit) continue
+      this.tasks.delete(id)
+      count++
+    }
+    return count
+  }
+
+  /** 끝난 뒤 읽은 문맥 크기 (운영 기록) */
+  setEndContextTokens(taskId: string, contextTokens: number | null): void {
+    const task = this.tasks.get(taskId)
+    if (!task || task.endContextTokens === contextTokens) return
+    task.endContextTokens = contextTokens
+    this.changed()
+  }
 
   get(taskId: string): Task | undefined {
     return this.tasks.get(taskId)
@@ -68,7 +184,13 @@ export class TaskStore {
   }
 
   /** 같은 팀원에게 running task 가 있으면 거부한다. 지시자가 순서를 지키게 강제 */
-  assign(teamId: string, memberSessionId: string, instruction: string, partId: string | null = null): Task {
+  assign(
+    teamId: string,
+    memberSessionId: string,
+    instruction: string,
+    partId: string | null = null,
+    start: TaskStart = UNKNOWN_START,
+  ): Task {
     const isBusy = [...this.tasks.values()].some((t) => t.memberSessionId === memberSessionId && t.status === 'running')
     if (isBusy) throw new TaskConflictError(memberSessionId)
     const task: Task = {
@@ -84,15 +206,22 @@ export class TaskStore {
       createdAt: this.now().toISOString(),
       finishedAt: null,
       isDelivered: false,
+      startContextTokens: start.contextTokens,
+      startIdleSince: start.idleSince,
+      endContextTokens: null,
     }
     this.tasks.set(task.id, task)
+    this.changed()
     return task
   }
 
   applyHook(payload: HookPayload): void {
     const task = this.runningOf(payload.session_id)
     if (!task) return
-    if (payload.hook_event_name === 'UserPromptSubmit') task.isAcknowledged = true
+    if (payload.hook_event_name === 'UserPromptSubmit' && !task.isAcknowledged) {
+      task.isAcknowledged = true
+      this.changed()
+    }
     if (payload.hook_event_name === 'Stop') this.finish(task, 'done', payload.last_assistant_message ?? '', null)
   }
 
@@ -112,7 +241,7 @@ export class TaskStore {
   expireUnacknowledged(): void {
     const limit = this.now().getTime() - ACK_TIMEOUT_MS
     for (const task of this.tasks.values()) {
-      if (task.status !== 'running' || task.isAcknowledged) continue
+      if (task.status !== 'running' || task.isAcknowledged || this.unreconciled.has(task.id)) continue
       if (new Date(task.createdAt).getTime() <= limit) this.finish(task, 'failed', null, '팀원이 지시를 받지 못함 (터미널 입력 불가 상태)')
     }
   }
@@ -135,6 +264,7 @@ export class TaskStore {
     const finished = candidates.find((t) => t.status !== 'running' && !t.isDelivered)
     if (finished) {
       finished.isDelivered = true
+      this.changed()
       return Promise.resolve(finished)
     }
     if (!candidates.some((t) => t.status === 'running')) {
@@ -183,6 +313,7 @@ export class TaskStore {
     task.result = result
     task.error = error
     task.finishedAt = this.now().toISOString()
+    this.unreconciled.delete(task.id)
     for (const waiter of this.waiters) {
       if (waiter.teamId !== task.teamId || waiter.partId !== task.partId) continue
       if (waiter.taskIds !== null && !waiter.taskIds.has(task.id)) continue
@@ -191,6 +322,12 @@ export class TaskStore {
       task.isDelivered = true
       waiter.resolve(task)
     }
+    this.changed()
+    this.hooks.onFinish?.(task)
+  }
+
+  private changed(): void {
+    this.hooks.onChange?.()
   }
 }
 

@@ -105,8 +105,9 @@ import { makeUsageCache } from './usage.js'
 import { AccountError, accountErrorBody, makeAccountStore } from './accountStore.js'
 import { makeLoginManager, runClaudeAuth } from './accountLogin.js'
 import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
-import { TaskConflictError, TaskStore } from './teamState.js'
-import { teamMemberOf } from './teamMembers.js'
+import { TaskConflictError, TaskStore, type RestoredMember } from './teamState.js'
+import { idleSinceOf, teamMemberOf, teamStatusTasks } from './teamMembers.js'
+import { TeamTaskLog } from './teamTaskFile.js'
 import { parseWaitRequest, respondJsonAfter } from './taskWait.js'
 import { leadExtraArgs } from './lead.js'
 import { formatHandoff, HANDOFF_LIMIT, handoffMessage, leadTranscriptPath, readHandoffSource, type LeadKind } from './leadHandoff.js'
@@ -152,7 +153,20 @@ const PORT = 4710
 const hookStates = new Map<string, HookState>()
 const subscribers = new Set<Response>()
 const host = new HostClient()
-const tasks = new TaskStore()
+/**
+ * 팀 task. `~/.claude/pray/team-tasks.json` 에 저장해 서버 재시작에도 남는다 (teamTaskFile.ts). 끝나면 그 팀원의 문맥 크기를 기록한다.
+ * onChange·onFinish 는 훅·타이머에서도 불리므로 던지지 않는다
+ */
+const tasks = new TaskStore(undefined, {
+  onChange: () => taskLog.save(),
+  onFinish: (task) => {
+    findTranscriptSummary(task.memberSessionId)
+      .then((summary) => tasks.setEndContextTokens(task.id, summary?.contextTokens ?? null))
+      .catch((error: unknown) => console.error(`task 끝 문맥 크기 읽기 실패 (${task.id}): ${error}`))
+  },
+})
+const taskLog = new TeamTaskLog(join(dataDir(), 'team-tasks.json'), tasks)
+taskLog.load()
 /**
  * 웹 세션의 AskUserQuestion PermissionRequest 훅 요청을 응답하지 않고 붙잡아 둔 것 (세션당 하나).
  * 답하기 API 가 이 응답으로 결정을 돌려준다. 터미널 화면과 경쟁해 먼저 결정한 쪽이 이긴다
@@ -1875,7 +1889,10 @@ async function assignTask(team: Team, part: Part | null, sessionId: string, inst
   }
   let task
   try {
-    task = tasks.assign(team.id, sessionId, instruction, part?.id ?? null)
+    task = tasks.assign(team.id, sessionId, instruction, part?.id ?? null, {
+      contextTokens: member.contextTokens,
+      idleSince: idleSinceOf(member.status, member.turnEndedAt),
+    })
   } catch (error) {
     if (error instanceof TaskConflictError) {
       res.status(409).json({ message: error.message })
@@ -1958,7 +1975,7 @@ app.get('/api/team/:teamId', async (req, res) => {
     .map(teamMemberOf)
   // 할 일은 싣지 않는다 (팀장 토큰 절약)
   const { todos: _todos, ...teamWithoutTodos } = team
-  res.json({ ...teamWithoutTodos, vcs: vcsOf(team.cwd), part, members, tasks: tasks.listByUnit(team.id, part?.id ?? null) })
+  res.json({ ...teamWithoutTodos, vcs: vcsOf(team.cwd), part, members, tasks: teamStatusTasks(tasks.listByUnit(team.id, part?.id ?? null)) })
 })
 
 app.patch('/api/team/:teamId', (req, res) => {
@@ -2174,6 +2191,17 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   setSessionName(sessionId, memberName)
   if (memberPosition) setPosition(sessionId, memberPosition)
   if (memberGender) setGender(sessionId, memberGender)
+  taskLog.record({
+    kind: 'spawn',
+    teamId: team.id,
+    partId: part?.id ?? null,
+    sessionId,
+    position: memberPosition,
+    model: modelChoice.model,
+    effort: modelChoice.effort,
+    contextTokens: null,
+    idleSince: null,
+  })
   const member = { sessionId, name: memberName, position: memberPosition, cwd }
   if (!instruction) {
     res.json({ member, task: null, isTrustFailed })
@@ -2190,9 +2218,38 @@ app.post('/api/team/:teamId/members', async (req, res) => {
 })
 
 /** 팀원 세션 종료 (team_dismiss). 호스트가 기록을 팀장이 정리(released) 퇴근으로 옮긴다 — 보관 기간이 짧다 */
-app.delete('/api/team/:teamId/members/:sessionId', (req, res) => {
-  host.send({ type: 'kill', sessionId: req.params.sessionId, isReleased: true })
-  tasks.markExited(req.params.sessionId)
+app.delete('/api/team/:teamId/members/:sessionId', async (req, res) => {
+  const unit = findUnit(req.params.teamId, req.query.partId, res)
+  if (!unit) return
+  const { sessionId } = req.params
+  // 지휘 단위의 팀원(웹 세션)만 정리한다. 안 보면 지시자가 다른 팀·파트의 세션이나 자기 자신을 끌 수 있다 (assignTask 와 같은 판정)
+  const session = (await snapshotPayload()).sessions.find((s) => s.id === sessionId)
+  if (!session || session.teamId !== unit.team.id) {
+    res.status(404).json({ message: 'Not a session of this team' })
+    return
+  }
+  if (session.partId !== (unit.part?.id ?? null)) {
+    res.status(403).json({ message: "Can't dismiss a session in another unit (directly under the team or another part)" })
+    return
+  }
+  if (session.role !== 'member') {
+    res.status(404).json({ message: 'Not a member (web session)' })
+    return
+  }
+  // 운영 기록: 정리 직전 값
+  taskLog.record({
+    kind: 'dismiss',
+    teamId: unit.team.id,
+    partId: unit.part?.id ?? null,
+    sessionId,
+    position: session.position,
+    model: session.model,
+    effort: session.effort,
+    contextTokens: session.contextTokens,
+    idleSince: idleSinceOf(session.status, session.turnEndedAt),
+  })
+  host.send({ type: 'kill', sessionId, isReleased: true })
+  tasks.markExited(sessionId)
   res.json({})
 })
 
@@ -2771,7 +2828,37 @@ watcher.on('change', (sessionId: string) => {
   for (const res of subscribers) sendSse(res, 'transcript', { sessionId })
 })
 
+/**
+ * 재시작 전에 running 이던 task 를 jsonl 로 정리한다 (teamState.ts restoredOutcome). 그 사이 못 받은 Stop 때문에 영영 running 으로 남지 않게.
+ * 요청 처리 밖이라 목록(hq.json)을 못 읽으면 로그만 남기고 5초 뒤 다시 한다
+ */
+let isReconcileFailing = false
+async function reconcileRestoredTasks(): Promise<void> {
+  if (!tasks.hasUnreconciled()) return
+  try {
+    const { sessions } = await snapshotPayload()
+    const members = new Map<string, RestoredMember>()
+    for (const task of tasks.list()) {
+      if (task.status !== 'running' || members.has(task.memberSessionId)) continue
+      const session = sessions.find((s) => s.id === task.memberSessionId)
+      const summary = session ? await findTranscriptSummary(session.id) : null
+      members.set(task.memberSessionId, {
+        isAlive: session?.isAlive ?? false,
+        turnEndedAt: summary?.turnEndedAt ?? null,
+        turn: summary?.turn ?? null,
+      })
+    }
+    tasks.reconcileRestored((id) => members.get(id) ?? null)
+    isReconcileFailing = false
+  } catch (error) {
+    if (!isReconcileFailing) console.error(`되살린 task 정리 실패 (5초 뒤 다시): ${error}`)
+    isReconcileFailing = true
+  }
+}
+void reconcileRestoredTasks()
+
 setInterval(() => void broadcast(), 5000)
+setInterval(() => void reconcileRestoredTasks(), 5000)
 setInterval(() => tasks.expireUnacknowledged(), 1000)
 void flowPoller.check()
 setInterval(() => void flowPoller.check(), FLOW_POLL_MS)

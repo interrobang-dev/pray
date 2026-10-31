@@ -117,7 +117,7 @@ export function createTeamServer(mode: McpMode, api: TeamApi): McpServer {
     names.wait,
     {
       description:
-        'task 가 끝날 때까지(done·failed) 기다린다. 결과는 task.result (팀원의 마지막 응답), pendingTaskIds 는 아직 결과를 안 받은 task. 여러 팀원에게 일을 나눠 줬으면 하나씩 기다리지 말고 taskIds 로 한 번에 불러 먼저 끝난 것부터 받고, 남은 pendingTaskIds 로 다시 부른다. taskId·taskIds 를 다 빼면 지휘 단위의 아무 task 하나. 시간 안에 안 끝나면 task 가 null 로 돌아오니 다시 호출하면 된다.',
+        'task 가 끝날 때까지(done·failed) 기다린다. 결과는 task.result (팀원의 마지막 응답), pendingTaskIds 는 아직 결과를 안 받은 task. 여러 팀원에게 일을 나눠 줬으면 하나씩 기다리지 말고 taskIds 로 한 번에 불러 먼저 끝난 것부터 받고, 남은 pendingTaskIds 로 다시 부른다. taskId·taskIds 를 다 빼면 지휘 단위의 아무 task 하나. 시간 안에 안 끝나면 task 가 null 로 돌아오니 다시 호출하면 된다. 이미 받은 task 도 taskId 하나로 부르면 전문을 다시 준다 (끝난 지 7일 지난 것은 지워져 null).',
       inputSchema: {
         taskId: z.string().optional().describe('기다릴 task ID 하나'),
         taskIds: z.array(z.string()).optional().describe('여러 task 를 한꺼번에 기다릴 때 ID 목록. 그중 먼저 끝난 하나를 돌려준다'),
@@ -151,7 +151,7 @@ export function createTeamServer(mode: McpMode, api: TeamApi): McpServer {
     names.status,
     {
       description:
-        '팀의 세션 목록(role = 지휘자·팀원 구분, position = 역할 약어, 웹/외부·상태·모델·effort·마지막 말)과 task 목록을 본다. 모델·effort 는 마지막 응답 기준이라 아직 대화가 없으면 null 이다. contextTokens = 팀원의 지금 문맥 크기(토큰, 마지막 응답 기준. 모르면 null), idleSince = 차례를 끝내고 쉬기 시작한 시각(ISO. 일하는 중이면 null) — 팀원을 다시 쓸지 정리할지 볼 때 쓴다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다.',
+        `팀의 세션 목록(role = 지휘자·팀원 구분, position = 역할 약어, 웹/외부·상태·모델·effort·마지막 말)과 task 목록을 본다. 모델·effort 는 마지막 응답 기준이라 아직 대화가 없으면 null 이다. contextTokens = 팀원의 지금 문맥 크기(토큰, 마지막 응답 기준. 모르면 null), idleSince = 차례를 끝내고 쉬기 시작한 시각(ISO. 일하는 중이면 null) — 팀원을 다시 쓸지 정리할지 볼 때 쓴다. 지시할 수 있는 대상은 role 이 member 인 세션뿐이다. 응답을 줄이려고 tasks 는 진행 중·결과를 아직 안 받은 것 전부와 끝나고 받은 것 중 최근 5개만 싣고, task 의 instruction·result 와 팀원의 마지막 말은 앞 200자만(넘으면 "…") 싣는다. 결과 전문은 ${names.wait} 를 그 taskId 로 부르면 다시 받는다.`,
       inputSchema: {},
     },
     async () => {
