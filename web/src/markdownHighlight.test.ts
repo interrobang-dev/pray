@@ -63,6 +63,10 @@ describe('경로 강조', () => {
     expect(marked('web/src/Chat.tsx를 고치고 Files.tsx에서 본다')).toEqual(['path:web/src/Chat.tsx', 'path:Files.tsx'])
   })
 
+  it('한글 이름이 든 경로는 조각(.md·D:/)도 칠하지 않는다', () => {
+    expect(marked('docs/plans/설계 문서.md 와 web/src/한글파일.ts, D:/작업/a.ts, ~/문서/메모.txt, src/설계/a.ts')).toEqual([])
+  })
+
   it('줄 번호는 경로 안에 넣는다 (숫자로 따로 칠하지 않음)', () => {
     expect(marked('at web/src/Chat.tsx:422 and Files.tsx:10:5')).toEqual(['path:web/src/Chat.tsx:422', 'path:Files.tsx:10:5'])
   })

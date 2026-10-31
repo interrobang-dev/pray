@@ -39,6 +39,8 @@ const LINE_SUFFIX = /^:\d+(?::\d+)?(?![\w])/
 
 /** 경로 앞에 올 수 없는 글자 (낱말·다른 경로의 한가운데) */
 const PATH_PREV_BLOCK = /[\w./\\:@~)\]-]/
+/** 한글 같은 ASCII 밖 글자. 경로 구간은 ASCII 만 받으므로(붙은 조사를 떼려고) 이런 글자가 든 경로는 칠하지 않는다 — 조각(`.md`·`D:/`)만 칠해지지 않게 */
+const NON_ASCII_LETTER = /(?![A-Za-z])\p{L}/u
 
 function overlaps(ranges: { start: number; end: number }[], start: number, end: number): boolean {
   return ranges.some((range) => start < range.end && end > range.start)
@@ -65,11 +67,16 @@ function isPathLike(path: string): boolean {
   return dot > 0 && EXTENSION_PATTERN.test(last.slice(dot + 1))
 }
 
+/** 경로가 `/`·`\` 로 끝나고 바로 뒤에 ASCII 밖 글자가 이어진다 (`D:/작업`·`docs/설계` 의 앞 조각) */
+function cutBeforeLetter(text: string, end: number): boolean {
+  return '/\\'.includes(text[end - 1]) && NON_ASCII_LETTER.test(text[end] ?? '')
+}
+
 function findPaths(text: string, excluded: { start: number; end: number }[]): HighlightRange[] {
   const found: HighlightRange[] = []
   const add = (start: number, end: number, check?: (path: string) => boolean) => {
     const trimmed = trimEnd(text, start, end)
-    if (trimmed <= start || PATH_PREV_BLOCK.test(text[start - 1] ?? '') || overlaps(excluded, start, trimmed) || overlaps(found, start, trimmed)) return
+    if (trimmed <= start || PATH_PREV_BLOCK.test(text[start - 1] ?? '') || NON_ASCII_LETTER.test(text[start - 1] ?? '') || cutBeforeLetter(text, trimmed) || overlaps(excluded, start, trimmed) || overlaps(found, start, trimmed)) return
     if (check && !check(text.slice(start, trimmed))) return
     const suffix = LINE_SUFFIX.exec(text.slice(trimmed))
     found.push({ start, end: trimmed + (suffix ? suffix[0].length : 0), kind: 'path' })
