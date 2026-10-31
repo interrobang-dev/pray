@@ -4,6 +4,7 @@ import { diffRowsOf, STATUS_LABELS, STATUS_LETTERS } from './changes'
 import { appendCommits, commitChatText, commitFileNotes, historyNote, parentNote, refChips } from './commitHistory'
 import { CopyButton } from './CopyButton'
 import { DiffView } from './DiffView'
+import { FileName } from './FileName'
 import { formatAgo, formatDateTime, type CommitDetail, type HistoryCommit, type WorkspaceDiff, type WorkspaceHistory } from './types'
 import { apiUrl, fetchJson } from './workspaceApi'
 import { nameOf } from './workspaceTree'
@@ -285,7 +286,7 @@ function CommitPane({
                 <span className={`ws-change-letter ${file.status}`} aria-label={STATUS_LABELS[file.status]}>
                   {STATUS_LETTERS[file.status]}
                 </span>
-                <span className={`ws-change-name${file.status === 'deleted' ? ' is-gone' : ''}`}>{file.path.slice(slash + 1)}</span>
+                <FileName name={file.path.slice(slash + 1)} className={`ws-change-name${file.status === 'deleted' ? ' is-gone' : ''}`} />
                 {slash > 0 && <span className="ws-change-dir">{file.path.slice(0, slash)}</span>}
               </button>
             )

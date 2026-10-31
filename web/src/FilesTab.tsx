@@ -7,6 +7,7 @@ import { chatLocationText, clampLineRange, lineCountOf, locationText, type LineR
 import { CopyButton } from './CopyButton'
 import { alertDialog, choiceDialog } from './Dialog'
 import { DiffView } from './DiffView'
+import { FileName } from './FileName'
 import { formatSize } from './Files'
 import { CommitDiffView, EMPTY_HISTORY, HistoryPanel, type HistoryState } from './HistoryPanel'
 import {
@@ -533,7 +534,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
                   ●
                 </span>
               )}
-              <b>{nameOf(navPath)}</b>
+              <FileName name={nameOf(navPath)} className="ws-path-name" />
               {shownRange && <span className="ws-path-lines">{locationText('', shownRange)}</span>}
             </>
           )}
@@ -619,7 +620,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
                 })
               }
             >
-              Changes
+              <span className="ws-side-label">Changes</span>
               {changesState.status === 'ok' && changesState.changes.kind !== 'none' && changesState.changes.files.length > 0 && (
                 <span className="ws-count">{changesState.changes.files.length.toLocaleString('en')}{changesState.changes.isTruncated ? '+' : ''}</span>
               )}
@@ -698,7 +699,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
                   <span className="ws-chevron" aria-hidden="true">
                     {row.entry.kind === 'dir' ? (row.isExpanded ? '▾' : '▸') : ''}
                   </span>
-                  <span className="ws-row-name">{row.entry.name}</span>
+                  {row.entry.kind === 'dir' ? <span className="ws-row-name">{row.entry.name}</span> : <FileName name={row.entry.name} className="ws-row-name" />}
                 </button>
               ) : (
                 <div
@@ -801,7 +802,7 @@ function ChangesList({ state, selectedPath, onOpen, onReload }: { state: Changes
               <span className={`ws-change-letter ${file.status}`} aria-label={STATUS_LABELS[file.status]}>
                 {STATUS_LETTERS[file.status]}
               </span>
-              <span className={`ws-change-name${file.status === 'deleted' || file.status === 'missing' ? ' is-gone' : ''}`}>{file.path.slice(slash + 1)}</span>
+              <FileName name={file.path.slice(slash + 1)} className={`ws-change-name${file.status === 'deleted' || file.status === 'missing' ? ' is-gone' : ''}`} />
               {slash > 0 && <span className="ws-change-dir">{file.path.slice(0, slash)}</span>}
             </button>
           )

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceEntry } from './types'
-import { ancestorFolders, joinPath, nameOf, treeRows, type FolderState } from './workspaceTree'
+import { ancestorFolders, joinPath, nameOf, splitFileName, treeRows, type FolderState } from './workspaceTree'
 
 const dir = (name: string): WorkspaceEntry => ({ name, kind: 'dir', size: 0, mtime: '2026-10-28T00:00:00.000Z' })
 const file = (name: string): WorkspaceEntry => ({ name, kind: 'file', size: 1, mtime: '2026-10-28T00:00:00.000Z' })
@@ -15,6 +15,19 @@ describe('workspaceTree', () => {
     expect(ancestorFolders('a/b/c.ts')).toEqual(['a', 'a/b'])
     expect(ancestorFolders('c.ts')).toEqual([])
     expect(nameOf('a/b/c.ts')).toBe('c.ts')
+  })
+
+  it('splits a file name into a stem to shorten and a tail to keep', () => {
+    expect(splitFileName('workspaceSearch.test.ts')).toEqual(['workspaceSearch', '.test.ts'])
+    expect(splitFileName('App.tsx')).toEqual(['App', '.tsx'])
+    expect(splitFileName('README')).toEqual(['README', ''])
+    expect(splitFileName('.gitignore')).toEqual(['.gitignore', ''])
+    expect(splitFileName('.eslintrc.json')).toEqual(['.eslintrc', '.json'])
+    // 꼬리가 길면 마지막 점부터만
+    expect(splitFileName('2026-10-20-session.office-design.md')).toEqual(['2026-10-20-session.office-design', '.md'])
+    // 마지막 점 뒤도 길면 나누지 않는다
+    expect(splitFileName('a.verylongextension')).toEqual(['a.verylongextension', ''])
+    expect(splitFileName('trailing.')).toEqual(['trailing', '.'])
   })
 
   it('flattens only expanded folders, with loading and error notes', () => {

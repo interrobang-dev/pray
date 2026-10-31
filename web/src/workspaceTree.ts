@@ -24,6 +24,23 @@ export function nameOf(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1)
 }
 
+/** 확장자로 남길 꼬리의 최대 길이 (".test.ts"·".module.css" 는 통째로, 그보다 길면 마지막 점부터) */
+const MAX_EXTENSION_CHARS = 12
+
+/**
+ * 좁은 칸에서 파일 이름을 줄일 때 앞(stem)만 말줄임하고 꼬리(ext)는 남기려고 나눈다.
+ * "workspaceSearch.test.ts" → ["workspaceSearch", ".test.ts"] — 같은 앞부분을 가진 파일이 "workspaceSear…" 로 똑같이 보이지 않게.
+ * 맨 앞 점(".gitignore")은 확장자로 보지 않는다
+ */
+export function splitFileName(name: string): [stem: string, ext: string] {
+  const first = name.indexOf('.', 1)
+  if (first < 0) return [name, '']
+  if (name.length - first <= MAX_EXTENSION_CHARS) return [name.slice(0, first), name.slice(first)]
+  const last = name.lastIndexOf('.')
+  if (last <= 0 || name.length - last > MAX_EXTENSION_CHARS) return [name, '']
+  return [name.slice(0, last), name.slice(last)]
+}
+
 /** 펼친 폴더만 따라 내려가며 화면 줄로 편다 (기준 폴더는 늘 펼친 것으로 본다) */
 export function treeRows(folders: Record<string, FolderState>, expanded: ReadonlySet<string>): TreeRow[] {
   const rows: TreeRow[] = []
