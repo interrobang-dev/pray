@@ -5521,6 +5521,18 @@ li.group.drop-after::after {
 .task-text.task-error {
   color: var(--red);
 }
+.task-usage {
+  overflow-wrap: anywhere;
+  font-size: calc(12px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+/* 창 머리 아래 7일 합계 한 줄 (끝난 task 의 usage) */
+.tasks-total {
+  margin-top: -4px;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
 /* 팀원 들고 남: task 줄보다 작게, 줄을 누를 수 없다 */
 .task-event {
   padding: 3px 8px;

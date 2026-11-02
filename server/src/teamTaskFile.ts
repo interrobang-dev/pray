@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Task, TaskStatus, TaskStore } from './teamState.js'
+import type { TaskUsage } from './taskUsage.js'
 
 /** 끝난 task 를 남기는 기간. 지나면 파일과 메모리에서 지운다 */
 export const TASK_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
@@ -38,6 +39,22 @@ const TASK_STATUSES: ReadonlySet<TaskStatus> = new Set(['running', 'done', 'fail
 const stringOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 const numberOrNull = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 
+const USAGE_KEYS = ['inputTokens', 'outputTokens', 'cacheCreationTokens', 'cacheReadTokens', 'turns'] as const
+
+/** 저장된 task 사용량. 칸 하나라도 숫자가 아니면 null */
+function usageOrNull(value: unknown): TaskUsage | null {
+  if (typeof value !== 'object' || value === null) return null
+  const v = value as Record<string, unknown>
+  if (!USAGE_KEYS.every((key) => numberOrNull(v[key]) !== null)) return null
+  return {
+    inputTokens: v.inputTokens as number,
+    outputTokens: v.outputTokens as number,
+    cacheCreationTokens: v.cacheCreationTokens as number,
+    cacheReadTokens: v.cacheReadTokens as number,
+    turns: v.turns as number,
+  }
+}
+
 /** 저장된 task 한 개. 꼴이 틀리면 null (그 항목만 버린다). 나중에 더한 칸이 없는 옛 항목은 null 로 채운다 */
 export function parseTask(value: unknown): Task | null {
   if (typeof value !== 'object' || value === null) return null
@@ -61,6 +78,8 @@ export function parseTask(value: unknown): Task | null {
     startContextTokens: numberOrNull(v.startContextTokens),
     startIdleSince: stringOrNull(v.startIdleSince),
     endContextTokens: numberOrNull(v.endContextTokens),
+    usage: usageOrNull(v.usage),
+    model: stringOrNull(v.model),
   }
 }
 

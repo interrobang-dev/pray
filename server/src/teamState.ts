@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { HookPayload } from './hookState.js'
 import type { TurnOutcome } from './transcript.js'
+import type { TaskEnd, TaskUsage } from './taskUsage.js'
 
 export type TaskStatus = 'running' | 'done' | 'failed'
 
@@ -27,6 +28,10 @@ export interface Task {
   startIdleSince: string | null
   /** 운영 기록: 끝난 뒤 읽은 팀원의 문맥 크기 (끝난 직후 jsonl 요약. 못 읽었으면 null) */
   endContextTokens: number | null
+  /** 운영 기록: 끝난 뒤 jsonl 에서 더한 이 task 의 claude 응답 usage (createdAt 이후). 못 읽었거나 응답이 없으면 null */
+  usage: TaskUsage | null
+  /** 운영 기록: 그 응답들의 마지막 model (전체 이름). 모르면 null */
+  model: string | null
 }
 
 /** 지시할 때의 팀원 상태 (운영 기록) */
@@ -74,7 +79,7 @@ export function restoredOutcome(task: Pick<Task, 'createdAt' | 'isAcknowledged'>
 export interface TaskStoreHooks {
   /** task 가 만들어지거나 바뀌면 (파일 저장용). 던지지 않아야 한다 */
   onChange?: () => void
-  /** task 가 끝나면 (끝난 뒤 문맥 크기 기록용). 던지지 않아야 한다 */
+  /** task 가 끝나면 (끝난 뒤 문맥 크기·사용량 기록용). 던지지 않아야 한다 */
   onFinish?: (task: Task) => void
 }
 
@@ -158,11 +163,16 @@ export class TaskStore {
     return count
   }
 
-  /** 끝난 뒤 읽은 문맥 크기 (운영 기록) */
-  setEndContextTokens(taskId: string, contextTokens: number | null): void {
+  /** 끝난 뒤 읽은 문맥 크기·사용량·모델 (운영 기록) */
+  setEnd(taskId: string, end: TaskEnd): void {
     const task = this.tasks.get(taskId)
-    if (!task || task.endContextTokens === contextTokens) return
-    task.endContextTokens = contextTokens
+    if (!task) return
+    const isSame =
+      task.endContextTokens === end.contextTokens && task.model === end.model && JSON.stringify(task.usage) === JSON.stringify(end.usage)
+    if (isSame) return
+    task.endContextTokens = end.contextTokens
+    task.usage = end.usage
+    task.model = end.model
     this.changed()
   }
 
@@ -209,6 +219,8 @@ export class TaskStore {
       startContextTokens: start.contextTokens,
       startIdleSince: start.idleSince,
       endContextTokens: null,
+      usage: null,
+      model: null,
     }
     this.tasks.set(task.id, task)
     this.changed()

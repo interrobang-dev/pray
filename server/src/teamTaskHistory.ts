@@ -1,5 +1,6 @@
 import type { TeamEvent } from './teamTaskFile.js'
 import type { Task, TaskStatus } from './teamState.js'
+import type { TaskUsage } from './taskUsage.js'
 
 /** 목록에 싣는 지시 앞부분 글자 수. 전문은 한 task API 로 받는다 */
 export const HISTORY_INSTRUCTION_LIMIT = 300
@@ -20,6 +21,8 @@ export interface TaskHistoryItem {
   finishedAt: string | null
   startContextTokens: number | null
   endContextTokens: number | null
+  usage: TaskUsage | null
+  model: string | null
   instruction: string
   isInstructionClipped: boolean
   error: string | null
@@ -65,6 +68,8 @@ export function taskHistoryOf(teamId: string, tasks: readonly Task[], events: re
         finishedAt: t.finishedAt,
         startContextTokens: t.startContextTokens,
         endContextTokens: t.endContextTokens,
+        usage: t.usage,
+        model: t.model,
         instruction: t.instruction.slice(0, HISTORY_INSTRUCTION_LIMIT),
         isInstructionClipped: t.instruction.length > HISTORY_INSTRUCTION_LIMIT,
         error: t.error,

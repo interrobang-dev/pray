@@ -19,6 +19,8 @@ const task = (id: string, fields: Partial<Task>): Task => ({
   startContextTokens: 1000,
   startIdleSince: null,
   endContextTokens: 5000,
+  usage: null,
+  model: null,
   ...fields,
 })
 
@@ -65,6 +67,18 @@ describe('taskHistoryOf', () => {
     expect(item.hasResult).toBe(true)
     expect(item).not.toHaveProperty('result')
     expect(taskHistoryOf('t1', [task('r', { status: 'running', result: null })], [], lookup).tasks[0].hasResult).toBe(false)
+  })
+
+  it('carries the usage and model of each task', () => {
+    const usage = { inputTokens: 1, outputTokens: 2, cacheCreationTokens: 3, cacheReadTokens: 4, turns: 1 }
+    const [item, old] = taskHistoryOf(
+      't1',
+      [task('old', {}), task('a', { createdAt: '2026-10-31T01:00:00Z', usage, model: 'claude-opus-5-5' })],
+      [],
+      lookup,
+    ).tasks
+    expect([item.usage, item.model]).toEqual([usage, 'claude-opus-5-5'])
+    expect([old.usage, old.model]).toEqual([null, null])
   })
 
   it('puts the later-added task first when times are equal', () => {

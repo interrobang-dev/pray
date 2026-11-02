@@ -107,6 +107,7 @@ import { makeLoginManager, runClaudeAuth } from './accountLogin.js'
 import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
 import { TaskConflictError, TaskStore, type RestoredMember } from './teamState.js'
 import { idleSinceOf, teamStatusMembers, teamStatusTasks } from './teamMembers.js'
+import { readTaskEnd } from './taskUsage.js'
 import { type MemberLookup, taskDetailOf, taskHistoryOf } from './teamTaskHistory.js'
 import { TeamTaskLog } from './teamTaskFile.js'
 import { parseWaitRequest, respondJsonAfter } from './taskWait.js'
@@ -155,15 +156,16 @@ const hookStates = new Map<string, HookState>()
 const subscribers = new Set<Response>()
 const host = new HostClient()
 /**
- * 팀 task. `~/.claude/pray/team-tasks.json` 에 저장해 서버 재시작에도 남는다 (teamTaskFile.ts). 끝나면 그 팀원의 문맥 크기를 기록한다.
+ * 팀 task. `~/.claude/pray/team-tasks.json` 에 저장해 서버 재시작에도 남는다 (teamTaskFile.ts).
+ * 끝나면 그 팀원의 문맥 크기(요약 캐시 — 덧붙은 줄만 읽는다)와 이 task 의 응답 usage·model(jsonl 글 한 번, taskUsage.ts)을 기록한다.
  * onChange·onFinish 는 훅·타이머에서도 불리므로 던지지 않는다
  */
 const tasks = new TaskStore(undefined, {
   onChange: () => taskLog.save(),
   onFinish: (task) => {
-    findTranscriptSummary(task.memberSessionId)
-      .then((summary) => tasks.setEndContextTokens(task.id, summary?.contextTokens ?? null))
-      .catch((error: unknown) => console.error(`task 끝 문맥 크기 읽기 실패 (${task.id}): ${error}`))
+    readTaskEnd(task, { summary: findTranscriptSummary, text: findTranscript })
+      .then((end) => tasks.setEnd(task.id, end))
+      .catch((error: unknown) => console.error(`task 끝 문맥 크기·사용량 읽기 실패 (${task.id}): ${error}`))
   },
 })
 const taskLog = new TeamTaskLog(join(dataDir(), 'team-tasks.json'), tasks)

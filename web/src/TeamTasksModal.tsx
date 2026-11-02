@@ -10,6 +10,10 @@ import {
   taskDuration,
   taskStatusLabel,
   timelineRows,
+  usageDetailText,
+  usageMetaText,
+  usageTotalOf,
+  usageTotalText,
   type TaskDetail,
   type TaskHistory,
   type TaskHistoryItem,
@@ -78,12 +82,15 @@ export function TeamTasksModal({ team, onClose }: Props) {
 
   const partName = (partId: string | null) => (partId ? (team.parts.find((part) => part.id === partId)?.name ?? 'Removed part') : null)
   const rows = history ? timelineRows(history) : []
+  const total = history ? usageTotalOf(history.tasks) : null
+  const totalText = total ? usageTotalText(total) : null
 
   function renderTask(task: TaskHistoryItem) {
     const isOpen = openId === task.id
     const growth = contextGrowthText(task.startContextTokens, task.endContextTokens, task.status === 'running')
     const endSize = contextSizeOf(task.endContextTokens)
     const part = partName(task.partId)
+    const usageText = usageMetaText(task.usage, task.model)
     const detail = details[task.id]
     return (
       <li key={`task-${task.id}`} className={isOpen ? 'task-row open' : 'task-row'}>
@@ -109,6 +116,7 @@ export function TeamTasksModal({ team, onClose }: Props) {
                 Context {growth}
               </span>
             )}
+            {usageText && task.usage && <span title={usageDetailText(task.usage)}>{usageText}</span>}
             {part && <span>Part {part}</span>}
           </span>
         </button>
@@ -133,6 +141,12 @@ export function TeamTasksModal({ team, onClose }: Props) {
                   <div className="task-text">{detail.result}</div>
                 ) : (
                   <div className="task-empty">{detail.status === 'running' ? 'Not finished yet' : 'No result'}</div>
+                )}
+                {detail.usage && (
+                  <>
+                    <div className="task-detail-label">Usage</div>
+                    <div className="task-usage">{[detail.model, usageDetailText(detail.usage)].filter(Boolean).join(' · ')}</div>
+                  </>
                 )}
               </>
             )}
@@ -162,6 +176,11 @@ export function TeamTasksModal({ team, onClose }: Props) {
 
   return (
     <Modal title={`Tasks · ${team.name}`} subtitle="Tasks from the last 7 days, members from the last 30" onClose={onClose} className="tasks-modal" hasCloseButton>
+      {totalText && total && (
+        <div className="tasks-total" title={total.withUsage > 0 ? usageDetailText(total.usage) : undefined}>
+          {totalText}
+        </div>
+      )}
       {failure && <div className="todo-error">{failure}</div>}
       <div className="tasks-scroll">
         {!history ? (

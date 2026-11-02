@@ -138,6 +138,8 @@ describe('teamStatusTasks', () => {
     startContextTokens: null,
     startIdleSince: null,
     endContextTokens: null,
+    usage: null,
+    model: null,
     ...fields,
   })
 

@@ -77,7 +77,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 팀 → `team.md`
 - `host/src/team.ts` — Team·Part 타입, cwd → 팀·파트·역할 판정
-- `server/src/lead.ts` — 팀장·파트장 지침·spawn 인자·`--mcp-config` · `server/src/leadHandoff.ts` — 새 팀장·파트장에게 첫 메시지로 줄 직전 지시자 히스토리(압축 요약 + 그 뒤 지시·답) · `server/src/teamState.ts` — task 상태 기계(재시작 때 되살린 running 정리) · `server/src/teamTaskFile.ts` — task·팀원 운영 기록(spawn·dismiss)을 `~/.claude/pray/team-tasks.json` 에 저장·보관 기간 정리 · `server/src/teamTaskHistory.ts` — 화면 Tasks 창용 팀 task·운영 기록 목록과 task 전문 · `server/src/taskWait.ts` — team_wait 롱폴링(대기 시간·헤더 먼저 보내고 공백 흘리기)
+- `server/src/lead.ts` — 팀장·파트장 지침·spawn 인자·`--mcp-config` · `server/src/leadHandoff.ts` — 새 팀장·파트장에게 첫 메시지로 줄 직전 지시자 히스토리(압축 요약 + 그 뒤 지시·답) · `server/src/teamState.ts` — task 상태 기계(재시작 때 되살린 running 정리) · `server/src/teamTaskFile.ts` — task·팀원 운영 기록(spawn·dismiss)을 `~/.claude/pray/team-tasks.json` 에 저장·보관 기간 정리 · `server/src/teamTaskHistory.ts` — 화면 Tasks 창용 팀 task·운영 기록 목록과 task 전문 · `server/src/taskUsage.ts` — 끝난 task 의 jsonl 응답 usage 합·모델 · `server/src/taskWait.ts` — team_wait 롱폴링(대기 시간·헤더 먼저 보내고 공백 흘리기)
 - `server/src/memberModel.ts` — 팀원 모델·effort 값, extraArgs 의 `--model`·`--effort` 읽고 바꾸기 · `server/src/teamMembers.ts` — team_status 팀원 꼴(근무 중만 전체 꼴, 휴식·퇴근은 짧은 꼴. 문맥 크기 `contextTokens`·쉰 시각 `idleSince`) · `server/src/memberName.ts` — 팀원 이름 뽑기·역할 검증
 - `server/src/worktree.ts` — 파트 worktree 만들기·지우기, `~/.claude.json` 폴더 신뢰 기록
 - `mcp/src/index.ts`·`teamServer.ts`·`teamApi.ts` — 팀장·파트장 claude 에 붙는 stdio MCP 서버 (`team_spawn_member`·`team_assign`·`team_wait`·`team_status`·`team_dismiss`. 이름을 바꾸기 전 리드는 env 로 옛 모드 `jk_*`)

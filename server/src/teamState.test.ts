@@ -24,6 +24,26 @@ describe('TaskStore', () => {
     expect(await store.wait('t1', task.id, 10)).toMatchObject({ id: task.id, status: 'done' })
   })
 
+  it('calls onFinish once on Stop and saves what setEnd records only when it changes', () => {
+    const finished: string[] = []
+    let changes = 0
+    const store = new TaskStore(() => new Date(0), { onChange: () => changes++, onFinish: (t) => finished.push(t.id) })
+    const task = store.assign('t1', 'm1', '조사해')
+    expect([task.usage, task.model]).toEqual([null, null])
+    store.applyHook(hook('m1', 'Stop', '끝'))
+    expect(finished).toEqual([task.id])
+    const end = {
+      contextTokens: 9000,
+      usage: { inputTokens: 1, outputTokens: 2, cacheCreationTokens: 3, cacheReadTokens: 4, turns: 1 },
+      model: 'claude-opus-5-5',
+    }
+    const before = changes
+    store.setEnd(task.id, end)
+    store.setEnd(task.id, { ...end, usage: { ...end.usage } })
+    expect(changes).toBe(before + 1)
+    expect(store.get(task.id)).toMatchObject({ endContextTokens: 9000, usage: end.usage, model: 'claude-opus-5-5' })
+  })
+
   it('latestOf gives the newest task of that member across units', () => {
     const { store } = makeStore()
     expect(store.latestOf('m1')).toBeUndefined()

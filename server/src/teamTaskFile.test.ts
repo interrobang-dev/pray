@@ -20,6 +20,7 @@ import {
 } from './teamTaskFile.js'
 
 const DAY = 24 * 60 * 60 * 1000
+const USAGE = { inputTokens: 12, outputTokens: 480, cacheCreationTokens: 3000, cacheReadTokens: 90_000, turns: 4 }
 
 let dir: string
 let path: string
@@ -94,7 +95,7 @@ describe('TeamTaskLog', () => {
     const task = first.store.assign('t1', 'm1', '조사해', null, { contextTokens: 1200, idleSince: '2026-10-31T09:00:00Z' })
     first.store.applyHook(hook('m1', 'UserPromptSubmit'))
     first.store.applyHook(hook('m1', 'Stop', '결과'))
-    first.store.setEndContextTokens(task.id, 5400)
+    first.store.setEnd(task.id, { contextTokens: 5400, usage: USAGE, model: 'claude-opus-5-5' })
 
     const second = makeServer(clock)
     expect(second.store.latestOf('m1')).toMatchObject({ id: task.id, status: 'done', result: '결과' })
@@ -103,6 +104,8 @@ describe('TeamTaskLog', () => {
       startContextTokens: 1200,
       startIdleSince: '2026-10-31T09:00:00Z',
       endContextTokens: 5400,
+      usage: USAGE,
+      model: 'claude-opus-5-5',
     })
     // 가져간 것도 저장돼 다음 재시작 뒤 아무 task wait 가 다시 주지 않는다
     const third = makeServer(clock)
@@ -243,10 +246,26 @@ describe('parseTeamTaskData', () => {
       }),
     )
     expect(data.tasks).toEqual([
-      expect.objectContaining({ id: 'a', isDelivered: false, startContextTokens: null, startIdleSince: null, endContextTokens: null }),
+      expect.objectContaining({ id: 'a', isDelivered: false, startContextTokens: null, startIdleSince: null, endContextTokens: null, usage: null, model: null }),
     ])
     expect(data.events).toEqual([])
     expect(() => parseTeamTaskData('[]')).toThrow()
+  })
+
+  it('keeps a stored usage and drops one with a missing count', () => {
+    const base = { teamId: 't', partId: null, memberSessionId: 'm', instruction: 'i', status: 'done', createdAt: 'c' }
+    const data = parseTeamTaskData(
+      JSON.stringify({
+        tasks: [
+          { ...base, id: 'a', usage: USAGE, model: 'claude-opus-5-5' },
+          { ...base, id: 'b', usage: { ...USAGE, turns: 'x' }, model: 3 },
+        ],
+      }),
+    )
+    expect(data.tasks.map((t) => [t.usage, t.model])).toEqual([
+      [USAGE, 'claude-opus-5-5'],
+      [null, null],
+    ])
   })
 
   it('reads a missing file as empty without a warning', () => {

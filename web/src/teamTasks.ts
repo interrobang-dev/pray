@@ -4,6 +4,16 @@ import { modelAlias } from './modelSetting'
 
 export type TaskStatus = 'running' | 'done' | 'failed'
 
+/** task 하나가 쓴 토큰 (팀원 jsonl 의 claude 응답 usage 합. 서버 `server/src/taskUsage.ts`) */
+export interface TaskUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+  /** claude 응답 수 */
+  turns: number
+}
+
 /** `GET /api/team/:teamId/tasks` 의 task 한 줄 (지시는 앞부분만, 결과 없음) */
 export interface TaskHistoryItem {
   id: string
@@ -18,6 +28,10 @@ export interface TaskHistoryItem {
   finishedAt: string | null
   startContextTokens: number | null
   endContextTokens: number | null
+  /** 끝난 뒤 서버가 jsonl 에서 더한 값. 진행 중·옛 task·응답이 없으면 null */
+  usage: TaskUsage | null
+  /** 그 응답들의 마지막 모델 (전체 이름) */
+  model: string | null
   instruction: string
   isInstructionClipped: boolean
   error: string | null
@@ -114,4 +128,64 @@ export function eventDetailText(event: TeamEventItem): string {
     if (event.idleSince) parts.push(`idle ${durationText(new Date(event.at).getTime() - new Date(event.idleSince).getTime())}`)
   }
   return parts.join(' · ')
+}
+
+/** 읽은 입력 전부 (캐시 쓰기·읽기 포함) */
+const inputTotalOf = (usage: TaskUsage) => usage.inputTokens + usage.cacheCreationTokens + usage.cacheReadTokens
+
+/** task 줄 meta "Opus · 48k out · 1.2M in" (in = input + cache write + cache read). usage 가 없으면 null */
+export function usageMetaText(usage: TaskUsage | null, model: string | null): string | null {
+  if (!usage) return null
+  const alias = modelAlias(model)
+  const name = alias ? alias[0].toUpperCase() + alias.slice(1) : model
+  const parts = [`${contextSizeText(usage.outputTokens)} out`, `${contextSizeText(inputTotalOf(usage))} in`]
+  return (name ? [name, ...parts] : parts).join(' · ')
+}
+
+const count = (value: number) => value.toLocaleString('en-US')
+
+/** 네 값과 응답 수 "Input 12,345 · Cache write 1,234 · Cache read 1,200,000 · Output 48,000 · 7 responses" */
+export function usageDetailText(usage: TaskUsage): string {
+  return [
+    `Input ${count(usage.inputTokens)}`,
+    `Cache write ${count(usage.cacheCreationTokens)}`,
+    `Cache read ${count(usage.cacheReadTokens)}`,
+    `Output ${count(usage.outputTokens)}`,
+    `${count(usage.turns)} ${usage.turns === 1 ? 'response' : 'responses'}`,
+  ].join(' · ')
+}
+
+/** 끝난 task 의 usage 합 (진행 중은 빼고, usage 가 없는 끝난 task 는 수만) */
+export interface UsageTotal {
+  usage: TaskUsage
+  withUsage: number
+  withoutUsage: number
+}
+
+export function usageTotalOf(tasks: readonly Pick<TaskHistoryItem, 'status' | 'usage'>[]): UsageTotal {
+  const usage: TaskUsage = { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, turns: 0 }
+  let withUsage = 0
+  let withoutUsage = 0
+  for (const task of tasks) {
+    if (task.status === 'running') continue
+    if (!task.usage) {
+      withoutUsage++
+      continue
+    }
+    withUsage++
+    usage.inputTokens += task.usage.inputTokens
+    usage.outputTokens += task.usage.outputTokens
+    usage.cacheCreationTokens += task.usage.cacheCreationTokens
+    usage.cacheReadTokens += task.usage.cacheReadTokens
+    usage.turns += task.usage.turns
+  }
+  return { usage, withUsage, withoutUsage }
+}
+
+/** 7일 합계 "12 tasks · 320k out · 9.8M in (3 without usage)". 끝난 task 가 없으면 null */
+export function usageTotalText(total: UsageTotal): string | null {
+  const { usage, withUsage, withoutUsage } = total
+  if (withUsage === 0) return withoutUsage === 0 ? null : `${withoutUsage} ${withoutUsage === 1 ? 'task' : 'tasks'} without usage`
+  const text = `${withUsage} ${withUsage === 1 ? 'task' : 'tasks'} · ${contextSizeText(usage.outputTokens)} out · ${contextSizeText(inputTotalOf(usage))} in`
+  return withoutUsage === 0 ? text : `${text} (${withoutUsage} without usage)`
 }
