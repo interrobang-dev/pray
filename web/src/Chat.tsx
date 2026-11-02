@@ -40,6 +40,10 @@ interface Props {
   isWritable: boolean
   /** 입력할 수 없을 때 입력칸 자리에 둘 것 (휴식 안내·퇴근 버튼). 없으면 외부 세션 안내 */
   footer?: ReactNode
+  /** 입력 상자 오른쪽 아래에 보일 문맥 크기 ("143k"; level 은 색, title 은 툴팁·aria-label). 없으면 그 부분 없음 */
+  contextSize?: { text: string; level: string; title: string } | null
+  /** 입력 상자 오른쪽 아래에 문맥 크기 옆으로 보일 모델 이름 ("Opus 5.5", effort 없음) */
+  modelText?: string | null
   isApprovalNeeded: boolean
   /** 훅 상태가 working 이면 대화 맨 아래에 작업 중 표시기 */
   isWorking: boolean
@@ -1100,6 +1104,8 @@ export function Chat({
   sessionId,
   isWritable,
   footer,
+  contextSize,
+  modelText,
   isApprovalNeeded,
   isWorking,
   workingSince,
@@ -1797,6 +1803,17 @@ export function Chat({
         onBtw={sendBtw}
         onOpenBtw={openBtwForInput}
       />
+      {isWritable && (contextSize || modelText) && (
+        <div className="composer-meta">
+          {contextSize && (
+            <span className={`context-size ${contextSize.level}`} role="img" title={contextSize.title} aria-label={contextSize.title}>
+              {contextSize.text}
+            </span>
+          )}
+          {contextSize && modelText && ' · '}
+          {modelText}
+        </div>
+      )}
       {!isWritable && (footer ?? <p className="hint">Started from a terminal or IDE, so this session is view-only</p>)}
     </div>
   )

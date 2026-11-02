@@ -1410,7 +1410,7 @@ li.group.drop-after::after {
   color: var(--caution-text);
   font-size: calc(12px * var(--font-scale));
 }
-/* 좁은 세션 패널(데스크톱만 — 폰은 끝의 폰 블록): 머리를 두 줄로 [이름 ✎ ··· 탭 검색 종료 ×] / [폴더 ··· 모델 칩 문맥 Hand over].
+/* 좁은 세션 패널(데스크톱만 — 폰은 끝의 폰 블록): 머리를 두 줄로 [이름 ✎ ··· 탭 검색 종료 ×] / [폴더 ··· 모델 칩 Hand over].
    한 줄이 모자라는 폭(480px 이하, Hand over 가 있으면 640px 이하)에서만. 검색·종료 버튼은 없을 때도 있어 칸을 정해 둔다 */
 @media (min-width: 769px) {
   @container panel (max-width: 480px) {
@@ -1454,7 +1454,7 @@ li.group.drop-after::after {
     justify-self: end;
   }
 }
-/* 패널 머리의 모델 칩 + 문맥 크기 묶음 (폰은 둘째 줄 오른쪽에 같이 간다) */
+/* 패널 머리의 모델 칩 + Hand over 묶음 (폰은 둘째 줄 오른쪽에 같이 간다) */
 .model-info {
   display: flex;
   align-items: center;
@@ -1465,7 +1465,7 @@ li.group.drop-after::after {
 .model-info:empty {
   display: none;
 }
-/* 문맥 크기 "143k" (contextSize.ts). 12만 이상 주의색, 15만 이상(팀장의 팀원 정리 기준) 경고색 */
+/* 문맥 크기 "143k" (contextSize.ts. 입력 상자 아래 .composer-meta 와 Tasks 창이 쓴다). 12만 이상 주의색, 15만 이상(팀장의 팀원 정리 기준) 경고색 */
 .context-size {
   color: var(--muted);
   font-size: calc(11px * var(--font-scale));
@@ -4263,6 +4263,16 @@ li.group.drop-after::after {
   padding: 8px;
   border: 1px solid var(--line);
   background: var(--panel);
+}
+/* 입력 상자 오른쪽 아래 "143k · Opus 5.5" (Chat.tsx). 상자의 아래 간격 12px 안으로 끌어올려 상자에 붙인다 */
+.composer-meta {
+  margin: -8px calc(var(--chat-gutter, 16px) + 10px) 6px;
+  text-align: right;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* 포커스는 입력칸이 아니라 상자 테두리로 보인다 (입력칸 포커스 초록 규칙과 같은 색) */
 .composer:has(textarea:focus) {

@@ -1722,11 +1722,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
                     </span>
                   )
                 )}
-                {selectedContext && (
-                  <span className={`context-size ${selectedContext.level}`} role="img" title={selectedContext.title} aria-label={selectedContext.title}>
-                    {selectedContext.text}
-                  </span>
-                )}
                 {selectedHandOver && (
                   <button
                     type="button"
@@ -1808,6 +1803,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 sessionId={selected.id}
                 isWritable={isSelectedLiveWeb}
                 footer={renderPanelFooter(selected)}
+                contextSize={selectedContext}
+                modelText={selected.model ? modelName(selected.model) : null}
                 // 휴식·퇴근 세션은 훅 상태가 남아 있어도 작업 중·승인 대기로 보지 않는다
                 isApprovalNeeded={isSelectedPresent && selected.status === 'needs-approval'}
                 isWorking={isSelectedPresent && selected.status === 'working'}
