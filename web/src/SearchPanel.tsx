@@ -95,6 +95,12 @@ export function SearchPanel({ sessionId, state, onStateChange, focusRequest, onF
 
   useEffect(() => () => controllerRef.current?.abort(), [])
 
+  // 패널을 열면 서버가 파일 목록(30초 캐시)을 미리 만들게 빈 빠른 찾기를 한 번 보낸다 — 첫 찾기가 목록 만들기(최대 3초)를 기다리지 않게.
+  // 데우기라 응답·실패는 보지 않는다 (같은 폴더를 만드는 중이면 서버에서 찾기가 같이 기다린다)
+  useEffect(() => {
+    fetchJson(apiUrl(sessionId, 'find', { q: '' })).catch(() => {})
+  }, [sessionId])
+
   useEffect(() => {
     if (!focusRequest) return
     const { text } = focusRequest

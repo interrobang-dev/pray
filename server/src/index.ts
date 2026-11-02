@@ -2927,6 +2927,21 @@ if (existsSync(webDist)) {
   app.get('/{*path}', (_req, res) => res.sendFile(join(webDist, 'index.html')))
 }
 
+/**
+ * 세션 요약 캐시(TranscriptCache)를 미리 데운다 — 서버를 켠 뒤 첫 목록은 큰 jsonl 을 처음부터 읽어 첫 화면 요청이 기다렸다.
+ * 그 사이 온 요청은 같은 파일을 다시 읽지 않고 읽는 중인 것을 기다린다. 요청 처리 밖이라 던지지 않는다 (hq.json 을 못 읽어도 로그만)
+ */
+async function warmSessionSummaries(): Promise<void> {
+  const startedAt = Date.now()
+  try {
+    const { sessions } = await snapshotPayload()
+    console.log(`세션 요약 미리 읽기: ${sessions.length}개 세션, ${Date.now() - startedAt}ms`)
+  } catch (error) {
+    console.error(`세션 요약 미리 읽기 실패: ${error}`)
+  }
+}
+
 app.listen(PORT, config.bind, () => {
   console.log(`Pray server http://${config.bind}:${PORT} (메일 로그인 ${sendCode ? '사용' : '미설정'})`)
+  void warmSessionSummaries()
 })
