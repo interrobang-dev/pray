@@ -11,9 +11,16 @@ export interface NotifySession {
   lastAssistantText: string | null
   pendingTool: string | null
   role: 'lead' | 'member' | null
+  /** 파트장이면 파트 ID (팀장은 null). 옛 서버 응답엔 없을 수 있다 */
+  partId?: string | null
+  /** 세션 문맥 크기(토큰). 옛 서버 응답엔 없을 수 있다 */
+  contextTokens?: number | null
 }
 
-export type NotifyKind = 'done' | 'my-turn' | 'needs-approval'
+export type NotifyKind = 'done' | 'my-turn' | 'needs-approval' | 'hand-over'
+
+/** 문맥 경고 단계 기준. web/src/contextSize.ts 의 CONTEXT_WARN_TOKENS 와 같아야 한다 (desktop 은 CommonJS 빌드라 web 을 import 하지 않는다) */
+export const CONTEXT_WARN_TOKENS = 150_000
 
 export interface SessionNotice {
   sessionId: string
@@ -23,15 +30,20 @@ export interface SessionNotice {
 }
 
 const BODY_MAX_LENGTH = 120
-const KIND_LABELS: Record<NotifyKind, string> = { done: 'Done', 'my-turn': 'My turn', 'needs-approval': 'Needs approval' }
+const KIND_LABELS: Record<NotifyKind, string> = { done: 'Done', 'my-turn': 'My turn', 'needs-approval': 'Needs approval', 'hand-over': 'Hand over' }
 
-/** 세션 ID → 직전 폴링의 표시 상태. 근무 중인 세션만 든다 */
-export type StatusBaseline = Map<string, string>
+/** 세션 ID → 직전 폴링의 표시 상태와 문맥이 경고 단계였는지. 근무 중인 세션만 든다 */
+export type StatusBaseline = Map<string, { status: string; isContextWarned: boolean }>
+
+function isContextWarned(session: NotifySession): boolean {
+  return typeof session.contextTokens === 'number' && session.contextTokens >= CONTEXT_WARN_TOKENS
+}
 
 /**
  * 직전 상태와 비교해 알릴 것을 고른다. previous 가 null 이면(트레이 시작·서버가 돌아온 직후·자식 재시작 뒤) 기준만 잡는다.
  * - working·waiting → done·my-turn: 팀원(role member)이 아닌 세션만
  * - needs-approval 이 새로 됨: 모든 세션
+ * - 팀장·파트장(role lead)의 문맥이 경고 단계(15만↑)로 새로 들어감: "Hand over". 압축으로 내려갔다 다시 넘으면 또 알린다. 위 판정과 독립이라 같은 폴링에 둘 다 나올 수 있다
  * 근무 중이 아닌 세션은 기준에서 빠져, 다시 근무가 된 첫 폴링(호스트 재시작 뒤 --resume 등)도 기준만 잡는다
  */
 export function diffSessions(
@@ -42,11 +54,15 @@ export function diffSessions(
   const notices: SessionNotice[] = []
   for (const session of sessions) {
     if (!session.isAlive) continue
-    next.set(session.id, session.status)
+    const isWarned = isContextWarned(session)
+    next.set(session.id, { status: session.status, isContextWarned: isWarned })
     const before = previous?.get(session.id)
     if (before === undefined) continue
-    const kind = noticeKind(before, session)
-    if (kind) notices.push({ sessionId: session.id, kind, title: noticeTitle(session, kind), body: noticeBody(session, kind) })
+    const kinds: NotifyKind[] = []
+    const kind = noticeKind(before.status, session)
+    if (kind) kinds.push(kind)
+    if (session.role === 'lead' && isWarned && !before.isContextWarned) kinds.push('hand-over')
+    for (const each of kinds) notices.push({ sessionId: session.id, kind: each, title: noticeTitle(session, each), body: noticeBody(session, each) })
   }
   return { next, notices }
 }
@@ -68,6 +84,10 @@ export function noticeTitle(session: NotifySession, kind: NotifyKind): string {
 /** 승인 대기면 도구 이름, 아니면 마지막 말의 첫 줄(마크다운 머리 #·굵게 ** 를 뗀다) 앞 120자 */
 export function noticeBody(session: NotifySession, kind: NotifyKind): string {
   if (kind === 'needs-approval') return session.pendingTool ? `Tool: ${session.pendingTool}` : ''
+  if (kind === 'hand-over') {
+    const kiloTokens = Math.round((session.contextTokens ?? 0) / 1000)
+    return `Context ${kiloTokens}k · Start a new ${session.partId ? 'part lead' : 'lead'} with this one's history`
+  }
   const firstLine = (session.lastAssistantText ?? '')
     .split(/\r?\n/)
     .map((line) => line.replace(/^#+\s*/, '').replaceAll('**', '').trim())
