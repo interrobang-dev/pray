@@ -1204,6 +1204,7 @@ li.group.drop-after::after {
 .session .avatar.needs-approval::after,
 .session .avatar.my-turn::after,
 .session .avatar.done::after,
+.session .avatar.lounge::after,
 .session .avatar.break::after {
   content: '';
   position: absolute;
@@ -1228,6 +1229,9 @@ li.group.drop-after::after {
 }
 .session .avatar.done::after {
   border-color: var(--success);
+}
+.session .avatar.lounge::after {
+  border-color: var(--line-strong);
 }
 .session .avatar.break::after {
   border-style: dashed;

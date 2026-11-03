@@ -38,6 +38,7 @@ import { sessionMenuEntries } from './sessionMenu'
 import { LEAD_POSITION, MEMBER_POSITION, editableNameOf, modalName, modalPosition, nameOf, positionOf, renamePatch } from './sessionPosition'
 import { PositionChip } from './PositionChip'
 import { CharacterPicker, type CharacterChoice } from './CharacterPicker'
+import { seatPlaceOf } from './dotState'
 import { headImageUrl, loadCharacterSheet, loadRecolorArt, type CharacterSheet, type RecolorArt } from './characterArt'
 import { assignCharacter, charactersInUse, dotLookOf, type DotCharacter, type DotLook } from '@pray/host/dotCharacter'
 import {
@@ -1336,7 +1337,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
 
   /**
    * 세션 한 줄: 아바타 · 제목 · (승인 대기·휴식 배지 · 시각). 상태는 아바타 테두리가 나타낸다
-   * (작업 중 파랑 숨쉬기·승인 대기 빨강·내 차례 초록·휴식 회색 점선, 그 밖은 없음). 아바타의 title·aria-label 이 상태 글자이고
+   * (작업 중 파랑 숨쉬기·승인 대기 빨강·내 차례 초록·휴식 회색 점선·라운지(사무실과 같은 seatPlaceOf) 회색 실선, 그 밖은 없음). 아바타의 title·aria-label 이 상태 글자이고
    * 팀장·파트장이면 앞에 "Lead · "·"Part lead · " 이 붙는다. 팀 안에서는 폴더를 숨긴다 (팀 = 폴더). teamName 이 있으면 제목 앞에 붙인다 (퇴근).
    * 퇴근은 시각 대신 퇴근 이유 · 시각 (옛 서버 응답이라 이유가 없으면 시각)
    */
@@ -1349,7 +1350,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
     const isPresent = attendance === 'present'
     const offDuty = attendance === 'off' && session.offDuty ? offDutyLabel(session.offDuty, now) : null
     const roleLabel = session.role === 'lead' ? (session.partId ? 'Part lead' : 'Lead') : null
-    const stateLabel = isPresent ? statusLabel[session.status] : attendance === 'break' ? 'Break' : 'Off duty'
+    const place = seatPlaceOf(session, now)
+    const loungeText = place === 'lounge-doze' ? ' · Dozing in lounge' : place === 'lounge' ? ' · Resting in lounge' : ''
+    const stateLabel = isPresent ? statusLabel[session.status] + loungeText : attendance === 'break' ? 'Break' : 'Off duty'
     const avatarLabel = roleLabel ? `${roleLabel} · ${stateLabel}` : stateLabel
     return (
       <div
@@ -1358,7 +1361,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
         onClick={() => selectSession(session.id)}
       >
         <span
-          className={['avatar', isPresent ? session.status : attendance, headUrl ? 'head' : ''].join(' ')}
+          className={['avatar', isPresent ? (place === 'desk' ? session.status : 'lounge') : attendance, headUrl ? 'head' : ''].join(' ')}
           style={headUrl ? { backgroundImage: `url(${headUrl})` } : undefined}
           role="img"
           title={avatarLabel}

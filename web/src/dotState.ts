@@ -7,7 +7,7 @@ export type DotState = 'typing' | 'raise-hand' | 'idle' | 'doze'
 export type SeatPlace = 'desk' | 'lounge' | 'lounge-doze'
 
 /** 차례가 끝나고 이만큼 지나면 책상을 비우고 라운지에서 쉰다 */
-export const LOUNGE_AFTER_MS = 30 * 60_000
+export const LOUNGE_AFTER_MS = 8 * 60 * 60_000
 /** 차례가 끝나고 이만큼 지나면 라운지에서 존다 */
 export const LOUNGE_DOZE_AFTER_MS = 24 * 60 * 60_000
 
@@ -18,8 +18,8 @@ export function turnEndedAtOf(session: Session): number | null {
 }
 
 /**
- * 근무 중이고 작업 중·백그라운드 대기·승인 대기가 아닌 세션은 차례가 끝난 지(turnEndedAt) 30분부터 라운지, 24시간부터 라운지에서 졸기.
- * 그 밖(30분 미만·시각을 모름·작업 중·waiting·승인 대기)은 책상. 휴식(책상 빈 의자)·퇴근(퇴근 거리)도 desk 로 준다 (라운지와 무관)
+ * 근무 중이고 작업 중·백그라운드 대기·승인 대기가 아닌 세션은 차례가 끝난 지(turnEndedAt) 8시간부터 라운지, 24시간부터 라운지에서 졸기.
+ * 그 밖(8시간 미만·시각을 모름·작업 중·waiting·승인 대기)은 책상. 휴식(책상 빈 의자)·퇴근(퇴근 거리)도 desk 로 준다 (라운지와 무관)
  */
 export function seatPlaceOf(session: Session, now: number): SeatPlace {
   if (attendanceOf(session) !== 'present' || session.status === 'working' || session.status === 'waiting' || session.status === 'needs-approval') return 'desk'

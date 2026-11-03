@@ -1991,7 +1991,7 @@ export function Office(props: Props) {
         }
 
         /**
-         * 라운지 (redraw 가 Focus Zone 과 같이 부른다): 차례가 끝난 지 30분 넘은 근무 세션(seatPlaceOf)을 앉힌 그림 + 앉은 사람 전신·"+N" 명판의 마우스 영역.
+         * 라운지 (redraw 가 Focus Zone 과 같이 부른다): 차례가 끝난 지 8시간 넘은 근무 세션(seatPlaceOf)을 앉힌 그림 + 앉은 사람 전신·"+N" 명판의 마우스 영역.
          * 사람 = 클릭(5px 미만)은 세션 선택, 마우스 올림은 자리 카드. "+N" = 마우스 올림은 못 앉은 사람 이름 카드, 클릭은 아무것도 안 한다. 그 이상 끌면 맵 이동.
          * 자리가 있는 세션(layout.seated)만 간다. 배치(앉아 보이는 세션은 figures)를 돌려준다
          */
