@@ -3677,6 +3677,14 @@ li.group.drop-after::after {
 .markdown a {
   color: var(--link);
 }
+/* 대화 속 이 PC .html 링크 (ChatLink.tsx): href 가 없는 a 라 손가락 커서를 직접 준다. 다른 PC 화면에서는 흐리게, 눌러도 아무것도 안 한다 */
+.markdown a.local-link {
+  cursor: pointer;
+}
+.markdown a.local-link.is-disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .markdown code {
   font-size: calc(12px * var(--font-scale));
 }

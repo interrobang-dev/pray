@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { chatImageTarget, imageFileName, rawImageUrl } from './chatImageUrl'
 import { Modal } from './Modal'
 
-/** 대화 속 그림이 서버에서 받을 세션 ID (Chat 이 대화 목록·곁가지 질문 카드에 준다). 없으면 이 PC 파일 그림은 실패 카드 */
+/** 대화 속 그림·로컬 .html 링크(ChatLink)가 서버에 물을 세션 ID (Chat 이 대화 목록·곁가지 질문 카드에 준다). 없으면 이 PC 파일 그림은 실패 카드, 링크는 흐림 */
 export const ChatImageSession = createContext<string | null>(null)
 /** 지금 그리는 마크다운 원문 (MarkdownText 가 준다). 그림 주소를 원문 그대로 꺼내려고 — 파서는 `\@` 같은 경로 글자를 이스케이프로 먹는다 */
 export const MarkdownSource = createContext<string | null>(null)

@@ -79,6 +79,7 @@ import {
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
 import { chatImagePathKind, resolveChatImage } from './chatImage.js'
+import { chromeArguments, locateChrome, openInChrome, resolveChatHtml } from './openInChrome.js'
 import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './workspaceChanges.js'
 import { commitDetail, commitFileDiff, historyFilePath, listHistory, REV_PATTERN } from './workspaceHistory.js'
 import { buildSearchPattern, MAX_MATCHES, parseSearchQuery, runSearchWorker, SEARCH_TIME_LIMIT_MS, SearchPatternError } from './workspaceSearch.js'
@@ -886,6 +887,35 @@ app.get('/api/sessions/:id/image', async (req, res) => {
   res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
   if (isActive) res.set('Content-Security-Policy', 'sandbox')
   res.sendFile(file, { dotfiles: 'allow' })
+})
+
+/**
+ * 대화 속 로컬 .html 링크를 이 PC 의 Chrome 으로 연다 (`{ path }` = 그림 API 와 같은 꼴·범위, openInChrome.ts).
+ * 다른 PC 를 먼저 막는다 — 이 PC 화면에 창을 띄우는 것이라 의미가 없고, 파일이 있는지도 알려 주지 않는다. Origin 검사는 위 전역 미들웨어가 한다
+ */
+app.post('/api/sessions/:id/open-in-chrome', async (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress)) {
+    res.status(403).json({ message: 'Opens in Chrome only on this PC' })
+    return
+  }
+  const path: unknown = req.body?.path
+  if (!isSessionId(req.params.id) || typeof path !== 'string' || !chatImagePathKind(path)) {
+    res.status(400).json({ message: 'Invalid session ID or path' })
+    return
+  }
+  const file = await resolveChatHtml(path, await workspaceRootOf(req.params.id))
+  const args = file ? chromeArguments(file) : null
+  if (!args) {
+    res.status(404).json({ message: 'HTML file not found' })
+    return
+  }
+  const chrome = await locateChrome()
+  if (!chrome) {
+    res.status(500).json({ message: "Chrome isn't installed" })
+    return
+  }
+  openInChrome(chrome, args)
+  res.json({})
 })
 
 const MAX_FIND_RESULTS = 100

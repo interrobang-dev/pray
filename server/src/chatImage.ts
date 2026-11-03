@@ -30,7 +30,20 @@ export function chatImagePathKind(path: unknown): 'absolute' | 'relative' | null
  * 요청 경로 → 보낼 그림 파일의 실제 경로(realpath). 꼴이 틀리면·범위 밖(링크·junction 으로 나가는 것 포함)·없음·파일 아님·그림 아님이면 null.
  * root = 세션 작업 폴더의 realpath (없으면 null — 상대 경로는 못 풀고 절대 경로는 임시 폴더만 된다)
  */
-export async function resolveChatImage(path: string, root: string | null, tempDir = claudeTempDir): Promise<string | null> {
+export function resolveChatImage(path: string, root: string | null, tempDir = claudeTempDir): Promise<string | null> {
+  return resolveChatFile(path, root, (real) => contentTypeOf(real).type.startsWith('image/'), tempDir)
+}
+
+/**
+ * 대화 속 파일 경로(그림·링크 공용) → 실제 경로(realpath). 꼴·범위는 위와 같고 받을 파일 종류는 isAccepted(realpath 를 받는다)가 정한다.
+ * 대화 속 .html 링크를 Chrome 으로 여는 것(openInChrome.ts)도 이것을 쓴다
+ */
+export async function resolveChatFile(
+  path: string,
+  root: string | null,
+  isAccepted: (real: string) => boolean,
+  tempDir = claudeTempDir,
+): Promise<string | null> {
   const kind = chatImagePathKind(path)
   if (!kind || (kind === 'relative' && !root)) return null
   const requested = kind === 'absolute' ? resolve(path) : resolve(root as string, path)
@@ -38,7 +51,7 @@ export async function resolveChatImage(path: string, root: string | null, tempDi
     const real = await realpath(requested)
     const realTemp = await realpath(tempDir).catch(() => null)
     const isAllowed = (root !== null && isInside(root, real)) || (realTemp !== null && isInside(realTemp, real))
-    if (!isAllowed || !contentTypeOf(real).type.startsWith('image/')) return null
+    if (!isAllowed || !isAccepted(real)) return null
     return (await stat(real)).isFile() ? real : null
   } catch {
     return null

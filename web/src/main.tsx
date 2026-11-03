@@ -3,6 +3,7 @@ import './copyLegacyStorage'
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { IsLocalPage } from './ChatLink'
 import { DialogHost } from './Dialog'
 import { Login } from './Login'
 import './theme'
@@ -27,7 +28,9 @@ function Root() {
   if (!me.isAuthenticated) return <Login canLogin={me.canLogin} onLoggedIn={() => void load()} />
   return (
     <>
-      <App isLocal={me.isLocal} />
+      <IsLocalPage.Provider value={me.isLocal}>
+        <App isLocal={me.isLocal} />
+      </IsLocalPage.Provider>
       <DialogHost />
     </>
   )
