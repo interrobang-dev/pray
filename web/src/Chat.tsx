@@ -8,7 +8,7 @@ import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
 import { Composer, type ComposerHandle } from './Composer'
 import { restoreToComposerDraft } from './composerDraft'
-import { isSuggestionVisible } from './composerText'
+import { handoverBandText, isSuggestionVisible } from './composerText'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
 import { runningToolNames, shortToolName } from './runningTools'
 import { isTeamWaitSummary, teamToolOf } from './teamTools'
@@ -53,6 +53,8 @@ interface Props {
   question: { questions: AskQuestion[] } | null
   /** 입력칸에 그려진 Claude Code 다음 입력 제안. 있으면 입력 상자의 빈 입력칸에 흐린 글 + Tab 칩 */
   suggestion: string | null
+  /** 인계 중이면 직전 지시자 이름 (Hand over 로 띄운 새 지시자가 인계 글에 답하기 전). 입력 상자·곁가지 질문을 막고 상자 위에 띠를 띄운다 */
+  handoverFrom: string | null
   /** 전역 SSE 의 transcript 이벤트로 올라가는 카운터. 바뀌면 다시 읽는다 */
   version: number
   /** 전역 SSE 의 btw 이벤트로 올라가는 카운터. 바뀌면 곁가지 질문 카드가 문답을 다시 받는다 */
@@ -1112,6 +1114,7 @@ export function Chat({
   pendingTool,
   question,
   suggestion,
+  handoverFrom,
   version,
   btwVersion,
   sessionNames,
@@ -1142,6 +1145,8 @@ export function Chat({
   const [pendings, setPendings] = useState<PendingMessage[]>([])
   /** 질문 중에는 입력칸을 막는다. 키 입력이 터미널의 질문 화면에 들어가면 Enter 가 1번 선택지로 답해 버린다. 쓰던 글은 남긴다 */
   const isAsking = Boolean(question) || pendingTool === ASK_TOOL
+  /** 인계 중에도 입력칸을 막는다 (서버 /input·btw 409). 쓰던 글은 남긴다 */
+  const isHandingOver = handoverFrom !== null
   /** 입력 상자의 흐린 제안 글 (조건은 composerText.ts isSuggestionVisible) */
   const isSuggestionShown = isSuggestionVisible({
     suggestion,
@@ -1149,6 +1154,7 @@ export function Chat({
     isWorking,
     isApprovalNeeded,
     isAsking,
+    isHandingOver,
     isDraftEmpty,
     hasUnconfirmedPending: pendings.some((pending) => !pending.isFailed),
   })
@@ -1786,10 +1792,21 @@ export function Chat({
           version={btwVersion}
           isAsking={isAsking}
           isApprovalNeeded={isApprovalNeeded}
+          isHandingOver={isHandingOver}
           onAsk={sendBtw}
           onEscClosed={focusComposer}
           onResize={keepBottomOnBtwResize}
         />
+      )}
+      {isWritable && handoverFrom !== null && (
+        <div className="handover-band" role="status">
+          <span className="typing-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className="handover-text">{handoverBandText(handoverFrom)}</span>
+        </div>
       )}
       {/* 쓸 수 없는 동안에도 마운트해 두어 쓰던 글·첨부가 남는다 (그동안은 아무것도 그리지 않는다) */}
       <Composer
@@ -1797,6 +1814,7 @@ export function Chat({
         sessionId={sessionId}
         isWritable={isWritable}
         isAsking={isAsking}
+        isHandingOver={isHandingOver}
         suggestion={isSuggestionShown ? suggestion : null}
         onEmptyChange={setIsDraftEmpty}
         onSend={send}

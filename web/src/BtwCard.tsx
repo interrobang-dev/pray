@@ -23,6 +23,8 @@ interface Props {
   isAsking: boolean
   /** 승인 대기 (서버 409). 보내기를 막는다 */
   isApprovalNeeded: boolean
+  /** 인계 중 (서버 409). 보내기를 막는다 */
+  isHandingOver: boolean
   /** 카드 입력칸의 질문. Chat 의 보내기 줄에 세우고 ask 로 카드에 띄운다 (입력칸의 `/btw 질문` 과 같은 길) */
   onAsk: (question: string) => void
   /** Esc 로 카드를 닫음 (Chat 이 대화 입력칸에 포커스를 돌려준다) */
@@ -52,7 +54,7 @@ interface View {
  * 카드 아래에 자기 입력칸이 있어 이어서 계속 물을 수 있다 (답을 기다리는 동안은 보내기를 막는다 — 서버가 세션당 하나만 받는다).
  * 세션마다 새로 만든다 (Chat 이 key 를 준다)
  */
-export function BtwCard({ ref, sessionId, version, isAsking, isApprovalNeeded, onAsk, onEscClosed, onResize }: Props) {
+export function BtwCard({ ref, sessionId, version, isAsking, isApprovalNeeded, isHandingOver, onAsk, onEscClosed, onResize }: Props) {
   const [items, setItems] = useState<BtwItem[]>([])
   const [isOpen, setIsOpen] = useState(false)
   /** 보고 있는 문답 key. null 이면 맨 마지막 (새 문답이 오면 따라간다) */
@@ -78,7 +80,7 @@ export function BtwCard({ ref, sessionId, version, isAsking, isApprovalNeeded, o
   }
   /** 답을 기다리는 질문이 있음 (닫아 두었어도 서버는 하나만 받는다) */
   const isPending = views.some((view) => view.status === 'pending')
-  const blockReason = btwBlockReason({ isAsking, isApprovalNeeded, isPending })
+  const blockReason = btwBlockReason({ isAsking, isApprovalNeeded, isPending, isHandingOver })
 
   async function load() {
     try {

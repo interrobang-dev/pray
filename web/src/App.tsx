@@ -1835,6 +1835,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 pendingTool={selected.pendingTool}
                 question={selected.question ?? null}
                 suggestion={selected.suggestion ?? null}
+                handoverFrom={selected.handover?.fromName ?? null}
                 version={transcriptVersions[selected.id] ?? 0}
                 btwVersion={btwVersions[selected.id] ?? 0}
                 sessionNames={sessionNames}

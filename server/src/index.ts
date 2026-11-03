@@ -113,6 +113,7 @@ import { TeamTaskLog } from './teamTaskFile.js'
 import { parseWaitRequest, respondJsonAfter } from './taskWait.js'
 import { leadExtraArgs } from './lead.js'
 import { formatHandoff, HANDOFF_LIMIT, handoffMessage, leadTranscriptPath, readHandoffSource, type LeadKind } from './leadHandoff.js'
+import { applyHandoverHook, HANDOVER_BLOCK_MESSAGE, isHandoverActive, markHandoverSent, startHandover, type HandoverState } from './handoffState.js'
 import { waitForLeadEnd } from './leadReplace.js'
 import {
   givenNameOf,
@@ -181,6 +182,27 @@ const heldQuestions = new Map<
 >()
 /** 웹 세션 입력칸의 Claude Code 다음 입력 제안 (mod 가 POST /api/hook/suggestion 으로 보낸다). 메모리에만 */
 const suggestions = new Map<string, string>()
+/** 인계 중인 새 지시자 (handoffState.ts). 그동안 대화 입력·곁가지 질문은 409. 메모리에만 */
+const handovers = new Map<string, HandoverState>()
+
+/** 지금 인계 중이면 그 상태. 5분이 지났으면 지우고 null (화면은 5초 목록 갱신으로 풀린다) */
+function activeHandover(sessionId: string): HandoverState | null {
+  const state = handovers.get(sessionId)
+  if (isHandoverActive(state, Date.now())) return state
+  handovers.delete(sessionId)
+  return null
+}
+
+/** 인계 상태를 바꾼다 (없으면 그대로 — 그 사이 풀렸으면 되살리지 않는다). null 이면 풀기. 바뀌었으면 true */
+function updateHandover(sessionId: string, update: (state: HandoverState) => HandoverState | null): boolean {
+  const state = handovers.get(sessionId)
+  if (!state) return false
+  const next = update(state)
+  if (next === state) return false
+  if (next) handovers.set(sessionId, next)
+  else handovers.delete(sessionId)
+  return true
+}
 /** 진행 중인 대기 메시지 취소 (세션당 하나). mod 의 입력칸 알림(POST /api/hook/prompt-box)이 단계를 넘긴다. 메모리에만 */
 const unqueues = new Map<string, UnqueueProgress>()
 /**
@@ -344,6 +366,10 @@ async function snapshotPayload() {
       listGenders(),
       listPositions(),
       (sessionId) => tasks.latestOf(sessionId) ?? null,
+      (sessionId) => {
+        const handover = activeHandover(sessionId)
+        return handover ? { fromName: handover.fromName } : null
+      },
     ),
   }
 }
@@ -554,13 +580,19 @@ app.post('/api/sessions', async (req, res) => {
   const isSpawnSent = host.send({ type: 'spawn', sessionId, cwd, prompt: prompt || undefined, extraArgs })
   res.json({ sessionId, isTrustFailed })
   if (isLead || part) broadcastOffice()
-  if (isSpawnSent && carryOverHistory === true && previousLeadId) void handOverHistory(sessionId, previousLeadId, part ? 'part-lead' : 'lead')
+  if (isSpawnSent && carryOverHistory === true && previousLeadId) {
+    // 인계 글이 정해지기 전부터 입력 상자를 막는다. 이름은 먼저 저장된 이름(없으면 ID 앞 8자리)으로, handOverHistory 가 자동 제목까지 본 이름으로 고친다
+    handovers.set(sessionId, startHandover(previousLeadId, listSessionNames()[previousLeadId] ?? previousLeadId.slice(0, 8), Date.now()))
+    void broadcast()
+    void handOverHistory(sessionId, previousLeadId, part ? 'part-lead' : 'lead')
+  }
 })
 
 /**
  * 새 지시자에게 직전 지시자 jsonl 로 만든 인계 글(leadHandoff.ts)을 첫 메시지로 보낸다. 팀원 첫 지시처럼 spawn 뒤 MEMBER_FIRST_INPUT_DELAY_MS 를
  * 기다리고(jsonl 읽기와 겹친다) instructions.jsonl 에 남겨 새 지시자 대화에 직전 지시자가 보낸 지시 말풍선으로 보인다.
- * jsonl 이 없거나 인계할 글이 없으면 아무것도 안 보낸다. 응답을 보낸 뒤 도니 예외는 로그만 (던지면 서버가 죽는다)
+ * jsonl 이 없거나 인계할 글이 없으면 아무것도 안 보낸다. 응답을 보낸 뒤 도니 예외는 로그만 (던지면 서버가 죽는다).
+ * 인계 중 상태(handovers)는 부른 쪽이 시작하고 여기서 보냄(sent)·풀기를 한다 — 글 없음·실패면 풀고, 보낸 뒤에는 새 지시자의 Stop 이 푼다
  */
 async function handOverHistory(sessionId: string, previousLeadId: string, kind: LeadKind): Promise<void> {
   const spawnedAt = Date.now()
@@ -569,15 +601,25 @@ async function handOverHistory(sessionId: string, previousLeadId: string, kind: 
     const source = file ? await readHandoffSource(file.path) : null
     // 이름은 역할 없이 (글 안에서 "이전 팀장(Pray)" 로 읽히게)
     const previousName = await displayNameOf(previousLeadId, listSessionNames(), {})
+    if (updateHandover(sessionId, (state) => (state.fromName === previousName ? state : { ...state, fromName: previousName }))) void broadcast()
     const body = source ? formatHandoff(source, HANDOFF_LIMIT) : null
     console.log(`인계 글 (${sessionId.slice(0, 8)} ← ${previousLeadId.slice(0, 8)}): ${body ? `${body.length}자` : '없음'}, ${Date.now() - spawnedAt}ms`)
-    if (!body) return
+    if (!body) {
+      if (updateHandover(sessionId, () => null)) void broadcast()
+      return
+    }
     const message = handoffMessage(kind, previousName, body)
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, MEMBER_FIRST_INPUT_DELAY_MS - (Date.now() - spawnedAt))))
     recordInstruction(sessionId, previousLeadId, message)
-    if (!submitInstruction(sessionId, message)) console.error(`인계 글 보내기 실패 (${sessionId.slice(0, 8)}): 호스트 연결 없음`)
+    if (submitInstruction(sessionId, message)) {
+      updateHandover(sessionId, markHandoverSent)
+    } else {
+      console.error(`인계 글 보내기 실패 (${sessionId.slice(0, 8)}): 호스트 연결 없음`)
+      if (updateHandover(sessionId, () => null)) void broadcast()
+    }
   } catch (error) {
     console.error(`인계 글 실패 (${sessionId.slice(0, 8)}): ${error}`)
+    if (updateHandover(sessionId, () => null)) void broadcast()
   }
 }
 
@@ -1251,9 +1293,14 @@ app.delete('/api/sessions/:id/off-duty', (req, res) => {
 })
 
 app.post('/api/sessions/:id/input', (req, res) => {
-  const { data } = req.body as { data?: string }
+  const { data, isTerminal } = req.body as { data?: string; isTerminal?: unknown }
   if (typeof data !== 'string') {
     res.status(400).end()
+    return
+  }
+  // 인계 중에는 대화 입력 상자의 보내기를 막는다. 터미널 탭 키는 통과 — 긴 인계 글이 입력창에 걸렸을 때 Enter 를 칠 탈출구라서
+  if (isTerminal !== true && activeHandover(req.params.id)) {
+    res.status(409).json({ message: HANDOVER_BLOCK_MESSAGE })
     return
   }
   // 대기 메시지 취소가 입력칸을 다루는 동안 다른 키가 끼면 꺼낸 글·다시 넣는 글과 섞인다
@@ -1452,6 +1499,7 @@ function clearBtw(sessionId: string): boolean {
 
 /** 곁가지 질문을 보낼 수 없는 이유 (409 문구). 키를 pty 에 쓰므로 승인·질문 화면이나 입력칸을 다루는 동안은 막는다 */
 function btwConflict(sessionId: string): string | null {
+  if (activeHandover(sessionId)) return HANDOVER_BLOCK_MESSAGE
   if (heldQuestions.has(sessionId) || hookStates.get(sessionId)?.status === 'needs-approval') {
     return "Can't ask while claude needs approval or is asking a question"
   }
@@ -2759,6 +2807,7 @@ app.post('/api/hook', (req, res) => {
   const next = applyHook(hookStates.get(payload.session_id), payload)
   if (next) hookStates.set(payload.session_id, next)
   tasks.applyHook(payload)
+  updateHandover(payload.session_id, (state) => applyHandoverHook(state, payload.hook_event_name))
   // 질문 도구가 끝났거나(터미널에서 먼저 답한 경우 포함) 차례·세션이 끝나면 붙잡은 질문은 쓸모없다
   const event = payload.hook_event_name
   if ((event === 'PostToolUse' && payload.tool_name === 'AskUserQuestion') || event === 'Stop' || event === 'SessionEnd') {
@@ -2907,6 +2956,7 @@ host.on('message', (message: HostMessage) => {
     if (clearBtw(message.sessionId)) broadcastBtw(message.sessionId)
     tasks.markExited(message.sessionId)
     releaseQuestion(message.sessionId)
+    handovers.delete(message.sessionId)
   }
   if (message.type === 'sessions' || message.type === 'exit') void broadcast()
 })

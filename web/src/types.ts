@@ -47,6 +47,8 @@ export interface Session {
   question?: { questions: AskQuestion[] } | null
   /** 입력칸에 놓인 Claude Code 다음 입력 제안 (웹 세션만, 세션의 mod 가 서버로 보낸다). 옛 서버 응답에는 빠져 있다 */
   suggestion?: string | null
+  /** Hand over 로 띄운 새 지시자가 인계 글에 답하기 전이면 직전 지시자 이름. 그동안 서버가 입력·곁가지 질문을 409 로 막는다. 아니면 null, 옛 서버 응답에는 빠져 있다 */
+  handover?: { fromName: string } | null
   /** claude 가 백그라운드로 띄워 아직 실행 중인 Bash 명령. 근무 중이 아니면 [], 옛 서버 응답에는 빠져 있다 (없는 것으로 본다) */
   shells?: Shell[]
   /** 도트 사무실 인물: 사용자가 고른 것 또는 서버가 새 세션에 배정한 것(isAuto). 없으면 null (세션 ID 해시로 고른다). 옛 서버 응답에는 빠져 있다 */

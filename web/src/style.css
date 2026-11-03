@@ -4288,7 +4288,29 @@ li.group.drop-after::after {
   border-radius: 0;
   background: transparent;
 }
-/* 질문 중 (Chat.tsx isAsking). 상자가 회색이 되고 쓰던 글은 남아 흐리게 보인다 */
+/* 인계 중 띠 (Chat.tsx). 입력 상자 바로 위 한 줄, 지시 말풍선과 같은 파란 계열. 점은 작업 중 표시기의 .typing-dots 를 그대로 쓴다 */
+.handover-band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 var(--chat-gutter, 16px) 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--relay-line);
+  border-radius: 12px;
+  background: var(--relay-bg);
+  color: var(--relay-text);
+  font-size: calc(12px * var(--font-scale));
+}
+.handover-band .typing-dots span {
+  background: var(--relay-text);
+}
+.handover-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 질문 중·인계 중 (Chat.tsx isAsking·isHandingOver). 상자가 회색이 되고 쓰던 글은 남아 흐리게 보인다 */
 .composer:has(textarea:disabled) {
   background: var(--bg);
 }

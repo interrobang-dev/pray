@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { btwBlockReason, composerRows, isBtwShortcut, isSuggestionVisible, MAX_BTW_ROWS, parseBtwCommand, withAttachmentPaths } from './composerText'
+import {
+  btwBlockReason,
+  composerPlaceholder,
+  composerRows,
+  handoverBandText,
+  HANDOVER_BLOCK_TEXT,
+  isBtwShortcut,
+  isSuggestionVisible,
+  MAX_BTW_ROWS,
+  parseBtwCommand,
+  withAttachmentPaths,
+} from './composerText'
 
 describe('btwBlockReason', () => {
-  const free = { isAsking: false, isApprovalNeeded: false, isPending: false }
+  const free = { isAsking: false, isApprovalNeeded: false, isPending: false, isHandingOver: false }
 
   it('막는 것이 없으면 null', () => {
     expect(btwBlockReason(free)).toBeNull()
@@ -15,6 +26,34 @@ describe('btwBlockReason', () => {
 
   it('답하는 중이면 기다리라고 한다', () => {
     expect(btwBlockReason({ ...free, isPending: true })).toBe('Wait for the answer before asking again')
+  })
+
+  it('인계 중이면 서버 409 문구로 막고 다른 이유보다 앞선다', () => {
+    expect(btwBlockReason({ ...free, isHandingOver: true })).toBe("Handing over — wait for the new lead's reply")
+    expect(btwBlockReason({ ...free, isHandingOver: true, isPending: true })).toBe(HANDOVER_BLOCK_TEXT)
+  })
+})
+
+describe('composerPlaceholder', () => {
+  const plain = { hasSuggestion: false, isAsking: false, isHandingOver: false }
+
+  it('평소', () => {
+    expect(composerPlaceholder(plain)).toBe('Type an instruction (Shift+Enter for a new line)')
+  })
+
+  it('제안이 보이면 비운다', () => {
+    expect(composerPlaceholder({ ...plain, hasSuggestion: true })).toBe('')
+  })
+
+  it('질문 중이 인계 중보다 앞선다', () => {
+    expect(composerPlaceholder({ ...plain, isHandingOver: true })).toBe("Handing over — wait for the new lead's reply")
+    expect(composerPlaceholder({ ...plain, isHandingOver: true, isAsking: true })).toBe('Answer the question above first')
+  })
+})
+
+describe('handoverBandText', () => {
+  it('직전 지시자 이름을 넣는다', () => {
+    expect(handoverBandText('Pray')).toBe("Handing over · Reading Pray's history…")
   })
 })
 
@@ -86,7 +125,7 @@ describe('parseBtwCommand', () => {
 })
 
 describe('isSuggestionVisible', () => {
-  const shown = { suggestion: '테스트 돌려줘', isWritable: true, isWorking: false, isApprovalNeeded: false, isAsking: false, isDraftEmpty: true, hasUnconfirmedPending: false }
+  const shown = { suggestion: '테스트 돌려줘', isWritable: true, isWorking: false, isApprovalNeeded: false, isAsking: false, isHandingOver: false, isDraftEmpty: true, hasUnconfirmedPending: false }
 
   it('조건이 모두 맞으면 보인다', () => {
     expect(isSuggestionVisible(shown)).toBe(true)
@@ -99,7 +138,7 @@ describe('isSuggestionVisible', () => {
   })
 
   it('하나라도 어긋나면 안 보인다', () => {
-    for (const override of [{ isWritable: false }, { isWorking: true }, { isApprovalNeeded: true }, { isAsking: true }, { isDraftEmpty: false }, { hasUnconfirmedPending: true }]) {
+    for (const override of [{ isWritable: false }, { isWorking: true }, { isApprovalNeeded: true }, { isAsking: true }, { isHandingOver: true }, { isDraftEmpty: false }, { hasUnconfirmedPending: true }]) {
       expect(isSuggestionVisible({ ...shown, ...override })).toBe(false)
     }
   })

@@ -9,11 +9,28 @@ export function composerRows(draft: string, maxRows = MAX_COMPOSER_ROWS): number
 /** 곁가지 질문 카드 입력칸의 최대 줄 수 (카드는 높이가 제한돼 대화 입력칸보다 적게 자란다) */
 export const MAX_BTW_ROWS = 4
 
+/** 인계 중(Hand over 로 띄운 새 지시자가 인계 글에 답하기 전) 입력칸 placeholder·곁가지 질문 막는 이유. 서버 409 문구와 같다 */
+export const HANDOVER_BLOCK_TEXT = "Handing over — wait for the new lead's reply"
+
+/** 입력칸 placeholder: 제안이 보이면 빈 글(흐린 제안과 겹치지 않게), 질문 중, 인계 중, 평소 */
+export function composerPlaceholder(state: { hasSuggestion: boolean; isAsking: boolean; isHandingOver: boolean }): string {
+  if (state.hasSuggestion) return ''
+  if (state.isAsking) return 'Answer the question above first'
+  if (state.isHandingOver) return HANDOVER_BLOCK_TEXT
+  return 'Type an instruction (Shift+Enter for a new line)'
+}
+
+/** 입력 상자 위 인계 중 띠 글 (fromName = 직전 지시자 이름, 역할 없이) */
+export function handoverBandText(fromName: string): string {
+  return `Handing over · Reading ${fromName}'s history…`
+}
+
 /**
  * 곁가지 질문 카드에서 질문을 보낼 수 없는 이유 (없으면 null). 서버 POST /api/sessions/:id/btw 의 409 조건과 맞춘다:
- * 승인 대기·질문 중, 아직 답하는 중인 질문(세션당 하나)
+ * 인계 중, 승인 대기·질문 중, 아직 답하는 중인 질문(세션당 하나)
  */
-export function btwBlockReason(state: { isAsking: boolean; isApprovalNeeded: boolean; isPending: boolean }): string | null {
+export function btwBlockReason(state: { isAsking: boolean; isApprovalNeeded: boolean; isPending: boolean; isHandingOver: boolean }): string | null {
+  if (state.isHandingOver) return HANDOVER_BLOCK_TEXT
   if (state.isAsking || state.isApprovalNeeded) return "Can't ask while claude needs approval or is asking a question"
   if (state.isPending) return 'Wait for the answer before asking again'
   return null
@@ -49,7 +66,7 @@ export function parseBtwCommand(text: string): { question: string | null } | nul
 
 /**
  * 입력 제안(흐린 글)을 보일지. Claude Code 가 빈 입력칸에 제안을 그리는 때와 같게:
- * 제안이 있고, 근무 중인 웹 세션이고, 작업·승인 대기·질문 중이 아니고, 입력칸이 비었고, 확인 전인 임시 말풍선이 없을 때.
+ * 제안이 있고, 근무 중인 웹 세션이고, 작업·승인 대기·질문·인계 중이 아니고, 입력칸이 비었고, 확인 전인 임시 말풍선이 없을 때.
  * 막 보낸 말이 확인 전이면 mod 가 보낸 null 이 반영되기 전일 수 있어 숨긴다 (전송 실패한 것은 입력이 안 갔으니 그대로)
  */
 export function isSuggestionVisible(state: {
@@ -58,6 +75,7 @@ export function isSuggestionVisible(state: {
   isWorking: boolean
   isApprovalNeeded: boolean
   isAsking: boolean
+  isHandingOver: boolean
   isDraftEmpty: boolean
   hasUnconfirmedPending: boolean
 }): boolean {
@@ -67,6 +85,7 @@ export function isSuggestionVisible(state: {
     !state.isWorking &&
     !state.isApprovalNeeded &&
     !state.isAsking &&
+    !state.isHandingOver &&
     state.isDraftEmpty &&
     !state.hasUnconfirmedPending
   )

@@ -40,10 +40,10 @@ export function Terminal({ sessionId }: Props) {
       clearTimeout(newlineFallbackTimer)
       if (!isNewlinePending) return
       isNewlinePending = false
-      void post('input', { data: NEWLINE_KEYS })
+      void post('input', { data: NEWLINE_KEYS, isTerminal: true })
     }
     term.onData((data) => {
-      void post('input', { data })
+      void post('input', { data, isTerminal: true })
       flushNewline()
     })
     // xterm.js 는 Shift+Enter 도 Enter 와 같은 \r 을 보내 Claude Code 가 제출로 받는다. 줄바꿈 값으로 바꿔 보낸다
@@ -64,7 +64,7 @@ export function Terminal({ sessionId }: Props) {
       event.preventDefault()
       // 꾹 눌러 반복되는 keydown 은 보낸다
       if (isComposedEnterDown && !event.repeat) return false
-      void post('input', { data: NEWLINE_KEYS })
+      void post('input', { data: NEWLINE_KEYS, isTerminal: true })
       return false
     })
     term.onResize(({ cols, rows }) => void post('resize', { cols, rows }))

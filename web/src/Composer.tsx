@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent, type Ref } from 'react'
 import { flushSync } from 'react-dom'
 import { composerDraft } from './composerDraft'
-import { composerRows, parseBtwCommand, withAttachmentPaths } from './composerText'
+import { composerPlaceholder, composerRows, parseBtwCommand, withAttachmentPaths } from './composerText'
 import { formatSize } from './Files'
 
 /** 터치 기기(마우스 없음). style.css 의 터치 기기 스타일과 같은 기준. 이 기기에서는 세션을 열 때 입력칸에 포커스하지 않는다 (가상 키보드가 바로 떠 대화를 가린다) */
@@ -64,6 +64,8 @@ interface Props {
   isWritable: boolean
   /** 질문 중에는 입력칸을 막는다. 키 입력이 터미널의 질문 화면에 들어가면 Enter 가 1번 선택지로 답해 버린다. 쓰던 글은 남긴다 */
   isAsking: boolean
+  /** 인계 중(새 지시자가 인계 글에 답하기 전)에도 질문 중처럼 입력칸·첨부·보내기를 막는다 (서버 /input 409). 쓰던 글은 남긴다 */
+  isHandingOver: boolean
   /** 보이는 제안 (빈 입력칸에 흐리게 보이고 Tab 또는 Tab 칩으로 채운다). 안 보일 때는 null */
   suggestion: string | null
   /** 입력칸이 비었는지 바뀔 때 (제안 표시 조건). 글자마다 부르지 않는다 */
@@ -80,7 +82,9 @@ interface Props {
  * 대화 입력 상자: 여러 줄 입력칸·첨부 칩·보내기. 글자 state 를 여기 두어 칠 때마다 대화(Chat)가 다시 그려지지 않는다.
  * 세션을 바꿔도 쓰던 글은 남고 첨부 칩은 비운다. 글·커서는 composerDraft 에도 적어 Files·터미널 탭을 다녀와도(언마운트) 되살린다
  */
-export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw }: Props) {
+export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw }: Props) {
+  /** 입력칸·첨부·보내기를 막는다 (질문 중·인계 중. 회색 상자) */
+  const isLocked = isAsking || isHandingOver
   const [draft, setDraft] = useState(() => composerDraft.text)
   /** 입력 상자의 첨부 칩. 세션을 바꾸면 비운다 */
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -150,13 +154,13 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
     event?.preventDefault()
     // 곁가지 질문은 첨부를 붙이지 않는다 (도구 없이 답해 파일을 못 읽는다). 올리는 중이어도 된다
     const btw = parseBtwCommand(draft)
-    if (btw && !isAsking) {
+    if (btw && !isLocked) {
       changeDraft('')
       onBtw(btw.question)
       return
     }
     const text = withAttachmentPaths(draft.trim(), uploaded.map((attachment) => attachment.path))
-    if (!text || isAsking || isUploading) return
+    if (!text || isLocked || isUploading) return
     changeDraft('')
     const sentIds = new Set(uploaded.map((attachment) => attachment.id))
     setAttachments((current) => current.filter((attachment) => !sentIds.has(attachment.id)))
@@ -165,7 +169,7 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
 
   /** 고르거나 붙여 넣은 파일을 칩으로 붙이고 바로 올린다. 20MB 를 넘으면 올리지 않고 칩에 알린다 */
   function attachFiles(files: File[]) {
-    if (files.length === 0 || isAsking) return
+    if (files.length === 0 || isLocked) return
     const added = files.map(
       (file): Attachment => ({
         id: nextAttachmentIdRef.current++,
@@ -250,7 +254,7 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
       <button
         type="button"
         className="attach"
-        disabled={isAsking}
+        disabled={isLocked}
         onClick={() => fileInputRef.current?.click()}
         aria-label="Attach files"
         title="Attach files"
@@ -291,9 +295,9 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
           onBlur={(e) => saveSelection(e.currentTarget)}
           onKeyDown={onComposerKeyDown}
           onPaste={onComposerPaste}
-          placeholder={suggestion ? '' : isAsking ? 'Answer the question above first' : 'Type an instruction (Shift+Enter for a new line)'}
+          placeholder={composerPlaceholder({ hasSuggestion: Boolean(suggestion), isAsking, isHandingOver })}
           rows={composerRows(draft)}
-          disabled={isAsking}
+          disabled={isLocked}
           autoFocus={!window.matchMedia(TOUCH_QUERY).matches}
         />
         {suggestion && (
@@ -316,7 +320,7 @@ export function Composer({ ref, sessionId, isWritable, isAsking, suggestion, onE
       <button
         type="submit"
         className="send"
-        disabled={(!draft.trim() && uploaded.length === 0) || isAsking || (isUploading && !parseBtwCommand(draft))}
+        disabled={(!draft.trim() && uploaded.length === 0) || isLocked || (isUploading && !parseBtwCommand(draft))}
         aria-label="Send"
         title={isUploading ? "Can't send while files are uploading" : 'Send (Enter)'}
       >

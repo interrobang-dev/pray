@@ -364,6 +364,8 @@ export async function listSessions(
   positions: Record<string, string> = {},
   /** 팀원 세션의 가장 최근 task (teamState). 표시 상태 done 판정용 */
   latestTaskOf: (sessionId: string) => TurnEndFacts['latestTask'] = () => null,
+  /** 인계 중이면 직전 지시자 이름 (index.ts 의 handoffState) */
+  handoverOf: (sessionId: string) => Session['handover'] = () => null,
 ): Promise<Session[]> {
   const live = await readLiveSessions(sessionsDir)
   const recordedById = new Map(recorded.map((r) => [r.sessionId, r]))
@@ -427,6 +429,7 @@ export async function listSessions(
         role,
         question: heldQuestions ? { questions: heldQuestions } : null,
         suggestion: isWeb ? (suggestions.get(id) ?? null) : null,
+        handover: handoverOf(id),
         // 프로세스가 없으면(휴식·퇴근) 그 프로세스가 띄운 shell 도 없다
         shells: attendance === 'present' ? (analysis?.shells ?? []) : [],
       }

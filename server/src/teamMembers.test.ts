@@ -29,6 +29,7 @@ const session = (fields: Partial<Session>): Session => ({
   partId: null,
   question: null,
   suggestion: null,
+  handover: null,
   shells: [],
   character: null,
   gender: null,

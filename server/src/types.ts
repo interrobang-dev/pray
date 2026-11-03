@@ -69,6 +69,8 @@ export interface Session {
   question: { questions: AskQuestion[] } | null
   /** 입력칸에 놓인 Claude Code 다음 입력 제안 (웹 세션의 mod 가 POST /api/hook/suggestion 으로 보낸다). 웹 세션이 아니거나 없으면 null */
   suggestion: string | null
+  /** Hand over 로 띄운 새 지시자가 인계 글에 답하기 전이면 직전 지시자 이름 (handoffState.ts). 그동안 입력·곁가지 질문은 409. 아니면 null */
+  handover: { fromName: string } | null
   /** claude 가 백그라운드로 돌리고 있는 shell (시작 순). 근무 중이 아니면 []. 출력은 GET /api/sessions/:id/shells/:shellId/output */
   shells: Shell[]
   /** 도트 사무실 인물 (hq.json characters): 사용자가 고른 것 또는 새 세션에 서버가 배정한 것(isAuto). 없으면 null — 화면이 세션 ID 해시로 고른다. 바꾸기는 PUT /api/sessions/:id/character */
