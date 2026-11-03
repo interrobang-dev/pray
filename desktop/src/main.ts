@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Child } from './children'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
+import { isExternalUrl } from './externalLink'
 import { appIconIco, trayIconPng } from './icon'
 import { isPipeAlive, LEGACY_PIPE_PATH } from './legacyHost'
 import { isLaunchAtLogin, LOGIN_ITEM_NAME } from './loginItem'
@@ -114,6 +115,12 @@ function createWindow(): BrowserWindow {
     show: false,
   })
   win.once('ready-to-show', () => win.show())
+  // 대화 속 웹 링크(target=_blank)가 새 Pray 창이 아니라 기본 브라우저로 열리게
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (!isExternalUrl(url, SERVER_URL)) return { action: 'allow' }
+    shell.openExternal(url).catch((error: unknown) => console.error(`Failed to open ${url}`, error))
+    return { action: 'deny' }
+  })
   win.on('close', (event) => {
     if (isQuitting) return
     event.preventDefault()

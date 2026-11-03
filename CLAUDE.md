@@ -72,7 +72,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `host/src/ptyPool.ts` — node-pty 로 `claude.exe` 실행·세션별 링버퍼, extraArgs 저장, 끝나면 퇴근 기록, 모델 바꾸기 재시작, 웹 세션에 mod 불러오기
 - `host/src/hq.ts` — `~/.claude/pray/hq.json` 읽기·쓰기 (웹 세션·퇴근 기록·그룹·팀·이름·인물·성별·역할·팀 할 일·목록 순서)
 - `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=` 파일 로그 · `host/src/dataDir.ts` — 설정 폴더 `~/.claude/pray/` 정하기·옛 폴더 한 번 옮기기 (서버가 `@pray/host/dataDir` 로 import, 트레이는 `desktop/src/dataDir.ts` 에 같은 규칙) · `host/src/protocol.ts` — pipe 메시지 타입·줄 단위 JSON
-- `desktop/src/main.ts`·`children.ts`·`icon.ts`·`notify.ts` — Electron 트레이 앱, 자식 재시작 정책, 코드로 만든 트레이·창 아이콘, 세션 알림 판정·글자
+- `desktop/src/main.ts`·`children.ts`·`icon.ts`·`notify.ts`·`externalLink.ts` — Electron 트레이 앱, 자식 재시작 정책, 코드로 만든 트레이·창 아이콘, 세션 알림 판정·글자, 창의 웹 링크를 기본 브라우저로 넘길지 판정
 - `scripts/*.ps1` — 작업 스케줄러 등록·중지·제거 · `scripts/brand-electron.mts` — postinstall 로 electron.exe 아이콘·이름을 Pray 로 · `hooks/install.mjs` — settings.json 훅 설치
 
 팀 → `team.md`
