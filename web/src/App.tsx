@@ -231,6 +231,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
   /** 세션 추가 모달의 "Carry over previous lead's history" 칸 (직전 지시자 기록이 있는 팀·파트에서 Lead 를 고를 때만 보인다) */
   const [isCarryOverChecked, setIsCarryOverChecked] = useState(true)
+  /** 세션 추가 요청을 보내는 중 (Hand over 면 서버가 옛 지시자가 끝나기를 최대 10초 기다린다) */
+  const [isSessionSubmitting, setIsSessionSubmitting] = useState(false)
   /**
    * 팀·파트 세션 추가 모달에 미리 채울 이름(이름만)과 그 성별. 성별은 이 이름을 그대로 쓸 때만 세션 생성에 넘긴다.
    * Role 칸은 세그먼트(Member/Lead)에 따라 Dev/Lead 로 채운다
@@ -580,16 +582,31 @@ export function App({ isLocal }: { isLocal: boolean }) {
     // 추천 이름을 그대로 쓸 때만 그 성별을 넘긴다 (직접 고친 이름은 성별 없음)
     const isSuggestedName = Boolean(sessionForm.teamId) && typedSessionName === null && suggestedSessionName !== null
     const isCarryingOver = isCarryOverShown(sessionForm.teamId, sessionForm.partId) && isCarryOverChecked
-    const response = await postJson('/api/sessions', 'POST', {
-      cwd: sessionForm.teamId ? undefined : form.get('cwd'),
-      teamId: sessionForm.teamId ?? undefined,
-      partId: sessionForm.partId ?? undefined,
-      name: form.get('name'),
-      position: String(form.get('position') ?? '').trim() || undefined,
-      gender: isSuggestedName ? suggestedSessionName?.gender : undefined,
-      isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
-      carryOverHistory: isCarryingOver || undefined,
-    })
+    // 살아 있는 지시자가 있으면 그를 끝내고 띄운다 (서버가 끝나기를 기다린다). 확인 창을 취소하면 아무것도 안 한다
+    const liveLead = liveLeadOf(sessionForm.teamId, sessionForm.partId)
+    if (liveLead) {
+      const isMidTurn = liveLead.status === 'working' || liveLead.status === 'waiting' || liveLead.status === 'needs-approval'
+      const leadLabel = sessionForm.partId ? 'part lead' : 'lead'
+      const message = `End ${displayName(liveLead)} and start a new ${leadLabel}?${isMidTurn ? ' Its current turn will stop.' : ''}`
+      if (!(await confirmDialog(message, { confirmLabel: 'End & start', isDanger: true }))) return
+    }
+    setIsSessionSubmitting(true)
+    let response: Response
+    try {
+      response = await postJson('/api/sessions', 'POST', {
+        cwd: sessionForm.teamId ? undefined : form.get('cwd'),
+        teamId: sessionForm.teamId ?? undefined,
+        partId: sessionForm.partId ?? undefined,
+        name: form.get('name'),
+        position: String(form.get('position') ?? '').trim() || undefined,
+        gender: isSuggestedName ? suggestedSessionName?.gender : undefined,
+        isLead: Boolean(sessionForm.teamId) && sessionRole === 'lead',
+        carryOverHistory: isCarryingOver || undefined,
+        replacesLead: liveLead ? true : undefined,
+      })
+    } finally {
+      setIsSessionSubmitting(false)
+    }
     if (!response.ok) {
       void alertDialog((await response.json()).message ?? "Couldn't create session")
       return
@@ -824,7 +841,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setSessionForm({ teamId, partId })
   }
 
-  /** Hand over: 그 팀·파트의 세션 추가 창을 Lead·인계 칸 켜짐으로 연다. 옛 지시자는 끄지 않는다 (사람이 창에서 보고 만든다) */
+  /** Hand over: 그 팀·파트의 세션 추가 창을 Lead·인계 칸 켜짐으로 연다. 옛 지시자가 근무 중이면 Start 가 확인 창 뒤 그를 끝내고 새 지시자를 띄운다 */
   function openHandOver(teamId: string, partId: string | null) {
     openSessionForm(teamId, partId)
     setSessionRole('lead')
@@ -1121,14 +1138,21 @@ export function App({ isLocal }: { isLocal: boolean }) {
     return sessionRole === 'lead' && Boolean(unit?.hasPreviousLead)
   }
 
-  function renderSessionModal(teamId: string | null, partId: string | null) {
+  /** 그 팀·파트의 근무 중인 지시자. 없으면 undefined */
+  function liveLeadOf(teamId: string | null, partId: string | null): Session | undefined {
     const team = teamId ? office.teams.find((t) => t.id === teamId) : undefined
     const part = team?.parts.find((p) => p.id === partId)
     const leadSessionId = part ? part.leadSessionId : team?.leadSessionId
-    const hasLiveLead = Boolean(leadSessionId && snapshot.sessions.some((s) => s.id === leadSessionId && s.isAlive))
+    return leadSessionId ? snapshot.sessions.find((s) => s.id === leadSessionId && s.isAlive) : undefined
+  }
+
+  function renderSessionModal(teamId: string | null, partId: string | null) {
+    const team = teamId ? office.teams.find((t) => t.id === teamId) : undefined
+    const part = team?.parts.find((p) => p.id === partId)
+    const liveLead = liveLeadOf(teamId, partId)
     const leadLabel = part ? 'Part lead' : 'Lead'
-    /** Hand over 로 열면 옛 지시자가 아직 근무 중일 수 있다: 서버가 409 로 막으므로 먼저 끄라고 알리고 Start 를 막는다 (끄면 SSE 로 풀린다) */
-    const liveLeadToEnd = team && sessionRole === 'lead' && hasLiveLead ? snapshot.sessions.find((s) => s.id === leadSessionId) : undefined
+    /** 살아 있는 지시자가 있는데 Lead 를 골랐으면 Start 가 그를 끝내고 새 지시자를 띄운다 (Hand over. 서버 replacesLead) */
+    const liveLeadToEnd = team && sessionRole === 'lead' ? liveLead : undefined
     const sessionPosition = modalPosition(typedSessionPosition, sessionRole, Boolean(team))
     const sessionName = modalName(typedSessionName, suggestedSessionName?.name ?? null, Boolean(team))
     return (
@@ -1149,9 +1173,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 {
                   value: 'lead',
                   label: leadLabel,
-                  isDisabled: hasLiveLead,
-                  hint: hasLiveLead
-                    ? `This ${part ? 'part' : 'team'} already has a ${leadLabel.toLowerCase()}`
+                  hint: liveLead
+                    ? `Starting ends ${displayName(liveLead)} first`
                     : `Spawns ${part ? 'part' : 'team'} members and hands out work (with MCP tools)`,
                 },
               ]}
@@ -1165,7 +1188,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
           )}
           {liveLeadToEnd && (
             <p className="hand-over-note">
-              End {displayName(liveLeadToEnd)} first. A {part ? 'part' : 'team'} has one {leadLabel.toLowerCase()} at a time.
+              Starting ends {displayName(liveLeadToEnd)} first. A {part ? 'part' : 'team'} has one {leadLabel.toLowerCase()} at a time.
             </p>
           )}
           {!team && <input name="cwd" placeholder="Folder path (e.g. D:\workspace\foo)" required autoFocus />}
@@ -1191,8 +1214,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
             </label>
           </div>
           <div className="actions">
-            <button type="submit" className="primary" disabled={Boolean(liveLeadToEnd)}>
-              Start
+            <button type="submit" className="primary" disabled={isSessionSubmitting}>
+              {isSessionSubmitting ? 'Starting…' : liveLeadToEnd ? `End ${displayName(liveLeadToEnd)} & start` : 'Start'}
             </button>
             <button type="button" onClick={() => setSessionForm(null)}>
               Cancel

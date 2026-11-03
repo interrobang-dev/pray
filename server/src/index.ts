@@ -113,6 +113,7 @@ import { TeamTaskLog } from './teamTaskFile.js'
 import { parseWaitRequest, respondJsonAfter } from './taskWait.js'
 import { leadExtraArgs } from './lead.js'
 import { formatHandoff, HANDOFF_LIMIT, handoffMessage, leadTranscriptPath, readHandoffSource, type LeadKind } from './leadHandoff.js'
+import { waitForLeadEnd } from './leadReplace.js'
 import {
   givenNameOf,
   nameAndPosition,
@@ -433,10 +434,11 @@ async function autoCharacterFor(target: { id: string; isLead: boolean; gender: S
  * teamId 가 있으면 그 팀 폴더로 띄운다. partId 가 있으면 그 파트로 (worktree 파트면 그 폴더).
  * isLead 면 그 지휘 단위의 지시자로 (팀장 또는 파트장. 살아 있는 지시자가 이미 있으면 거부).
  * name·position 은 세션 이름과 역할 (빼거나 빈 글이면 없음. 이름이 옛 꼴 "[역할] 이름" 이면 나눈다).
- * carryOverHistory 면 지시자로 띄운 뒤 직전 지시자의 인계 글을 첫 메시지로 보낸다 (handOverHistory)
+ * carryOverHistory 면 지시자로 띄운 뒤 직전 지시자의 인계 글을 첫 메시지로 보낸다 (handOverHistory).
+ * replacesLead 면 살아 있는 지시자를 화면 종료 버튼과 같은 kill 로 끝내고(dismissed 퇴근) 끝나기를 기다린 뒤 띄운다 (Hand over)
  */
 app.post('/api/sessions', async (req, res) => {
-  const { cwd: rawCwd, teamId, partId, prompt, isLead, name, gender, position, carryOverHistory } = req.body as {
+  const { cwd: rawCwd, teamId, partId, prompt, isLead, name, gender, position, carryOverHistory, replacesLead } = req.body as {
     cwd?: string
     teamId?: string
     partId?: string
@@ -447,9 +449,14 @@ app.post('/api/sessions', async (req, res) => {
     gender?: unknown
     position?: unknown
     carryOverHistory?: unknown
+    replacesLead?: unknown
   }
   if (carryOverHistory !== undefined && typeof carryOverHistory !== 'boolean') {
     res.status(400).json({ message: 'carryOverHistory must be true or false' })
+    return
+  }
+  if (replacesLead !== undefined && typeof replacesLead !== 'boolean') {
+    res.status(400).json({ message: 'replacesLead must be true or false' })
     return
   }
   const team = teamId ? findTeam(teamId) : undefined
@@ -477,7 +484,7 @@ app.post('/api/sessions', async (req, res) => {
     return
   }
   let extraArgs: string[] | undefined
-  // 직전 지시자: 아래에서 leadSessionId 를 새 ID 로 바꾸기 전에 잡아 둔다 (살아 있으면 409 라 여기까지 오면 끝난 세션이다)
+  // 직전 지시자: 아래에서 leadSessionId 를 새 ID 로 바꾸기 전에 잡아 둔다 (살아 있으면 409 이거나 replacesLead 로 끝낸 뒤라 여기까지 오면 끝난 세션이다)
   let previousLeadId: string | null = null
   if (isLead) {
     if (!team) {
@@ -487,9 +494,36 @@ app.post('/api/sessions', async (req, res) => {
     const currentLeadId = part ? part.leadSessionId : team.leadSessionId
     previousLeadId = currentLeadId ?? null
     if (currentLeadId) {
+      const hasLeadMessage = part ? 'This part already has a part lead' : 'This team already has a lead'
       const { sessions } = await snapshotPayload()
       if (sessions.some((s) => s.id === currentLeadId && s.isAlive)) {
-        res.status(409).json({ message: part ? 'This part already has a part lead' : 'This team already has a lead' })
+        if (replacesLead !== true) {
+          res.status(409).json({ message: hasLeadMessage })
+          return
+        }
+        if (!endWebSession(currentLeadId)) {
+          res.status(503).json({ message: 'Not connected to session host' })
+          return
+        }
+        const endStartedAt = Date.now()
+        const outcome = await waitForLeadEnd({
+          leadId: currentLeadId,
+          currentLeadId: () => unitLeadId(team.id, part?.id ?? null),
+          isAlive: () => isPresentSession(currentLeadId),
+        })
+        console.log(`지시자 교대 (${currentLeadId.slice(0, 8)} 끝내기): ${outcome}, ${Date.now() - endStartedAt}ms`)
+        if (outcome === 'timeout') {
+          res.status(409).json({ message: "Couldn't end the current lead" })
+          return
+        }
+        if (outcome === 'superseded') {
+          res.status(409).json({ message: hasLeadMessage })
+          return
+        }
+      }
+      // 기다리는 사이(await) 다른 요청이 지시자를 바꿨으면 거절한다. 여기부터 아래 leadSessionId 바꾸기까지 await 가 없어야 겹치지 않는다
+      if (unitLeadId(team.id, part?.id ?? null) !== currentLeadId) {
+        res.status(409).json({ message: hasLeadMessage })
         return
       }
     }
@@ -1149,9 +1183,17 @@ app.put('/api/sessions/:id/character', async (req, res) => {
   void broadcast()
 })
 
-/** 웹 세션 종료. 호스트가 기록을 정리됨(dismissed) 퇴근으로 옮긴다 */
+/**
+ * 웹 세션 끝내기 (화면 종료 버튼, Hand over 로 바뀌는 옛 지시자). 호스트가 기록을 정리됨(dismissed) 퇴근으로 옮긴다.
+ * 호스트 연결이 없어 못 보냈으면 false
+ */
+function endWebSession(sessionId: string): boolean {
+  return host.send({ type: 'kill', sessionId })
+}
+
+/** 웹 세션 종료 */
 app.delete('/api/sessions/:id', (req, res) => {
-  host.send({ type: 'kill', sessionId: req.params.id })
+  endWebSession(req.params.id)
   res.json({})
 })
 
@@ -1846,6 +1888,17 @@ function recordInstruction(sessionId: string, fromSessionId: string | null, text
 
 function findTeam(teamId: string): Team | undefined {
   return listTeams().find((t) => t.id === teamId)
+}
+
+/** 지휘 단위(팀 직속 또는 파트)의 지금 leadSessionId 를 hq.json 에서 다시 읽는다 */
+function unitLeadId(teamId: string, partId: string | null): string | undefined {
+  const team = findTeam(teamId)
+  return partId ? team?.parts.find((p) => p.id === partId)?.leadSessionId : team?.leadSessionId
+}
+
+/** 근무 중인지: 호스트 목록 또는 살아 있는 pid 기록 (세션 목록의 isAlive 와 같은 기준) */
+async function isPresentSession(sessionId: string): Promise<boolean> {
+  return host.sessions.some((s) => s.sessionId === sessionId) || (await isLiveSession(sessionId))
 }
 
 /** 요청의 지휘 단위. partId 가 없으면 null (팀 직속), 있으면 그 파트, 모르는 파트면 undefined */
