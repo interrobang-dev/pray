@@ -3695,6 +3695,103 @@ li.group.drop-after::after {
   margin: 0;
   padding-right: 36px;
 }
+/* 대화 속 그림 (ChatImage.tsx). 마크다운 그림은 <p> 안이라 span 을 block 으로 쓴다.
+   말풍선 폭에 맞추고 높이는 360px 까지(비율 유지). 불러오는 중엔 크기를 몰라 자리 잡힌 회색 칸(180px)으로 대화가 덜 들썩이게 */
+.chat-image {
+  display: block;
+  max-width: 100%;
+  margin: 4px 0 8px;
+}
+.chat-image-frame {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: zoom-in;
+  /* 투명한 그림이 보이게 체크무늬 (작업 파일 미리보기와 같다) */
+  background: repeating-conic-gradient(var(--code-bg) 0 25%, var(--panel) 0 50%) 0 0 / 16px 16px;
+}
+.chat-image-frame:hover {
+  border-color: var(--line-strong);
+}
+.chat-image-frame img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+}
+.chat-image.is-loading .chat-image-frame {
+  width: min(100%, 320px);
+  height: 180px;
+  background: var(--code-bg);
+  cursor: default;
+}
+.chat-image.is-loading img {
+  opacity: 0;
+}
+.chat-image-caption {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+/* 그림을 못 받을 때: 깨진 그림 아이콘 대신 카드 (title 에 전체 경로) */
+.chat-image-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 4px 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: var(--code-bg);
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  line-height: 1.4;
+  vertical-align: middle;
+}
+.chat-image-missing svg {
+  flex: none;
+}
+.chat-image-missing .chat-image-name {
+  overflow-wrap: anywhere;
+}
+/* 크게 보기 (Modal + .image-viewer): 화면 가득, 그림은 남은 칸에 비율 유지 */
+.modal.image-viewer {
+  box-sizing: border-box;
+  width: calc(100vw - 32px);
+  max-width: none;
+  height: calc(100dvh - 32px);
+  gap: 10px;
+}
+.image-viewer-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: repeating-conic-gradient(var(--code-bg) 0 25%, var(--panel) 0 50%) 0 0 / 16px 16px;
+}
+.image-viewer-body img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.image-viewer-foot {
+  display: flex;
+  justify-content: flex-end;
+  font-size: calc(13px * var(--font-scale));
+}
+.image-viewer-foot a {
+  color: var(--link);
+}
 /* 긴 줄은 말풍선 안에서만 가로 스크롤 */
 .markdown pre {
   overflow-x: auto;
@@ -6431,6 +6528,22 @@ li.group.drop-after::after {
   .flow-read-all {
     grid-column: 3 / -1;
     justify-self: end;
+  }
+  /* 대화 그림 크게 보기: 화면 전체 (작업 파일 모달과 같다). Open original 은 누르기 쉬운 높이로 */
+  .modal.image-viewer {
+    width: 100vw;
+    height: 100dvh;
+    padding: 12px;
+    border: 0;
+    border-radius: 0;
+  }
+  .image-viewer-foot a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+  .chat-image-frame img {
+    max-height: 300px;
   }
 }
 

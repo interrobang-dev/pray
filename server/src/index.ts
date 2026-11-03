@@ -78,6 +78,7 @@ import {
 } from './scratchpad.js'
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
 import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
+import { chatImagePathKind, resolveChatImage } from './chatImage.js'
 import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './workspaceChanges.js'
 import { commitDetail, commitFileDiff, historyFilePath, listHistory, REV_PATTERN } from './workspaceHistory.js'
 import { buildSearchPattern, MAX_MATCHES, parseSearchQuery, runSearchWorker, SEARCH_TIME_LIMIT_MS, SearchPatternError } from './workspaceSearch.js'
@@ -864,6 +865,27 @@ app.get('/api/sessions/:id/file/raw', async (req, res) => {
   res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
   if (isActive) res.set('Content-Security-Policy', 'sandbox')
   res.sendFile(resolved.target, { dotfiles: 'allow' })
+})
+
+/**
+ * 대화 속 그림 (?path= 절대 경로 또는 세션 작업 폴더 기준 상대 경로). 범위는 작업 폴더 안 또는 Claude 임시 폴더 아래 (chatImage.ts).
+ * 꼴이 틀리면 400, 범위 밖·없음·그림 아님은 모두 404. 응답 머리는 /file/raw 와 같다
+ */
+app.get('/api/sessions/:id/image', async (req, res) => {
+  const { path } = req.query
+  if (!isSessionId(req.params.id) || typeof path !== 'string' || !chatImagePathKind(path)) {
+    res.status(400).json({ message: 'Invalid session ID or path' })
+    return
+  }
+  const file = await resolveChatImage(path, await workspaceRootOf(req.params.id))
+  if (!file) {
+    res.status(404).json({ message: 'Image not found' })
+    return
+  }
+  const { type, isActive } = contentTypeOf(file)
+  res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
+  if (isActive) res.set('Content-Security-Policy', 'sandbox')
+  res.sendFile(file, { dotfiles: 'allow' })
 })
 
 const MAX_FIND_RESULTS = 100

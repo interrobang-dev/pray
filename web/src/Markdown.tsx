@@ -1,7 +1,8 @@
 import { memo } from 'react'
-import Markdown, { type Components, type Options } from 'react-markdown'
+import Markdown, { defaultUrlTransform, type Components, type Options, type UrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import { ChatImage, MarkdownSource } from './ChatImage'
 import { CopyButton } from './CopyButton'
 import { codeBlockText, type HastNode } from './codeText'
 import { rehypeHighlightTokens } from './markdownHighlight'
@@ -26,15 +27,36 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
 }
 
+// 대화에서만: img 는 ChatImage 가 이 PC 파일 경로를 서버 그림 API 로 바꾼다 (작업 파일 미리보기의 img 는 그대로)
+const CHAT_MARKDOWN_COMPONENTS: Components = {
+  ...MARKDOWN_COMPONENTS,
+  img: ({ node, src, alt }) => (
+    <ChatImage start={node?.position?.start.offset} end={node?.position?.end.offset} src={typeof src === 'string' ? src : undefined} alt={alt} />
+  ),
+}
+// 대화에서만: img src 는 기본 변환이 `C:` 를 모르는 프로토콜로 보고 지우므로 그대로 넘긴다 (ChatImage 가 http(s)·data:image·서버 그림 API 밖은 쓰지 않는다). 링크 등 나머지는 기본 그대로
+const chatUrlTransform: UrlTransform = (url, key, node) => (node.tagName === 'img' && key === 'src' ? url : defaultUrlTransform(url))
+
 /** 마크다운 글 (대화 탭의 claude 응답·팀장↔팀원 지시·보고, 작업 파일 미리보기). raw HTML 은 react-markdown 기본값대로 글자로 보인다 (rehype-raw 안 씀).
- *  isChat: 대화(claude 답·작업 묶음 설명 글·지시 말풍선·곁가지 질문 답·설정 창 미리보기)일 때만 숫자·경로 강조. 작업 파일 미리보기는 끈다.
+ *  isChat: 대화(claude 답·작업 묶음 설명 글·지시 말풍선·곁가지 질문 답·설정 창 미리보기)일 때만 숫자·경로 강조와 대화 그림(ChatImage). 작업 파일 미리보기는 끈다.
  *  memo: 입력칸에 칠 때마다 대화 전체를 다시 파싱하지 않게 */
 export const MarkdownText = memo(function MarkdownText({ text, isChat = false }: { text: string; isChat?: boolean }) {
+  if (!isChat) {
+    return (
+      <div className="markdown">
+        <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={MARKDOWN_COMPONENTS}>
+          {text}
+        </Markdown>
+      </div>
+    )
+  }
   return (
     <div className="markdown">
-      <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={isChat ? REHYPE_CHAT_PLUGINS : REHYPE_PLUGINS} components={MARKDOWN_COMPONENTS}>
-        {text}
-      </Markdown>
+      <MarkdownSource.Provider value={text}>
+        <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_CHAT_PLUGINS} components={CHAT_MARKDOWN_COMPONENTS} urlTransform={chatUrlTransform}>
+          {text}
+        </Markdown>
+      </MarkdownSource.Provider>
     </div>
   )
 })

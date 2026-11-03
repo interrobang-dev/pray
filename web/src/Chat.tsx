@@ -10,6 +10,7 @@ import { Composer, type ComposerHandle } from './Composer'
 import { restoreToComposerDraft } from './composerDraft'
 import { handoverBandText, isSuggestionVisible } from './composerText'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
+import { ChatImageSession } from './ChatImage'
 import { runningToolNames, shortToolName } from './runningTools'
 import { isTeamWaitSummary, teamToolOf } from './teamTools'
 import { FilesButton } from './Files'
@@ -1690,21 +1691,24 @@ export function Chat({
               Earlier messages · scroll up
             </div>
           )}
-          <MessageRows
-            rows={visibleRows}
-            memberOf={memberOf}
-            workToggles={workToggles}
-            workBundles={workBundles}
-            highlightKey={highlight?.key ?? null}
-            searchKey={searchCurrentKey}
-            lineNotice={lineNotice}
-            lastQueuedId={lastQueuedId}
-            canCancelQueued={canCancelQueued}
-            cancellingId={cancellingId}
-            onToggleWork={toggleWork}
-            onOpenRelay={openRelay}
-            onCancelQueued={cancelQueued}
-          />
+          {/* 대화 속 이 PC 파일 그림을 받을 세션: 지금 보이는 메시지의 세션 (세션을 바꾼 직후 messages 는 앞 세션 것이다) */}
+          <ChatImageSession.Provider value={loadedSessionId}>
+            <MessageRows
+              rows={visibleRows}
+              memberOf={memberOf}
+              workToggles={workToggles}
+              workBundles={workBundles}
+              highlightKey={highlight?.key ?? null}
+              searchKey={searchCurrentKey}
+              lineNotice={lineNotice}
+              lastQueuedId={lastQueuedId}
+              canCancelQueued={canCancelQueued}
+              cancellingId={cancellingId}
+              onToggleWork={toggleWork}
+              onOpenRelay={openRelay}
+              onCancelQueued={cancelQueued}
+            />
+          </ChatImageSession.Provider>
           {pendings.map((pending) => (
             <div key={`pending-${pending.id}`} className={`msg user pending${pending.isFailed ? ' failed' : ''}`}>
               <div className="text">{pending.text}</div>
@@ -1785,18 +1789,20 @@ export function Chat({
         ))
       )}
       {isWritable && (
-        <BtwCard
-          key={sessionId}
-          ref={btwRef}
-          sessionId={sessionId}
-          version={btwVersion}
-          isAsking={isAsking}
-          isApprovalNeeded={isApprovalNeeded}
-          isHandingOver={isHandingOver}
-          onAsk={sendBtw}
-          onEscClosed={focusComposer}
-          onResize={keepBottomOnBtwResize}
-        />
+        <ChatImageSession.Provider value={sessionId}>
+          <BtwCard
+            key={sessionId}
+            ref={btwRef}
+            sessionId={sessionId}
+            version={btwVersion}
+            isAsking={isAsking}
+            isApprovalNeeded={isApprovalNeeded}
+            isHandingOver={isHandingOver}
+            onAsk={sendBtw}
+            onEscClosed={focusComposer}
+            onResize={keepBottomOnBtwResize}
+          />
+        </ChatImageSession.Provider>
       )}
       {isWritable && handoverFrom !== null && (
         <div className="handover-band" role="status">
