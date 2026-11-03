@@ -3,76 +3,76 @@
  "mask": "office-v5-down-recolor.png",
  "characters": {
   "lead": {
-   "hair": "#4d3428",
-   "top": "#aecced"
+   "hair": "#5d3929",
+   "top": "#cbe0fa"
   },
   "lead-suit": {
-   "hair": "#2f2e2d",
-   "top": "#3f3f3c"
+   "hair": "#262521",
+   "top": "#525251"
   },
   "member": {
-   "hair": "#292623",
-   "top": "#ee952d"
+   "hair": "#443e3c",
+   "top": "#fdc431"
   },
   "hoodie": {
-   "hair": "#232221",
+   "hair": "#211f1e",
    "top": "#27583f"
   },
   "flannel": {
-   "hair": "#e0954f",
+   "hair": "#fdcb7b",
    "top": "#c2292c"
   },
   "ponytail": {
-   "hair": "#9e382a",
-   "top": "#ad93ad"
+   "hair": "#a2452b",
+   "top": "#c4a2b6"
   },
   "cardigan": {
-   "hair": "#353533",
-   "top": "#23385d"
+   "hair": "#333232",
+   "top": "#2c4269"
   },
   "turtleneck": {
-   "hair": "#e2dad1",
-   "top": "#296b7b"
+   "hair": "#decfc2",
+   "top": "#4685a1"
   },
   "afro": {
-   "hair": "#222120",
+   "hair": "#211e1e",
    "top": "#e3641e"
   },
   "lead-vest": {
-   "hair": "#4d342a",
-   "top": "#741e23"
+   "hair": "#3e2f25",
+   "top": "#752327"
   },
   "lead-blazer": {
-   "hair": "#73422b",
-   "top": "#5c3146"
+   "hair": "#77492c",
+   "top": "#853f51"
   },
   "denim": {
-   "hair": "#42423c",
+   "hair": "#565656",
    "top": "#75a3ce"
   },
   "professor": {
-   "hair": "#c0b0a1",
-   "top": "#a55f2e"
+   "hair": "#e7e5e1",
+   "top": "#a86135"
   },
   "headphones": {
-   "hair": "#3a3739",
-   "top": "#5f3f61"
+   "hair": "#363739",
+   "top": "#775587"
   },
   "polo": {
-   "hair": "#302620",
-   "top": "#f9ca6b"
+   "hair": "#3a2c23",
+   "top": "#fde995"
   },
   "hijab": {
-   "hair": "#e29475",
-   "top": "#dfb487"
+   "hair": "#d26458",
+   "top": "#eec49e"
   },
   "overalls": {
-   "hair": "#1f090d",
-   "top": "#353232"
+   "hair": "#eb7782",
+   "top": "#363635"
   },
   "braids": {
-   "hair": "#943b2f",
-   "top": "#f16f6b"
+   "hair": "#3e2316",
+   "top": "#f4656d"
   }
  }
 }

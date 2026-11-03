@@ -46,14 +46,18 @@ export function hslToRgb([hue, saturation, lightness]: Rgb): Rgb {
 
 /**
  * 픽셀 하나를 기본색 → 고른 색으로. 밝기 차이는 고른 색이 기본색보다 밝으면 늘리고(검은 머리를 금발로 해도 음영이 보이게, 3배까지)
- * 어두우면 줄인다(0.6배까지)
+ * 어두우면 줄인다(0.6배까지). 기본색보다 밝은 쪽은 고른 색 밝기에서 1 까지 남은 여유 안에 눌러 담는다
+ * (그냥 더하면 밝은 색을 고를 때 하이라이트가 흰색으로 날아간다)
  */
 export function recolorPixel(pixel: Rgb, base: Rgb, target: Rgb): Rgb {
   const [, , pixelLightness] = rgbToHsl(pixel)
   const [, , baseLightness] = rgbToHsl(base)
   const [hue, saturation, targetLightness] = rgbToHsl(target)
   const scale = Math.min(3, Math.max(0.6, targetLightness / Math.max(baseLightness, 0.05)))
-  const lightness = Math.min(1, Math.max(0, targetLightness + (pixelLightness - baseLightness) * scale))
+  const offset = (pixelLightness - baseLightness) * scale
+  const headroom = 1 - targetLightness
+  const lifted = offset > 0 && headroom > 0 ? headroom * (1 - Math.exp(-offset / headroom)) : offset
+  const lightness = Math.min(1, Math.max(0, targetLightness + lifted))
   return hslToRgb([hue, saturation, lightness])
 }
 

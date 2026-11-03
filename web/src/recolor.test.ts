@@ -26,6 +26,28 @@ describe('recolor', () => {
     expect(lightnessOf(highlight)).toBeGreaterThan(lightnessOf(middle))
   })
 
+  it('밝은 색을 고르면 하이라이트를 남은 여유 안에 눌러 담아 흰색으로 날아가지 않고, 밝기 순서는 지킨다', () => {
+    const base = parseHex('#22211f')
+    const target = parseHex('#e3b860')
+    const middle = lightnessOf(recolorPixel(base, base, target))
+    const highlights = ['#3a3835', '#5a5753', '#8a8780'].map((hex) => lightnessOf(recolorPixel(parseHex(hex), base, target)))
+    // 압축하지 않으면 #3a3835 는 밝기 약 0.9 (거의 흰색), #5a5753 부터 1 (흰색)
+    expect(highlights[0]).toBeLessThan(0.85)
+    expect(highlights[0]).toBeGreaterThan(middle)
+    expect(highlights[1]).toBeGreaterThan(highlights[0])
+    expect(highlights[2]).toBeGreaterThan(highlights[1])
+    expect(highlights[2]).toBeLessThan(1)
+  })
+
+  it('기본색보다 어두운 쪽은 배율만 곱한다', () => {
+    const base = parseHex('#eb7782')
+    const target = parseHex('#2a2522')
+    const pixel = parseHex('#a04a52')
+    const scale = Math.max(0.6, lightnessOf(target) / lightnessOf(base))
+    const expected = lightnessOf(target) + (lightnessOf(pixel) - lightnessOf(base)) * scale
+    expect(lightnessOf(recolorPixel(pixel, base, target))).toBeCloseTo(Math.max(0, expected), 2)
+  })
+
   it('밝기는 0~1 밖으로 나가지 않는다', () => {
     expect(recolorPixel(parseHex('#ffffff'), parseHex('#22211f'), parseHex('#f2f2f0'))).toEqual([255, 255, 255])
     expect(recolorPixel(parseHex('#000000'), parseHex('#fac12d'), parseHex('#2f2f34'))).toEqual([0, 0, 0])

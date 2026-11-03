@@ -43,13 +43,16 @@ function hslToRgb([hue, saturation, lightness]: Rgb): Rgb {
   return [channel(1 / 3), channel(0), channel(-1 / 3)]
 }
 
-/** 픽셀 하나를 기본색 → 고른 색으로. 밝기 차이는 고른 색이 밝으면 늘리고(3배까지) 어두우면 줄인다(0.6배까지) */
+/** 픽셀 하나를 기본색 → 고른 색으로. 밝기 차이는 고른 색이 밝으면 늘리고(3배까지) 어두우면 줄인다(0.6배까지). 밝은 쪽은 1 까지 남은 여유 안에 눌러 담는다 */
 function recolorPixel(pixel: Rgb, base: Rgb, target: Rgb): Rgb {
   const [, , pixelLightness] = rgbToHsl(pixel)
   const [, , baseLightness] = rgbToHsl(base)
   const [hue, saturation, targetLightness] = rgbToHsl(target)
   const scale = Math.min(3, Math.max(0.6, targetLightness / Math.max(baseLightness, 0.05)))
-  const lightness = Math.min(1, Math.max(0, targetLightness + (pixelLightness - baseLightness) * scale))
+  const offset = (pixelLightness - baseLightness) * scale
+  const headroom = 1 - targetLightness
+  const lifted = offset > 0 && headroom > 0 ? headroom * (1 - Math.exp(-offset / headroom)) : offset
+  const lightness = Math.min(1, Math.max(0, targetLightness + lifted))
   return hslToRgb([hue, saturation, lightness])
 }
 
