@@ -6,10 +6,23 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Child } from './children'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
+import { dotLookOf } from './dotCharacter'
 import { isExternalUrl } from './externalLink'
 import { appIconIco, noticeIconPng, trayIconPng } from './icon'
 import { isPipeAlive, LEGACY_PIPE_PATH } from './legacyHost'
 import { isLaunchAtLogin, LOGIN_ITEM_NAME } from './loginItem'
+import {
+  buildFaceArt,
+  FACE_SHEET,
+  faceFileKey,
+  facePixels,
+  HEAD_RECT,
+  rgbaFromBgra,
+  type FaceArt,
+  type FaceRecolorJson,
+  type FaceSheetJson,
+  type RgbaImage,
+} from './noticeFace'
 import {
   bundleLine,
   bundleToast,
@@ -186,25 +199,78 @@ async function focusedSessionId(): Promise<string | null> {
   }
 }
 
-/** 종류별 알림 그림 file:// URL. 이 실행에서 처음 쓸 때 앱 데이터 폴더에 PNG 로 쓴다 (코드가 바뀌면 따라가게). 못 쓰면 null (그림 없이) */
-const noticeIconUrls = new Map<NotifyKind, string | null>()
-function noticeIconUrl(kind: NotifyKind): string | null {
-  if (noticeIconUrls.has(kind)) return noticeIconUrls.get(kind) ?? null
-  const path = join(app.getPath('userData'), `notice-${kind}.png`)
+/**
+ * 알림 그림 file:// URL. 이 실행에서 그 조합(종류, 인물·색)을 처음 쓸 때 앱 데이터 폴더에 PNG 로 쓰고 다시 쓴다 (코드가 바뀌면 따라가게).
+ * face 가 없으면 Pray 마크 `notice-<종류>.png`, 있으면 그 인물 머리 `notice-<종류>-<인물>-<머리색>-<윗옷색>.png`. 못 쓰면 null (그림 없이)
+ */
+const noticeIconUrls = new Map<string, string | null>()
+function noticeIconUrl(kind: NotifyKind, face: { key: string; pixels: Uint8Array } | null = null): string | null {
+  const name = face ? `notice-${kind}-${face.key}.png` : `notice-${kind}.png`
+  if (noticeIconUrls.has(name)) return noticeIconUrls.get(name) ?? null
+  const path = join(app.getPath('userData'), name)
   let url: string | null = null
   try {
-    writeFileSync(path, noticeIconPng(kind))
+    writeFileSync(path, noticeIconPng(kind, face ? { pixels: face.pixels, size: HEAD_RECT.w } : null))
     url = pathToFileURL(path).href
   } catch (error) {
     console.warn(`알림 그림 ${path} 를 못 써서 그림 없이 띄운다: ${String(error)}`)
   }
-  noticeIconUrls.set(kind, url)
+  noticeIconUrls.set(name, url)
   return url
+}
+
+async function fetchOk(path: string): Promise<Response> {
+  const response = await fetch(`${SERVER_URL}${path}`)
+  if (!response.ok) throw new Error(`GET ${path}: HTTP ${response.status}`)
+  return response
+}
+
+async function fetchImage(path: string): Promise<RgbaImage> {
+  const image = nativeImage.createFromBuffer(Buffer.from(await (await fetchOk(path)).arrayBuffer()))
+  if (image.isEmpty()) throw new Error(`GET ${path}: not an image`)
+  const { width, height } = image.getSize()
+  // toBitmap 은 BGRA (Windows)
+  return rgbaFromBgra(image.toBitmap(), width, height)
+}
+
+/**
+ * 화면 목록 아바타와 같은 정면 아틀라스·마스크를 서버에서 받아 인물마다 머리 칸만 잘라 메모리에 둔다 (한 번만. 실패하면 다음 알림 때 다시).
+ * 아틀라스 전체 픽셀은 들고 있지 않는다
+ */
+let faceArtPromise: Promise<FaceArt> | null = null
+function loadFaceArt(): Promise<FaceArt> {
+  faceArtPromise ??= (async () => {
+    const [sheet, recolor] = await Promise.all([
+      fetchOk(`/office/${FACE_SHEET}.json`).then((response) => response.json() as Promise<FaceSheetJson>),
+      fetchOk(`/office/${FACE_SHEET}-recolor.json`).then((response) => response.json() as Promise<FaceRecolorJson>),
+    ])
+    const [atlas, mask] = await Promise.all([fetchImage(`/office/${FACE_SHEET}.png`), fetchImage(`/office/${encodeURIComponent(recolor.mask)}`)])
+    return buildFaceArt(sheet, recolor, atlas, mask)
+  })().catch((error: unknown) => {
+    faceArtPromise = null
+    throw error
+  })
+  return faceArtPromise
+}
+
+/** 세션 도트 인물 머리 그림 (화면과 같은 dotLookOf 규칙). 아틀라스를 못 받았거나 인물이 아틀라스·마스크에 없으면 null (Pray 마크) */
+async function sessionFace(session: NotifySession | undefined): Promise<{ key: string; pixels: Uint8Array } | null> {
+  if (!session) return null
+  let art: FaceArt
+  try {
+    art = await loadFaceArt()
+  } catch (error) {
+    console.warn(`알림 인물 그림을 못 받아 Pray 마크로 띄운다: ${String(error)}`)
+    return null
+  }
+  const look = dotLookOf(session, art.characters)
+  const pixels = look ? facePixels(art, look) : null
+  return look && pixels ? { key: faceFileKey(look), pixels } : null
 }
 
 /**
  * toastXml 로 띄우고, XML 을 못 만들거나 failed 가 오면 평범한 title·body 알림으로 한 번 다시 띄운다.
- * 본문·[Open] 클릭은 click 이벤트, [Dismiss] 는 Windows 가 닫아 close 이벤트다 (Electron 44 windows_toast_notification.cc)
+ * 토스트(본문) 클릭은 click 이벤트다 (Electron 44 windows_toast_notification.cc)
  */
 function showNotification(content: ToastContent, sessionId?: string, isPlain = false): void {
   let xml: string | null = null
@@ -234,7 +300,7 @@ function showNotification(content: ToastContent, sessionId?: string, isPlain = f
   notification.show()
 }
 
-/** 알림에 그룹·팀·파트 이름을 붙이려고 알릴 것이 있을 때만 받는다. 못 받으면 null (이름 없이 알린다) */
+/** 알림에 팀·파트 이름을 붙이려고 알릴 것이 있을 때만 받는다. 못 받으면 null (이름 없이 알린다) */
 async function fetchOffice(): Promise<NotifyOffice | null> {
   try {
     const response = await fetch(`${SERVER_URL}/api/office`)
@@ -262,8 +328,8 @@ async function notify(notices: SessionNotice[], sessions: NotifySession[]): Prom
     return
   }
   for (const notice of shown) {
-    const content = noticeToast(notice, sessionOf(notice.sessionId), placeFor(notice.sessionId), noticeIconUrl(notice.kind))
-    showNotification(content, notice.sessionId)
+    const face = await sessionFace(sessionOf(notice.sessionId))
+    showNotification(noticeToast(notice, placeFor(notice.sessionId), noticeIconUrl(notice.kind, face)), notice.sessionId)
   }
 }
 

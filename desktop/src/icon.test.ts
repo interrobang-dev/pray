@@ -113,4 +113,24 @@ describe('noticeIconPng', () => {
     expect(pixelAt(image, 36, 28)).toEqual([0xf5, 0xb8, 0x41, 255])
     expect(pixelAt(image, 37, 29)).toEqual([0xf5, 0xb8, 0x41, 255])
   })
+
+  it('face 가 있으면 마크 대신 머리를 2배로 가운데에 놓고 고리 안쪽 원으로 자른다', () => {
+    const faceSize = 44
+    const pixels = new Uint8Array(faceSize * faceSize * 4)
+    for (let index = 0; index < pixels.length; index += 4) pixels.set([200, 10, 10, 255], index)
+    // 머리 (22, 10) 은 투명 → 먹색 바탕, (23, 10) 은 반투명 → 먹색 위에 섞음
+    pixels.set([0, 0, 0, 0], (10 * faceSize + 22) * 4)
+    pixels.set([255, 255, 255, 128], (10 * faceSize + 23) * 4)
+    const image = pngPixels(noticeIconPng('needs-approval', { pixels, size: faceSize }))
+    expect(pngSize(noticeIconPng('done', { pixels, size: faceSize }))).toEqual({ width: NOTICE_ICON_SIZE, height: NOTICE_ICON_SIZE })
+    // 2배, (96 - 88) / 2 = 4 만큼 밀림
+    expect(pixelAt(image, 48, 48)).toEqual([200, 10, 10, 255])
+    expect(pixelAt(image, 36, 28)).toEqual([200, 10, 10, 255])
+    expect(pixelAt(image, 48, 24)).toEqual([0x23, 0x26, 0x2e, 255])
+    expect(pixelAt(image, 50, 25)).toEqual([145, 147, 151, 255])
+    // 고리는 머리 위에 그대로, 원 바깥(머리 네모의 모서리)은 투명
+    expect(pixelAt(image, 48, 2)).toEqual([...NOTICE_RING_COLORS['needs-approval']])
+    expect(pixelAt(image, 5, 5)[3]).toBe(0)
+    expect(pixelAt(image, 0, 0)[3]).toBe(0)
+  })
 })

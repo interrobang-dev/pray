@@ -201,11 +201,33 @@ function blendOver(dst: Uint8Array, offset: number, src: readonly number[]): voi
   dst[offset + 3] = Math.round(outAlpha * 255)
 }
 
+/** 알림 그림에 넣는 인물 머리: 정사각 RGBA (noticeFace.ts 의 facePixels, 44px) */
+export interface NoticeFace {
+  pixels: Uint8Array
+  size: number
+}
+
+/** 머리 그림 배율 (44px → 88px, 최근접 이웃) */
+const NOTICE_FACE_SCALE = 2
+
+/** face 를 배율만큼 늘려 가운데에 놓았을 때 (px, py) 점의 색을 먹색 바탕 위에 덮은 것 */
+function faceColorAt(face: NoticeFace, px: number, py: number): readonly number[] {
+  const start = (NOTICE_ICON_SIZE - face.size * NOTICE_FACE_SCALE) / 2
+  const fx = Math.floor((px - start) / NOTICE_FACE_SCALE)
+  const fy = Math.floor((py - start) / NOTICE_FACE_SCALE)
+  if (fx < 0 || fy < 0 || fx >= face.size || fy >= face.size) return INK
+  const offset = (fy * face.size + fx) * 4
+  const color = new Uint8Array(INK)
+  blendOver(color, 0, [...face.pixels.subarray(offset, offset + 4)])
+  return [...color]
+}
+
 /**
- * 알림 그림: 먹색 원판 + 상태 색 고리(6px) 위에 32 격자 마크를 2배(64px)로 가운데에 찍는다. 토스트가 hint-crop="circle" 로 원으로 자르므로
- * 원 바깥은 투명이고, 원 가장자리만 4x4 표본으로 부드럽게 한다 (마크는 최근접 이웃 그대로)
+ * 알림 그림: 먹색 원판 + 상태 색 고리(6px). 토스트가 hint-crop="circle" 로 원으로 자르므로 원 바깥은 투명이고, 원 가장자리는 4x4 표본으로 부드럽게 한다.
+ * face 가 없으면 32 격자 마크를 2배(64px)로 가운데에 찍는다 (최근접 이웃 그대로).
+ * face(세션 도트 인물 머리)가 있으면 2배(88px)로 가운데에 놓고 고리 안쪽 원으로 자른다 — 원판 안쪽 표본마다 머리 픽셀을 먹색 위에 덮는다
  */
-export function noticeIconPng(kind: NoticeRingKind): Buffer {
+export function noticeIconPng(kind: NoticeRingKind, face: NoticeFace | null = null): Buffer {
   const size = NOTICE_ICON_SIZE
   const ring = NOTICE_RING_COLORS[kind]
   const pixels = new Uint8Array(size * size * 4)
@@ -215,8 +237,11 @@ export function noticeIconPng(kind: NoticeRingKind): Buffer {
       const sum = [0, 0, 0, 0]
       for (let sy = 0; sy < NOTICE_SAMPLES; sy++) {
         for (let sx = 0; sx < NOTICE_SAMPLES; sx++) {
-          const distance = Math.hypot(x + (sx + 0.5) / NOTICE_SAMPLES - center, y + (sy + 0.5) / NOTICE_SAMPLES - center)
-          const color = distance <= NOTICE_RING_INNER ? INK : distance <= NOTICE_RING_OUTER ? ring : null
+          const px = x + (sx + 0.5) / NOTICE_SAMPLES
+          const py = y + (sy + 0.5) / NOTICE_SAMPLES
+          const distance = Math.hypot(px - center, py - center)
+          const inner = face ? faceColorAt(face, px, py) : INK
+          const color = distance <= NOTICE_RING_INNER ? inner : distance <= NOTICE_RING_OUTER ? ring : null
           if (!color) continue
           for (let i = 0; i < 3; i++) sum[i] += color[i]
           sum[3] += 1
@@ -228,6 +253,7 @@ export function noticeIconPng(kind: NoticeRingKind): Buffer {
       pixels[offset + 3] = Math.round((sum[3] / (NOTICE_SAMPLES * NOTICE_SAMPLES)) * 255)
     }
   }
+  if (face) return encodePng(pixels, size)
   const markSize = SIZE * 2
   const mark = scaleNearest(drawGrid(MARK), SIZE, markSize)
   const start = (size - markSize) / 2

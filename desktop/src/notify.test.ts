@@ -3,11 +3,11 @@ import {
   bundleLine,
   bundleToast,
   diffSessions,
-  noticeAttribution,
+  fitOneLine,
   noticeBody,
-  noticeHeader,
   noticeTitle,
   noticeToast,
+  placeLabel,
   placeOf,
   urgentKind,
   type NotifyOffice,
@@ -168,19 +168,20 @@ describe('noticeBody', () => {
   })
 })
 
-describe('알림 자리 (그룹 › 팀 › 파트)', () => {
+describe('알림 자리 (팀 › 파트)', () => {
   const office: NotifyOffice = {
-    groups: [{ id: 'g1', name: 'Office' }],
     teams: [
-      { id: 't1', name: 'Pray', groupId: 'g1', parts: [{ id: 'p1', name: 'Design' }] },
-      { id: 't2', name: 'Orphan', groupId: 'gone' },
+      { id: 't1', name: 'Pray', parts: [{ id: 'p1', name: 'Design' }] },
+      { id: 't2', name: 'Solo' },
     ],
   }
 
   it('팀·파트 ID 로 이름을 찾는다', () => {
-    expect(placeOf({ teamId: 't1', partId: 'p1' }, office)).toEqual({ group: 'Office', team: 'Pray', part: 'Design' })
-    expect(placeOf({ teamId: 't1', partId: null }, office)).toEqual({ group: 'Office', team: 'Pray', part: null })
-    expect(placeOf({ teamId: 't2', partId: null }, office)).toEqual({ group: null, team: 'Orphan', part: null })
+    expect(placeOf({ teamId: 't1', partId: 'p1' }, office)).toEqual({ team: 'Pray', part: 'Design' })
+    expect(placeOf({ teamId: 't1', partId: null }, office)).toEqual({ team: 'Pray', part: null })
+    // 파트 이름을 못 찾으면 팀만
+    expect(placeOf({ teamId: 't1', partId: 'gone' }, office)).toEqual({ team: 'Pray', part: null })
+    expect(placeOf({ teamId: 't2', partId: null }, office)).toEqual({ team: 'Solo', part: null })
   })
 
   it('팀이 없거나 모르거나 사무실 정보가 없으면 null', () => {
@@ -190,63 +191,67 @@ describe('알림 자리 (그룹 › 팀 › 파트)', () => {
     expect(placeOf({ teamId: 't1' }, null)).toBeNull()
   })
 
-  it('머리줄은 팀 › 파트, id 는 팀ID[:파트ID], 팀이 없으면 null', () => {
-    const design = { group: 'Office', team: 'Pray', part: 'Design' }
-    expect(noticeHeader({ teamId: 't1', partId: 'p1' }, design)).toEqual({ id: 't1:p1', title: 'Pray › Design' })
-    expect(noticeHeader({ teamId: 't1', partId: null }, { group: 'Office', team: 'Pray', part: null })).toEqual({ id: 't1', title: 'Pray' })
-    // 파트 이름을 못 찾으면 팀 묶음으로
-    expect(noticeHeader({ teamId: 't1', partId: 'gone' }, { group: 'Office', team: 'Pray', part: null })).toEqual({ id: 't1', title: 'Pray' })
-    expect(noticeHeader({ teamId: null }, null)).toBeNull()
+  it('자리 글자는 팀 › 파트, 파트가 없으면 팀, 자리가 없으면 빈 글', () => {
+    expect(placeLabel({ team: 'Pray', part: 'Design' })).toBe('Pray › Design')
+    expect(placeLabel({ team: 'Pray', part: null })).toBe('Pray')
+    expect(placeLabel(null)).toBe('')
   })
 
-  it('작은 회색 줄은 그룹 · 역할, 없는 칸은 뺀다', () => {
-    const place = { group: 'Office', team: 'Pray', part: null }
-    expect(noticeAttribution({ role: 'lead', partId: null }, place)).toBe('Office · Lead')
-    expect(noticeAttribution({ role: 'lead', partId: 'p1' }, place)).toBe('Office · Part lead')
-    expect(noticeAttribution({ role: 'member', partId: null }, { ...place, group: null })).toBe('Member')
-    expect(noticeAttribution({ role: null, partId: null }, place)).toBe('Office')
-    expect(noticeAttribution({ role: null, partId: null }, null)).toBe('')
-  })
-
-  it('묶음 줄은 그룹 없이 팀 › 파트 · 제목', () => {
-    expect(bundleLine('[Lead] Park · Done', { group: 'Office', team: 'Pray', part: 'Design' })).toBe('Pray › Design · [Lead] Park · Done')
-    expect(bundleLine('[Lead] Park · Done', { group: 'Office', team: 'Pray', part: null })).toBe('Pray · [Lead] Park · Done')
+  it('묶음 줄은 팀 › 파트 · 제목', () => {
+    expect(bundleLine('[Lead] Park · Done', { team: 'Pray', part: 'Design' })).toBe('Pray › Design · [Lead] Park · Done')
+    expect(bundleLine('[Lead] Park · Done', { team: 'Pray', part: null })).toBe('Pray · [Lead] Park · Done')
     expect(bundleLine('Kim · My turn', null)).toBe('Kim · My turn')
   })
 })
 
-describe('알림 토스트 내용', () => {
-  const place = { group: 'Office', team: 'Pray', part: null }
-  const lead = session({ id: 's1', name: 'Park', position: 'Lead', role: 'lead', teamId: 't1', partId: null })
+describe('fitOneLine', () => {
+  it('폭 예산 안이면 그대로 (넓은 글자 2, 나머지 1)', () => {
+    expect(fitOneLine('a'.repeat(34))).toBe('a'.repeat(34))
+    expect(fitOneLine('가'.repeat(17))).toBe('가'.repeat(17))
+    expect(fitOneLine('')).toBe('')
+  })
 
-  it('한 세션: 머리줄·작은 줄·그림, 승인 대기는 Review', () => {
-    const notice = { sessionId: 's1', kind: 'done' as const, title: '[Lead] Park · Done', body: '끝났습니다' }
-    expect(noticeToast(notice, lead, place, 'file:///icon.png')).toEqual({
+  it('넘으면 … 까지 예산 안으로 자르고 끝 공백은 뗀다', () => {
+    expect(fitOneLine('a'.repeat(35))).toBe(`${'a'.repeat(33)}…`)
+    expect(fitOneLine('가'.repeat(18))).toBe(`${'가'.repeat(16)}…`)
+    expect(fitOneLine(`${'a'.repeat(32)} bcd`)).toBe(`${'a'.repeat(32)}…`)
+    expect(fitOneLine('abcdef', 4)).toBe('abc…')
+  })
+
+  it('이모지(서로게이트 쌍)를 반으로 자르지 않는다', () => {
+    expect(fitOneLine('😀😀😀', 4)).toBe('😀…')
+  })
+})
+
+describe('알림 토스트 내용', () => {
+  const notice = { sessionId: 's1', kind: 'done' as const, title: '[Lead] Park · Done', body: '끝났습니다' }
+
+  it('한 세션: 본문, 작은 줄은 팀 › 파트, 그림', () => {
+    expect(noticeToast(notice, { team: 'Pray', part: 'Design' }, 'file:///icon.png')).toEqual({
       title: '[Lead] Park · Done',
       body: '끝났습니다',
-      header: { id: 't1', title: 'Pray' },
-      attribution: 'Office · Lead',
+      attribution: 'Pray › Design',
       iconUrl: 'file:///icon.png',
-      openLabel: 'Open',
     })
-    expect(noticeToast({ ...notice, kind: 'needs-approval' }, lead, place, null).openLabel).toBe('Review')
   })
 
-  it('Focus Zone 세션·세션을 못 찾으면 머리줄 없이', () => {
-    const notice = { sessionId: 's2', kind: 'my-turn' as const, title: 'Kim · My turn', body: '' }
-    expect(noticeToast(notice, session({ id: 's2', name: 'Kim' }), null, null)).toMatchObject({ header: null, attribution: '' })
-    expect(noticeToast(notice, undefined, null, null)).toMatchObject({ header: null, attribution: '' })
+  it('본문은 한 줄 폭으로 자른다', () => {
+    const long = { ...notice, body: '토스트 알림을 컴팩트하게 바꾸고 왼쪽 그림을 세션 도트 인물 머리로 바꿨습니다.' }
+    expect(noticeToast(long, null, null).body).toBe('토스트 알림을 컴팩트하게 바꾸고…')
   })
 
-  it('묶음은 머리줄 없이 줄마다', () => {
+  it('팀이 없으면(Focus Zone·세션을 못 찾음) 작은 줄 없이', () => {
+    expect(noticeToast(notice, null, null)).toMatchObject({ attribution: '', iconUrl: null })
+  })
+
+  it('묶음은 줄마다, 줄 수를 자르지 않는다', () => {
     expect(bundleToast(['a', 'b', 'c', 'd'], null)).toEqual({
       title: 'Pray · 4 sessions',
       body: 'a\nb\nc\nd',
-      header: null,
       attribution: '',
       iconUrl: null,
-      openLabel: 'Open',
     })
+    expect(bundleToast(['x'.repeat(80)], null).body).toBe('x'.repeat(80))
   })
 
   it('묶음 그림은 가장 급한 종류', () => {

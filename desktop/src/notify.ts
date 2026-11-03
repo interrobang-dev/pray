@@ -1,4 +1,5 @@
 /** 세션 작업 완료·승인 대기 Windows 알림의 판정과 글자. Electron 을 쓰지 않는 순수 함수 */
+import type { DotLook } from './dotCharacter'
 import type { ToastContent } from './toast'
 
 /** `/api/sessions` 의 세션 중 알림에 쓰는 필드 (web/src/types.ts 의 Session 일부) */
@@ -18,6 +19,10 @@ export interface NotifySession {
   partId?: string | null
   /** 세션 문맥 크기(토큰). 옛 서버 응답엔 없을 수 있다 */
   contextTokens?: number | null
+  /** 고르거나 배정된 도트 인물 (없으면 해시로 고른다 → dotLookOf). 옛 서버 응답엔 없을 수 있다 */
+  character?: DotLook | null
+  /** 서버가 이름을 지을 때 정한 성별 (해시 인물 후보를 좁힌다) */
+  gender?: 'male' | 'female' | null
 }
 
 export type NotifyKind = 'done' | 'my-turn' | 'needs-approval' | 'hand-over'
@@ -101,13 +106,11 @@ export function noticeBody(session: NotifySession, kind: NotifyKind): string {
 
 /** `/api/office` 중 알림의 자리 글자에 쓰는 필드 */
 export interface NotifyOffice {
-  groups: { id: string; name: string }[]
-  teams: { id: string; name: string; groupId: string; parts?: { id: string; name: string }[] }[]
+  teams: { id: string; name: string; parts?: { id: string; name: string }[] }[]
 }
 
-/** 세션이 속한 그룹·팀·파트 이름. 팀이 없거나(Focus Zone) 사무실 정보를 못 받았으면 null */
+/** 세션이 속한 팀·파트 이름. 팀이 없거나(Focus Zone) 사무실 정보를 못 받았으면 null */
 export interface NoticePlace {
-  group: string | null
   team: string
   part: string | null
 }
@@ -116,45 +119,48 @@ export function placeOf(session: Pick<NotifySession, 'teamId' | 'partId'>, offic
   if (!office || !session.teamId) return null
   const team = office.teams.find((each) => each.id === session.teamId)
   if (!team) return null
-  const group = office.groups.find((each) => each.id === team.groupId)?.name ?? null
   const part = session.partId ? (team.parts?.find((each) => each.id === session.partId)?.name ?? null) : null
-  return { group, team: team.name, part }
+  return { team: team.name, part }
 }
 
-/** 알림 머리줄 "팀 › 파트". id 가 같은 알림은 알림 센터에서 한 묶음이다 (팀ID 또는 팀ID:파트ID). 팀이 없으면 null */
-export function noticeHeader(session: Pick<NotifySession, 'teamId' | 'partId'>, place: NoticePlace | null): { id: string; title: string } | null {
-  if (!place || !session.teamId) return null
-  if (place.part && session.partId) return { id: `${session.teamId}:${session.partId}`, title: `${place.team} › ${place.part}` }
-  return { id: session.teamId, title: place.team }
+/** "팀 › 파트" (파트가 없으면 팀). 자리가 없으면 빈 글 */
+export function placeLabel(place: NoticePlace | null): string {
+  if (!place) return ''
+  return place.part ? `${place.team} › ${place.part}` : place.team
 }
 
-/** 알림 아래 작은 회색 줄 "그룹 · 역할" (역할 = 팀장 Lead·파트장 Part lead·팀원 Member). 없는 칸은 뺀다 */
-export function noticeAttribution(session: Pick<NotifySession, 'role' | 'partId'>, place: NoticePlace | null): string {
-  const role = session.role === 'lead' ? (session.partId ? 'Part lead' : 'Lead') : session.role === 'member' ? 'Member' : null
-  return [place?.group ?? null, role].filter((each) => each).join(' · ')
-}
-
-/** 묶음 알림의 한 줄: "팀 › 파트 · 제목" (그룹은 길어서 뺀다) */
+/** 묶음 알림의 한 줄: "팀 › 파트 · 제목" */
 export function bundleLine(title: string, place: NoticePlace | null): string {
-  if (!place) return title
-  return `${place.part ? `${place.team} › ${place.part}` : place.team} · ${title}`
+  const label = placeLabel(place)
+  return label ? `${label} · ${title}` : title
 }
 
-/** 한 세션 알림의 토스트 내용. 승인 대기면 버튼이 Review */
-export function noticeToast(notice: SessionNotice, session: NotifySession | undefined, place: NoticePlace | null, iconUrl: string | null): ToastContent {
-  return {
-    title: notice.title,
-    body: notice.body,
-    header: session ? noticeHeader(session, place) : null,
-    attribution: session ? noticeAttribution(session, place) : '',
-    iconUrl,
-    openLabel: notice.kind === 'needs-approval' ? 'Review' : 'Open',
-  }
+/**
+ * 토스트 본문 한 줄의 폭 예산. 넓은 글자(한글·한자·전각·이모지, U+1100 부터) 2, 나머지 1, 끝의 … 도 1.
+ * 그림이 있는 토스트(배율 100%)에서 한글 17자 + 공백 4 + … 는 한 줄, 영어 37자는 두 줄이었다(실측) — 그래서 34 로 둔다.
+ * 대문자·W 처럼 넓은 글자가 많으면 두 줄로 넘어갈 수 있다 (어림)
+ */
+export const BODY_LINE_UNITS = 34
+
+/** 한 줄 폭 예산(BODY_LINE_UNITS)을 넘으면 잘라 … 를 붙인다. 맨 위 text 의 hint-maxLines 는 Windows 토스트가 무시해서(실측) 글을 자른다 */
+export function fitOneLine(text: string, units = BODY_LINE_UNITS): string {
+  const widthOf = (char: string) => ((char.codePointAt(0) ?? 0) >= 0x1100 ? 2 : 1)
+  const chars = [...text]
+  if (chars.reduce((sum, char) => sum + widthOf(char), 0) <= units) return text
+  let used = 1
+  let end = 0
+  while (end < chars.length && used + widthOf(chars[end]) <= units) used += widthOf(chars[end++])
+  return `${chars.slice(0, end).join('').trimEnd()}…`
 }
 
-/** 묶음 알림 "Pray · N sessions": 머리줄 없이 본문 줄마다 bundleLine */
+/** 한 세션 알림의 토스트 내용: 제목 · 본문 한 줄(fitOneLine) · 작은 회색 줄 "팀 › 파트" (팀이 없으면 줄 없음) */
+export function noticeToast(notice: SessionNotice, place: NoticePlace | null, iconUrl: string | null): ToastContent {
+  return { title: notice.title, body: fitOneLine(notice.body), attribution: placeLabel(place), iconUrl }
+}
+
+/** 묶음 알림 "Pray · N sessions": 본문 줄마다 bundleLine (자르지 않는다) */
 export function bundleToast(lines: string[], iconUrl: string | null): ToastContent {
-  return { title: `Pray · ${lines.length} sessions`, body: lines.join('\n'), header: null, attribution: '', iconUrl, openLabel: 'Open' }
+  return { title: `Pray · ${lines.length} sessions`, body: lines.join('\n'), attribution: '', iconUrl }
 }
 
 /** 묶음 알림 그림의 테두리 색: 가장 급한 종류 (승인 대기 → 내 차례 → 인계 → 끝남) */
