@@ -1,4 +1,5 @@
 /** 세션 작업 완료·승인 대기 Windows 알림의 판정과 글자. Electron 을 쓰지 않는 순수 함수 */
+import type { ToastContent } from './toast'
 
 /** `/api/sessions` 의 세션 중 알림에 쓰는 필드 (web/src/types.ts 의 Session 일부) */
 export interface NotifySession {
@@ -11,7 +12,9 @@ export interface NotifySession {
   lastAssistantText: string | null
   pendingTool: string | null
   role: 'lead' | 'member' | null
-  /** 파트장이면 파트 ID (팀장은 null). 옛 서버 응답엔 없을 수 있다 */
+  /** 속한 팀 ID (팀 없으면 null). 옛 서버 응답엔 없을 수 있다 */
+  teamId?: string | null
+  /** 속한 파트 ID (팀 직속이면 null). 옛 서버 응답엔 없을 수 있다 */
   partId?: string | null
   /** 세션 문맥 크기(토큰). 옛 서버 응답엔 없을 수 있다 */
   contextTokens?: number | null
@@ -94,6 +97,70 @@ export function noticeBody(session: NotifySession, kind: NotifyKind): string {
     .find((line) => line !== '')
   if (!firstLine) return ''
   return firstLine.length > BODY_MAX_LENGTH ? `${firstLine.slice(0, BODY_MAX_LENGTH)}…` : firstLine
+}
+
+/** `/api/office` 중 알림의 자리 글자에 쓰는 필드 */
+export interface NotifyOffice {
+  groups: { id: string; name: string }[]
+  teams: { id: string; name: string; groupId: string; parts?: { id: string; name: string }[] }[]
+}
+
+/** 세션이 속한 그룹·팀·파트 이름. 팀이 없거나(Focus Zone) 사무실 정보를 못 받았으면 null */
+export interface NoticePlace {
+  group: string | null
+  team: string
+  part: string | null
+}
+
+export function placeOf(session: Pick<NotifySession, 'teamId' | 'partId'>, office: NotifyOffice | null): NoticePlace | null {
+  if (!office || !session.teamId) return null
+  const team = office.teams.find((each) => each.id === session.teamId)
+  if (!team) return null
+  const group = office.groups.find((each) => each.id === team.groupId)?.name ?? null
+  const part = session.partId ? (team.parts?.find((each) => each.id === session.partId)?.name ?? null) : null
+  return { group, team: team.name, part }
+}
+
+/** 알림 머리줄 "팀 › 파트". id 가 같은 알림은 알림 센터에서 한 묶음이다 (팀ID 또는 팀ID:파트ID). 팀이 없으면 null */
+export function noticeHeader(session: Pick<NotifySession, 'teamId' | 'partId'>, place: NoticePlace | null): { id: string; title: string } | null {
+  if (!place || !session.teamId) return null
+  if (place.part && session.partId) return { id: `${session.teamId}:${session.partId}`, title: `${place.team} › ${place.part}` }
+  return { id: session.teamId, title: place.team }
+}
+
+/** 알림 아래 작은 회색 줄 "그룹 · 역할" (역할 = 팀장 Lead·파트장 Part lead·팀원 Member). 없는 칸은 뺀다 */
+export function noticeAttribution(session: Pick<NotifySession, 'role' | 'partId'>, place: NoticePlace | null): string {
+  const role = session.role === 'lead' ? (session.partId ? 'Part lead' : 'Lead') : session.role === 'member' ? 'Member' : null
+  return [place?.group ?? null, role].filter((each) => each).join(' · ')
+}
+
+/** 묶음 알림의 한 줄: "팀 › 파트 · 제목" (그룹은 길어서 뺀다) */
+export function bundleLine(title: string, place: NoticePlace | null): string {
+  if (!place) return title
+  return `${place.part ? `${place.team} › ${place.part}` : place.team} · ${title}`
+}
+
+/** 한 세션 알림의 토스트 내용. 승인 대기면 버튼이 Review */
+export function noticeToast(notice: SessionNotice, session: NotifySession | undefined, place: NoticePlace | null, iconUrl: string | null): ToastContent {
+  return {
+    title: notice.title,
+    body: notice.body,
+    header: session ? noticeHeader(session, place) : null,
+    attribution: session ? noticeAttribution(session, place) : '',
+    iconUrl,
+    openLabel: notice.kind === 'needs-approval' ? 'Review' : 'Open',
+  }
+}
+
+/** 묶음 알림 "Pray · N sessions": 머리줄 없이 본문 줄마다 bundleLine */
+export function bundleToast(lines: string[], iconUrl: string | null): ToastContent {
+  return { title: `Pray · ${lines.length} sessions`, body: lines.join('\n'), header: null, attribution: '', iconUrl, openLabel: 'Open' }
+}
+
+/** 묶음 알림 그림의 테두리 색: 가장 급한 종류 (승인 대기 → 내 차례 → 인계 → 끝남) */
+export function urgentKind(kinds: NotifyKind[]): NotifyKind {
+  const order: NotifyKind[] = ['needs-approval', 'my-turn', 'hand-over', 'done']
+  return order.find((kind) => kinds.includes(kind)) ?? 'done'
 }
 
 function splitLegacyName(name: string): { position: string | null; name: string } {

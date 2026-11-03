@@ -174,6 +174,72 @@ export function appIconPng(size: number): Buffer {
   return encodePng(scaleNearest(drawGrid(grid), grid.length, size), size)
 }
 
+/** 알림 왼쪽 그림의 상태 색 테두리. 웹 style.css 다크 값 (--success·--yellow·--red·--blue-dot). desktop 은 CSS 를 못 읽어 따로 둔다 */
+export const NOTICE_RING_COLORS = {
+  done: [0x3f, 0x9c, 0x4b, 255],
+  'my-turn': [0xe3, 0xb3, 0x41, 255],
+  'needs-approval': [0xef, 0x7b, 0x72, 255],
+  'hand-over': [0x4c, 0x93, 0xe6, 255],
+} as const satisfies Record<string, readonly number[]>
+export type NoticeRingKind = keyof typeof NOTICE_RING_COLORS
+
+/** 알림 그림 크기: 토스트 appLogoOverride 는 48 epx 라 배율 200% 화면에서 96px 로 그린다 (작은 배율은 Windows 가 줄인다) */
+export const NOTICE_ICON_SIZE = 96
+const NOTICE_RING_OUTER = NOTICE_ICON_SIZE / 2
+const NOTICE_RING_INNER = NOTICE_RING_OUTER - 6
+const NOTICE_SAMPLES = 4
+
+/** src 를 dst 위에 덮는다 (straight alpha 의 source-over) */
+function blendOver(dst: Uint8Array, offset: number, src: readonly number[]): void {
+  const srcAlpha = src[3] / 255
+  if (srcAlpha === 0) return
+  const dstAlpha = dst[offset + 3] / 255
+  const outAlpha = srcAlpha + dstAlpha * (1 - srcAlpha)
+  for (let i = 0; i < 3; i++) {
+    dst[offset + i] = Math.round((src[i] * srcAlpha + dst[offset + i] * dstAlpha * (1 - srcAlpha)) / outAlpha)
+  }
+  dst[offset + 3] = Math.round(outAlpha * 255)
+}
+
+/**
+ * 알림 그림: 먹색 원판 + 상태 색 고리(6px) 위에 32 격자 마크를 2배(64px)로 가운데에 찍는다. 토스트가 hint-crop="circle" 로 원으로 자르므로
+ * 원 바깥은 투명이고, 원 가장자리만 4x4 표본으로 부드럽게 한다 (마크는 최근접 이웃 그대로)
+ */
+export function noticeIconPng(kind: NoticeRingKind): Buffer {
+  const size = NOTICE_ICON_SIZE
+  const ring = NOTICE_RING_COLORS[kind]
+  const pixels = new Uint8Array(size * size * 4)
+  const center = size / 2
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const sum = [0, 0, 0, 0]
+      for (let sy = 0; sy < NOTICE_SAMPLES; sy++) {
+        for (let sx = 0; sx < NOTICE_SAMPLES; sx++) {
+          const distance = Math.hypot(x + (sx + 0.5) / NOTICE_SAMPLES - center, y + (sy + 0.5) / NOTICE_SAMPLES - center)
+          const color = distance <= NOTICE_RING_INNER ? INK : distance <= NOTICE_RING_OUTER ? ring : null
+          if (!color) continue
+          for (let i = 0; i < 3; i++) sum[i] += color[i]
+          sum[3] += 1
+        }
+      }
+      if (sum[3] === 0) continue
+      const offset = (y * size + x) * 4
+      for (let i = 0; i < 3; i++) pixels[offset + i] = Math.round(sum[i] / sum[3])
+      pixels[offset + 3] = Math.round((sum[3] / (NOTICE_SAMPLES * NOTICE_SAMPLES)) * 255)
+    }
+  }
+  const markSize = SIZE * 2
+  const mark = scaleNearest(drawGrid(MARK), SIZE, markSize)
+  const start = (size - markSize) / 2
+  for (let y = 0; y < markSize; y++) {
+    for (let x = 0; x < markSize; x++) {
+      const from = (y * markSize + x) * 4
+      blendOver(pixels, ((start + y) * size + start + x) * 4, [...mark.subarray(from, from + 4)])
+    }
+  }
+  return encodePng(pixels, size)
+}
+
 /** PNG 들을 그대로 담은 .ico (Vista 부터 ICO 항목에 PNG 를 넣을 수 있다). 크기는 각 PNG 의 IHDR 에서 읽는다 */
 export function icoFromPngs(pngs: Buffer[]): Buffer {
   const header = Buffer.alloc(6)

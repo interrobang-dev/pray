@@ -1,6 +1,6 @@
 import { inflateSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { APP_ICON_SIZES, appIconIco, appIconPng, icoFromPngs, trayIconPng } from './icon'
+import { APP_ICON_SIZES, appIconIco, appIconPng, icoFromPngs, NOTICE_ICON_SIZE, NOTICE_RING_COLORS, noticeIconPng, trayIconPng } from './icon'
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
@@ -95,5 +95,22 @@ describe('appIconIco', () => {
       expect(png.subarray(0, 8).equals(PNG_SIGNATURE)).toBe(true)
       expect(pngSize(png)).toEqual({ width: size, height: size })
     })
+  })
+})
+
+describe('noticeIconPng', () => {
+  it.each(Object.keys(NOTICE_RING_COLORS) as (keyof typeof NOTICE_RING_COLORS)[])('%s: 투명 바깥 · 상태 색 고리 · 먹색 원판 · 가운데 2배 마크', (kind) => {
+    const png = noticeIconPng(kind)
+    expect(png.subarray(0, 8).equals(PNG_SIGNATURE)).toBe(true)
+    expect(pngSize(png)).toEqual({ width: NOTICE_ICON_SIZE, height: NOTICE_ICON_SIZE })
+    const image = pngPixels(png)
+    expect(pixelAt(image, 0, 0)[3]).toBe(0)
+    expect(pixelAt(image, 95, 95)[3]).toBe(0)
+    expect(pixelAt(image, 48, 2)).toEqual([...NOTICE_RING_COLORS[kind]])
+    expect(pixelAt(image, 2, 48)).toEqual([...NOTICE_RING_COLORS[kind]])
+    expect(pixelAt(image, 48, 10)).toEqual([0x23, 0x26, 0x2e, 255])
+    // 32 격자 (10, 6) 의 금색 막대 → 2배, 16 만큼 밀림
+    expect(pixelAt(image, 36, 28)).toEqual([0xf5, 0xb8, 0x41, 255])
+    expect(pixelAt(image, 37, 29)).toEqual([0xf5, 0xb8, 0x41, 255])
   })
 })

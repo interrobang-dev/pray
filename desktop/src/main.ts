@@ -3,13 +3,27 @@ import { execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { Child } from './children'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
 import { isExternalUrl } from './externalLink'
-import { appIconIco, trayIconPng } from './icon'
+import { appIconIco, noticeIconPng, trayIconPng } from './icon'
 import { isPipeAlive, LEGACY_PIPE_PATH } from './legacyHost'
 import { isLaunchAtLogin, LOGIN_ITEM_NAME } from './loginItem'
-import { diffSessions, type NotifySession, type SessionNotice, type StatusBaseline } from './notify'
+import {
+  bundleLine,
+  bundleToast,
+  diffSessions,
+  noticeToast,
+  placeOf,
+  urgentKind,
+  type NotifyKind,
+  type NotifyOffice,
+  type NotifySession,
+  type SessionNotice,
+  type StatusBaseline,
+} from './notify'
+import { toastXml, type ToastContent } from './toast'
 
 const SERVER_URL = 'http://127.0.0.1:4710'
 const repoDir = resolve(__dirname, '..', '..')
@@ -172,8 +186,38 @@ async function focusedSessionId(): Promise<string | null> {
   }
 }
 
-function showNotification(title: string, body: string, sessionId?: string): void {
-  const notification = new Notification({ title, body, icon: nativeImage.createFromBuffer(trayIconPng(false)) })
+/** 종류별 알림 그림 file:// URL. 이 실행에서 처음 쓸 때 앱 데이터 폴더에 PNG 로 쓴다 (코드가 바뀌면 따라가게). 못 쓰면 null (그림 없이) */
+const noticeIconUrls = new Map<NotifyKind, string | null>()
+function noticeIconUrl(kind: NotifyKind): string | null {
+  if (noticeIconUrls.has(kind)) return noticeIconUrls.get(kind) ?? null
+  const path = join(app.getPath('userData'), `notice-${kind}.png`)
+  let url: string | null = null
+  try {
+    writeFileSync(path, noticeIconPng(kind))
+    url = pathToFileURL(path).href
+  } catch (error) {
+    console.warn(`알림 그림 ${path} 를 못 써서 그림 없이 띄운다: ${String(error)}`)
+  }
+  noticeIconUrls.set(kind, url)
+  return url
+}
+
+/**
+ * toastXml 로 띄우고, XML 을 못 만들거나 failed 가 오면 평범한 title·body 알림으로 한 번 다시 띄운다.
+ * 본문·[Open] 클릭은 click 이벤트, [Dismiss] 는 Windows 가 닫아 close 이벤트다 (Electron 44 windows_toast_notification.cc)
+ */
+function showNotification(content: ToastContent, sessionId?: string, isPlain = false): void {
+  let xml: string | null = null
+  if (!isPlain) {
+    try {
+      xml = toastXml(content)
+    } catch (error) {
+      console.warn(`알림 XML 을 못 만들어 평범한 알림으로 띄운다: ${String(error)}`)
+    }
+  }
+  const notification = xml
+    ? new Notification({ toastXml: xml })
+    : new Notification({ title: content.title, body: content.body, icon: nativeImage.createFromBuffer(trayIconPng(false)) })
   shownNotifications.add(notification)
   const release = () => shownNotifications.delete(notification)
   notification.on('click', () => {
@@ -181,20 +225,46 @@ function showNotification(title: string, body: string, sessionId?: string): void
     void showWindow(sessionId)
   })
   notification.on('close', release)
-  notification.on('failed', release)
+  notification.on('failed', (_event, error) => {
+    release()
+    if (!xml) return
+    console.warn(`토스트 XML 알림이 실패해 평범한 알림으로 다시 띄운다: ${error}`)
+    showNotification(content, sessionId, true)
+  })
   notification.show()
 }
 
+/** 알림에 그룹·팀·파트 이름을 붙이려고 알릴 것이 있을 때만 받는다. 못 받으면 null (이름 없이 알린다) */
+async function fetchOffice(): Promise<NotifyOffice | null> {
+  try {
+    const response = await fetch(`${SERVER_URL}/api/office`)
+    return response.ok ? ((await response.json()) as NotifyOffice) : null
+  } catch {
+    return null
+  }
+}
+
 /** 창이 앞에 있고 그 세션이 열려 있으면 빼고 띄운다. 많으면 한 장으로 묶고 누르면 창만 연다 */
-async function notify(notices: SessionNotice[]): Promise<void> {
+async function notify(notices: SessionNotice[], sessions: NotifySession[]): Promise<void> {
   if (!settings.isNotifying || notices.length === 0 || !Notification.isSupported()) return
   const openId = await focusedSessionId()
   const shown = notices.filter((notice) => notice.sessionId !== openId)
+  if (shown.length === 0) return
+  const office = await fetchOffice()
+  const sessionOf = (sessionId: string) => sessions.find((each) => each.id === sessionId)
+  const placeFor = (sessionId: string) => {
+    const session = sessionOf(sessionId)
+    return session ? placeOf(session, office) : null
+  }
   if (shown.length > MAX_SEPARATE_NOTICES) {
-    showNotification(`Pray · ${shown.length} sessions`, shown.map((notice) => notice.title).join('\n'))
+    const lines = shown.map((notice) => bundleLine(notice.title, placeFor(notice.sessionId)))
+    showNotification(bundleToast(lines, noticeIconUrl(urgentKind(shown.map((notice) => notice.kind)))))
     return
   }
-  for (const notice of shown) showNotification(notice.title, notice.body, notice.sessionId)
+  for (const notice of shown) {
+    const content = noticeToast(notice, sessionOf(notice.sessionId), placeFor(notice.sessionId), noticeIconUrl(notice.kind))
+    showNotification(content, notice.sessionId)
+  }
 }
 
 async function pollStatus(): Promise<void> {
@@ -209,7 +279,7 @@ async function pollStatus(): Promise<void> {
     }
     const { next, notices } = diffSessions(baseline, data.sessions)
     baseline = next
-    void notify(notices)
+    void notify(notices, data.sessions)
   } catch {
     status = { ...status, isServerUp: false }
     baseline = null
