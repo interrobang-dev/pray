@@ -1,4 +1,5 @@
 import { CHARACTER_SHEET, type DotCharacter, type DotLook } from '@pray/host/dotCharacter'
+import { headRectOf } from './headRect'
 import { parseHex, recolorPixels, type RecolorSlot } from './recolor'
 
 /** 인물을 그리는 방향. left 는 right 를 좌우로 뒤집어 그려 아틀라스가 없다 */
@@ -8,8 +9,6 @@ export type CharacterDirection = 'down' | 'up' | 'right'
 export const CHARACTER_ATLAS: Record<CharacterDirection, string> = { down: CHARACTER_SHEET, up: 'office-v5-up', right: 'office-v5-right' }
 /** 인물 목록·목록 머리·인물 고르기는 정면(down) 아틀라스 */
 const ATLAS_SHEET_URL = `/office/${CHARACTER_ATLAS.down}.json`
-/** 머리 그림: 정면 셀(80×132, 인물은 가운데 64 폭에 위 4 내려 있다) 안 정사각형. 목록 아바타(22px)는 그 절반 */
-export const HEAD_RECT: Rect = { x: 18, y: 14, w: 44, h: 44 }
 
 export interface Rect {
   x: number
@@ -133,12 +132,12 @@ export function paintCharacter(art: RecolorArt, character: string, rects: Rect[]
 
 const headUrls = new Map<string, string | null>()
 
-/** 그 인물·색의 머리 그림 data URL (목록 아바타). 조합마다 한 번 만든다. 인물이 아틀라스·마스크에 없으면 null */
+/** 그 인물·색의 머리 그림 data URL (목록 아바타). 자리는 인물마다 headRectOf (보통 44px, 넓은 머리만 더 크게. 칩은 늘 22px 로 줄여 보인다). 조합마다 한 번 만든다. 인물이 아틀라스·마스크에 없으면 null */
 export function headImageUrl(sheet: CharacterSheet, art: RecolorArt, look: DotLook): string | null {
   const key = `${look.id}|${look.hair}|${look.top}`
   if (headUrls.has(key)) return headUrls.get(key) ?? null
   const frame = sheet.frames.get(look.id)
-  const canvas = frame ? paintCharacter(art, look.id, [{ x: frame.x + HEAD_RECT.x, y: frame.y + HEAD_RECT.y, w: HEAD_RECT.w, h: HEAD_RECT.h }], look.hair, look.top) : null
+  const canvas = frame ? paintCharacter(art, look.id, [headRectOf(art.atlas.data, art.atlas.width, frame)], look.hair, look.top) : null
   const url = canvas ? canvas.toDataURL() : null
   headUrls.set(key, url)
   return url

@@ -1194,7 +1194,7 @@ li.group.drop-after::after {
 .avatar.head {
   background-size: 22px 22px;
 }
-/* 목록 세션 줄의 상태 테두리: 아바타 위에 덮은 ::after 안쪽 테두리라 크기·줄 높이가 그대로고, 숨쉬기도 테두리만 흐려진다 (그림은 그대로).
+/* 목록 세션 줄의 상태 테두리: 아바타 둘레 2px 바깥에 두른 ::after 고리라 칩 크기·줄 높이가 그대로고 머리 그림을 덮지 않으며, 숨쉬기도 테두리만 흐려진다 (그림은 그대로).
    working 파랑 실선(숨쉬기)·waiting 파랑 점선(움직임 없음)·needs-approval 빨강·my-turn 주황(--yellow)·done 초록·break 회색 점선. 그 밖(idle·unknown·ended·off)은 테두리 없음 */
 .session .avatar {
   position: relative;
@@ -1208,9 +1208,9 @@ li.group.drop-after::after {
 .session .avatar.break::after {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -2px;
   border: 2px solid transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   pointer-events: none;
 }
 .session .avatar.working::after {

@@ -16,7 +16,6 @@ import {
   FACE_SHEET,
   faceFileKey,
   facePixels,
-  HEAD_RECT,
   rgbaFromBgra,
   type FaceArt,
   type FaceRecolorJson,
@@ -204,13 +203,13 @@ async function focusedSessionId(): Promise<string | null> {
  * face 가 없으면 Pray 마크 `notice-<종류>.png`, 있으면 그 인물 머리 `notice-<종류>-<인물>-<머리색>-<윗옷색>.png`. 못 쓰면 null (그림 없이)
  */
 const noticeIconUrls = new Map<string, string | null>()
-function noticeIconUrl(kind: NotifyKind, face: { key: string; pixels: Uint8Array } | null = null): string | null {
+function noticeIconUrl(kind: NotifyKind, face: { key: string; pixels: Uint8Array; size: number } | null = null): string | null {
   const name = face ? `notice-${kind}-${face.key}.png` : `notice-${kind}.png`
   if (noticeIconUrls.has(name)) return noticeIconUrls.get(name) ?? null
   const path = join(app.getPath('userData'), name)
   let url: string | null = null
   try {
-    writeFileSync(path, noticeIconPng(kind, face ? { pixels: face.pixels, size: HEAD_RECT.w } : null))
+    writeFileSync(path, noticeIconPng(kind, face ? { pixels: face.pixels, size: face.size } : null))
     url = pathToFileURL(path).href
   } catch (error) {
     console.warn(`알림 그림 ${path} 를 못 써서 그림 없이 띄운다: ${String(error)}`)
@@ -254,7 +253,7 @@ function loadFaceArt(): Promise<FaceArt> {
 }
 
 /** 세션 도트 인물 머리 그림 (화면과 같은 dotLookOf 규칙). 아틀라스를 못 받았거나 인물이 아틀라스·마스크에 없으면 null (Pray 마크) */
-async function sessionFace(session: NotifySession | undefined): Promise<{ key: string; pixels: Uint8Array } | null> {
+async function sessionFace(session: NotifySession | undefined): Promise<{ key: string; pixels: Uint8Array; size: number } | null> {
   if (!session) return null
   let art: FaceArt
   try {
@@ -264,8 +263,8 @@ async function sessionFace(session: NotifySession | undefined): Promise<{ key: s
     return null
   }
   const look = dotLookOf(session, art.characters)
-  const pixels = look ? facePixels(art, look) : null
-  return look && pixels ? { key: faceFileKey(look), pixels } : null
+  const face = look ? facePixels(art, look) : null
+  return look && face ? { key: faceFileKey(look), ...face } : null
 }
 
 /**
