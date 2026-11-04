@@ -5925,11 +5925,14 @@ li.group.drop-after::after {
 .home-greeting {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   margin-bottom: 28px;
 }
+/* 로고 높이 = 옆 글자 묶음(인사말 줄 + 앱 문구 줄) 높이. 글자 크기 설정을 따라 같이 커지고 작아진다 */
 .home-logo {
   flex-shrink: 0;
+  width: calc(48px * var(--font-scale));
+  height: calc(48px * var(--font-scale));
 }
 /* 인사말: 제목 "Pray" 와 같은 Fraunces (전역 h1 은 아니라 여기서 준다) */
 .home-greeting h2 {
@@ -5938,12 +5941,12 @@ li.group.drop-after::after {
   font-weight: 500;
   font-variation-settings: 'SOFT' 50;
   font-size: calc(30px * var(--font-scale));
-  line-height: 1.15;
+  line-height: 1.05;
   letter-spacing: -0.01em;
   color: var(--text);
 }
 .home-tagline {
-  margin: 4px 0 0;
+  margin: 0;
   font-family: 'Fraunces', Georgia, serif;
   font-style: italic;
   font-size: calc(13.5px * var(--font-scale));

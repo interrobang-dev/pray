@@ -40,7 +40,7 @@ export function HomePanel({ sessions, teams, now, isHostReachable, renderAvatar,
     <div className="home">
       <div className="home-column">
         <div className="home-greeting">
-          <img className="home-logo" src="/logo.svg" width={32} height={32} alt="" />
+          <img className="home-logo" src="/logo.svg" width={48} height={48} alt="" />
           <div>
             <h2>{greetingOf(new Date(now).getHours())}</h2>
             <p className="home-tagline">Do your best. Then pray.</p>
