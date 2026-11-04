@@ -1,6 +1,6 @@
 # Pray (jk-corp)
 
-앱 이름은 **Pray** (문구 "Do your best. Then pray."). 내부 이름도 pray 다 (패키지 `@pray/*`·루트 `pray`, 호스트 pipe `\\.\pipe\pray-host`, 환경변수 `PRAY_*`, MCP 서버 `pray`·도구 `team_*`, mod 플러그인 `pray`, localStorage `pray.*`, 알림 ID `pray`, 스케줄러 작업 `pray-*`). jk-corp 로 남은 것: 저장소·worktree 폴더 이름 (GitHub 저장소는 `interrobang-dev/pray`), 인증 쿠키 `jk_session`, 스프라이트 메타 키 `jkCorp`, 옛 이름을 읽는 호환 코드 (로고·글자 로고 → `web-app.md`). 설정 폴더는 `~/.claude/pray/` (옛 `~/.claude/jk-corp/` 만 있으면 트레이·호스트·서버가 시작할 때 한 번 옮긴다 → `host.md` 의 `dataDir.ts`). Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사무실의 직원으로 보여주고, 웹에서 띄운 세션은 조작하고 외부(터미널·IDE) 세션은 관찰만 한다. 설계 전문: `docs/plans/2026-10-20-session-office-design.md`.
+앱 이름은 **Pray** (문구 "Do your best. Then pray."). 내부 이름도 pray 다 (패키지 `@pray/*`·루트 `pray`, 호스트 pipe `\\.\pipe\pray-host`, 환경변수 `PRAY_*`, MCP 서버 `pray`·도구 `team_*`, mod 플러그인 `pray`, localStorage `pray.*`, 알림 ID `pray`, 스케줄러 작업 `pray-*`). jk-corp 로 남은 것: 저장소·worktree 폴더 이름 (GitHub 저장소는 `interrobang-dev/pray`), 인증 쿠키 `jk_session`, 스프라이트 메타 키 `jkCorp`, 옛 이름을 읽는 호환 코드 (로고·글자 로고 → `theme.md`). 설정 폴더는 `~/.claude/pray/` (옛 `~/.claude/jk-corp/` 만 있으면 트레이·호스트·서버가 시작할 때 한 번 옮긴다 → `host.md` 의 `dataDir.ts`). Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사무실의 직원으로 보여주고, 웹에서 띄운 세션은 조작하고 외부(터미널·IDE) 세션은 관찰만 한다. 설계 전문: `docs/plans/2026-10-20-session-office-design.md`.
 
 하지 않는 것: 외부 세션 조작(관찰만) · 설치 파일(electron-builder) — 저장소에서 실행한다 · HTTPS(사내망 전제) · Claude 토큰 직접 갱신(Claude Code 가 한다).
 
@@ -23,9 +23,10 @@
 | `flow.md` | 플로우(flow.team) 알림 서버·화면 |
 | `chat.md` | 대화 메시지(`messages.ts`)와 대화 탭 전체, 마크다운, 작업 파일, Shells, 터미널 탭 |
 | `workspace.md` | 세션 패널 Files 탭(세션 cwd 트리·코드 보기·빠른 찾기·줄 고르기·Add to chat·git/SVN 변경 목록과 diff·git 커밋 히스토리·이 PC 에서만 되는 편집). 그 서버 API 는 `server-api.md`, 단 변경 보기(`workspaceChanges.ts`)·커밋 히스토리(`workspaceHistory.ts`)·내용 찾기 API 는 이 파일 |
-| `web-app.md` | App.tsx(목록·패널·상태 표시줄·폰·사무실 숨기기), 응답 타입·공통 문구, 테마·스크롤바·로고, 모달·메뉴, 팀 만들기 창·폴더 고르기, 팀 할 일 화면, 역할 칩, 모델 변경 창 |
+| `web-app.md` | App.tsx(목록·패널·상태 표시줄·폰·사무실 숨기기), 응답 타입·공통 문구, 모달·메뉴, 팀 만들기 창·폴더 고르기, 팀 할 일 화면, 역할 칩, 모델 변경 창 |
 | `office.md` | 사무실 캔버스(Office.tsx 전문), 배치·섬 밀기·그룹 크기, 고정 꾸미기, 라운지·라운지 휴식, 퇴근 거리 |
 | `office-art.md` | 목록 아바타·인물 고르기·색 바꾸기, 스프라이트 파이프라인·아틀라스 |
+| `theme.md` | 화면 테마(모드·팔레트·강조색·글자 크기)·설정 창 App 탭·대비 규칙·스크롤바·로고·대화 모양 Colors |
 
 저절로 읽히는 경로는 각 파일 머리의 `paths:` 를 본다.
 
@@ -98,7 +99,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/usage.ts`·`accounts.ts`·`accountStore.ts`·`accountLogin.ts`·`switchImpact.ts` — 사용량·계정 (→ `accounts.md`)
 
 웹 → `web-app.md` · `chat.md` · `workspace.md` · `office.md` · `office-art.md` · `accounts.md` · `flow.md`
-- `web/src/main.tsx` — 로그인 또는 App (`legacyStorage.ts`·`copyLegacyStorage.ts` — 옛 localStorage 키 한 번 옮기기) · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `sessionLink.ts` — 트레이 알림이 여는 `#session=<id>` 읽기 · `listCollapse.ts` — 목록 그룹 접기 저장 값·접힌 라벨 상태 요약 · `panelWidth.ts` — 사무실이 보일 때 끌어 바꾸는 패널 폭 · `types.ts` — 응답 타입·공통 문구 함수 · `contextSize.ts` — 입력 상자 아래 문맥 크기 글자("143k")·주의/경고 단계 · `handOver.ts` — 문맥 경고 단계 팀장·파트장의 패널 머리 Hand over(새 지시자 창 열기) 판정
+- `web/src/main.tsx` — 로그인 또는 App (`legacyStorage.ts`·`copyLegacyStorage.ts` — 옛 localStorage 키 한 번 옮기기) · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `reconnect.ts` — 서버·호스트가 끊겼다 붙을 때까지 위쪽 띠 단계 · `sessionLink.ts` — 트레이 알림이 여는 `#session=<id>` 읽기 · `listCollapse.ts` — 목록 그룹 접기 저장 값·접힌 라벨 상태 요약 · `panelWidth.ts` — 사무실이 보일 때 끌어 바꾸는 패널 폭 · `types.ts` — 응답 타입·공통 문구 함수 · `contextSize.ts` — 입력 상자 아래 문맥 크기 글자("143k")·주의/경고 단계 · `handOver.ts` — 문맥 경고 단계 팀장·파트장의 패널 머리 Hand over(새 지시자 창 열기) 판정
 - `web/src/theme.ts` — 테마·스타일 적용 · `appearance.ts`·`palettes.ts`·`AppearanceModal.tsx`·`ChatStyleTab.tsx` — 스타일 설정(팔레트·강조색·글자 크기·대화 모양) 계산·값·창 · `Modal.tsx` — 모달·세그먼트 · `Dialog.tsx`·`dialogQueue.ts` — 브라우저 confirm·alert·prompt 대신 쓰는 앱 안 확인·알림·입력 창 · `sessionMenu.ts` — 세션 줄 ⋯ 메뉴 · `sessionPosition.ts`·`PositionChip.tsx` — 역할·이름
 - `web/src/NewTeamModal.tsx`·`FolderPicker.tsx`·`folderChoice.ts` — 팀 만들기 창(이 PC 면 폴더 고르기·git init 칸) · `web/src/TeamTodosModal.tsx`·`teamTodos.ts` — 팀 TODO · `web/src/TeamTasksModal.tsx`·`teamTasks.ts` — 팀 Tasks 창(팀원 task·들고 남 기록) · `ModelSettingModal.tsx`·`modelSetting.ts` — 모델·effort 변경 창
 - `web/src/Chat.tsx`·`chatRows.ts`·`runningTools.ts`·`teamTools.ts` — 대화 탭(팀 MCP 도구 이름 옛·새 둘 다 알아보기) · `chatWindow.ts`·`chatReuse.ts`·`chatDelta.ts` — 최근 줄만 그리기·다시 받은 대화 재사용·바뀐 뒤쪽만 받기 · `Composer.tsx`·`composerText.ts` — 대화 입력 상자(글·첨부 state) · `BtwCard.tsx` — 곁가지 질문 카드 · `Markdown.tsx` — 마크다운 · `ChatImage.tsx`·`chatImageUrl.ts` — 대화 속 그림(이 PC 파일 경로 → 서버 그림 API, 크게 보기) · `ChatLink.tsx`·`chatLinkUrl.ts` — 대화 속 로컬 .html 링크(이 PC 의 Chrome 으로 열기, 다른 PC 는 흐림) · `markdownHighlight.ts` — 대화 마크다운 숫자·경로 강조 · `CopyButton.tsx`·`copyText.ts`·`codeText.ts` — 복사 버튼·클립보드·코드 글자 뽑기 · `Files.tsx` — 작업 파일 · `Shells.tsx` — shell 보기 · `Terminal.tsx` — xterm · `chatSearch.ts`·`ChatSearchBar.tsx`·`chatSearchPaint.ts` — 대화 탭 안 검색(찾기·막대·글자 칠하기) (→ `chat.md`)
@@ -111,7 +112,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 - **화면 글자는 영어, 대화 내용은 그대로.** 영어: 웹 화면의 버튼·라벨·카드·안내·확인·알림·입력 창(`Dialog.tsx`. 브라우저 confirm·alert·prompt 는 쓰지 않는다)·툴팁(title)·aria-label·placeholder, 화면에 뜨는 서버 오류 문구, 트레이 앱 메뉴·알림, 로그인 코드 메일. 그대로 둔다: claude 와의 대화 내용(말풍선, 자리 카드의 마지막 말처럼 claude·사람이 쓴 글 — 쓴 사람의 글이라 번역 대상이 아니다), 리드 지침(`server/src/lead.ts`)·MCP 도구 설명(`mcp/src`)·claude 에게 가는 훅 응답 문구(질문 취소·대화로 답하기 등 — 화면이 아니라 claude 가 읽는 입력이라 바꾸면 claude 의 판단이 바뀔 수 있고, 지침은 이미 떠 있는 리드에 반영되지도 않는다), 로그·코드 주석·문서·커밋 메시지, `<html lang>`(대화 내용이 한국어라). 용어: 팀장 Lead · 파트장 Part lead · 팀원 Member · 팀 Team · 파트 Part · 그룹 Group · 외부 세션 External session · 근무 On duty · 휴식 Break · 퇴근 Off duty · 종료 End · 중지 Stop · 다시 출근 Clock in · 기록 지우기 Delete record. 상태 이름은 `types.ts` 의 `statusLabel`, 지난 시각은 `formatAgo`("5m ago") 를 쓴다. 새 문구는 사용량 창·Shells 창 말투(짧게, 문장 첫 글자만 대문자)에 맞춘다
 - **서버가 화면으로 보내는 `{ message }` 도 영어다** — `@pray/host/hq` 의 오류 문구는 한국어라 `error.message` 를 그대로 보내지 않는다 (→ `server-api.md`).
-- **색은 `web/src/style.css` 맨 위 `:root`(라이트)·`:root[data-theme='dark']`(다크) 변수로만 쓴다** — literal 로 박지 말고 변수를 만들어 두 값을 다 넣고 `web/src/palettes.ts` 의 `DEFAULT_VARS` 에도 넣는다 (테스트가 같은지 본다). 테마·팔레트 규칙 전문 → `web-app.md`. 폰 전용 스타일은 `style.css` 끝 `@media (max-width: 768px)` 블록에만 둔다.
+- **색은 `web/src/style.css` 맨 위 `:root`(라이트)·`:root[data-theme='dark']`(다크) 변수로만 쓴다** — literal 로 박지 말고 변수를 만들어 두 값을 다 넣고 `web/src/palettes.ts` 의 `DEFAULT_VARS` 에도 넣는다 (테스트가 같은지 본다). 테마·팔레트 규칙 전문 → `theme.md`. 폰 전용 스타일은 `style.css` 끝 `@media (max-width: 768px)` 블록에만 둔다.
 - **`hq.json` 은 호스트·서버 두 프로세스가 같이 읽고 쓴다.** `readHq` 는 모르는 키를 보존한다 (한쪽만 새 코드일 때 다른 쪽 데이터가 지워진 적이 있다). 쓰기는 같은 폴더 임시 파일에 다 쓴 뒤 `renameSync` 로 바꿔 끼우고, 파일이 있는데 읽기·해석에 실패하면 던져서 읽기·쓰기를 모두 막는다. 요청 처리 밖에서 hq 를 부르는 곳을 새로 만들면 예외를 잡아야 한다 (안 잡으면 서버가 죽고 트레이가 재시작을 반복하다 포기한다). 전문 → `host.md` 의 `host/src/hq.ts`.
 - **계정 기능 시험 규칙.** 실제 `~/.claude/.credentials.json`·`~/.claude.json`·`~/.claude/pray/` 를 쓰지 않고, 실제 로그인을 끝내지 않고, 기본 폴더에서 실제 `claude auth logout` 을 하지 않는다. 시험 서버(아래 "화면 확인 방법")의 preload 로 전역 `fetch` 의 `https://api.anthropic.com/` 를 가짜 API 로 돌리고 가짜 토큰 파일을 둔다. 시험 서버가 띄우는 claude 의 외부 접속은 `HTTPS_PROXY` 를 CONNECT 를 막는 가짜 프록시로 줘서 막는다 (Claude Code 의 OAuth 주소는 `CLAUDE_CODE_CUSTOM_OAUTH_URL` 허용 목록 밖으로 못 돌린다). claude(Bun)의 홈이 `USERPROFILE` 을 따르는지 확인하지 않았으니 시험 서버에서도 기본 폴더 claude 는 띄우지 않는다 (`--claude=` 로 다른 실행 파일을 주고 확인한다)
 - **Claude Code 세션 안에서 호스트를 띄우지 않는다** (위 "실행·확인").

@@ -4892,6 +4892,72 @@ li.group.drop-after::after {
   line-height: 16px;
   color: var(--muted);
 }
+/* 끊겼다 다시 붙는 중 (reconnect.ts): 그 ↻ 가 돌고 점이 숨쉰다. disabled 여도 흐려지지 않게 글자색을 둔다 */
+.status-link button.is-spinning {
+  display: inline-block;
+  color: var(--relay-text);
+  animation: reconnect-spin 1s linear infinite;
+}
+.status-bar .dot.is-waiting {
+  background: var(--relay-text);
+  animation: dot-breathe 1.2s ease-in-out infinite;
+}
+@keyframes reconnect-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* 화면 맨 위 끊김 띠 (App.tsx). 자리를 차지해 layout 을 아래로 민다 — 덮지 않아 화면은 그대로 쓴다. 지시 말풍선과 같은 파란 계열 */
+.reconnect-band {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 3px 12px;
+  box-sizing: border-box;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--relay-text);
+  background: var(--relay-bg);
+  border-bottom: 1px solid var(--relay-line);
+}
+.reconnect-band.done {
+  color: var(--success-text);
+  background: var(--panel);
+  border-bottom-color: var(--line);
+}
+.reconnect-band.partial {
+  color: var(--caution-text);
+  background: var(--panel);
+  border-bottom-color: var(--line);
+}
+.reconnect-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.reconnect-mark {
+  font-weight: 700;
+}
+.reconnect-spinner {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: reconnect-spin 0.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .status-link button.is-spinning,
+  .status-bar .dot.is-waiting,
+  .reconnect-spinner {
+    animation: none;
+  }
+}
 /* 승인 대기 N: 누르면 그 중 첫 세션을 연다. 목록의 승인 대기 점과 같은 빨강 */
 .status-bar .status-approval {
   padding: 0 5px;

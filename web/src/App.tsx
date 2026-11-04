@@ -61,6 +61,7 @@ import {
 import { AppearanceModal } from './AppearanceModal'
 import { contextSizeOf, turnCacheOf } from './contextSize'
 import { handOverUnit } from './handOver'
+import { bannerOf, nextOutage, presentWebIds, type Outage, type RestartTarget } from './reconnect'
 
 interface Snapshot {
   isHostReachable: boolean
@@ -219,6 +220,14 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [snapshot, setSnapshot] = useState<Snapshot>({ isHostReachable: false, sessions: [] })
   const [office, setOffice] = useState<OfficeData>(EMPTY_OFFICE)
   const [isConnected, setIsConnected] = useState(false)
+  /** 서버·호스트가 끊겼다 다시 붙기까지 (위쪽 띠, reconnect.ts). 끊기지 않았으면 null */
+  const [outage, setOutage] = useState<Outage | null>(null)
+  /** 끊긴 동안 띠 단계를 다시 계산하는 시계 */
+  const [outageTick, setOutageTick] = useState(0)
+  /** 마지막으로 다 붙어 있을 때 근무 중이던 웹 세션 (호스트가 다시 붙은 뒤 돌아오기를 기다린다) */
+  const healthyWebIdsRef = useRef<string[]>([])
+  /** 화면 ↻ 로 시작한 재시작 (곧 끊기면 "Restarting …") */
+  const restartRequestRef = useRef<{ target: RestartTarget; at: number } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** 오른쪽 패널 자리에 플로우 알림 패널을 열었는지. 세션 패널과 같은 자리라 세션을 고르면 닫힌다 */
   const [isFlowOpen, setIsFlowOpen] = useState(false)
@@ -365,24 +374,60 @@ export function App({ isLocal }: { isLocal: boolean }) {
     fetch('/api/office')
       .then((r) => r.json())
       .then(setOffice)
-    const source = new EventSource('/api/events')
-    source.addEventListener('sessions', (event) => {
-      setSnapshot(JSON.parse((event as MessageEvent).data))
-      setIsConnected(true)
-    })
-    source.addEventListener('office', (event) => setOffice(JSON.parse((event as MessageEvent).data)))
-    source.addEventListener('flow', (event) => setFlowStatus(JSON.parse((event as MessageEvent).data)))
-    source.addEventListener('transcript', (event) => {
-      const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
-      setTranscriptVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
-    })
-    source.addEventListener('btw', (event) => {
-      const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
-      setBtwVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
-    })
-    source.onerror = () => setIsConnected(false)
-    return () => source.close()
+    let source: EventSource | null = null
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    const connect = () => {
+      const current = new EventSource('/api/events')
+      source = current
+      current.addEventListener('sessions', (event) => {
+        setSnapshot(JSON.parse((event as MessageEvent).data))
+        setIsConnected(true)
+      })
+      current.addEventListener('office', (event) => setOffice(JSON.parse((event as MessageEvent).data)))
+      current.addEventListener('flow', (event) => setFlowStatus(JSON.parse((event as MessageEvent).data)))
+      current.addEventListener('transcript', (event) => {
+        const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
+        setTranscriptVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
+      })
+      current.addEventListener('btw', (event) => {
+        const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
+        setBtwVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
+      })
+      current.onerror = () => {
+        setIsConnected(false)
+        // 연결 거절은 브라우저가 알아서 다시 붙지만, 200 이 아닌 응답(재시작 중 프록시 502 등)을 받으면 CLOSED 로 끝나 다시 붙지 않는다
+        if (current.readyState !== EventSource.CLOSED) return
+        current.close()
+        clearTimeout(retryTimer)
+        retryTimer = setTimeout(connect, 3000)
+      }
+    }
+    connect()
+    return () => {
+      clearTimeout(retryTimer)
+      source?.close()
+    }
   }, [])
+
+  // 끊김 띠: 연결·세션 목록이 바뀔 때와 끊긴 동안 시계마다 단계를 다시 계산한다
+  useEffect(() => {
+    const input = { isConnected, isHostReachable: snapshot.isHostReachable, sessions: snapshot.sessions }
+    if (!outage && isConnected && snapshot.isHostReachable) healthyWebIdsRef.current = presentWebIds(snapshot.sessions)
+    const next = nextOutage(outage, input, Date.now(), healthyWebIdsRef.current, restartRequestRef.current)
+    if (next === outage) return
+    if (next && next.since !== outage?.since) restartRequestRef.current = null
+    setOutage(next)
+  }, [isConnected, snapshot, outage, outageTick])
+
+  const connectionBanner = bannerOf(outage, { isConnected, isHostReachable: snapshot.isHostReachable, sessions: snapshot.sessions })
+  const isServerWaiting = connectionBanner?.phase === 'server'
+  const isHostWaiting = connectionBanner?.phase === 'host' || connectionBanner?.phase === 'resume'
+  const hasOutage = outage !== null
+  useEffect(() => {
+    if (!hasOutage) return
+    const timer = setInterval(() => setOutageTick((tick) => tick + 1), 250)
+    return () => clearInterval(timer)
+  }, [hasOutage])
 
   // 팀·파트 세션 추가 모달이 열리면 서버에 이름을 추천받는다. 실패하면 빈 칸 그대로
   useEffect(() => {
@@ -688,8 +733,11 @@ export function App({ isLocal }: { isLocal: boolean }) {
       { confirmLabel: 'Restart', isDanger: true },
     )
     if (!isConfirmed) return
+    restartRequestRef.current = { target: 'host', at: Date.now() }
     const response = await postJson('/api/host/restart', 'POST', {})
-    if (!response.ok) void alertDialog((await response.json()).message ?? "Couldn't restart host")
+    if (response.ok) return
+    restartRequestRef.current = null
+    void alertDialog((await response.json()).message ?? "Couldn't restart host")
   }
 
   async function restartServer() {
@@ -698,12 +746,15 @@ export function App({ isLocal }: { isLocal: boolean }) {
       { confirmLabel: 'Restart' },
     )
     if (!isConfirmed) return
+    restartRequestRef.current = { target: 'server', at: Date.now() }
     try {
       const response = await postJson('/api/server/restart', 'POST', {})
       if (response.ok) return
+      restartRequestRef.current = null
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
       void alertDialog(`Couldn't restart server: ${message ?? `HTTP ${response.status}`}`)
     } catch {
+      restartRequestRef.current = null
       void alertDialog("Couldn't restart server: Network error")
     }
   }
@@ -1477,6 +1528,22 @@ export function App({ isLocal }: { isLocal: boolean }) {
 
   return (
     <div className="app">
+      {connectionBanner && (
+        <div className={`reconnect-band ${connectionBanner.phase}`} role="status" aria-live="polite">
+          {connectionBanner.phase === 'done' ? (
+            <span className="reconnect-mark" aria-hidden="true">
+              ✓
+            </span>
+          ) : connectionBanner.phase === 'partial' ? (
+            <span className="reconnect-mark" aria-hidden="true">
+              !
+            </span>
+          ) : (
+            <span className="reconnect-spinner" aria-hidden="true" />
+          )}
+          <span className="reconnect-text">{connectionBanner.text}</span>
+        </div>
+      )}
       <main
         ref={layoutRef}
         className={`layout${hasPanel ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}${isPanelResizing ? ' panel-resizing' : ''}`}
@@ -1897,15 +1964,25 @@ export function App({ isLocal }: { isLocal: boolean }) {
           </span>
           <span className="status-link" title={isConnected ? 'Server connected' : 'Server disconnected'}>
             <span className="status-link-label">Server</span>
-            <span className={isConnected ? 'dot on' : 'dot'} />
-            <button onClick={() => void restartServer()} disabled={!isConnected} title="Restart server (offline for a few seconds)">
+            <span className={[isConnected ? 'dot on' : 'dot', isServerWaiting ? 'is-waiting' : ''].join(' ')} />
+            <button
+              className={isServerWaiting ? 'is-spinning' : undefined}
+              onClick={() => void restartServer()}
+              disabled={!isConnected}
+              title="Restart server (offline for a few seconds)"
+            >
               ↻
             </button>
           </span>
           <span className="status-link" title={snapshot.isHostReachable ? 'Session host connected' : 'Session host disconnected'}>
             <span className="status-link-label">Host</span>
-            <span className={snapshot.isHostReachable ? 'dot on' : 'dot'} />
-            <button onClick={() => void restartHost()} disabled={!snapshot.isHostReachable} title="Restart host (web sessions disconnect)">
+            <span className={[snapshot.isHostReachable ? 'dot on' : 'dot', isHostWaiting ? 'is-waiting' : ''].join(' ')} />
+            <button
+              className={isHostWaiting ? 'is-spinning' : undefined}
+              onClick={() => void restartHost()}
+              disabled={!snapshot.isHostReachable}
+              title="Restart host (web sessions disconnect)"
+            >
               ↻
             </button>
           </span>
