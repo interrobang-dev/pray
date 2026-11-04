@@ -414,9 +414,9 @@ describe('parseMessages: messages sent while claude is working', () => {
   })
 
   it('withoutQueued: drops the queued messages of a session that is not present, keeping the rest in order', () => {
-    // 실제 jsonl 의 꼴 (퇴근 세션): 끝나는 프로세스가 cost-state 를 남긴 뒤 알림을 enqueue 하고 다시 뜨지 않았다
+    // 실제 jsonl 의 꼴 (퇴근 세션): 끝나는 프로세스가 cost-state 를 남긴 뒤 알림·말을 enqueue 하고 다시 뜨지 않았다
     const costState = line({ type: 'cost-state', sessionId: 's', totalCostUSD: 1 })
-    const notification = '<task-notification>\n<task-id>b5</task-id>\n<status>killed</status>\n</task-notification>'
+    const notification = '<task-notification>\n<task-id>b5</task-id>\n<status>completed</status>\n</task-notification>'
     const jsonl = [user('u1', '일 해 줘'), assistant('a1', '끝남'), costState, costState, enqueue(notification), enqueue('못 받은 말')].join('\n')
 
     const messages = parseMessages(jsonl)
@@ -431,6 +431,54 @@ describe('parseMessages: messages sent while claude is working', () => {
       ['assistant', '끝남', false],
     ])
     expect(withoutQueued([])).toEqual([])
+  })
+
+  it('shows the killed notices an ending process queued after cost-state once in place, not queued at the end', () => {
+    // 실제 jsonl 의 꼴 (2.1.317, 트레이 Quit): 끝나는 프로세스가 cost-state 뒤에 같이 끈 shell 의 killed 알림을 넣고 꺼내지 못한다.
+    // 다시 뜬 프로세스는 stopped 알림을 넣고 꺼낸다. 그 뒤 대화가 이어져도 killed 알림이 맨 끝에 대기 중으로 붙지 않아야 한다
+    const costState = line({ type: 'cost-state', sessionId: 's', totalCostUSD: 1 })
+    const killed = (id: string) =>
+      `<task-notification>\n<task-id>${id}</task-id>\n<status>killed</status>\n<summary>Background command "Start ${id}" was stopped</summary>\n</task-notification>`
+    const stopped = '<task-notification>\n<task-id>b9</task-id>\n<status>stopped</status>\n</task-notification>'
+    const jsonl = [
+      user('u1', '서버 띄워 줘'),
+      assistant('a1', '띄움'),
+      costState,
+      line({ type: 'last-prompt', lastPrompt: '서버 띄워 줘', sessionId: 's' }),
+      costState,
+      enqueue(killed('front'), 't-k1'),
+      enqueue(killed('back'), 't-k2'),
+      enqueue(stopped),
+      dequeue(),
+      user('u2', stopped),
+      user('u3', '다음 지시'),
+      assistant('a2', '함'),
+    ].join('\n')
+
+    const messages = parseMessages(jsonl)
+    expect(view(messages)).toEqual([
+      ['user', '서버 띄워 줘', false],
+      ['assistant', '띄움', false],
+      ['system', killed('front'), false],
+      ['system', killed('back'), false],
+      ['system', stopped, false],
+      ['user', '다음 지시', false],
+      ['assistant', '함', false],
+    ])
+    expect(messages[2]).toMatchObject({ id: 'queued-5', timestamp: 't-k1' })
+    expect(queuedPrompts(jsonl)).toEqual([])
+  })
+
+  it('keeps a killed notice queued when it comes in a running process (not right after cost-state)', () => {
+    // 메모리 부족 정리 등: 살아 있는 프로세스가 넣은 killed 알림은 그 프로세스가 꺼낼 때까지 대기 중이다
+    const notice = '<task-notification>\n<task-id>m1</task-id>\n<status>killed</status>\n</task-notification>'
+    const costState = line({ type: 'cost-state', sessionId: 's', totalCostUSD: 1 })
+    const jsonl = [costState, user('u1', '일 해 줘'), assistant('a1', '작업 중'), enqueue(notice)].join('\n')
+    expect(view(parseMessages(jsonl))).toEqual([
+      ['user', '일 해 줘', false],
+      ['assistant', '작업 중', false],
+      ['system', notice, true],
+    ])
   })
 
   it('queuedPrompts: the queued user messages in order, raw content and unwrapped text, without content-less or system ones', () => {

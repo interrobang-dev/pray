@@ -86,6 +86,17 @@ interface QueueItem {
   content: string | undefined
 }
 
+/** 대기열과, 지금이 프로세스가 떠난 뒤(cost-state) 다음 대화 줄이 오기 전인지 (applyQueueRecord) */
+interface QueueState {
+  items: QueueItem[]
+  isAfterExit: boolean
+}
+
+/** 끝나는 프로세스가 같이 끈 백그라운드 작업 알림 (status killed) */
+function isKilledNotification(content: string | undefined): boolean {
+  return content !== undefined && content.startsWith('<task-notification>') && content.includes('<status>killed</status>')
+}
+
 /** 대기열에서 빼는 queue-operation. popAll 은 빈 입력칸 ↑ 로 대기 메시지를 입력칸에 꺼낸 것(꺼낸 것마다 한 줄), popOne 은 하나만 꺼낸 것 */
 const TAKE_OPERATIONS = new Set(['remove', 'popAll', 'popOne'])
 
@@ -231,29 +242,38 @@ function promptAfter(lines: readonly (MessageLine | null)[], index: number): str
  * cost-state 는 Claude Code 프로세스가 이 세션을 떠날 때(종료·kill·호스트 재시작·세션 전환) 남기는 줄이고 정상 진행 중에는 안 나온다.
  * 대기열은 프로세스 메모리에만 있어 그 프로세스와 함께 사라지므로 여기서 비운다 (다시 뜬 프로세스는 못 받은 알림을 "stopped" 알림으로 새로 enqueue 한다).
  * 안 비우면 주인 없는 항목이 맨 앞에 남아 그 뒤 dequeue 가 한 칸씩 어긋나 가장 최근에 받은 것이 늘 대기 중으로 보인다.
- * 강제 종료로 cost-state 가 없을 때도 dequeue 를 글로 맞추면 남은 항목만 남고 어긋나지 않는다
+ * 강제 종료로 cost-state 가 없을 때도 dequeue 를 글로 맞추면 남은 항목만 남고 어긋나지 않는다.
+ * **끝나는 프로세스는 cost-state 를 남긴 뒤 같이 끈 백그라운드 shell 의 killed 알림을 자기 대기열에 넣는다** (트레이 Quit·호스트 재시작 때.
+ * 실제 jsonl 에서 cost-state 와 다음 대화 줄 사이의 killed 알림 22건은 모두 꺼낸 기록이 없었고, 그 사이 새 프로세스가 넣는 것은 stopped 알림이었다).
+ * 그 프로세스는 이미 없어 영영 대기 중으로 남아 대화 맨 끝에 계속 붙으므로, 대기열에 넣지 않고 돌려준다 — buildMessages 가 그 자리에 한 번 보인다
  */
 function applyQueueRecord(
-  queue: QueueItem[],
+  queue: QueueState,
   line: Extract<MessageLine, { type: 'queue-operation' | 'cost-state' }>,
   index: number,
   lines: readonly (MessageLine | null)[],
-): void {
+): QueueItem | null {
   if (line.type === 'cost-state') {
-    queue.length = 0
-    return
+    queue.items.length = 0
+    queue.isAfterExit = true
+    return null
   }
   const { content, operation } = line
-  if (operation === 'enqueue') queue.push({ id: `queued-${index}`, timestamp: line.timestamp, content })
+  if (operation === 'enqueue') {
+    const item = { id: `queued-${index}`, timestamp: line.timestamp, content }
+    if (queue.isAfterExit && isKilledNotification(content)) return item
+    queue.items.push(item)
+  }
   if (TAKE_OPERATIONS.has(operation as string)) {
-    const position = queue.findIndex((item) => item.content === content)
-    if (position >= 0) queue.splice(position, 1)
+    const position = queue.items.findIndex((item) => item.content === content)
+    if (position >= 0) queue.items.splice(position, 1)
   }
-  if (operation === 'dequeue' && queue.length > 0) {
+  if (operation === 'dequeue' && queue.items.length > 0) {
     const prompt = promptAfter(lines, index)
-    const position = prompt === undefined ? -1 : queue.findIndex((item) => item.content === prompt)
-    queue.splice(Math.max(position, 0), 1)
+    const position = prompt === undefined ? -1 : queue.items.findIndex((item) => item.content === prompt)
+    queue.items.splice(Math.max(position, 0), 1)
   }
+  return null
 }
 
 /**
@@ -312,15 +332,19 @@ export function buildMessages(lines: readonly (MessageLine | null)[]): ChatMessa
   const toolUseById = new Map<string, ToolUse>()
   const assistantByMessageId = new Map<unknown, ChatMessage>()
   /** 대기열 (enqueue 순). 글이 없는 enqueue 도 dequeue 순서를 맞추려고 넣고 화면에는 안 낸다 */
-  const queue: QueueItem[] = []
+  const queue: QueueState = { items: [], isAfterExit: false }
   const restored = restoredPromptLines(lines)
 
   for (const [index, line] of lines.entries()) {
     if (!line) continue
     if (line.type === 'queue-operation' || line.type === 'cost-state') {
-      applyQueueRecord(queue, line, index, lines)
+      // 끝난 프로세스가 남긴 killed 알림은 대기 중이 아니라 그 자리의 system 글
+      const leftover = applyQueueRecord(queue, line, index, lines)
+      const notice = leftover && userTextMessage(leftover.id, leftover.timestamp, leftover.content)
+      if (notice) messages.push(notice)
       continue
     }
+    queue.isAfterExit = false
     const { timestamp } = line
     const uuid = line.uuid ?? `${messages.length}`
 
@@ -368,7 +392,7 @@ export function buildMessages(lines: readonly (MessageLine | null)[]): ChatMessa
       }
     }
   }
-  for (const item of queue) {
+  for (const item of queue.items) {
     const queued = userTextMessage(item.id, item.timestamp, item.content)
     if (queued) messages.push({ ...queued, isQueued: true })
   }
@@ -394,12 +418,14 @@ export interface QueuedPrompt {
  * `<` 로 시작하는 글(백그라운드 작업 알림 등. 화면에서는 system)은 뺀다
  */
 export function queuedPrompts(jsonl: string): QueuedPrompt[] {
-  const queue: QueueItem[] = []
+  const queue: QueueState = { items: [], isAfterExit: false }
   const lines = messageLinesOf(jsonl)
   for (const [index, line] of lines.entries()) {
-    if (line?.type === 'queue-operation' || line?.type === 'cost-state') applyQueueRecord(queue, line, index, lines)
+    if (!line) continue
+    if (line.type === 'queue-operation' || line.type === 'cost-state') applyQueueRecord(queue, line, index, lines)
+    else queue.isAfterExit = false
   }
-  return queue.flatMap(({ content }) => (content === undefined || content.startsWith('<') ? [] : [{ raw: content, text: unwrapPastes(content) }]))
+  return queue.items.flatMap(({ content }) => (content === undefined || content.startsWith('<') ? [] : [{ raw: content, text: unwrapPastes(content) }]))
 }
 
 /** instructions.jsonl 에서 그 세션이 받은 지시만 고른다. 깨진 줄·모양이 다른 줄은 건너뛴다 */
