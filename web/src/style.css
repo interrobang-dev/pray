@@ -1196,16 +1196,16 @@ li.group.drop-after::after {
 }
 /* 목록 세션 줄의 상태 테두리: 아바타 둘레 2px 바깥에 두른 ::after 고리라 칩 크기·줄 높이가 그대로고 머리 그림을 덮지 않으며, 숨쉬기도 테두리만 흐려진다 (그림은 그대로).
    working 파랑 실선(숨쉬기)·waiting 파랑 점선(움직임 없음)·needs-approval 빨강·my-turn 주황(--yellow)·done 초록·break 회색 점선. 그 밖(idle·unknown·ended·off)은 테두리 없음 */
-.session .avatar {
+:is(.session, .home-row) .avatar {
   position: relative;
 }
-.session .avatar.working::after,
-.session .avatar.waiting::after,
-.session .avatar.needs-approval::after,
-.session .avatar.my-turn::after,
-.session .avatar.done::after,
-.session .avatar.lounge::after,
-.session .avatar.break::after {
+:is(.session, .home-row) .avatar.working::after,
+:is(.session, .home-row) .avatar.waiting::after,
+:is(.session, .home-row) .avatar.needs-approval::after,
+:is(.session, .home-row) .avatar.my-turn::after,
+:is(.session, .home-row) .avatar.done::after,
+:is(.session, .home-row) .avatar.lounge::after,
+:is(.session, .home-row) .avatar.break::after {
   content: '';
   position: absolute;
   inset: -2px;
@@ -1213,32 +1213,32 @@ li.group.drop-after::after {
   border-radius: 8px;
   pointer-events: none;
 }
-.session .avatar.working::after {
+:is(.session, .home-row) .avatar.working::after {
   border-color: var(--blue-dot);
   animation: dot-breathe 1.6s ease-in-out infinite;
 }
-.session .avatar.needs-approval::after {
+:is(.session, .home-row) .avatar.needs-approval::after {
   border-color: var(--red-dot);
 }
-.session .avatar.waiting::after {
+:is(.session, .home-row) .avatar.waiting::after {
   border-style: dashed;
   border-color: var(--blue-dot);
 }
-.session .avatar.my-turn::after {
+:is(.session, .home-row) .avatar.my-turn::after {
   border-color: var(--yellow);
 }
-.session .avatar.done::after {
+:is(.session, .home-row) .avatar.done::after {
   border-color: var(--success);
 }
-.session .avatar.lounge::after {
+:is(.session, .home-row) .avatar.lounge::after {
   border-color: var(--line-strong);
 }
-.session .avatar.break::after {
+:is(.session, .home-row) .avatar.break::after {
   border-style: dashed;
   border-color: var(--line-strong);
 }
 @media (prefers-reduced-motion: reduce) {
-  .session .avatar.working::after {
+  :is(.session, .home-row) .avatar.working::after {
     animation: none;
   }
 }
@@ -5904,16 +5904,178 @@ li.group.drop-after::after {
 }
 
 /* 데스크톱에서 사무실을 숨긴 화면 (App.tsx isOfficeHiddenLayout. 폰 폭에는 이 클래스가 붙지 않는다).
-   세션을 골랐으면 패널이 목록 오른쪽 폭을 다 쓰고, 안 골랐으면 그 자리에 안내 한 줄 */
+   세션을 골랐으면 패널이 목록 오른쪽 폭을 다 쓰고, 안 골랐으면 그 자리에 첫 화면 (.home) */
 .layout.office-hidden.with-panel {
   grid-template-columns: 300px minmax(0, 1fr);
 }
-.office-empty {
+/* 안 골랐을 때의 첫 화면 (HomePanel.tsx, Claude·Gemini 첫 화면 꼴): 가운데 640px 열을 위아래 가운데보다 조금 위에 둔다 */
+.home {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 0 24px;
+}
+.home-column {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 640px;
+  padding: max(48px, 14vh) 0 48px;
+}
+.home-greeting {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+.home-logo {
+  flex-shrink: 0;
+}
+/* 인사말: 제목 "Pray" 와 같은 Fraunces (전역 h1 은 아니라 여기서 준다) */
+.home-greeting h2 {
+  margin: 0;
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 500;
+  font-variation-settings: 'SOFT' 50;
+  font-size: calc(30px * var(--font-scale));
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.home-tagline {
+  margin: 4px 0 0;
+  font-family: 'Fraunces', Georgia, serif;
+  font-style: italic;
+  font-size: calc(13.5px * var(--font-scale));
+  color: var(--muted);
+}
+/* 입력 상자처럼 생긴 큰 새 세션 카드 (대화 탭 .composer 와 같은 둥근 카드·옅은 그림자) */
+.home-new {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: calc(15px * var(--font-scale));
+  text-align: left;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 14px rgba(0, 0, 0, 0.05);
+}
+.home-new:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.home-new-icon {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: var(--on-accent);
+  background: var(--accent);
+}
+.home-new:disabled .home-new-icon {
+  background: var(--line-strong);
+}
+.home-new-label {
+  flex: 1;
+  font-weight: 600;
+}
+.home-new-place {
+  font-size: calc(12px * var(--font-scale));
   color: var(--muted);
+}
+.home-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.home-chip {
+  max-width: 200px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-chip:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+.home-heading {
+  margin: 36px 0 8px;
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.home-empty {
+  margin: 0;
+  color: var(--muted);
+}
+.home-recent {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.home-recent li {
+  border-bottom: 1px solid var(--line);
+}
+/* 최근 세션 한 줄: 아바타 · 역할 칩 + 이름 · 팀 · 상태 · 지난 시각. 아바타 상태 테두리는 목록 세션 줄 규칙을 같이 쓴다 */
+.home-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, max-content) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+/* 첫 화면 바탕이 --bg 라 목록 줄(바탕 --panel, hover --bg)과 반대로 hover 가 --panel */
+.home-row:hover {
+  background: var(--panel);
+}
+.home-row.dead > * {
+  opacity: 0.55;
+}
+.home-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.home-row-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--muted);
+}
+.home-row-time {
+  font-size: calc(12px * var(--font-scale));
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 /* 넓어진 대화 탭: 말풍선 열·버튼 묶음·입력칸 자리(승인 막대·질문 카드·입력 상자·퇴근 막대·안내)를 가운데 960px 열로 모은다 (줄이 너무 길어지지 않게).
    대화 스크롤바는 패널 폭 그대로 두려고 max-width 대신 양옆 여백으로 좁힌다. 좁으면 원래 여백 16px.

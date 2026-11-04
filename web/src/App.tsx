@@ -61,6 +61,7 @@ import {
 import { AppearanceModal } from './AppearanceModal'
 import { contextSizeOf, turnCacheOf } from './contextSize'
 import { handOverUnit } from './handOver'
+import { HomePanel } from './HomePanel'
 import { bannerOf, nextOutage, presentWebIds, type Outage, type RestartTarget } from './reconnect'
 
 interface Snapshot {
@@ -1392,32 +1393,48 @@ export function App({ isLocal }: { isLocal: boolean }) {
    * 팀장·파트장이면 앞에 "Lead · "·"Part lead · " 이 붙는다. 팀 안에서는 폴더를 숨긴다 (팀 = 폴더). teamName 이 있으면 제목 앞에 붙인다 (퇴근).
    * 퇴근은 시각 대신 퇴근 이유 · 시각 (옛 서버 응답이라 이유가 없으면 시각)
    */
-  function renderSession(session: Session, hasCwd: boolean, teamName?: string) {
+  /** 목록 아바타 툴팁의 상태 글자: 근무 중이면 상태(+ 라운지), 아니면 Break·Off duty */
+  function sessionStateLabel(session: Session): string {
+    const attendance = attendanceOf(session)
+    if (attendance !== 'present') return attendance === 'break' ? 'Break' : 'Off duty'
+    const place = seatPlaceOf(session, now)
+    const loungeText = place === 'lounge-doze' ? ' · Dozing in lounge' : place === 'lounge' ? ' · Resting in lounge' : ''
+    return statusLabel[session.status] + loungeText
+  }
+
+  /** 세션 아바타: 도트 인물 머리 그림 + 상태 테두리 클래스 (목록 세션 줄·첫 화면 최근 세션) */
+  function renderAvatar(session: Session) {
     const look = dotHeadArt ? dotLookOf(session, dotHeadArt.sheet.characters) : null
     const headUrl = look && dotHeadArt ? headImageUrl(dotHeadArt.sheet, dotHeadArt.art, look) : null
+    const attendance = attendanceOf(session)
+    const ring = attendance === 'present' ? (seatPlaceOf(session, now) === 'desk' ? session.status : 'lounge') : attendance
+    const roleLabel = session.role === 'lead' ? (session.partId ? 'Part lead' : 'Lead') : null
+    const stateLabel = sessionStateLabel(session)
+    const avatarLabel = roleLabel ? `${roleLabel} · ${stateLabel}` : stateLabel
+    return (
+      <span
+        className={['avatar', ring, headUrl ? 'head' : ''].join(' ')}
+        style={headUrl ? { backgroundImage: `url(${headUrl})` } : undefined}
+        role="img"
+        title={avatarLabel}
+        aria-label={avatarLabel}
+      />
+    )
+  }
+
+  function renderSession(session: Session, hasCwd: boolean, teamName?: string) {
     const elapsed = formatElapsed(session.lastAt, now)
     const model = modelLabel(session)
     const attendance = attendanceOf(session)
     const isPresent = attendance === 'present'
     const offDuty = attendance === 'off' && session.offDuty ? offDutyLabel(session.offDuty, now) : null
-    const roleLabel = session.role === 'lead' ? (session.partId ? 'Part lead' : 'Lead') : null
-    const place = seatPlaceOf(session, now)
-    const loungeText = place === 'lounge-doze' ? ' · Dozing in lounge' : place === 'lounge' ? ' · Resting in lounge' : ''
-    const stateLabel = isPresent ? statusLabel[session.status] + loungeText : attendance === 'break' ? 'Break' : 'Off duty'
-    const avatarLabel = roleLabel ? `${roleLabel} · ${stateLabel}` : stateLabel
     return (
       <div
         key={session.id}
         className={['session', session.id === selectedId ? 'selected' : '', attendance === 'off' ? 'dead' : ''].join(' ')}
         onClick={() => selectSession(session.id)}
       >
-        <span
-          className={['avatar', isPresent ? (place === 'desk' ? session.status : 'lounge') : attendance, headUrl ? 'head' : ''].join(' ')}
-          style={headUrl ? { backgroundImage: `url(${headUrl})` } : undefined}
-          role="img"
-          title={avatarLabel}
-          aria-label={avatarLabel}
-        />
+        {renderAvatar(session)}
         <div className="title">
           {teamName ? `${teamName} · ` : ''}
           <PositionChip position={positionOf(session)} />
@@ -1742,7 +1759,18 @@ export function App({ isLocal }: { isLocal: boolean }) {
           </Modal>
         )}
         {/* 폰 폭과 사무실을 숨겼을 때는 PixiJS 를 돌리지 않도록 마운트하지 않는다 (CSS 로 숨기기만 하면 캔버스가 계속 돈다) */}
-        {isOfficeHiddenLayout && !hasPanel && <div className="office-empty">Pick a session on the left to open its chat</div>}
+        {isOfficeHiddenLayout && !hasPanel && (
+          <HomePanel
+            sessions={snapshot.sessions}
+            teams={office.teams}
+            now={now}
+            isHostReachable={snapshot.isHostReachable}
+            renderAvatar={renderAvatar}
+            stateLabelOf={sessionStateLabel}
+            onSelect={selectSession}
+            onNewSession={(teamId) => openSessionForm(teamId)}
+          />
+        )}
         {!isNarrow && !isOfficeHidden && (
           <Office
             office={office}
