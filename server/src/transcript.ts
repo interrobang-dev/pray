@@ -33,8 +33,20 @@ export interface TranscriptSummary {
    * usage 가 없거나 그 뒤에 대화 압축(compact_boundary)이 있으면 null (압축 뒤 문맥은 요약이라 크기를 모른다)
    */
   contextTokens: number | null
+  /**
+   * 마지막 차례(마지막 사람 입력 뒤)의 주 대화 claude 응답 usage 합 — 입력 상자 아래 캐시율. 사이드체인·메타·synthetic 은 빼고,
+   * 스트리밍 조각으로 여러 줄 남은 같은 message.id 는 마지막 줄 값 하나만 센다. 그 차례에 usage 있는 응답이 없으면 null
+   */
+  turnUsage: TurnUsage | null
   /** 마지막 차례의 끝 (turnOutcome 참고) */
   turn: TurnOutcome
+}
+
+/** 응답 usage 의 입력 쪽 세 값 (output 은 넣지 않는다) */
+export interface TurnUsage {
+  inputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
 }
 
 interface ContentBlock {
@@ -92,6 +104,17 @@ function contextTokensOf(usage: unknown): number | null {
   return counts.length === 0 ? null : counts.reduce((sum, count) => sum + count, 0)
 }
 
+/** 응답 usage 의 입력 쪽 세 값. 세 값 중 숫자가 하나도 없으면 null (숫자가 아닌 칸은 0) */
+function turnUsageOf(usage: unknown): TurnUsage | null {
+  if (typeof usage !== 'object' || usage === null) return null
+  const { input_tokens, cache_creation_input_tokens, cache_read_input_tokens } = usage as Record<string, unknown>
+  const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+  const values = [count(input_tokens), count(cache_creation_input_tokens), count(cache_read_input_tokens)]
+  if (values.every((value) => value === null)) return null
+  const [inputTokens, cacheCreationTokens, cacheReadTokens] = values.map((value) => value ?? 0)
+  return { inputTokens, cacheCreationTokens, cacheReadTokens }
+}
+
 /** turnEndedAt 에 넣는 대화 줄인지 */
 function isConversationLine(record: Record<string, unknown>): boolean {
   if (record.isSidechain || record.isMeta) return false
@@ -122,6 +145,8 @@ export interface TranscriptState {
   phase: 'none' | 'ended' | 'interrupted' | 'working'
   hasBoundary: boolean
   turnText: string | null
+  /** turnUsage 에 마지막으로 더한 응답 (같은 message.id 조각이 또 오면 그 값을 빼고 새 값을 더한다) */
+  turnUsageMessage: { id: string; usage: TurnUsage } | null
 }
 
 export function newTranscriptState(): TranscriptState {
@@ -135,16 +160,31 @@ export function newTranscriptState(): TranscriptState {
       model: null,
       effort: null,
       contextTokens: null,
+      turnUsage: null,
     },
     phase: 'none',
     hasBoundary: false,
     turnText: null,
+    turnUsageMessage: null,
   }
 }
 
-/** 상태 복사본 (덜 쓰인 마지막 줄을 넣어 볼 때 원래 상태를 남긴다) */
+/** 상태 복사본 (덜 쓰인 마지막 줄을 넣어 볼 때 원래 상태를 남긴다). turnUsage 는 바꿀 때마다 새 객체라 얕은 복사로 된다 */
 export function copyTranscriptState(state: TranscriptState): TranscriptState {
   return { ...state, summary: { ...state.summary } }
+}
+
+/** 차례 usage 에 응답 하나를 더한다. 바로 앞에 더한 것과 같은 message.id 면 그 조각 값을 새 값으로 바꾼다 */
+function addTurnUsage(state: TranscriptState, id: string | null, usage: TurnUsage): void {
+  const { summary } = state
+  const previous = id !== null && state.turnUsageMessage?.id === id ? state.turnUsageMessage.usage : null
+  const base = summary.turnUsage ?? { inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 }
+  summary.turnUsage = {
+    inputTokens: base.inputTokens - (previous?.inputTokens ?? 0) + usage.inputTokens,
+    cacheCreationTokens: base.cacheCreationTokens - (previous?.cacheCreationTokens ?? 0) + usage.cacheCreationTokens,
+    cacheReadTokens: base.cacheReadTokens - (previous?.cacheReadTokens ?? 0) + usage.cacheReadTokens,
+  }
+  state.turnUsageMessage = id !== null ? { id, usage } : null
 }
 
 export function applyTranscriptRecord(state: TranscriptState, record: Record<string, unknown>): void {
@@ -162,11 +202,15 @@ export function applyTranscriptRecord(state: TranscriptState, record: Record<str
   if (event) {
     state.phase = event === 'input' ? 'working' : event === 'interrupt' ? 'interrupted' : event
     state.hasBoundary = false
-    if (event === 'input') state.turnText = null
+    if (event === 'input') {
+      state.turnText = null
+      summary.turnUsage = null
+      state.turnUsageMessage = null
+    }
   }
   if (record.type === 'system' && record.subtype === 'compact_boundary') summary.contextTokens = null
   if (record.type === 'assistant') {
-    const message = record.message as { content?: ContentBlock[]; model?: unknown; usage?: unknown } | undefined
+    const message = record.message as { id?: unknown; content?: ContentBlock[]; model?: unknown; usage?: unknown } | undefined
     const text = message?.content
       ?.filter((block) => block.type === 'text' && block.text)
       .map((block) => (block.text ?? '').trim())
@@ -181,6 +225,8 @@ export function applyTranscriptRecord(state: TranscriptState, record: Record<str
       const effort = record.perTurnEffort ?? record.effort
       summary.effort = typeof effort === 'string' ? effort : null
       summary.contextTokens = contextTokensOf(message.usage)
+      const usage = turnUsageOf(message.usage)
+      if (usage) addTurnUsage(state, typeof message.id === 'string' ? message.id : null, usage)
     }
   }
 }

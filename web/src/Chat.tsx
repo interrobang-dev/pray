@@ -43,6 +43,8 @@ interface Props {
   footer?: ReactNode
   /** 입력 상자 오른쪽 아래에 보일 문맥 크기 ("143k"; level 은 색, title 은 툴팁·aria-label). 없으면 그 부분 없음 */
   contextSize?: { text: string; level: string; title: string } | null
+  /** 문맥 크기 옆 마지막 차례 캐시율 ("95% cached"; title 은 툴팁·aria-label). 없으면 그 부분 없음 */
+  turnCache?: { text: string; title: string } | null
   /** 입력 상자 오른쪽 아래에 문맥 크기 옆으로 보일 모델 이름 ("Opus 5.5", effort 없음) */
   modelText?: string | null
   isApprovalNeeded: boolean
@@ -1108,6 +1110,7 @@ export function Chat({
   isWritable,
   footer,
   contextSize,
+  turnCache,
   modelText,
   isApprovalNeeded,
   isWorking,
@@ -1827,15 +1830,23 @@ export function Chat({
         onBtw={sendBtw}
         onOpenBtw={openBtwForInput}
       />
-      {isWritable && (contextSize || modelText) && (
+      {isWritable && (contextSize || turnCache || modelText) && (
         <div className="composer-meta">
-          {contextSize && (
-            <span className={`context-size ${contextSize.level}`} role="img" title={contextSize.title} aria-label={contextSize.title}>
-              {contextSize.text}
-            </span>
-          )}
-          {contextSize && modelText && ' · '}
-          {modelText}
+          {[
+            contextSize && (
+              <span key="context" className={`context-size ${contextSize.level}`} role="img" title={contextSize.title} aria-label={contextSize.title}>
+                {contextSize.text}
+              </span>
+            ),
+            turnCache && (
+              <span key="cache" title={turnCache.title} aria-label={turnCache.title}>
+                {turnCache.text}
+              </span>
+            ),
+            modelText && <span key="model">{modelText}</span>,
+          ]
+            .filter(Boolean)
+            .flatMap((part, index) => (index === 0 ? [part] : [' · ', part]))}
         </div>
       )}
       {!isWritable && (footer ?? <p className="hint">Started from a terminal or IDE, so this session is view-only</p>)}

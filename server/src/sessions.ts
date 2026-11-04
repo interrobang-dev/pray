@@ -422,6 +422,7 @@ export async function listSessions(
         effort: transcript?.effort ?? null,
         modelSetting: isWeb ? modelSettingOf(record?.extraArgs ?? []) : null,
         contextTokens: transcript?.contextTokens ?? null,
+        turnUsage: transcript?.turnUsage ?? null,
         pendingTool: hook?.pendingTool ?? null,
         workingSince: hook?.workingSince ?? null,
         teamId: team?.id ?? null,

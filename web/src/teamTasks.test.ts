@@ -119,14 +119,16 @@ describe('usage text', () => {
   const usage = { inputTokens: 12_345, outputTokens: 48_000, cacheCreationTokens: 1_234, cacheReadTokens: 1_200_000, turns: 7 }
 
   it('gives the meta line with the model alias, output and all input', () => {
-    expect(usageMetaText(usage, 'claude-opus-5-5')).toBe('Opus · 48k out · 1.2M in')
-    expect(usageMetaText(usage, 'some-model')).toBe('some-model · 48k out · 1.2M in')
-    expect(usageMetaText(usage, null)).toBe('48k out · 1.2M in')
+    expect(usageMetaText(usage, 'claude-opus-5-5')).toBe('Opus · 48k out · 1.2M in · 99% cached')
+    expect(usageMetaText(usage, 'some-model')).toBe('some-model · 48k out · 1.2M in · 99% cached')
+    expect(usageMetaText(usage, null)).toBe('48k out · 1.2M in · 99% cached')
     expect(usageMetaText(null, 'claude-opus-5-5')).toBeNull()
+    // 입력이 0 이면 캐시율을 뺀다
+    expect(usageMetaText({ ...usage, inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 }, null)).toBe('48k out · 0 in')
   })
 
   it('gives the four counts and responses for the tooltip', () => {
-    expect(usageDetailText(usage)).toBe('Input 12,345 · Cache write 1,234 · Cache read 1,200,000 · Output 48,000 · 7 responses')
+    expect(usageDetailText(usage)).toBe('Input 12,345 · Cache write 1,234 · Cache read 1,200,000 · Output 48,000 · 99% cached · 7 responses')
     expect(usageDetailText({ ...usage, turns: 1 })).toMatch(/· 1 response$/)
   })
 
@@ -139,8 +141,8 @@ describe('usage text', () => {
     ]
     const total = usageTotalOf(tasks)
     expect([total.withUsage, total.withoutUsage, total.usage.outputTokens, total.usage.turns]).toEqual([2, 1, 50_000, 14])
-    expect(usageTotalText(total)).toBe('2 tasks · 50k out · 2.4M in (1 without usage)')
-    expect(usageTotalText(usageTotalOf(tasks.slice(0, 1)))).toBe('1 task · 48k out · 1.2M in')
+    expect(usageTotalText(total)).toBe('2 tasks · 50k out · 2.4M in · 99% cached (1 without usage)')
+    expect(usageTotalText(usageTotalOf(tasks.slice(0, 1)))).toBe('1 task · 48k out · 1.2M in · 99% cached')
     expect(usageTotalText(usageTotalOf(tasks.slice(2)))).toBe('1 task without usage')
     expect(usageTotalText(usageTotalOf([]))).toBeNull()
   })

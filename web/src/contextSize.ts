@@ -33,6 +33,32 @@ export function contextSizeTitle(tokens: number): string {
   return `Context ${Math.round(Math.max(0, tokens)).toLocaleString('en-US')} tokens`
 }
 
+/** 입력 쪽 usage 세 값 (서버 transcript.ts 의 TurnUsage·teamTasks 의 TaskUsage 가 다 이 칸을 가진다) */
+export interface InputUsage {
+  inputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+}
+
+/** 캐시율 % = cache read / (input + cache write + cache read), 반올림 (token-ledger mod 와 같은 식). 입력이 0 이면 null */
+export function cacheRateOf(usage: InputUsage): number | null {
+  const total = usage.inputTokens + usage.cacheCreationTokens + usage.cacheReadTokens
+  return total > 0 ? Math.round((usage.cacheReadTokens / total) * 100) : null
+}
+
+/** 입력 상자 아래 "95% cached" 와 툴팁. 마지막 차례 usage 가 없으면(null·옛 서버 응답의 undefined·입력 0) null */
+export function turnCacheOf(usage: InputUsage | null | undefined): { text: string; title: string } | null {
+  if (!usage) return null
+  const rate = cacheRateOf(usage)
+  if (rate === null) return null
+  const total = usage.inputTokens + usage.cacheCreationTokens + usage.cacheReadTokens
+  const count = (value: number) => value.toLocaleString('en-US')
+  return {
+    text: `${rate}% cached`,
+    title: `Last turn: cache read ${count(usage.cacheReadTokens)} of ${count(total)} input tokens (cache write ${count(usage.cacheCreationTokens)}, uncached ${count(usage.inputTokens)})`,
+  }
+}
+
 /** 화면에 그릴 값. 모르면(null·옛 서버 응답의 undefined) null = 표시 안 함 */
 export function contextSizeOf(tokens: number | null | undefined): { text: string; level: ContextLevel; title: string } | null {
   if (typeof tokens !== 'number' || !Number.isFinite(tokens)) return null

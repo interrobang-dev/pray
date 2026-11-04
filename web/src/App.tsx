@@ -59,7 +59,7 @@ import {
   type Team,
 } from './types'
 import { AppearanceModal } from './AppearanceModal'
-import { contextSizeOf } from './contextSize'
+import { contextSizeOf, turnCacheOf } from './contextSize'
 import { handOverUnit } from './handOver'
 
 interface Snapshot {
@@ -1830,6 +1830,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 isWritable={isSelectedLiveWeb}
                 footer={renderPanelFooter(selected)}
                 contextSize={selectedContext}
+                turnCache={selected ? turnCacheOf(selected.turnUsage) : null}
                 modelText={selected.model ? modelName(selected.model) : null}
                 // 휴식·퇴근 세션은 훅 상태가 남아 있어도 작업 중·승인 대기로 보지 않는다
                 isApprovalNeeded={isSelectedPresent && selected.status === 'needs-approval'}

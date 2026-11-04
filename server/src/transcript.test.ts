@@ -23,6 +23,7 @@ describe('summarizeTranscript', () => {
       model: null,
       effort: null,
       contextTokens: null,
+      turnUsage: null,
       turn: { kind: 'in-progress', text: null },
     })
   })
@@ -37,6 +38,7 @@ describe('summarizeTranscript', () => {
       model: null,
       effort: null,
       contextTokens: null,
+      turnUsage: null,
       turn: { kind: 'none', text: null },
     })
   })
@@ -133,6 +135,45 @@ describe('summarizeTranscript', () => {
       const before = reply({ usage: usage(2, 400000, 0) })
       expect(summarizeTranscript([before, boundary].join('\n'))).toMatchObject({ model: 'claude-opus-5-5', contextTokens: null })
       expect(summarizeTranscript([before, boundary, reply({ usage: usage(3, 0, 20000) })].join('\n')).contextTokens).toBe(20003)
+    })
+  })
+
+  describe('turnUsage', () => {
+    const usage = (input: number, cacheRead: number, cacheCreation: number) => ({
+      input_tokens: input,
+      cache_read_input_tokens: cacheRead,
+      cache_creation_input_tokens: cacheCreation,
+      output_tokens: 345,
+    })
+    const reply = (id: string, value: ReturnType<typeof usage>, fields: Record<string, unknown> = {}, model = 'claude-opus-5-5') =>
+      JSON.stringify({ type: 'assistant', message: { id, model, content: [{ type: 'text', text: '응답' }], usage: value }, ...fields })
+    const human = (text: string) => JSON.stringify({ type: 'user', message: { role: 'user', content: text } })
+
+    it('sums the responses after the last human input only', () => {
+      const jsonl = [human('첫 지시'), reply('a', usage(9, 9, 9)), human('다음 지시'), reply('b', usage(2, 100, 50)), reply('c', usage(1, 150, 3))].join('\n')
+      expect(summarizeTranscript(jsonl).turnUsage).toEqual({ inputTokens: 3, cacheCreationTokens: 53, cacheReadTokens: 250 })
+    })
+
+    it('counts streamed pieces of one message once, with the last piece value', () => {
+      const jsonl = [human('지시'), reply('a', usage(2, 100, 50)), reply('a', usage(2, 100, 60)), reply('b', usage(1, 10, 0))].join('\n')
+      expect(summarizeTranscript(jsonl).turnUsage).toEqual({ inputTokens: 3, cacheCreationTokens: 60, cacheReadTokens: 110 })
+    })
+
+    it('skips sidechain, meta and synthetic responses, and keeps the turn over notifications', () => {
+      const jsonl = [
+        human('지시'),
+        reply('a', usage(1, 100, 0)),
+        reply('s', usage(5, 5, 5), { isSidechain: true }),
+        reply('m', usage(5, 5, 5), { isMeta: true }),
+        reply('x', usage(5, 5, 5), {}, '<synthetic>'),
+        human('<task-notification>끝</task-notification>'),
+        reply('b', usage(1, 200, 10)),
+      ].join('\n')
+      expect(summarizeTranscript(jsonl).turnUsage).toEqual({ inputTokens: 2, cacheCreationTokens: 10, cacheReadTokens: 300 })
+    })
+
+    it('is null when the last turn has no response yet', () => {
+      expect(summarizeTranscript([reply('a', usage(1, 2, 3)), human('새 지시')].join('\n')).turnUsage).toBeNull()
     })
   })
 

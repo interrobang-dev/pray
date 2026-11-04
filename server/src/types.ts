@@ -1,5 +1,6 @@
 import type { SessionCharacter, SessionGender } from '@pray/host/hq'
 import type { ModelSetting } from './memberModel.js'
+import type { TurnUsage } from './transcript.js'
 
 /**
  * 훅 이벤트로 정하는 상태 (hookState.ts). 서버의 다른 판정(대기 취소·중지·모델 변경 409 등)은 이것을 본다.
@@ -57,6 +58,8 @@ export interface Session {
   modelSetting: ModelSetting | null
   /** 다음 차례에 다시 읽을 문맥 크기 (jsonl 마지막 claude 응답 usage. 압축 뒤 다음 응답까지·응답이 없으면 null). 모델을 바꾸면 다음 차례에 이만큼 캐시를 다시 쓴다 */
   contextTokens: number | null
+  /** 마지막 차례(마지막 사람 입력 뒤) 주 대화 응답들의 입력 쪽 usage 합 — 화면 캐시율. 그 차례에 응답이 없으면 null (transcript.ts) */
+  turnUsage: TurnUsage | null
   pendingTool: string | null
   /** 이번 차례를 시작한 시각 (훅 상태). 모르면 null */
   workingSince: string | null

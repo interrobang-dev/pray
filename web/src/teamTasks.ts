@@ -1,5 +1,5 @@
 /** 팀 Tasks 창의 응답 타입과 순수 함수. 서버 `server/src/teamTaskHistory.ts` 와 손으로 맞춘다 */
-import { contextSizeText } from './contextSize'
+import { cacheRateOf, contextSizeText } from './contextSize'
 import { modelAlias } from './modelSetting'
 
 export type TaskStatus = 'running' | 'done' | 'failed'
@@ -133,24 +133,31 @@ export function eventDetailText(event: TeamEventItem): string {
 /** 읽은 입력 전부 (캐시 쓰기·읽기 포함) */
 const inputTotalOf = (usage: TaskUsage) => usage.inputTokens + usage.cacheCreationTokens + usage.cacheReadTokens
 
-/** task 줄 meta "Opus · 48k out · 1.2M in" (in = input + cache write + cache read). usage 가 없으면 null */
+/** "92% cached" 한 칸 (입력이 0 이면 빈 배열) */
+function cachedParts(usage: TaskUsage): string[] {
+  const rate = cacheRateOf(usage)
+  return rate === null ? [] : [`${rate}% cached`]
+}
+
+/** task 줄 meta "Opus · 48k out · 1.2M in · 92% cached" (in = input + cache write + cache read, 캐시율은 그중 cache read 몫). usage 가 없으면 null */
 export function usageMetaText(usage: TaskUsage | null, model: string | null): string | null {
   if (!usage) return null
   const alias = modelAlias(model)
   const name = alias ? alias[0].toUpperCase() + alias.slice(1) : model
-  const parts = [`${contextSizeText(usage.outputTokens)} out`, `${contextSizeText(inputTotalOf(usage))} in`]
+  const parts = [`${contextSizeText(usage.outputTokens)} out`, `${contextSizeText(inputTotalOf(usage))} in`, ...cachedParts(usage)]
   return (name ? [name, ...parts] : parts).join(' · ')
 }
 
 const count = (value: number) => value.toLocaleString('en-US')
 
-/** 네 값과 응답 수 "Input 12,345 · Cache write 1,234 · Cache read 1,200,000 · Output 48,000 · 7 responses" */
+/** 네 값·캐시율과 응답 수 "Input 12,345 · Cache write 1,234 · Cache read 1,200,000 · Output 48,000 · 99% cached · 7 responses" */
 export function usageDetailText(usage: TaskUsage): string {
   return [
     `Input ${count(usage.inputTokens)}`,
     `Cache write ${count(usage.cacheCreationTokens)}`,
     `Cache read ${count(usage.cacheReadTokens)}`,
     `Output ${count(usage.outputTokens)}`,
+    ...cachedParts(usage),
     `${count(usage.turns)} ${usage.turns === 1 ? 'response' : 'responses'}`,
   ].join(' · ')
 }
@@ -182,10 +189,15 @@ export function usageTotalOf(tasks: readonly Pick<TaskHistoryItem, 'status' | 'u
   return { usage, withUsage, withoutUsage }
 }
 
-/** 7일 합계 "12 tasks · 320k out · 9.8M in (3 without usage)". 끝난 task 가 없으면 null */
+/** 7일 합계 "12 tasks · 320k out · 9.8M in · 89% cached (3 without usage)". 끝난 task 가 없으면 null */
 export function usageTotalText(total: UsageTotal): string | null {
   const { usage, withUsage, withoutUsage } = total
   if (withUsage === 0) return withoutUsage === 0 ? null : `${withoutUsage} ${withoutUsage === 1 ? 'task' : 'tasks'} without usage`
-  const text = `${withUsage} ${withUsage === 1 ? 'task' : 'tasks'} · ${contextSizeText(usage.outputTokens)} out · ${contextSizeText(inputTotalOf(usage))} in`
+  const text = [
+    `${withUsage} ${withUsage === 1 ? 'task' : 'tasks'}`,
+    `${contextSizeText(usage.outputTokens)} out`,
+    `${contextSizeText(inputTotalOf(usage))} in`,
+    ...cachedParts(usage),
+  ].join(' · ')
   return withoutUsage === 0 ? text : `${text} (${withoutUsage} without usage)`
 }

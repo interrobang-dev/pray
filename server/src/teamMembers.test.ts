@@ -22,6 +22,7 @@ const session = (fields: Partial<Session>): Session => ({
   effort: 'high',
   modelSetting: null,
   contextTokens: 123456,
+  turnUsage: null,
   pendingTool: null,
   workingSince: null,
   role: 'member',

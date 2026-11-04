@@ -59,6 +59,8 @@ export interface Session {
   modelSetting?: { model: string | null; effort: string | null } | null
   /** 다음 차례에 다시 읽을 문맥 크기 (토큰). 모르면 null, 옛 서버 응답에는 빠져 있다 */
   contextTokens?: number | null
+  /** 마지막 차례(마지막 사람 입력 뒤) 응답들의 입력 쪽 usage 합 — 입력 상자 아래 캐시율. 그 차례에 응답이 없으면 null, 옛 서버 응답에는 빠져 있다 */
+  turnUsage?: { inputTokens: number; cacheCreationTokens: number; cacheReadTokens: number } | null
 }
 
 /** 도트 인물 프리셋 id 와 머리·윗옷 색 ('#rrggbb', null = 그 인물 기본색). isAuto = 서버가 새 세션에 배정한 것 (인물 고르기 창의 "Auto"), 옛 서버 응답·사용자가 고른 것에는 없다 */
