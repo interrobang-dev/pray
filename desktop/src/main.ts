@@ -8,7 +8,7 @@ import { Child } from './children'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
 import { dotLookOf } from './dotCharacter'
 import { isExternalUrl } from './externalLink'
-import { appIconIco, noticeIconPng, trayIconPng } from './icon'
+import { appIconIco, noticeIconPng, trayIconIco, trayIconPng } from './icon'
 import { isPipeAlive, LEGACY_PIPE_PATH } from './legacyHost'
 import { isLaunchAtLogin, LOGIN_ITEM_NAME } from './loginItem'
 import {
@@ -129,6 +129,23 @@ function windowIcon(): string | NativeImage {
     console.warn(`창 아이콘 ${path} 를 못 써서 32px PNG 로 띄운다: ${String(error)}`)
     return nativeImage.createFromBuffer(trayIconPng(false))
   }
+}
+
+/** 트레이 아이콘 .ico 경로 (평소·승인 대기). 띄울 때 한 번 앱 데이터 폴더에 쓴다 — .ico 경로면 Electron 이 화면 배율에 맞는 크기(16·20·24·32…)를 고른다 */
+const trayIconPaths = new Map<boolean, string | null>()
+
+function trayIcon(isAlert: boolean): string | NativeImage {
+  if (!trayIconPaths.has(isAlert)) {
+    const path = join(app.getPath('userData'), isAlert ? 'tray-alert.ico' : 'tray.ico')
+    try {
+      writeFileSync(path, trayIconIco(isAlert))
+      trayIconPaths.set(isAlert, path)
+    } catch (error) {
+      console.warn(`트레이 아이콘 ${path} 를 못 써서 32px PNG 로 띄운다: ${String(error)}`)
+      trayIconPaths.set(isAlert, null)
+    }
+  }
+  return trayIconPaths.get(isAlert) ?? nativeImage.createFromBuffer(trayIconPng(isAlert))
 }
 
 function createWindow(): BrowserWindow {
@@ -357,7 +374,7 @@ let children: { host: Child; server: Child } | null = null
 function refreshTray(): void {
   if (!tray || !children) return
   const isAlert = status.needsApproval > 0
-  tray.setImage(nativeImage.createFromBuffer(trayIconPng(isAlert)))
+  tray.setImage(trayIcon(isAlert))
   const summary = status.isServerUp
     ? `Working ${status.working} · Needs approval ${status.needsApproval}`
     : 'Server not responding'
@@ -473,7 +490,7 @@ if (!app.requestSingleInstanceLock()) {
       return
     }
     loadSettings()
-    tray = new Tray(nativeImage.createFromBuffer(trayIconPng(false)))
+    tray = new Tray(trayIcon(false))
     tray.on('click', () => void showWindow())
     for (const child of [children.host, children.server]) {
       child.on('change', () => {

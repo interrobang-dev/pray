@@ -1569,7 +1569,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
         <aside>
           <header>
             <h1>
-              <img className="logo" src="/favicon.svg" width={16} height={16} alt="" />
+              {/* 배율 100% 는 손으로 맞춘 16px 판, 그보다 큰 배율은 벡터판 (16px 판을 늘이면 도트가 고르지 않게 커진다) */}
+              <img className="logo" src="/favicon.svg" srcSet="/favicon.svg 1x, /logo.svg 2x" width={16} height={16} alt="" />
               Pray
             </h1>
             <button className="icon" onClick={() => setIsAppearanceOpen(true)} title="Appearance" aria-label="Appearance">

@@ -1,6 +1,21 @@
+import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { APP_ICON_SIZES, appIconIco, appIconPng, icoFromPngs, NOTICE_ICON_SIZE, NOTICE_RING_COLORS, noticeIconPng, trayIconPng } from './icon'
+import { join } from 'node:path'
+import {
+  APP_ICON_SIZES,
+  appIconIco,
+  appIconPng,
+  flattenPath,
+  icoFromPngs,
+  LOGO_PATHS,
+  NOTICE_ICON_SIZE,
+  NOTICE_RING_COLORS,
+  noticeIconPng,
+  TRAY_ICON_SIZES,
+  trayIconIco,
+  trayIconPng,
+} from './icon'
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
@@ -37,26 +52,90 @@ describe('appIconPng', () => {
     }
   })
 
-  it('draws the 32 grid one to one, the same as the tray icon', () => {
+  it('draws the same 32px as the tray icon', () => {
     expect(appIconPng(32).equals(trayIconPng(false))).toBe(true)
   })
 
-  it('scales by whole cells so each grid cell stays one solid block', () => {
-    const base = pngPixels(appIconPng(32))
+  it('draws logo.svg as vector: transparent corners, solid colors inside, blended edges (no blocks of the 32 grid)', () => {
+    for (const size of APP_ICON_SIZES.filter((size) => size !== 16)) {
+      const image = pngPixels(appIconPng(size))
+      const at = (x: number, y: number) => pixelAt(image, Math.floor((x / 32) * size), Math.floor((y / 32) * size))
+      expect(at(0.2, 0.2)[3]).toBe(0)
+      expect(at(31.8, 31.8)[3]).toBe(0)
+      expect(at(4, 16)).toEqual([0x23, 0x26, 0x2e, 255])
+      expect(at(14, 8)).toEqual([0xf5, 0xb8, 0x41, 255])
+      expect(at(12, 16)).toEqual([0xff, 0xff, 0xff, 255])
+      expect(at(12, 24)).toEqual([0xff, 0xff, 0xff, 255])
+      expect(at(20, 24)).toEqual([0x3c, 0x42, 0x50, 255])
+    }
+    // 256 의 둥근 바깥 모서리(왼쪽 위 40×40)는 여러 단계의 반투명 픽셀로 섞인다 — 32 격자를 8배 한 것이면 반투명이 128 한 가지뿐이었다
     const large = pngPixels(appIconPng(256))
-    for (const [x, y] of [[0, 0], [5, 0], [10, 6], [12, 15], [19, 23], [31, 31]]) {
-      const color = pixelAt(base, x, y)
-      for (const [dx, dy] of [[0, 0], [7, 0], [0, 7], [7, 7]]) expect(pixelAt(large, x * 8 + dx, y * 8 + dy)).toEqual(color)
+    const partial = new Set<number>()
+    for (let y = 0; y < 40; y++) {
+      for (let x = 0; x < 40; x++) {
+        const alpha = pixelAt(large, x, y)[3]
+        if (alpha > 0 && alpha < 255) partial.add(alpha)
+      }
+    }
+    expect(partial.size).toBeGreaterThan(20)
+  })
+
+  it('keeps the hand-tuned 16 grid at 16px', () => {
+    const image = pngPixels(appIconPng(16))
+    expect(pixelAt(image, 0, 0)[3]).toBe(0)
+    expect(pixelAt(image, 6, 3)).toEqual([0xf5, 0xb8, 0x41, 255])
+    expect(pixelAt(image, 5, 6)).toEqual([0xff, 0xff, 0xff, 255])
+  })
+})
+
+describe('LOGO_PATHS', () => {
+  it('is the same as web/public/logo.svg', () => {
+    const svg = readFileSync(join(__dirname, '../../web/public/logo.svg'), 'utf8')
+    const paths = [...svg.matchAll(/<path d="([^"]+)"(?: transform="translate\(([\d.]+),([\d.]+)\) scale\(([\d.]+)\)")? fill="([^"]+)"\/>/g)].map(
+      ([, d, x, y, scale, fill]) => ({ d, fill, ...(x !== undefined && { transform: { translate: [Number(x), Number(y)], scale: Number(scale) } }) }),
+    )
+    expect(paths).toHaveLength((svg.match(/<path /g) ?? []).length)
+    expect(LOGO_PATHS).toEqual(paths)
+  })
+})
+
+describe('flattenPath', () => {
+  it('turns lines, curves and arcs into closed polygons that stay on the outline', () => {
+    const [square] = flattenPath('M0,0H10V10H0Z')
+    expect(square).toEqual([[0, 0], [10, 0], [10, 10], [0, 10]])
+    // 원 (logo.svg 의 작은 원): 모든 점이 중심 (20, 24) 에서 반지름 2.25
+    const circle = flattenPath('M17.75,24A2.25,2.25 0 1 0 22.25,24A2.25,2.25 0 1 0 17.75,24Z')
+    expect(circle).toHaveLength(1)
+    for (const [x, y] of circle[0]) expect(Math.hypot(x - 20, y - 24)).toBeCloseTo(2.25, 6)
+  })
+})
+
+describe('trayIconPng · trayIconIco', () => {
+  it('draws the alert square on whole pixels at every tray size', () => {
+    for (const size of TRAY_ICON_SIZES) {
+      const plain = pngPixels(trayIconPng(false, size))
+      const alert = pngPixels(trayIconPng(true, size))
+      expect(pngSize(trayIconPng(true, size))).toEqual({ width: size, height: size })
+      const center = Math.round((26 / 32) * size)
+      expect(pixelAt(alert, center, Math.round((6 / 32) * size))).toEqual([0xe0, 0x5a, 0x5a, 255])
+      // 점 밖(왼쪽 아래)은 평소 그림 그대로
+      expect(pixelAt(alert, Math.floor(size / 4), Math.floor((3 * size) / 4))).toEqual(pixelAt(plain, Math.floor(size / 4), Math.floor((3 * size) / 4)))
+      // 점의 모든 픽셀은 흰색이나 빨강 (섞인 색 없음)
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const before = pixelAt(plain, x, y).join()
+          const after = pixelAt(alert, x, y).join()
+          if (before !== after) expect(['255,255,255,255', '224,90,90,255']).toContain(after)
+        }
+      }
     }
   })
 
-  it('uses no colors that are not in the 32 grid for 24 and 48', () => {
-    const colors = new Set<string>()
-    const base = pngPixels(appIconPng(32))
-    for (let i = 0; i < base.pixels.length; i += 4) colors.add(base.pixels.subarray(i, i + 4).join())
-    for (const size of [24, 48]) {
-      const image = pngPixels(appIconPng(size))
-      for (let i = 0; i < image.pixels.length; i += 4) expect(colors.has(image.pixels.subarray(i, i + 4).join())).toBe(true)
+  it('holds every tray size', () => {
+    for (const isAlert of [false, true]) {
+      const ico = trayIconIco(isAlert)
+      expect(ico.readUInt16LE(4)).toBe(TRAY_ICON_SIZES.length)
+      TRAY_ICON_SIZES.forEach((size, index) => expect(ico[6 + index * 16]).toBe(size))
     }
   })
 })
