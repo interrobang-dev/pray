@@ -5068,10 +5068,15 @@ li.group.drop-after::after {
   line-height: 16px;
   color: var(--muted);
 }
-/* 끊겼다 다시 붙는 중 (reconnect.ts): 그 ↻ 가 돌고 점이 숨쉰다. disabled 여도 흐려지지 않게 글자색을 둔다 */
+/* 끊겼다 다시 붙는 중 (reconnect.ts): 그 ↻ 가 돌고 점이 숨쉰다. disabled 여도 흐려지지 않게 글자색을 둔다.
+   도는 것은 안쪽 글자(.restart-glyph)만 — 버튼에 걸면 테두리·배경·좌우 여백까지 돌고 가운데가 어긋나 흔들렸다 */
 .status-link button.is-spinning {
-  display: inline-block;
   color: var(--relay-text);
+}
+.restart-glyph {
+  display: inline-block;
+}
+.status-link button.is-spinning .restart-glyph {
   animation: reconnect-spin 1s linear infinite;
 }
 .status-bar .dot.is-waiting {
@@ -5128,7 +5133,7 @@ li.group.drop-after::after {
   animation: reconnect-spin 0.8s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .status-link button.is-spinning,
+  .status-link button.is-spinning .restart-glyph,
   .status-bar .dot.is-waiting,
   .reconnect-spinner {
     animation: none;

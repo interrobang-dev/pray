@@ -2106,7 +2106,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
               disabled={!isConnected}
               title="Restart server (offline for a few seconds)"
             >
-              ↻
+              <span className="restart-glyph">↻</span>
             </button>
           </span>
           <span className="status-link" title={snapshot.isHostReachable ? 'Session host connected' : 'Session host disconnected'}>
@@ -2118,7 +2118,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
               disabled={!snapshot.isHostReachable}
               title="Restart host (web sessions disconnect)"
             >
-              ↻
+              <span className="restart-glyph">↻</span>
             </button>
           </span>
         </span>
