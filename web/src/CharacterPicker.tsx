@@ -109,8 +109,27 @@ export function CharacterPicker({
   ]
   const chosenFrame = value.id ? sheet.frames.get(value.id) : undefined
   const bases = value.id ? art?.bases[value.id] : undefined
+  // 고른 인물의 큰 미리보기(+ 색 칸)를 격자 앞에 둔다: 데스크톱 넓은 창은 왼쪽 칸, 폰은 격자 위 (style.css .character-layout). 격자만 스크롤한다
   return (
-    <>
+    <div className="character-layout">
+      <div className="character-selected">
+        {!value.id && art && auto && sheet.frames.get(auto.id) && (
+          <div className="character-colors">
+            <Preview art={art} character={auto.id} frame={sheet.frames.get(auto.id)!} hair={auto.hair} top={auto.top} />
+            <p className="form-hint">Picked automatically so look-alikes are rare. Choose a character to set colors yourself.</p>
+          </div>
+        )}
+        {value.id && art && bases && chosenFrame && (
+          <div className="character-colors">
+            <Preview art={art} character={value.id} frame={chosenFrame} hair={value.hair} top={value.top} />
+            <div className="character-color-rows">
+              <Swatches label="Hair" base={bases.hair} colors={HAIR_COLORS} value={value.hair} onChange={(hair) => onChange({ ...value, hair })} />
+              <Swatches label="Top" base={bases.top} colors={TOP_COLORS} value={value.top} onChange={(top) => onChange({ ...value, top })} />
+            </div>
+          </div>
+        )}
+        {artError && <p className="form-hint">{artError}</p>}
+      </div>
       <div className="character-picker" role="radiogroup" aria-label="Office character">
         {options.map((option) => (
           <button
@@ -127,22 +146,6 @@ export function CharacterPicker({
           </button>
         ))}
       </div>
-      {artError && <p className="form-hint">{artError}</p>}
-      {!value.id && art && auto && sheet.frames.get(auto.id) && (
-        <div className="character-colors">
-          <Preview art={art} character={auto.id} frame={sheet.frames.get(auto.id)!} hair={auto.hair} top={auto.top} />
-          <p className="form-hint">Picked automatically so look-alikes are rare. Choose a character to set colors yourself.</p>
-        </div>
-      )}
-      {value.id && art && bases && chosenFrame && (
-        <div className="character-colors">
-          <Preview art={art} character={value.id} frame={chosenFrame} hair={value.hair} top={value.top} />
-          <div className="character-color-rows">
-            <Swatches label="Hair" base={bases.hair} colors={HAIR_COLORS} value={value.hair} onChange={(hair) => onChange({ ...value, hair })} />
-            <Swatches label="Top" base={bases.top} colors={TOP_COLORS} value={value.top} onChange={(top) => onChange({ ...value, top })} />
-          </div>
-        </div>
-      )}
-    </>
+    </div>
   )
 }

@@ -1726,7 +1726,12 @@ export function App({ isLocal }: { isLocal: boolean }) {
           </Modal>
         )}
         {renameTarget && (
-          <Modal title="Rename session" subtitle={renameTarget.title ?? renameTarget.id} onClose={() => setRenameTarget(null)}>
+          <Modal
+            title="Rename session"
+            subtitle={renameTarget.title ?? renameTarget.id}
+            onClose={() => setRenameTarget(null)}
+            className={renameTarget.role === 'lead' ? 'rename-modal has-character' : 'rename-modal'}
+          >
             <form className="create" onSubmit={renameSession}>
               <div className="field-row">
                 <label className="field role">
