@@ -3,7 +3,13 @@
  "method": 2,
  "direction": "up",
  "tolerance": 36,
- "description": "office-v5-up 인물의 머리·윗옷 마스크. sample 은 정면(office-v5-down) idle 첫 칸의 셀 좌표(--sample-atlas), y·exclude 는 up 셀(92x128) 좌표. method 2 = 기본색은 표본 픽셀 수 기준 가운데 값·머리/윗옷/피부 부위 경쟁·가중치 0/1 (mask.py 머리말). skin = 인물 단위 피부 표본 상자(경쟁용), outlineMax = 이 부위에서 외곽선으로 보고 뺄 가장 밝은 채널 한도(기본 26), minShare = 표본에서 뺄 드문 색 묶음 비율(기본 0.04), compete = \"share\" 면 같은 색으로 맞설 때 표본 안 비율이 큰 부위가 갖는다(머리·윗옷이 같은 색을 나눠 쓰는 인물), false 면 경쟁하지 않는다, sampleFrames = {\"<상태>/<n>\": 상자들} 그 칸(이 아틀라스 셀 좌표)에서 고를 색만 더한다(상태 행은 팔레트 색이 idle 과 다르다), sampleSelf·skinSelf = 정면 표본 대신 이 방향 idle 첫 칸에서 모을 상자, sampleAdd = 이 방향 idle 첫 칸에서 표본에 더할 상자 (셋 다 이 방향 셀 좌표)",
+ "fill": {
+  "grow": 1.5,
+  "growSteps": 3,
+  "majority": 2,
+  "holes": 16
+ },
+ "description": "office-v5-up 인물의 머리·윗옷 마스크. sample 은 정면(office-v5-down) idle 첫 칸의 셀 좌표(--sample-atlas), y·exclude 는 up 셀(92x128) 좌표. method 2 = 기본색은 표본 픽셀 수 기준 가운데 값·머리/윗옷/피부 부위 경쟁·가중치 0/1 (mask.py 머리말). skin = 인물 단위 피부 표본 상자(경쟁용), outlineMax = 이 부위에서 외곽선으로 보고 뺄 가장 밝은 채널 한도(기본 26), minShare = 표본에서 뺄 드문 색 묶음 비율(기본 0.04), compete = \"share\" 면 같은 색으로 맞설 때 표본 안 비율이 큰 부위가 갖는다(머리·윗옷이 같은 색을 나눠 쓰는 인물), false 면 경쟁하지 않는다, sampleFrames = {\"<상태>/<n>\": 상자들} 그 칸(이 아틀라스 셀 좌표)에서 고를 색만 더한다(상태 행은 팔레트 색이 idle 과 다르다), sampleSelf·skinSelf = 정면 표본 대신 이 방향 idle 첫 칸에서 모을 상자, sampleAdd = 이 방향 idle 첫 칸에서 표본에 더할 상자 (셋 다 이 방향 셀 좌표). fill = 고른 뒤 고른 픽셀에 붙은 같은 계열 음영(grow: tolerance×값·걸음 수)·8이웃 다수결(majority 번)·둘러싼 구멍(holes 픽셀 이하)을 더한다(mask.py 머리말 \"후처리\")",
  "characters": {
   "lead": {
    "hair": {
@@ -366,7 +372,8 @@
       66,
       64
      ]
-    ]
+    ],
+    "outlineMax": 18
    },
    "top": {
     "sample": [

@@ -32,6 +32,20 @@
 고를 색에만 더하고 기본색 계산에는 넣지 않는다 (기본색은 idle 표본 기준. 드문 색 기준은 부위의 `minShare`).
 레시피의 `direction` 은 그 칸(`char/<id>/<direction>/idle/0`)과 미리보기에서 볼 칸을 정한다.
 
+후처리 (레시피 맨 위 `"fill": {"grow": 1.5, "growSteps": 3, "majority": 2, "holes": 16}`, v5 레시피. 없으면 하지 않는다):
+위 규칙으로 고른 뒤 칸마다 부위별로 이 순서로 더한다. 부위의 세로 범위 밖·exclude 상자 안·다른 부위가 이미 고른 픽셀·
+투명 픽셀은 건드리지 않고, 외곽선(`outlineMax` 이하)은 더하지 않는다.
+- grow: 고른 픽셀에 8방향으로 맞닿고, 고를 색과의 거리가 tolerance×grow 미만이며 다른 부위·피부 표본보다 이 부위
+  표본이 더 가까운 픽셀을 growSteps 걸음까지 더한다 (표본 밖의 한 단계 더 짙거나 옅은 음영·주름선)
+- majority: 8이웃 중 5개 이상이 고른 픽셀인 것을 majority 번 더한다 (덩어리 가장자리의 이 빠진 곳)
+- holes: 고른 픽셀 ∪ 외곽선이 4방향으로 둘러싼 holes 픽셀 이하 구멍 중 둘레의 절반 이상이 고른 픽셀인 것을 메운다
+  (외곽선만으로 닫힌 눈·신발은 둘레 조건으로 빠진다)
+- 머리·윗옷이 같은 픽셀을 더하면 원래 고른 쪽이 갖고, 둘 다 새로 더한 것이면 둘 다 뺀다
+이유: 표본 상자 안에 있던 음영색이 드문 색 기준(minShare)에 걸리거나 tolerance 를 조금 넘어, 바꾼 색 사이에 원래 색 픽셀이
+섬·구멍·가장자리 줄로 남았다 (18명 × 세 방향 × 모든 칸에서 51,283 픽셀. 60% 가 드문 색, 22% 가 표본 밖 음영).
+minShare 를 낮추면 피부·다른 부위가 같이 잡혀서, 고른 픽셀에 붙은 것만 더하는 후처리로 고친다 (94% 를 고치고
+그 밖에 더한 것은 그림으로 보면 대부분 소매 끝·옷깃·음영처럼 실제 그 부위였다).
+
 사용:
   python tools/sprites/mask.py --recipe tools/sprites/recipes/office-v3-recolor.json \
       --atlas web/public/office/office-v3 [--preview 미리보기.png]
@@ -186,6 +200,89 @@ def shared_weights(cell: np.ndarray, owns: dict, slots: dict, skin, tolerances: 
     return weights
 
 
+FILL_KEYS = {'grow', 'growSteps', 'majority', 'holes'}
+
+
+def neighbors8(binary: np.ndarray) -> np.ndarray:
+    """칸마다 8이웃 중 참인 수"""
+    return box_sum(binary, 1) - binary.astype(int)
+
+
+def holes_in(wall: np.ndarray, max_size: int) -> list[np.ndarray]:
+    """wall 이 4방향으로 둘러싼(그림 가장자리에 닿지 않는) max_size 픽셀 이하 구멍 덩어리들"""
+    height, width = wall.shape
+    seen = np.zeros_like(wall)
+    out = []
+    for start_y, start_x in zip(*np.nonzero(~wall)):
+        if seen[start_y, start_x]:
+            continue
+        stack, members, touches = [(start_y, start_x)], [], False
+        seen[start_y, start_x] = True
+        while stack:
+            y, x = stack.pop()
+            members.append((y, x))
+            if y in (0, height - 1) or x in (0, width - 1):
+                touches = True
+            for ny, nx in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+                if 0 <= ny < height and 0 <= nx < width and not wall[ny, nx] and not seen[ny, nx]:
+                    seen[ny, nx] = True
+                    stack.append((ny, nx))
+        if not touches and len(members) <= max_size:
+            component = np.zeros_like(wall)
+            ys, xs = zip(*members)
+            component[list(ys), list(xs)] = True
+            out.append(component)
+    return out
+
+
+def allowed_area(shape: tuple[int, int], rule: dict) -> np.ndarray:
+    """부위의 세로 범위 안이면서 exclude 상자 밖"""
+    area = np.zeros(shape, dtype=bool)
+    y0, y1 = rule['y']
+    area[y0:y1] = True
+    for x0, ey0, x1, ey1 in rule.get('exclude', []):
+        area[ey0:ey1, x0:x1] = False
+    return area
+
+
+def fill_weights(cell: np.ndarray, weights: dict, slots: dict, owns: dict, skin, tolerances: dict, fill: dict) -> dict[str, np.ndarray]:
+    """후처리 (머리말 "후처리"): 색 확장 → 다수결 확장 → 구멍 메우기. 가중치 0/1"""
+    opaque = cell[..., 3] > 0
+    out = {slot: weights[slot] > 0 for slot in SLOTS}
+    for slot in SLOTS:
+        rule = slots[slot]
+        other = next(o for o in SLOTS if o != slot)
+        dark = opaque & (cell[..., :3].max(axis=2) <= rule.get('outlineMax', OUTLINE_MAX))
+        free = opaque & ~out[other] & allowed_area(out[slot].shape, rule) & ~dark
+        picked = out[slot].copy()
+        if fill.get('grow'):
+            band = cell.reshape(-1, 4).astype(float)
+            own_distance = nearest(band, owns[slot][0])[0].reshape(cell.shape[:2])
+            closer = own_distance < tolerances[slot] * fill['grow']
+            for rival in [owns[other]] + ([skin] if skin is not None else []):
+                closer &= own_distance < nearest(band, rival[0])[0].reshape(cell.shape[:2])
+            like = free & closer
+            for _ in range(fill.get('growSteps', 1)):
+                grow = (box_sum(picked, 1) > 0) & like & ~picked
+                if not grow.any():
+                    break
+                picked |= grow
+        for _ in range(fill.get('majority', 0)):
+            grow = (neighbors8(picked) >= 5) & free & ~picked
+            if not grow.any():
+                break
+            picked |= grow
+        if fill.get('holes'):
+            for component in holes_in(picked | dark, fill['holes']):
+                ring = (box_sum(component, 1) > 0) & ~component
+                if picked[ring].sum() * 2 >= ring.sum():
+                    picked |= component & free
+        out[slot] = picked
+    # 머리·윗옷이 같은 픽셀을 더하면 원래 고른 쪽이 갖고, 둘 다 새로 더한 것이면 둘 다 뺀다
+    both = out['hair'] & out['top']
+    return {slot: (out[slot] & (~both | (weights[slot] > 0))).astype(float) for slot in SLOTS}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--recipe', required=True)
@@ -205,6 +302,10 @@ def main() -> int:
     prefix = f"{recipe['direction']}/" if recipe.get('direction') else ''
 
     is_v2 = recipe.get('method', 1) == 2
+    fill = recipe.get('fill')
+    if fill is not None and (not isinstance(fill, dict) or set(fill) - FILL_KEYS):
+        print(f'레시피 fill 은 {sorted(FILL_KEYS)} 만 쓴다', file=sys.stderr)
+        return 1
 
     mask = np.zeros(atlas.shape, dtype=np.uint8)
     mask[..., 3] = 255
@@ -276,6 +377,8 @@ def main() -> int:
                         if skin_share is not None:
                             rivals.append(skin_share)
                     weights[slot] = slot_weight(cell, owns[slot], rivals, slots[slot], tolerances[slot], is_v2)
+            if fill:
+                weights = fill_weights(cell, weights, slots, owns, skin_share, tolerances, fill)
             for slot in SLOTS:
                 region = mask[y:y + h, x:x + w, CHANNEL[slot]]
                 np.maximum(region, (weights[slot] * 255).round().astype(np.uint8), out=region)
