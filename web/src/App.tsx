@@ -1822,18 +1822,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
               <button className="rename" title="Rename" onClick={() => openRename(selected)}>
                 ✎
               </button>
-              <span className="model-info">
-                {selectedHandOver && (
-                  <button
-                    type="button"
-                    className="hand-over"
-                    title={`Start a new ${selectedHandOver.partId ? 'part lead' : 'lead'} with this one's history`}
-                    onClick={() => openHandOver(selectedHandOver.teamId, selectedHandOver.partId)}
-                  >
-                    Hand over
-                  </button>
-                )}
-              </span>
               <span className="cwd">{selected.cwd}</span>
               <nav className="tabs">
                 <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => whenLeavingAllowed(() => setTab('chat'))} title="Chat" aria-label="Chat">
@@ -1906,6 +1894,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 isWritable={isSelectedLiveWeb}
                 footer={renderPanelFooter(selected)}
                 contextSize={selectedContext}
+                handOverTitle={selectedHandOver && `Hand over: start a new ${selectedHandOver.partId ? 'part lead' : 'lead'} with this one's history`}
+                onHandOver={selectedHandOver && (() => openHandOver(selectedHandOver.teamId, selectedHandOver.partId))}
                 turnCache={selected ? turnCacheOf(selected.turnUsage) : null}
                 modelText={modelLabel(selected)}
                 modelFullName={selected.model ?? null}

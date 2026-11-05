@@ -43,6 +43,9 @@ interface Props {
   footer?: ReactNode
   /** 입력 상자 오른쪽 아래에 보일 문맥 크기 ("143k"; level 은 색, title 은 툴팁·aria-label). 없으면 그 부분 없음 */
   contextSize?: { text: string; level: string; title: string } | null
+  /** Hand over 할 수 있는 지시자(handOver.ts)면 문맥 크기가 버튼이 되고 누르면 이것 (새 지시자 창). 툴팁 둘째 줄은 `handOverTitle` */
+  onHandOver?: (() => void) | null
+  handOverTitle?: string | null
   /** 문맥 크기 옆 마지막 차례 캐시율 ("95% cached"; title 은 툴팁·aria-label). 없으면 그 부분 없음 */
   turnCache?: { text: string; title: string } | null
   /** 입력 상자 오른쪽 아래에 문맥 크기 옆으로 보일 모델·effort ("Opus 5.5 · xhigh"). 누르면 `onChangeModel` */
@@ -1118,6 +1121,8 @@ export function Chat({
   isWritable,
   footer,
   contextSize,
+  onHandOver,
+  handOverTitle,
   turnCache,
   modelText,
   modelFullName,
@@ -1845,11 +1850,22 @@ export function Chat({
       {isWritable && (contextSize || turnCache || modelText || isModelRestarting || onChangeModel) && (
         <div className="composer-meta">
           {[
-            contextSize && (
-              <span key="context" className={`context-size ${contextSize.level}`} role="img" title={contextSize.title} aria-label={contextSize.title}>
-                {contextSize.text}
-              </span>
-            ),
+            contextSize &&
+              (onHandOver ? (
+                <button
+                  key="context"
+                  type="button"
+                  className={`context-size ${contextSize.level} composer-hand-over`}
+                  title={[contextSize.title, handOverTitle].filter(Boolean).join('\n')}
+                  onClick={onHandOver}
+                >
+                  {contextSize.text}
+                </button>
+              ) : (
+                <span key="context" className={`context-size ${contextSize.level}`} role="img" title={contextSize.title} aria-label={contextSize.title}>
+                  {contextSize.text}
+                </span>
+              )),
             turnCache && (
               <span key="cache" title={turnCache.title} aria-label={turnCache.title}>
                 {turnCache.text}
