@@ -2714,11 +2714,22 @@ li.group.drop-after::after {
 .ws-back,
 .ws-add-chat,
 .ws-file-history,
-.ws-toolbar > .copy-button {
+.ws-toolbar > .copy-menu > .copy-button {
   width: 32px;
   height: 30px;
   padding: 0;
   flex-shrink: 0;
+}
+/* 위 막대 Copy 메뉴: 버튼 하나 크기의 자리, 메뉴는 버튼 아래 오른쪽 끝에 맞춘다 */
+.ws-toolbar > .copy-menu {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.copy-menu > .menu-list {
+  min-width: 150px;
+}
+.copy-menu > .menu-list button {
+  white-space: nowrap;
 }
 .ws-add-chat,
 .ws-file-history,
@@ -6599,7 +6610,7 @@ li.group.drop-after::after {
   .ws-meta,
   .ws:not(.is-viewing) .ws-add-chat,
   .ws:not(.is-viewing) .ws-file-history,
-  .ws:not(.is-viewing) .ws-toolbar > .copy-button,
+  .ws:not(.is-viewing) .ws-toolbar > .copy-menu,
   .ws.is-viewing .ws-find {
     display: none;
   }
@@ -6613,9 +6624,12 @@ li.group.drop-after::after {
   .ws-add-chat,
   .ws-file-history,
   .ws-edit,
-  .ws-toolbar > .copy-button {
+  .ws-toolbar > .copy-menu > .copy-button {
     width: 40px;
     height: 40px;
+  }
+  .copy-menu > .menu-list button {
+    min-height: 40px;
   }
   .ws-save {
     height: 40px;
@@ -6624,7 +6638,7 @@ li.group.drop-after::after {
   .ws:not(.is-viewing) .ws-save {
     display: none;
   }
-  .ws-toolbar > .copy-button {
+  .ws-toolbar > .copy-menu > .copy-button {
     opacity: 1;
   }
   .ws-body {

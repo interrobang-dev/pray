@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatLocationText, clampLineRange, clickLine, isSameRange, lineCountOf, locationText, rangeBetween, selectionLineRange } from './codeSelection'
+import { chatLocationText, clampLineRange, clickLine, fullPathOf, isSameRange, lineCountOf, locationText, rangeBetween, selectionLineRange } from './codeSelection'
 
 describe('codeSelection', () => {
   it('orders a range', () => {
@@ -47,5 +47,14 @@ describe('codeSelection', () => {
     expect(locationText('src/App.tsx', { start: 12, end: 12 })).toBe('src/App.tsx:12')
     expect(locationText('README.md', null)).toBe('README.md')
     expect(chatLocationText('web/src/a_b.ts', { start: 1, end: 3 })).toBe('`web/src/a_b.ts:1-3`')
+  })
+})
+
+describe('fullPathOf', () => {
+  it('joins the session folder and the relative path with Windows separators', () => {
+    expect(fullPathOf('D:\\workspace\\@private\\jk-corp', 'web/src/App.tsx')).toBe('D:\\workspace\\@private\\jk-corp\\web\\src\\App.tsx')
+    expect(fullPathOf('d:/repo/', 'a.ts')).toBe('d:\\repo\\a.ts')
+    expect(fullPathOf('D:\\', 'a.ts')).toBe('D:\\a.ts')
+    expect(fullPathOf('D:\\repo\\', '')).toBe('D:\\repo')
   })
 })

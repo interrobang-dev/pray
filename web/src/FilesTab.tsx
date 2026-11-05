@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type Ref } from 'react'
 import { AddToChatIcon } from './AddToChatIcon'
-import { diffLineRange, diffRowsOf, STATUS_LABELS, STATUS_LETTERS } from './changes'
+import { diffLineRange, diffRowsOf, isOpenable, STATUS_LABELS, STATUS_LETTERS } from './changes'
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor'
 import { CodeView, type CodeFindState } from './CodeView'
-import { chatLocationText, clampLineRange, lineCountOf, locationText, type LineRange } from './codeSelection'
-import { CopyButton } from './CopyButton'
+import { chatLocationText, clampLineRange, fullPathOf, lineCountOf, locationText, type LineRange } from './codeSelection'
+import { CopyMenu } from './CopyMenu'
+import { copyText } from './copyText'
 import { alertDialog, choiceDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import { FileName } from './FileName'
@@ -73,14 +74,16 @@ interface Props {
   onAddToChat: (snippet: string) => void
   /** 입력칸이 없는 세션(외부·휴식·퇴근)이면 그 이유. 있으면 Add to chat 을 막고 title 로 보인다 */
   addToChatBlockReason: string | null
+  /** 이 PC 에서 연 화면 — Copy file(서버가 이 PC 클립보드에 파일을 넣는다)은 이때만 보인다 */
+  isLocal: boolean
 }
 
 /**
- * 세션 패널의 Files 탭: 세션 cwd 를 IDE 처럼 본다. 위 막대(빠른 찾기·경로·편집·저장·Add to chat·Copy path·↻), 왼쪽 트리(폴더를 펼칠 때 받는다)·변경 목록, 오른쪽 파일 보기·편집기·diff.
+ * 세션 패널의 Files 탭: 세션 cwd 를 IDE 처럼 본다. 위 막대(빠른 찾기·경로·편집·저장·Add to chat·Copy 메뉴·↻), 왼쪽 트리(폴더를 펼칠 때 받는다)·변경 목록, 오른쪽 파일 보기·편집기·diff.
  * 편집은 연필 버튼으로 들어가고 이 PC(127.0.0.1) 접속에서만 된다 (서버가 파일마다 editBlockReason 으로 알려 준다).
  * 폰은 트리 → 파일을 누르면 보기 → ← 로 트리. 세션마다 App 이 key 로 새로 만든다
  */
-export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: Props) {
+export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, isLocal }: Props) {
   const saved = sessionViews.get(sessionId)
   const [folders, setFolders] = useState<Record<string, FolderState>>(saved?.folders ?? {})
   const [expanded, setExpanded] = useState<Set<string>>(saved?.expanded ?? new Set())
@@ -331,6 +334,11 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
   const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing || isHistory ? null : lineRange
   /** 경로 표시줄의 파일. History 면 고른 커밋의 파일이고 Add to chat·Copy path 는 없다 (지난 커밋의 줄 번호라 위치로 공유하지 않는다) */
   const navPath = isHistory ? (history.selectedHash ? history.selectedFile : null) : shownPath
+  /** Changes 에서 고른 파일이 지운·없어진 것 — Copy file 을 막는다 */
+  const isShownFileGone =
+    isChanges && changesState.status === 'ok' && changesState.changes.kind !== 'none'
+      ? changesState.changes.files.some((file) => file.path === selectedChange && !isOpenable(file.status))
+      : false
   const changesKind = changesState.status === 'ok' ? changesState.changes.kind : null
   /** 파일별 히스토리를 막는 이유 (변경 목록을 받아 git 이 아님을 알 때만) */
   const fileHistoryBlock = changesKind === 'svn' ? 'available for git only' : changesKind === 'none' ? 'not a git repository' : null
@@ -593,7 +601,27 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason }: 
             >
               <AddToChatIcon />
             </button>
-            <CopyButton text={() => locationText(shownPath, locationRange())} label="Copy path" />
+            <CopyMenu
+              label="Copy"
+              items={[
+                {
+                  label: 'Copy path',
+                  title: isEditing ? `${shownPath} (with the selected lines)` : locationText(shownPath, shownRange),
+                  copy: () => copyText(locationText(shownPath, locationRange())),
+                },
+                { label: 'Copy full path', title: fullPathOf(cwd, shownPath), copy: () => copyText(fullPathOf(cwd, shownPath)) },
+                ...(isLocal
+                  ? [
+                      {
+                        label: 'Copy file',
+                        title: isShownFileGone ? 'The file is gone from the working copy' : 'Copy the file to paste it in Explorer or a messenger',
+                        isDisabled: isShownFileGone,
+                        copy: () => copyFileToClipboard(sessionId, shownPath),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </>
         )}
         <button type="button" className="ws-reload" onClick={() => guardEdit(() => setReloadId((id) => id + 1))} title="Reload" aria-label="Reload">
@@ -758,6 +786,23 @@ function entryOf(folders: Record<string, FolderState>, path: string): WorkspaceE
 /**
  * 변경 목록 (Changes): 머리줄(git · 브랜치 / SVN · ↻. 개수는 탭 배지) + 상태 글자·이름·폴더 줄. 받는 중·실패·형상관리 없음·명령 실패·변경 없음은 회색 한 줄
  */
+/** 서버가 이 PC 의 클립보드에 그 파일을 넣는다 (탐색기 Ctrl+C 와 같은 파일 목록). 실패하면 서버 문구를 창으로 보이고 false */
+async function copyFileToClipboard(sessionId: string, path: string): Promise<boolean> {
+  let response: Response
+  try {
+    response = await fetch(apiUrl(sessionId, 'file/copy', { path }), { method: 'POST' })
+  } catch {
+    await alertDialog("Couldn't copy the file: network error", { title: 'Copy failed' })
+    return false
+  }
+  if (response.ok) return true
+  const body = (await response.json().catch(() => null)) as { message?: string } | null
+  // 재시작 전 옛 서버는 이 경로가 없어 JSON 이 아닌 404 다
+  const reason = body?.message ?? (response.status === 404 ? 'the server needs a restart to support this' : `HTTP ${response.status}`)
+  await alertDialog(`Couldn't copy the file: ${reason}`, { title: 'Copy failed' })
+  return false
+}
+
 function ChangesList({ state, selectedPath, onOpen, onReload }: { state: ChangesState; selectedPath: string | null; onOpen: (path: string) => void; onReload: () => void }) {
   const changes = state.status === 'ok' ? state.changes : null
   const files: ChangedFile[] = changes && changes.kind !== 'none' ? changes.files : []

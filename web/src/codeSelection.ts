@@ -56,6 +56,15 @@ export function locationText(path: string, range: LineRange | null): string {
   return range.start === range.end ? `${path}:${range.start}` : `${path}:${range.start}-${range.end}`
 }
 
+/**
+ * 이 PC 의 전체 경로: 세션 cwd 와 cwd 기준 `/` 구분 path 를 Windows 구분자 `\` 로 잇는다 (`D:\repo\src\App.tsx`).
+ * cwd 끝 구분자는 하나로 맞추고(드라이브 루트 `D:\` 도), path 가 비면 cwd 그대로
+ */
+export function fullPathOf(cwd: string, path: string): string {
+  const root = cwd.replace(/\//g, '\\').replace(/\\+$/, '')
+  return path ? [root, ...path.split('/').filter(Boolean)].join('\\') : root || cwd
+}
+
 /** 대화 입력칸에 넣는 위치: 백틱으로 감싼다 (마크다운 코드로 보이고, 경로의 `_`·`*` 가 서식이 되지 않는다) */
 export function chatLocationText(path: string, range: LineRange | null): string {
   return `\`${locationText(path, range)}\``

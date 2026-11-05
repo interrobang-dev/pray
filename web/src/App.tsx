@@ -1909,6 +1909,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 key={selected.id}
                 sessionId={selected.id}
                 cwd={selected.cwd}
+                isLocal={isLocal}
                 onAddToChat={addToChat}
                 addToChatBlockReason={
                   isSelectedLiveWeb
