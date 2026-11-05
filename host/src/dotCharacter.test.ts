@@ -150,6 +150,28 @@ describe('assignCharacter', () => {
     expect(assignCharacter(session(ids[0]), one, inUse.slice(0, 3))).toEqual(assignCharacter(session(ids[0]), one, inUse.slice(0, 3)))
   })
 
+  it('without a random, gives each character its own color order (seeded by session + character)', () => {
+    let different = 0
+    for (const id of ids.slice(0, 20)) {
+      const second = (character: string) => assignCharacter(session(id), [{ id: character, pool: 'member' }], [use('x', { id: character })])!
+      if (`${second('dev-a').hair}|${second('dev-a').top}` !== `${second('dev-b').hair}|${second('dev-b').top}`) different++
+    }
+    expect(different).toBeGreaterThan(15)
+  })
+
+  it('uses the given random for ties and colors (the Auto button), keeping the rules', () => {
+    expect(assignCharacter(session(ids[0]), pool, [], () => 0)?.id).toBe(pool[0].id)
+    expect(assignCharacter(session(ids[0]), pool, [], () => 0.999)?.id).toBe(pool.at(-1)!.id)
+    // 덜 쓰인 인물 규칙은 그대로: 하나만 안 쓰였으면 난수와 상관없이 그것
+    const inUse = [use('a', { id: 'boss-m1' }), use('b', { id: 'boss-f1' }), use('c', { id: 'dev-m1' })]
+    for (const r of [0, 0.5, 0.999]) expect(assignCharacter(session(ids[0]), pool, inUse, () => r)?.id).toBe('dev-f1')
+    // 색: 기본색이 쓰였으면 난수로 섞은 순서 — 다른 난수면 대개 다른 색
+    const taken = [use('a', { id: 'dev-f1' })]
+    const one: DotCharacter[] = [{ id: 'dev-f1', pool: 'member' }]
+    const looks = new Set([0.01, 0.3, 0.6, 0.9].map((r) => { const look = assignCharacter(session(ids[0]), one, taken, () => r)!; return `${look.hair}|${look.top}` }))
+    expect(looks.size).toBeGreaterThan(1)
+  })
+
   it('reuses the hash combo when every combo is taken', () => {
     const full = [use('base', { id: 'dev-f1' }), ...HAIR_COLORS.flatMap((hair) => TOP_COLORS.map((top) => use(`${hair}${top}`, { id: 'dev-f1', hair, top })))]
     const oneFemale = pool.filter((c) => c.id !== 'boss-f1')

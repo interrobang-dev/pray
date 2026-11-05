@@ -936,18 +936,26 @@ export function App({ isLocal }: { isLocal: boolean }) {
       const initialLook = kind === 'new' ? newSessionAutoLook(teamId, characters) : renameTarget ? dotLookOf(renameTarget, characters) : null
       const shownLook = choice.id ? { id: choice.id, hair: choice.hair, top: choice.top } : initialLook
       const skip = [...autoSkip, ...(autoSkip.length === 0 && initialLook && shownLook !== initialLook ? [initialLook] : []), ...(shownLook ? [shownLook] : [])]
-      const next = nextAutoLook({ id: kind === 'new' || !renameTarget ? sessionCharacterSeed : renameTarget.id, gender, teamId }, characters, skip)
+      const next = nextAutoLook({ id: kind === 'new' || !renameTarget ? sessionCharacterSeed : renameTarget.id, gender, teamId }, characters, skip, Math.random)
       setAutoSkip(skip)
       if (next) (kind === 'new' ? setSessionCharacter : setRenameCharacter)({ ...next, isAuto: true })
     }
     setAutoPulse((count) => count + 1)
   }
 
-  /** 자동 배정 규칙(assignCharacter)으로 고른 인물: 근무·휴식 세션이 지금 보이는 인물 + skip 을 쓰는 중으로 친다 */
-  function nextAutoLook(target: { id: string; gender: 'male' | 'female' | null; teamId: string | null }, characters: DotCharacter[], skip: DotLook[]): DotLook | null {
+  /**
+   * 자동 배정 규칙(assignCharacter)으로 고른 인물: 근무·휴식 세션이 지금 보이는 인물 + skip 을 쓰는 중으로 친다.
+   * random 을 주면(Auto 버튼) 동점 고르기·색이 누를 때마다 무작위, 안 주면 결정적 (창을 열 때의 처음 인물)
+   */
+  function nextAutoLook(
+    target: { id: string; gender: 'male' | 'female' | null; teamId: string | null },
+    characters: DotCharacter[],
+    skip: DotLook[],
+    random?: () => number,
+  ): DotLook | null {
     const inUse = charactersInUse(snapshot.sessions.filter((other) => attendanceOf(other) !== 'off'), characters)
     const skipped = skip.map((look, index) => ({ sessionId: `skip-${index}`, teamId: target.teamId, look }))
-    return assignCharacter(target, characters, [...inUse, ...skipped])
+    return assignCharacter(target, characters, [...inUse, ...skipped], random)
   }
 
   function openRename(session: Session) {
