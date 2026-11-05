@@ -1823,27 +1823,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 ✎
               </button>
               <span className="model-info">
-                {restartingIds.has(selected.id) ? (
-                  <span className="model-chip" title="Restarting with the new model / effort">
-                    Restarting…
-                  </span>
-                ) : isSelectedLiveWeb ? (
-                  <button
-                    type="button"
-                    className="model-chip is-button"
-                    title={[selected.model, nextLabel(selected) && `Next: ${nextLabel(selected)}`, 'Change model & effort'].filter(Boolean).join('\n')}
-                    onClick={() => setModelModalSessionId(selected.id)}
-                  >
-                    {modelLabel(selected) ?? 'Model'}
-                    {nextLabel(selected) && <span className="model-next"> → {nextLabel(selected)}</span>}
-                  </button>
-                ) : (
-                  modelLabel(selected) && (
-                    <span className="model-chip" title={selected.model ?? undefined}>
-                      {modelLabel(selected)}
-                    </span>
-                  )
-                )}
                 {selectedHandOver && (
                   <button
                     type="button"
@@ -1928,7 +1907,11 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 footer={renderPanelFooter(selected)}
                 contextSize={selectedContext}
                 turnCache={selected ? turnCacheOf(selected.turnUsage) : null}
-                modelText={selected.model ? modelName(selected.model) : null}
+                modelText={modelLabel(selected)}
+                modelFullName={selected.model ?? null}
+                modelNextText={nextLabel(selected)}
+                isModelRestarting={restartingIds.has(selected.id)}
+                onChangeModel={() => setModelModalSessionId(selected.id)}
                 // 휴식·퇴근 세션은 훅 상태가 남아 있어도 작업 중·승인 대기로 보지 않는다
                 isApprovalNeeded={isSelectedPresent && selected.status === 'needs-approval'}
                 isWorking={isSelectedPresent && selected.status === 'working'}

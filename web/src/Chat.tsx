@@ -45,8 +45,16 @@ interface Props {
   contextSize?: { text: string; level: string; title: string } | null
   /** 문맥 크기 옆 마지막 차례 캐시율 ("95% cached"; title 은 툴팁·aria-label). 없으면 그 부분 없음 */
   turnCache?: { text: string; title: string } | null
-  /** 입력 상자 오른쪽 아래에 문맥 크기 옆으로 보일 모델 이름 ("Opus 5.5", effort 없음) */
+  /** 입력 상자 오른쪽 아래에 문맥 크기 옆으로 보일 모델·effort ("Opus 5.5 · xhigh"). 누르면 `onChangeModel` */
   modelText?: string | null
+  /** 모델 버튼 툴팁 첫 줄의 모델 ID ("claude-opus-5-5") */
+  modelFullName?: string | null
+  /** 다음에 뜰 때 쓸 모델·effort 가 지금과 다르면 그 글 ("Sonnet · high"). 버튼 글 뒤 " → …" */
+  modelNextText?: string | null
+  /** 모델·effort 를 바꿔 다시 띄우는 중이면 버튼 대신 "Restarting…" */
+  isModelRestarting?: boolean
+  /** 모델 버튼을 누르면 모델·effort 변경 창을 연다 */
+  onChangeModel?: () => void
   isApprovalNeeded: boolean
   /** 훅 상태가 working 이면 대화 맨 아래에 작업 중 표시기 */
   isWorking: boolean
@@ -1112,6 +1120,10 @@ export function Chat({
   contextSize,
   turnCache,
   modelText,
+  modelFullName,
+  modelNextText,
+  isModelRestarting,
+  onChangeModel,
   isApprovalNeeded,
   isWorking,
   workingSince,
@@ -1830,7 +1842,7 @@ export function Chat({
         onBtw={sendBtw}
         onOpenBtw={openBtwForInput}
       />
-      {isWritable && (contextSize || turnCache || modelText) && (
+      {isWritable && (contextSize || turnCache || modelText || isModelRestarting || onChangeModel) && (
         <div className="composer-meta">
           {[
             contextSize && (
@@ -1843,7 +1855,24 @@ export function Chat({
                 {turnCache.text}
               </span>
             ),
-            modelText && <span key="model">{modelText}</span>,
+            isModelRestarting ? (
+              <span key="model" title="Restarting with the new model / effort">
+                Restarting…
+              </span>
+            ) : onChangeModel ? (
+              <button
+                key="model"
+                type="button"
+                className="composer-model"
+                title={[modelFullName, modelNextText && `Next: ${modelNextText}`, 'Change model & effort'].filter(Boolean).join('\n')}
+                onClick={onChangeModel}
+              >
+                {modelText ?? 'Model'}
+                {modelNextText && <span className="model-next"> → {modelNextText}</span>}
+              </button>
+            ) : (
+              modelText && <span key="model">{modelText}</span>
+            ),
           ]
             .filter(Boolean)
             .flatMap((part, index) => (index === 0 ? [part] : [' · ', part]))}
