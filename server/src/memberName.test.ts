@@ -126,6 +126,16 @@ describe('pickMemberName', () => {
     expect(pickMemberName(used, () => 0).name).toBe(ALL[1])
   })
 
+  it('picks only the given gender, and its numbered names when all are taken', () => {
+    for (const r of [0, 0.5, 0.99]) {
+      expect(pickMemberName([], () => r, 'male').gender).toBe('male')
+      expect(MALE_NAMES).toContain(pickMemberName([], () => r, 'male').name)
+      expect(FEMALE_NAMES).toContain(pickMemberName([], () => r, 'female').name)
+    }
+    expect(pickMemberName(FEMALE_NAMES, () => 0, 'female')).toEqual({ name: `${FEMALE_NAMES[0]} 2`, gender: 'female' })
+    expect(pickMemberName(FEMALE_NAMES, () => 0, 'male')).toEqual({ name: MALE_NAMES[0], gender: 'male' })
+  })
+
   it('adds a number when every name is taken, then the next number', () => {
     expect(pickMemberName(ALL, () => 0)).toEqual({ name: `${ALL[0]} 2`, gender: 'female' })
     const twoTaken = [...ALL, ...ALL.map((n) => `[QA] ${n} 2`)]

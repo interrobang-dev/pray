@@ -421,81 +421,42 @@ header button.icon svg {
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
-/* 인물 고르기의 Auto 카드 (CharacterPicker): 고르기 목록 맨 위 한 줄 카드 [실루엣 | Auto · 안내]. 골라지면 인물 칸처럼 강조색 테두리 */
-.character-auto-card {
+/* 프로필 카드의 Auto 버튼 (CharacterPicker): 누를 때마다 이름(팀 세션)·인물을 같이 새로 정한다. 옅은 강조 바탕 */
+.create .character-auto-button {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.create .character-auto-button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.character-auto-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 4px 12px 4px 4px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  text-align: left;
-}
-.character-auto-card.is-selected {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-.character-auto-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  gap: 8px;
   min-width: 0;
 }
-.character-auto-text > span {
-  color: var(--muted);
-  font-size: calc(11px * var(--font-scale));
-}
-/* 실루엣: 인물 윤곽만 옅은 회색(아틀라스 CSS mask) + 상자 정가운데 "?" 배지. 색은 테마를 따른다 */
-.character-auto-art {
-  position: relative;
-  flex-shrink: 0;
-  border-radius: 6px;
-  background: var(--avatar-bg);
-}
-.character-silhouette {
-  position: absolute;
-  inset: 0;
-  background: var(--muted);
-  opacity: 0.45;
-  mask-repeat: no-repeat;
-  -webkit-mask-repeat: no-repeat;
-}
-.character-auto-mark {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--line-strong);
-  border-radius: 50%;
-  background: var(--panel);
-  color: var(--text);
-  font-size: calc(15px * var(--font-scale));
-  font-weight: 700;
-  line-height: 1;
-}
-/* Auto 일 때 자동으로 정해진 인물 칸: 점선 강조 테두리 + 오른쪽 위 "Auto" 꼬리표 (직접 고른 칸의 실선과 구분) */
-.character-picker button.is-auto-pick {
-  border: 1px dashed var(--accent);
-}
+/* 지금 인물이 자동으로 정해진 것이면 미리보기 오른쪽 위에 "Auto" */
 .character-auto-tag {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  padding: 0 4px;
+  top: 6px;
+  right: 6px;
+  padding: 0 6px;
   border-radius: 4px;
   background: var(--accent);
   color: var(--on-accent);
   font-size: calc(10px * var(--font-scale));
-  line-height: 15px;
+  line-height: 16px;
 }
-/* Auto 카드를 누를 때마다 그 칸이 한 번 반짝인다 (key 로 다시 시작). reduced-motion 이면 없음 */
+/* Auto 를 누를 때마다 미리보기가 한 번 반짝인다 (key 로 다시 시작). reduced-motion 이면 없음 */
 .character-pulse {
   position: absolute;
   inset: -1px;
@@ -518,10 +479,6 @@ header button.icon svg {
     animation: none;
   }
 }
-/* Auto 일 때 색 칸은 잠근다 (자동 인물의 색을 보이기만) */
-.character-swatches.is-disabled {
-  opacity: 0.45;
-}
 .character-name {
   font-size: calc(11px * var(--font-scale));
   color: var(--muted);
@@ -530,8 +487,8 @@ header button.icon svg {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 이름 바꾸기·세션 추가 창 (App.tsx character-modal, 모든 세션): 넓은 두 칸 [고르기 목록: Auto 카드 위·인물 격자 아래 | 큰 미리보기·색 칸].
-   창은 화면 높이 안이고 제목·Role·Name·Save·Auto 카드는 그대로 둔 채 인물 격자만 스크롤한다 (안 묶으면 Save 가 화면 밖으로 잘린다). 폰은 끝의 폰 블록 */
+/* 이름 바꾸기·세션 추가 창 (App.tsx character-modal, 모든 세션): 위 프로필 카드 [큰 미리보기 | Role·Name · Auto · 색 칸], 아래 인물 격자.
+   창은 화면 높이 안이고 인물 격자만 스크롤한다 (안 묶으면 Save 가 화면 밖으로 잘린다). 폰은 끝의 폰 블록 */
 .modal.character-modal {
   width: 720px;
   max-height: calc(100dvh - 48px);
@@ -547,55 +504,48 @@ header button.icon svg {
 .character-layout {
   flex: 1 1 auto;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 12px;
-}
-.character-choices {
-  min-width: 0;
-  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
-/* padding: 색 칸 선택 고리(box-shadow, 바깥 4px)가 스크롤 영역 가장자리에서 잘리지 않게 */
-.character-selected {
+.character-profile {
+  flex-shrink: 0;
+  display: flex;
+  gap: 16px;
+}
+.character-preview-box {
+  position: relative;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+/* padding: 색 칸 선택 고리(box-shadow, 바깥 4px)가 잘리지 않게 */
+.character-profile-side {
+  flex: 1;
   min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px;
-}
-.character-layout .character-colors {
+  display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  gap: 10px;
+  padding: 0 4px;
 }
-/* position: relative — Auto 카드를 누를 때 자동 인물 칸까지 격자만 스크롤하는 offsetTop 기준 */
+/* position: relative — Auto 를 누를 때 고른 칸까지 격자만 스크롤하는 offsetTop 기준 */
 .character-layout .character-picker {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   align-content: start;
-}
-/* 고른 인물의 큰 미리보기 + 머리·윗옷 색 칸 */
-.character-colors {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+  padding: 2px;
 }
 .character-preview {
+  display: block;
+  box-sizing: border-box;
+  min-width: 128px;
+  min-height: 192px;
   flex-shrink: 0;
   image-rendering: pixelated;
   background: var(--avatar-bg);
   border: 1px solid var(--line);
   border-radius: 8px;
-}
-.character-color-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
 }
 .character-swatches {
   display: flex;
@@ -6574,21 +6524,29 @@ li.group.drop-after::after {
     width: calc(100vw - 32px);
     max-width: none;
   }
-  /* 이름 바꾸기 창: 한 칸으로 [큰 미리보기 + 색 칸(가로)] → Auto 카드 → 인물 격자(이것만 스크롤) */
+  /* 이름 바꾸기·세션 추가 창: 프로필 카드 오른쪽은 Role·Name 을 위아래로, Auto 버튼은 전체 폭 40px, 그 아래 인물 격자(이것만 스크롤) */
   .modal.character-modal {
     width: calc(100vw - 32px);
     max-height: calc(100dvh - 32px);
   }
-  .character-layout {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
+  .character-profile {
+    gap: 12px;
   }
-  .character-selected {
-    order: -1;
+  .character-profile .field-row {
+    flex-direction: column;
   }
-  .character-layout .character-colors {
-    flex-direction: row;
-    align-items: center;
+  /* .create .field.role 의 84px(가로 배치 폭)가 세로 배치에서 높이가 되지 않게 (그 규칙이 이 블록보다 뒤에 있어 한 단계 더 구체적으로) */
+  .character-profile .field-row .field.role {
+    flex: none;
+  }
+  .character-auto-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .create .character-auto-button {
+    justify-content: center;
+    height: 40px;
   }
   /* 팀 만들기 창·폴더 고르기: 손가락으로 누르기 쉽게 40px, 목록은 주소창이 보여도 화면 안 */
   .modal.folder-picker-modal {

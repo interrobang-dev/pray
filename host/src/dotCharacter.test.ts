@@ -139,6 +139,17 @@ describe('assignCharacter', () => {
     expect(inUse.slice(4).every((u) => u.look.hair !== null && u.look.top !== null)).toBe(true)
   })
 
+  it('after the default colors, varies both hair and top from pick to pick (shuffled by the session hash)', () => {
+    const one: DotCharacter[] = [{ id: 'solo', pool: 'member' }]
+    const inUse: CharacterInUse[] = []
+    for (let step = 0; step < 9; step++) inUse.push({ sessionId: `s${step}`, teamId: null, look: assignCharacter(session(ids[0]), one, inUse)! })
+    const colored = inUse.slice(1).map((u) => u.look)
+    expect(new Set(colored.map((look) => look.hair)).size).toBeGreaterThan(3)
+    expect(new Set(colored.map((look) => look.top)).size).toBeGreaterThan(3)
+    // 같은 세션이면 같은 순서
+    expect(assignCharacter(session(ids[0]), one, inUse.slice(0, 3))).toEqual(assignCharacter(session(ids[0]), one, inUse.slice(0, 3)))
+  })
+
   it('reuses the hash combo when every combo is taken', () => {
     const full = [use('base', { id: 'dev-f1' }), ...HAIR_COLORS.flatMap((hair) => TOP_COLORS.map((top) => use(`${hair}${top}`, { id: 'dev-f1', hair, top })))]
     const oneFemale = pool.filter((c) => c.id !== 'boss-f1')

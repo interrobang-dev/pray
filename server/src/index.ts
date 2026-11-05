@@ -1261,12 +1261,13 @@ app.post('/api/sessions/:id/attachments', async (req, res) => {
 })
 
 /**
- * 세션 이름·역할 `{ name?, position? }`. 준 것만 바꾸고, 빈 글·null 이면 지운다 (이름은 자동 제목(ai-title)으로). 외부 세션에도 붙일 수 있다.
- * 이름이 옛 꼴 "[역할] 이름" 이면 나눠 역할도 바꾼다 (따로 준 역할이 있으면 그것이 이긴다)
+ * 세션 이름·역할 `{ name?, position?, gender? }`. 준 것만 바꾸고, 빈 글·null 이면 지운다 (이름은 자동 제목(ai-title)으로). 외부 세션에도 붙일 수 있다.
+ * 이름이 옛 꼴 "[역할] 이름" 이면 나눠 역할도 바꾼다 (따로 준 역할이 있으면 그것이 이긴다).
+ * gender(male|female)는 이름과 같이 올 때만 — 화면 이름 다시 뽑기가 준 이름을 그대로 저장할 때 그 성별로 남긴다 (그 밖의 값은 무시)
  */
 app.patch('/api/sessions/:id', (req, res) => {
   const sessionId = req.params.id
-  const { name, position } = req.body as { name?: unknown; position?: unknown }
+  const { name, position, gender } = req.body as { name?: unknown; position?: unknown; gender?: unknown }
   const isNameGiven = name !== undefined
   const isPositionGiven = position !== undefined
   if (!isNameGiven && !isPositionGiven) {
@@ -1288,6 +1289,8 @@ app.patch('/api/sessions/:id', (req, res) => {
     const oldName = listSessionNames()[sessionId]
     if (oldName !== undefined && (!label.name || givenNameOf(oldName) !== givenNameOf(label.name))) setGender(sessionId, null)
     setSessionName(sessionId, label.name)
+    const namedGender = label.name ? parseGender(gender) : null
+    if (namedGender) setGender(sessionId, namedGender)
     if (isPositionGiven || label.position) setPosition(sessionId, label.position)
   } else {
     setPosition(sessionId, parsedPosition)
@@ -2308,6 +2311,7 @@ async function usedMemberNames(teamId: string): Promise<string[]> {
 /**
  * 세션 추가 모달에 미리 채울 이름 → { name, gender }. name 은 이름만이고 역할은 붙이지 않는다 (화면이 역할 칸에 따로 넣는다).
  * ?role= 은 꼴만 확인한다. 이름 회피는 팀 전체 기준 (?partId= 는 확인만 한다).
+ * ?gender=male|female 이면 그 성별 이름만(그 밖의 값은 무시), ?exclude= (여럿 가능) 는 쓰인 이름처럼 피한다 — 화면의 이름 다시 뽑기가 방금 보인 이름을 다시 내지 않게.
  * 추천만 하고 recentMemberNames 에 넣지 않는다 — 모달을 열기만 하고 닫을 수 있어서
  */
 app.get('/api/team/:teamId/member-name', async (req, res) => {
@@ -2318,7 +2322,8 @@ app.get('/api/team/:teamId/member-name', async (req, res) => {
     res.status(400).json({ message: 'role must be 1–12 characters with no [ ] or line breaks (e.g. Dev, Lead, PL)' })
     return
   }
-  res.json(pickMemberName(await usedMemberNames(unit.team.id)))
+  const exclude = ([] as unknown[]).concat(req.query.exclude ?? []).filter((value): value is string => typeof value === 'string')
+  res.json(pickMemberName([...(await usedMemberNames(unit.team.id)), ...exclude], Math.random, parseGender(req.query.gender)))
 })
 
 /**

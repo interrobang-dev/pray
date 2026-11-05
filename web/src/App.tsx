@@ -256,6 +256,16 @@ export function App({ isLocal }: { isLocal: boolean }) {
   /** 세션 추가 창의 인물 고르기 값과, 아직 ID 가 없는 새 세션의 자동 후보를 고를 때 해시에 쓸 임시 ID (창을 열 때마다 새로) */
   const [sessionCharacter, setSessionCharacter] = useState<CharacterChoice>({ id: null, hair: null, top: null })
   const [sessionCharacterSeed, setSessionCharacterSeed] = useState('')
+  /** 이름 바꾸기 창 Name 칸 글 (이름 다시 뽑기가 바꾸므로 state) */
+  const [renameName, setRenameName] = useState('')
+  /** 이름 바꾸기 창에서 Auto 버튼이 준 이름·성별. Name 칸이 이 이름 그대로면 그 성별을 같이 저장한다 */
+  const [autoName, setAutoName] = useState<MemberNameSuggestion | null>(null)
+  /** Auto 버튼으로 그동안 보인 이름 (다시 내지 않게)·인물 (건너뛰게). 두 창 공용, 창을 열 때 비운다 */
+  const [autoNames, setAutoNames] = useState<string[]>([])
+  const [autoSkip, setAutoSkip] = useState<DotLook[]>([])
+  /** Auto 가 이름을 받는 중 (버튼 잠금) · Auto 를 누른 횟수 (미리보기 반짝임) */
+  const [isAutoBusy, setIsAutoBusy] = useState(false)
+  const [autoPulse, setAutoPulse] = useState(0)
   /** 파트 추가 모달. 팀 "⋯" 의 "파트 추가" 로 열린다 */
   const [partForm, setPartForm] = useState<{ teamId: string } | null>(null)
   const [partLocation, setPartLocation] = useState<'folder' | 'worktree'>('folder')
@@ -642,7 +652,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
     }
     // 인물: 직접 고른 것·뽑은 후보는 그대로, 그대로 Auto 면 창에 보이던 자동 인물을 자동 배정으로 (아틀라스를 못 읽었으면 빼서 서버가 배정)
     const characters = dotHeadArt?.sheet.characters
-    const autoCharacter = sessionCharacter.id === null && characters ? newSessionAutoLook(sessionForm.teamId, characters, []) : null
+    const autoCharacter = sessionCharacter.id === null && characters ? newSessionAutoLook(sessionForm.teamId, characters) : null
     const character = sessionCharacter.id ? sessionCharacter : autoCharacter ? { ...autoCharacter, isAuto: true } : undefined
     setIsSessionSubmitting(true)
     let response: Response
@@ -846,8 +856,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
     event.preventDefault()
     if (!renameTarget) return
     const form = new FormData(event.currentTarget)
-    // 바뀐 이름·역할만 보낸다 (이름만 고쳤는데 역할이 지워지지 않게)
-    const patch = renamePatch(renameTarget, String(form.get('name') ?? ''), String(form.get('position') ?? ''))
+    // 바뀐 이름·역할만 보낸다 (이름만 고쳤는데 역할이 지워지지 않게). Auto 버튼이 준 이름 그대로면 그 성별도
+    const namePatch = renamePatch(renameTarget, renameName, String(form.get('position') ?? ''))
+    const patch = namePatch.name !== undefined && autoName?.gender && namePatch.name === autoName.name ? { ...namePatch, gender: autoName.gender } : namePatch
     if (Object.keys(patch).length > 0) {
       const response = await postJson(`/api/sessions/${renameTarget.id}`, 'PATCH', patch)
       if (!response.ok) {
@@ -873,13 +884,63 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setRenameTarget(null)
   }
 
+  /** 이름 바꾸기 창의 지금 이름 성별: Auto 가 준 이름 그대로면 그 성별, 원래 이름 그대로면 세션 성별, 직접 고쳤으면 없음 */
+  function renameGenderOf(session: Session): 'male' | 'female' | null {
+    if (autoName && renameName.trim() === autoName.name) return autoName.gender ?? null
+    return renameName.trim() === editableNameOf(session) ? (session.gender ?? null) : null
+  }
+
   /**
-   * 인물 고르기 창의 "Auto" 가 보일 인물: 지금 자동(배정·해시)이면 지금 보이는 것, 고른 인물이면 Auto 로 돌아갈 때 서버가 새로 배정할 것을 같은 규칙으로 미리 본다.
-   * skip(Auto 카드로 그동안 보인 후보)이 있으면 그것도 쓰는 중으로 쳐서 다음 후보를 고른다
+   * 세션 창(세션 추가·이름 바꾸기)의 Auto 버튼: 무엇을 골랐든·이름을 직접 썼든 이름과 인물을 같이 새로 정한다.
+   * 이름은 팀 세션만(이름 추천 API 가 팀 단위) 성별 구분 없이 뽑고(그동안 보인 이름은 exclude), 인물은 그 이름 성별의 다음 자동 후보
+   * (자동 배정 규칙, 그동안 보인 인물은 건너뛴다). 팀이 없거나 이름을 못 받으면 인물만 바꾸고 성별은 지금 이름 기준
    */
-  function autoLookOf(session: Session, characters: DotCharacter[], skip: DotLook[]): DotLook | null {
-    if (skip.length === 0 && (!session.character || session.character.isAuto)) return dotLookOf(session, characters)
-    return nextAutoLook({ id: session.id, gender: session.gender ?? null, teamId: session.teamId }, characters, skip)
+  async function pressAuto(kind: 'new' | 'rename') {
+    const target = kind === 'new' ? sessionForm : renameTarget
+    if (!target || isAutoBusy) return
+    const teamId = target.teamId ?? null
+    const characters = dotHeadArt?.sheet.characters ?? []
+    const choice = kind === 'new' ? sessionCharacter : renameCharacter
+    let gender = kind === 'new' ? newSessionGender(teamId) : renameTarget ? renameGenderOf(renameTarget) : null
+    if (teamId) {
+      const shownName = kind === 'new' ? modalName(typedSessionName, suggestedSessionName?.name ?? null, true) : renameName
+      const query = new URLSearchParams({ role: MEMBER_POSITION })
+      if (target.partId) query.set('partId', target.partId)
+      for (const name of [...autoNames, shownName.trim()].filter(Boolean)) query.append('exclude', name)
+      setIsAutoBusy(true)
+      let data: MemberNameSuggestion | null = null
+      try {
+        const response = await fetch(`/api/team/${teamId}/member-name?${query}`)
+        data = response.ok ? ((await response.json()) as MemberNameSuggestion) : null
+      } catch {
+        data = null
+      } finally {
+        setIsAutoBusy(false)
+      }
+      if (data) {
+        const picked = data
+        // 이번에 보이던 이름(처음 추천 이름 포함)과 새 이름 모두 다음에 다시 내지 않는다
+        setAutoNames((names) => [...names, shownName.trim(), picked.name].filter(Boolean))
+        if (kind === 'new') {
+          setSuggestedSessionName(picked)
+          setTypedSessionName(null)
+        } else {
+          setRenameName(picked.name)
+          setAutoName(picked)
+        }
+        gender = picked.gender ?? null
+      }
+    }
+    if (characters.length > 0) {
+      // 건너뛸 인물: 그동안 보인 것 + 지금 보이는 것 + 처음 자동 인물 (직접 고른 뒤 처음 누를 때도 처음 인물이 다시 나오지 않게)
+      const initialLook = kind === 'new' ? newSessionAutoLook(teamId, characters) : renameTarget ? dotLookOf(renameTarget, characters) : null
+      const shownLook = choice.id ? { id: choice.id, hair: choice.hair, top: choice.top } : initialLook
+      const skip = [...autoSkip, ...(autoSkip.length === 0 && initialLook && shownLook !== initialLook ? [initialLook] : []), ...(shownLook ? [shownLook] : [])]
+      const next = nextAutoLook({ id: kind === 'new' || !renameTarget ? sessionCharacterSeed : renameTarget.id, gender, teamId }, characters, skip)
+      setAutoSkip(skip)
+      if (next) (kind === 'new' ? setSessionCharacter : setRenameCharacter)({ ...next, isAuto: true })
+    }
+    setAutoPulse((count) => count + 1)
   }
 
   /** 자동 배정 규칙(assignCharacter)으로 고른 인물: 근무·휴식 세션이 지금 보이는 인물 + skip 을 쓰는 중으로 친다 */
@@ -892,6 +953,10 @@ export function App({ isLocal }: { isLocal: boolean }) {
   function openRename(session: Session) {
     const { character } = session
     setRenameCharacter(character && !character.isAuto ? { id: character.id, hair: character.hair, top: character.top } : { id: null, hair: null, top: null })
+    setRenameName(editableNameOf(session))
+    setAutoName(null)
+    setAutoNames([])
+    setAutoSkip([])
     setRenameTarget(session)
   }
 
@@ -910,6 +975,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setTypedSessionName(null)
     setTypedSessionPosition(null)
     setSessionCharacter({ id: null, hair: null, top: null })
+    setAutoNames([])
+    setAutoSkip([])
     // 해시에만 쓰는 임시 ID. crypto.randomUUID 는 다른 PC 의 http 접속(보안 컨텍스트 아님)에 없다
     setSessionCharacterSeed(`new-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`)
     setSessionForm({ teamId, partId })
@@ -1220,10 +1287,14 @@ export function App({ isLocal }: { isLocal: boolean }) {
     return leadSessionId ? snapshot.sessions.find((s) => s.id === leadSessionId && s.isAlive) : undefined
   }
 
-  /** 세션 추가 창의 자동 인물: 임시 ID 해시·추천 이름의 성별(이름을 고치지 않았을 때)·그 팀 기준 */
-  function newSessionAutoLook(teamId: string | null, characters: DotCharacter[], skip: DotLook[]): DotLook | null {
-    const gender = teamId && typedSessionName === null ? (suggestedSessionName?.gender ?? null) : null
-    return nextAutoLook({ id: sessionCharacterSeed, gender, teamId }, characters, skip)
+  /** 세션 추가 창의 지금 이름 성별: 추천·Auto 이름을 고치지 않았을 때만 */
+  function newSessionGender(teamId: string | null): 'male' | 'female' | null {
+    return teamId && typedSessionName === null ? (suggestedSessionName?.gender ?? null) : null
+  }
+
+  /** 세션 추가 창의 처음 자동 인물: 임시 ID 해시·지금 이름 성별·그 팀 기준 */
+  function newSessionAutoLook(teamId: string | null, characters: DotCharacter[]): DotLook | null {
+    return nextAutoLook({ id: sessionCharacterSeed, gender: newSessionGender(teamId), teamId }, characters, [])
   }
 
   function renderSessionModal(teamId: string | null, partId: string | null) {
@@ -1273,32 +1344,38 @@ export function App({ isLocal }: { isLocal: boolean }) {
             </p>
           )}
           {!team && <input name="cwd" placeholder="Folder path (e.g. D:\workspace\foo)" required autoFocus />}
-          <div className="field-row">
-            <label className="field role">
-              <span>Role</span>
-              <input
-                name="position"
-                placeholder="e.g. FE"
-                value={sessionPosition}
-                onChange={(event) => setTypedSessionPosition(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>Name</span>
-              <input
-                name="name"
-                placeholder="Optional; empty = auto title"
-                value={sessionName}
-                onChange={(event) => setTypedSessionName(event.target.value)}
-                autoFocus={Boolean(team)}
-              />
-            </label>
-          </div>
-          <span className="form-hint">Office character (shown at the desk, as the list avatar and on the Off Duty street)</span>
+          {/* 프로필 카드: 미리보기 | Role·Name · Auto(이름·인물 같이) · 색, 그 아래 인물 격자 */}
           <CharacterPicker
-            autoLook={(characters, skip) => newSessionAutoLook(teamId, characters, skip)}
+            currentAutoLook={(characters) => newSessionAutoLook(teamId, characters)}
             value={sessionCharacter}
             onChange={setSessionCharacter}
+            onAuto={() => void pressAuto('new')}
+            isAutoBusy={isAutoBusy}
+            autoHint={team ? 'Pick a name and a character for me' : 'Pick a character for me'}
+            pulse={autoPulse}
+            fields={
+              <div className="field-row">
+                <label className="field role">
+                  <span>Role</span>
+                  <input
+                    name="position"
+                    placeholder="e.g. FE"
+                    value={sessionPosition}
+                    onChange={(event) => setTypedSessionPosition(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Name</span>
+                  <input
+                    name="name"
+                    placeholder="Optional; empty = auto title"
+                    value={sessionName}
+                    onChange={(event) => setTypedSessionName(event.target.value)}
+                    autoFocus={Boolean(team)}
+                  />
+                </label>
+              </div>
+            }
           />
           <div className="actions">
             <button type="submit" className="primary" disabled={isSessionSubmitting}>
@@ -1767,19 +1844,34 @@ export function App({ isLocal }: { isLocal: boolean }) {
             className="character-modal"
           >
             <form className="create" onSubmit={renameSession}>
-              <div className="field-row">
-                <label className="field role">
-                  <span>Role</span>
-                  <input name="position" defaultValue={positionOf(renameTarget) ?? ''} placeholder="e.g. FE" />
-                </label>
-                <label className="field">
-                  <span>Name</span>
-                  <input name="name" defaultValue={editableNameOf(renameTarget)} placeholder="Empty = back to the auto title" autoFocus />
-                </label>
-              </div>
-              {/* 인물 고르기는 역할과 상관없이 모든 세션 (팀장·파트장·팀원·외부) */}
-              <span className="form-hint">Office character (shown at the desk, as the list avatar and on the Off Duty street)</span>
-              <CharacterPicker autoLook={(characters, skip) => autoLookOf(renameTarget, characters, skip)} value={renameCharacter} onChange={setRenameCharacter} />
+              {/* 프로필 카드는 역할과 상관없이 모든 세션 (팀장·파트장·팀원·외부). 이름은 팀 세션만 Auto 가 바꾼다 */}
+              <CharacterPicker
+                currentAutoLook={(characters) => dotLookOf(renameTarget, characters)}
+                value={renameCharacter}
+                onChange={setRenameCharacter}
+                onAuto={() => void pressAuto('rename')}
+                isAutoBusy={isAutoBusy}
+                autoHint={renameTarget.teamId ? 'Pick a name and a character for me' : 'Pick a character for me'}
+                pulse={autoPulse}
+                fields={
+                  <div className="field-row">
+                    <label className="field role">
+                      <span>Role</span>
+                      <input name="position" defaultValue={positionOf(renameTarget) ?? ''} placeholder="e.g. FE" />
+                    </label>
+                    <label className="field">
+                      <span>Name</span>
+                      <input
+                        name="name"
+                        value={renameName}
+                        onChange={(event) => setRenameName(event.target.value)}
+                        placeholder="Empty = back to the auto title"
+                        autoFocus
+                      />
+                    </label>
+                  </div>
+                }
+              />
               <div className="actions">
                 <button type="submit" className="primary">
                   Save

@@ -95,13 +95,33 @@ export function charactersInUse(
   })
 }
 
-/** 겹친 인물에 줄 색 조합: 기본색(null·null) 다음 HAIR_COLORS × TOP_COLORS (머리 순, 그 안에서 윗옷 순) */
+/** 겹친 인물에 줄 색 조합: 기본색(null·null) 다음 HAIR_COLORS × TOP_COLORS */
 const COLOR_COMBOS: { hair: string; top: string }[] = HAIR_COLORS.flatMap((hair) => TOP_COLORS.map((top) => ({ hair, top })))
+
+/**
+ * 색 조합을 세션 ID 해시로 섞은 순서 (mulberry32 시드 난수 + Fisher–Yates). 차례대로 돌면 머리색은 그대로이고 윗옷만 한 칸씩 바뀌어
+ * 다시 뽑기(화면 Auto 카드)가 비슷해 보였다. 시드라 같은 세션이면 늘 같은 순서 — 화면 미리보기와 서버 배정이 같은 결과를 낸다
+ */
+function shuffledCombos(seed: number): { hair: string; top: string }[] {
+  let state = seed >>> 0
+  const random = () => {
+    state = (state + 0x6d2b79f5) >>> 0
+    let value = Math.imul(state ^ (state >>> 15), 1 | state)
+    value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+  }
+  const combos = [...COLOR_COMBOS]
+  for (let index = combos.length - 1; index > 0; index--) {
+    const other = Math.floor(random() * (index + 1))
+    ;[combos[index], combos[other]] = [combos[other], combos[index]]
+  }
+  return combos
+}
 
 /**
  * 새 세션에 줄 인물과 색 (자동 배정). 후보(candidatesOf) 중
  * ① 지금 보이는 인물(inUse) 중 가장 적게 쓰인 것 ② 같으면 같은 팀에서 안 쓰는 것 ③ 그래도 같으면 세션 ID 해시.
- * 고른 인물을 이미 누가 쓰면 그 세션들의 (머리, 윗옷) 과 다른 조합: 기본색이 비었으면 기본색, 아니면 COLOR_COMBOS 를 해시 자리부터 돌며 처음 빈 것 (다 차면 해시 자리).
+ * 고른 인물을 이미 누가 쓰면 그 세션들의 (머리, 윗옷) 과 다른 조합: 기본색이 비었으면 기본색, 아니면 해시로 섞은 순서(shuffledCombos)에서 처음 빈 것 (다 차면 그 순서의 첫 것).
  * inUse 에 같은 세션이 있으면 뺀다 ("Auto" 로 다시 배정할 때). 인물이 없으면 null
  */
 export function assignCharacter(
@@ -123,10 +143,7 @@ export function assignCharacter(
   const id = finalists[hash % finalists.length].id
   const usedCombos = new Set(others.filter((use) => use.look.id === id).map((use) => `${use.look.hair}|${use.look.top}`))
   if (!usedCombos.has('null|null')) return { id, hair: null, top: null }
-  const start = hash % COLOR_COMBOS.length
-  for (let step = 0; step < COLOR_COMBOS.length; step++) {
-    const combo = COLOR_COMBOS[(start + step) % COLOR_COMBOS.length]
-    if (!usedCombos.has(`${combo.hair}|${combo.top}`)) return { id, ...combo }
-  }
-  return { id, ...COLOR_COMBOS[start] }
+  const combos = shuffledCombos(hash)
+  const free = combos.find((combo) => !usedCombos.has(`${combo.hair}|${combo.top}`))
+  return { id, ...(free ?? combos[0]) }
 }

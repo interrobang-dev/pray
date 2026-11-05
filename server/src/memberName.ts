@@ -54,13 +54,18 @@ export function nameAndPosition(name: string | null, position: string | null): {
 
 /**
  * 이름(역할 없이)과 그 이름의 성별. usedNames(같은 팀 세션 이름)에 쓰인 이름은 역할이 달라도 피한다 (이름이 같으면 헷갈려서).
- * 옛 "[역할] 성" 이름은 겹칠 이름이 없어 그냥 지나간다. 이름이 다 쓰였으면 "Minji 2" 처럼 숫자를 붙인 것 중에서, 그것도 다 쓰였으면 3, 4… 로 고른다
+ * 옛 "[역할] 성" 이름은 겹칠 이름이 없어 그냥 지나간다. 이름이 다 쓰였으면 "Minji 2" 처럼 숫자를 붙인 것 중에서, 그것도 다 쓰였으면 3, 4… 로 고른다.
+ * gender 를 주면 그 성별 이름만 (화면의 이름 다시 뽑기가 미리보기 인물의 성별에 맞출 때)
  */
-export function pickMemberName(usedNames: readonly string[], random: () => number = Math.random): { name: string; gender: SessionGender } {
+export function pickMemberName(
+  usedNames: readonly string[],
+  random: () => number = Math.random,
+  gender: SessionGender | null = null,
+): { name: string; gender: SessionGender } {
   const used = new Set(usedNames.map(givenNameOf))
   const all = [
-    ...FEMALE_NAMES.map((name) => ({ name, gender: 'female' as const })),
-    ...MALE_NAMES.map((name) => ({ name, gender: 'male' as const })),
+    ...(gender === 'male' ? [] : FEMALE_NAMES.map((name) => ({ name, gender: 'female' as const }))),
+    ...(gender === 'female' ? [] : MALE_NAMES.map((name) => ({ name, gender: 'male' as const }))),
   ]
   for (let suffix = 1; ; suffix++) {
     const candidates = all
