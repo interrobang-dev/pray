@@ -437,7 +437,7 @@ const RECENT_CHARACTER_MS = 60_000
  * 아틀라스를 못 읽거나 목록을 못 읽으면 null (배정 없이 화면이 해시로 고른다 — 세션 띄우기를 막지 않는다).
  * 고른 것은 recentCharacters 에 넣는다 — 띄우지 못하면 부른 쪽이 지운다
  */
-async function autoCharacterFor(target: { id: string; isLead: boolean; gender: SessionGender | null; teamId: string | null }): Promise<SessionCharacter | null> {
+async function autoCharacterFor(target: { id: string; gender: SessionGender | null; teamId: string | null }): Promise<SessionCharacter | null> {
   const characters = readCharacterSheet()
   if (!characters) return null
   try {
@@ -576,7 +576,7 @@ app.post('/api/sessions', async (req, res) => {
     if (sessionGender) setGender(sessionId, sessionGender)
   }
   if (label.position) setPosition(sessionId, label.position)
-  const character = await autoCharacterFor({ id: sessionId, isLead: Boolean(isLead && team), gender: sessionGender, teamId: team?.id ?? null })
+  const character = await autoCharacterFor({ id: sessionId, gender: sessionGender, teamId: team?.id ?? null })
   if (character) setCharacter(sessionId, character)
   // 신뢰 확인 창(기본 "No, exit")에 막혀 세션이 꺼지지 않게 띄우기 전에 폴더를 신뢰로 기록한다. 실패해도 띄우고 화면이 경고한다
   const isTrustFailed = markFolderTrusted(cwd) === false
@@ -1299,7 +1299,7 @@ app.put('/api/sessions/:id/character', async (req, res) => {
   if (character) setCharacter(sessionId, character)
   else {
     const session = (await snapshotPayload()).sessions.find((s) => s.id === sessionId)
-    const auto = session ? await autoCharacterFor({ id: sessionId, isLead: session.role === 'lead', gender: session.gender, teamId: session.teamId }) : null
+    const auto = session ? await autoCharacterFor({ id: sessionId, gender: session.gender, teamId: session.teamId }) : null
     setCharacter(sessionId, auto)
   }
   res.json({})
@@ -2354,7 +2354,7 @@ app.post('/api/team/:teamId/members', async (req, res) => {
   // claude 쪽 세션 이름(터미널 제목·resume 목록)에는 역할을 붙여 둔다. Pray 화면은 이 값을 읽지 않는다
   const claudeName = memberName ? withPosition(memberName, memberPosition) : `[${memberPosition}]`
   const extraArgs = memberExtraArgs(claudeName, permissionMode ?? 'bypassPermissions', modelChoice)
-  const character = await autoCharacterFor({ id: sessionId, isLead: false, gender: memberGender, teamId: team.id })
+  const character = await autoCharacterFor({ id: sessionId, gender: memberGender, teamId: team.id })
   // 인물은 spawn 을 보내기 전에 쓴다 — 뒤에 쓰면 호스트가 같은 때 webSessions 를 쓰며(Windows rename 재시도로 길어진다) 덮어써 사라진다(시험 서버 실측)
   if (character) setCharacter(sessionId, character)
   if (part && !part.worktree) setPartOf(team.id, sessionId, part.id)

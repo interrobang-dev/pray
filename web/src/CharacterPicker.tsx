@@ -67,7 +67,7 @@ function Thumb({ frame }: { frame: Rect | undefined }) {
 }
 
 /**
- * 지시자(팀장·파트장)의 도트 사무실 인물 고르기: "Auto"(서버의 자동 배정, 없으면 세션 ID 해시) + 인물 프리셋 전부.
+ * 세션(역할 무관)의 도트 사무실 인물 고르기: "Auto"(서버의 자동 배정, 없으면 세션 ID 해시) + 인물 프리셋 전부.
  * 인물을 고르면 머리·윗옷 색 칸과 큰 미리보기가 나온다 (인물을 바꾸면 색은 기본색으로). Auto 는 그 인물·색의 미리보기만
  */
 export function CharacterPicker({

@@ -22,13 +22,11 @@ describe('dotCharacter (host/src/dotCharacter.ts 사본)', () => {
     for (const id of ids) expect(hashOf(id)).toBe(host.hashOf(id))
   })
 
-  it('candidatesOf·pickDotCharacter 가 같다 (풀·성별·빈 목록)', () => {
-    for (const isLead of [true, false]) {
-      for (const gender of genders) {
-        expect(candidatesOf(isLead, characters, gender)).toEqual(host.candidatesOf(isLead, characters, gender))
-        expect(candidatesOf(isLead, [], gender)).toEqual(host.candidatesOf(isLead, [], gender))
-        for (const id of ids) expect(pickDotCharacter(id, isLead, characters, gender)).toBe(host.pickDotCharacter(id, isLead, characters, gender))
-      }
+  it('candidatesOf·pickDotCharacter 가 같다 (성별·빈 목록)', () => {
+    for (const gender of genders) {
+      expect(candidatesOf(characters, gender)).toEqual(host.candidatesOf(characters, gender))
+      expect(candidatesOf([], gender)).toEqual(host.candidatesOf([], gender))
+      for (const id of ids) expect(pickDotCharacter(id, characters, gender)).toBe(host.pickDotCharacter(id, characters, gender))
     }
   })
 

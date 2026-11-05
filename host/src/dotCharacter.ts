@@ -18,7 +18,7 @@ export function hashOf(id: string): number {
   return hash
 }
 
-/** 아틀라스 meta.jkCorp.characters 의 인물 하나. pool: lead = 팀장·파트장, member = 나머지. gender 가 없는 아틀라스도 있다 */
+/** 아틀라스 meta.jkCorp.characters 의 인물 하나. pool 은 아틀라스에 남은 옛 구분(lead·member)이고 고를 때 보지 않는다. gender 가 없는 아틀라스도 있다 */
 export interface DotCharacter {
   id: string
   pool: 'lead' | 'member'
@@ -26,24 +26,17 @@ export interface DotCharacter {
 }
 
 /**
- * 세션이 앉을 수 있는 인물 (아틀라스 순서). 지시자(팀장·파트장)는 리더 풀, 나머지는 팀원 풀이고 풀이 비면 전체.
- * 성별(서버가 이름을 지을 때 정한 것)이 있으면 그 풀의 같은 성별 인물 — 없거나 그 성별 인물이 없으면 성별을 무시한다
+ * 세션이 앉을 수 있는 인물 (아틀라스 순서). 역할(팀장·파트장·팀원)과 상관없이 전체다.
+ * 성별(서버가 이름을 지을 때 정한 것)이 있으면 같은 성별 인물 — 없거나 그 성별 인물이 없으면 성별을 무시한다
  */
-export function candidatesOf(isLead: boolean, characters: DotCharacter[], gender: 'male' | 'female' | null = null): DotCharacter[] {
-  const pool = characters.filter((character) => character.pool === (isLead ? 'lead' : 'member'))
-  const inPool = pool.length > 0 ? pool : characters
-  const sameGender = gender ? inPool.filter((character) => character.gender === gender) : []
-  return sameGender.length > 0 ? sameGender : inPool
+export function candidatesOf(characters: DotCharacter[], gender: 'male' | 'female' | null = null): DotCharacter[] {
+  const sameGender = gender ? characters.filter((character) => character.gender === gender) : []
+  return sameGender.length > 0 ? sameGender : characters
 }
 
 /** 고른 것도 배정도 없는 세션의 인물: 후보 중 세션 ID 해시로. 인물이 없으면 null */
-export function pickDotCharacter(
-  sessionId: string,
-  isLead: boolean,
-  characters: DotCharacter[],
-  gender: 'male' | 'female' | null = null,
-): string | null {
-  const candidates = candidatesOf(isLead, characters, gender)
+export function pickDotCharacter(sessionId: string, characters: DotCharacter[], gender: 'male' | 'female' | null = null): string | null {
+  const candidates = candidatesOf(characters, gender)
   if (candidates.length === 0) return null
   return candidates[hashOf(sessionId) % candidates.length].id
 }
@@ -77,7 +70,7 @@ export function dotLookOf(
 ): DotLook | null {
   const saved = session.character
   if (saved && characters.some((character) => character.id === saved.id)) return { id: saved.id, hair: saved.hair, top: saved.top }
-  const id = pickDotCharacter(session.id, session.role === 'lead', characters, session.gender ?? null)
+  const id = pickDotCharacter(session.id, characters, session.gender ?? null)
   return id ? { id, hair: null, top: null } : null
 }
 
@@ -112,11 +105,11 @@ const COLOR_COMBOS: { hair: string; top: string }[] = HAIR_COLORS.flatMap((hair)
  * inUse 에 같은 세션이 있으면 뺀다 ("Auto" 로 다시 배정할 때). 인물이 없으면 null
  */
 export function assignCharacter(
-  session: { id: string; isLead: boolean; gender: 'male' | 'female' | null; teamId: string | null },
+  session: { id: string; gender: 'male' | 'female' | null; teamId: string | null },
   characters: DotCharacter[],
   inUse: CharacterInUse[],
 ): DotLook | null {
-  const candidates = candidatesOf(session.isLead, characters, session.gender)
+  const candidates = candidatesOf(characters, session.gender)
   if (candidates.length === 0) return null
   const others = inUse.filter((use) => use.sessionId !== session.id)
   const countOf = (id: string) => others.filter((use) => use.look.id === id).length

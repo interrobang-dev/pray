@@ -4,7 +4,7 @@
  * require 할 수 없다. 같은 결과인지 dotCharacter.test.ts 가 host 쪽과 맞춰 본다. 규칙을 고치면 같이 고친다
  */
 
-/** 아틀라스 meta.jkCorp.characters 의 인물 하나. pool: lead = 팀장·파트장, member = 나머지 */
+/** 아틀라스 meta.jkCorp.characters 의 인물 하나. pool 은 아틀라스에 남은 옛 구분이고 고를 때 보지 않는다 */
 export interface DotCharacter {
   id: string
   pool: 'lead' | 'member'
@@ -25,16 +25,14 @@ export function hashOf(id: string): number {
   return hash
 }
 
-/** 지시자는 리더 풀, 나머지는 팀원 풀(비면 전체). 성별이 있으면 그 풀의 같은 성별 — 없으면 성별 무시 */
-export function candidatesOf(isLead: boolean, characters: DotCharacter[], gender: 'male' | 'female' | null = null): DotCharacter[] {
-  const pool = characters.filter((character) => character.pool === (isLead ? 'lead' : 'member'))
-  const inPool = pool.length > 0 ? pool : characters
-  const sameGender = gender ? inPool.filter((character) => character.gender === gender) : []
-  return sameGender.length > 0 ? sameGender : inPool
+/** 역할과 상관없이 전체. 성별이 있으면 같은 성별 — 없으면 성별 무시 */
+export function candidatesOf(characters: DotCharacter[], gender: 'male' | 'female' | null = null): DotCharacter[] {
+  const sameGender = gender ? characters.filter((character) => character.gender === gender) : []
+  return sameGender.length > 0 ? sameGender : characters
 }
 
-export function pickDotCharacter(sessionId: string, isLead: boolean, characters: DotCharacter[], gender: 'male' | 'female' | null = null): string | null {
-  const candidates = candidatesOf(isLead, characters, gender)
+export function pickDotCharacter(sessionId: string, characters: DotCharacter[], gender: 'male' | 'female' | null = null): string | null {
+  const candidates = candidatesOf(characters, gender)
   if (candidates.length === 0) return null
   return candidates[hashOf(sessionId) % candidates.length].id
 }
@@ -46,6 +44,6 @@ export function dotLookOf(
 ): DotLook | null {
   const saved = session.character
   if (saved && characters.some((character) => character.id === saved.id)) return { id: saved.id, hair: saved.hair, top: saved.top }
-  const id = pickDotCharacter(session.id, session.role === 'lead', characters, session.gender ?? null)
+  const id = pickDotCharacter(session.id, characters, session.gender ?? null)
   return id ? { id, hair: null, top: null } : null
 }

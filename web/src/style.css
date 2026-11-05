@@ -428,13 +428,13 @@ header button.icon svg {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 팀장 이름 바꾸기 창 (App.tsx rename-modal has-character): 넓은 두 칸 [고른 인물 미리보기·색 | 인물 격자].
+/* 이름 바꾸기 창 (App.tsx rename-modal, 모든 세션): 넓은 두 칸 [고른 인물 미리보기·색 | 인물 격자].
    창은 화면 높이 안이고 제목·Role·Name·Save 는 그대로 둔 채 인물 격자만 스크롤한다 (안 묶으면 Save 가 화면 밖으로 잘린다). 폰은 끝의 폰 블록 */
-.modal.rename-modal.has-character {
+.modal.rename-modal {
   width: 720px;
   max-height: calc(100dvh - 48px);
 }
-.rename-modal.has-character .create {
+.rename-modal .create {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -6458,8 +6458,8 @@ li.group.drop-after::after {
     width: calc(100vw - 32px);
     max-width: none;
   }
-  /* 팀장 이름 바꾸기 창: 한 칸으로 [고른 인물 미리보기 + 색 칸(가로)] 위, 인물 격자 아래(이것만 스크롤) */
-  .modal.rename-modal.has-character {
+  /* 이름 바꾸기 창: 한 칸으로 [고른 인물 미리보기 + 색 칸(가로)] 위, 인물 격자 아래(이것만 스크롤) */
+  .modal.rename-modal {
     width: calc(100vw - 32px);
     max-height: calc(100dvh - 32px);
   }

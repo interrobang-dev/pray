@@ -851,7 +851,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
     const current = renameTarget.character?.isAuto ? null : (renameTarget.character ?? null)
     const isCharacterChanged =
       renameCharacter.id !== (current?.id ?? null) || renameCharacter.hair !== (current?.hair ?? null) || renameCharacter.top !== (current?.top ?? null)
-    if (renameTarget.role === 'lead' && isCharacterChanged) {
+    if (isCharacterChanged) {
       const body = renameCharacter.id ? renameCharacter : { id: null }
       const characterResponse = await postJson(`/api/sessions/${renameTarget.id}/character`, 'PUT', body)
       if (!characterResponse.ok) {
@@ -868,7 +868,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
   function autoLookOf(session: Session, characters: DotCharacter[]): DotLook | null {
     if (!session.character || session.character.isAuto) return dotLookOf(session, characters)
     const inUse = charactersInUse(snapshot.sessions.filter((other) => attendanceOf(other) !== 'off'), characters)
-    return assignCharacter({ id: session.id, isLead: session.role === 'lead', gender: session.gender ?? null, teamId: session.teamId }, characters, inUse)
+    return assignCharacter({ id: session.id, gender: session.gender ?? null, teamId: session.teamId }, characters, inUse)
   }
 
   function openRename(session: Session) {
@@ -1730,7 +1730,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
             title="Rename session"
             subtitle={renameTarget.title ?? renameTarget.id}
             onClose={() => setRenameTarget(null)}
-            className={renameTarget.role === 'lead' ? 'rename-modal has-character' : 'rename-modal'}
+            className="rename-modal"
           >
             <form className="create" onSubmit={renameSession}>
               <div className="field-row">
@@ -1743,16 +1743,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
                   <input name="name" defaultValue={editableNameOf(renameTarget)} placeholder="Empty = back to the auto title" autoFocus />
                 </label>
               </div>
-              {renameTarget.role === 'lead' && (
-                <>
-                  <span className="form-hint">Office character (shown at the desk, as the list avatar and on the Off Duty street)</span>
-                  <CharacterPicker
-                    autoLook={(characters) => autoLookOf(renameTarget, characters)}
-                    value={renameCharacter}
-                    onChange={setRenameCharacter}
-                  />
-                </>
-              )}
+              {/* 인물 고르기는 역할과 상관없이 모든 세션 (팀장·파트장·팀원·외부) */}
+              <span className="form-hint">Office character (shown at the desk, as the list avatar and on the Off Duty street)</span>
+              <CharacterPicker autoLook={(characters) => autoLookOf(renameTarget, characters)} value={renameCharacter} onChange={setRenameCharacter} />
               <div className="actions">
                 <button type="submit" className="primary">
                   Save
