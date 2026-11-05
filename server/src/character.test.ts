@@ -14,6 +14,12 @@ describe('parseCharacter', () => {
     expect(parseCharacter({ id: 'afro', hair: '#2B2622', top: '#c4453c' })).toEqual({ id: 'afro', hair: '#2b2622', top: '#c4453c' })
   })
 
+  it('keeps isAuto only when true (a candidate picked with the Auto card)', () => {
+    expect(parseCharacter({ id: 'afro', hair: '#2a2522', top: null, isAuto: true })).toEqual({ id: 'afro', hair: '#2a2522', top: null, isAuto: true })
+    expect(parseCharacter({ id: 'afro', isAuto: false })).toEqual({ id: 'afro', hair: null, top: null })
+    expect(parseCharacter({ id: 'afro', isAuto: 'yes' })).toBeUndefined()
+  })
+
   it('clears with a null id', () => {
     expect(parseCharacter({ id: null })).toBeNull()
   })

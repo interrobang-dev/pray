@@ -437,6 +437,12 @@ const RECENT_CHARACTER_MS = 60_000
  * 아틀라스를 못 읽거나 목록을 못 읽으면 null (배정 없이 화면이 해시로 고른다 — 세션 띄우기를 막지 않는다).
  * 고른 것은 recentCharacters 에 넣는다 — 띄우지 못하면 부른 쪽이 지운다
  */
+/** 방금 정한 인물을 RECENT_CHARACTER_MS 동안 기억한다 (아직 목록에 없는 새 세션을 다음 자동 배정이 피하게) */
+function rememberRecentCharacter(sessionId: string, teamId: string | null, look: { id: string; hair: string | null; top: string | null }): void {
+  recentCharacters.set(sessionId, { sessionId, teamId, look: { id: look.id, hair: look.hair, top: look.top } })
+  setTimeout(() => recentCharacters.delete(sessionId), RECENT_CHARACTER_MS)
+}
+
 async function autoCharacterFor(target: { id: string; gender: SessionGender | null; teamId: string | null }): Promise<SessionCharacter | null> {
   const characters = readCharacterSheet()
   if (!characters) return null
@@ -450,8 +456,7 @@ async function autoCharacterFor(target: { id: string; gender: SessionGender | nu
     // 목록을 기다린 뒤 고르고 넣기까지는 동기라 동시에 온 요청도 서로의 배정을 본다
     const look = assignCharacter(target, characters, inUse)
     if (!look) return null
-    recentCharacters.set(target.id, { sessionId: target.id, teamId: target.teamId, look })
-    setTimeout(() => recentCharacters.delete(target.id), RECENT_CHARACTER_MS)
+    rememberRecentCharacter(target.id, target.teamId, look)
     return { ...look, isAuto: true }
   } catch (error) {
     console.error(`인물 자동 배정 실패 (${target.id.slice(0, 8)}): ${error}`)
@@ -464,10 +469,11 @@ async function autoCharacterFor(target: { id: string; gender: SessionGender | nu
  * isLead 면 그 지휘 단위의 지시자로 (팀장 또는 파트장. 살아 있는 지시자가 이미 있으면 거부).
  * name·position 은 세션 이름과 역할 (빼거나 빈 글이면 없음. 이름이 옛 꼴 "[역할] 이름" 이면 나눈다).
  * carryOverHistory 면 지시자로 띄운 뒤 직전 지시자의 인계 글을 첫 메시지로 보낸다 (handOverHistory).
- * replacesLead 면 살아 있는 지시자를 화면 종료 버튼과 같은 kill 로 끝내고(dismissed 퇴근) 끝나기를 기다린 뒤 띄운다 (Hand over)
+ * replacesLead 면 살아 있는 지시자를 화면 종료 버튼과 같은 kill 로 끝내고(dismissed 퇴근) 끝나기를 기다린 뒤 띄운다 (Hand over).
+ * character 가 있으면 그 인물로 (화면이 미리 보인 것 그대로), 없으면 자동 배정 (autoCharacterFor)
  */
 app.post('/api/sessions', async (req, res) => {
-  const { cwd: rawCwd, teamId, partId, prompt, isLead, name, gender, position, carryOverHistory, replacesLead } = req.body as {
+  const { cwd: rawCwd, teamId, partId, prompt, isLead, name, gender, position, carryOverHistory, replacesLead, character: rawCharacter } = req.body as {
     cwd?: string
     teamId?: string
     partId?: string
@@ -479,6 +485,8 @@ app.post('/api/sessions', async (req, res) => {
     position?: unknown
     carryOverHistory?: unknown
     replacesLead?: unknown
+    /** 세션 추가 창의 인물 (parseCharacter 꼴. isAuto 면 Auto 카드로 뽑은 후보). 없거나 틀리면 자동 배정 */
+    character?: unknown
   }
   if (carryOverHistory !== undefined && typeof carryOverHistory !== 'boolean') {
     res.status(400).json({ message: 'carryOverHistory must be true or false' })
@@ -576,7 +584,10 @@ app.post('/api/sessions', async (req, res) => {
     if (sessionGender) setGender(sessionId, sessionGender)
   }
   if (label.position) setPosition(sessionId, label.position)
-  const character = await autoCharacterFor({ id: sessionId, gender: sessionGender, teamId: team?.id ?? null })
+  // 화면 세션 추가 창이 고른(또는 Auto 카드로 뽑은) 인물이 있으면 그대로, 없거나 꼴이 틀리면(옛 화면) 자동 배정
+  const chosenCharacter = rawCharacter === undefined ? null : parseCharacter(rawCharacter)
+  if (chosenCharacter) rememberRecentCharacter(sessionId, team?.id ?? null, chosenCharacter)
+  const character = chosenCharacter ?? (await autoCharacterFor({ id: sessionId, gender: sessionGender, teamId: team?.id ?? null }))
   if (character) setCharacter(sessionId, character)
   // 신뢰 확인 창(기본 "No, exit")에 막혀 세션이 꺼지지 않게 띄우기 전에 폴더를 신뢰로 기록한다. 실패해도 띄우고 화면이 경고한다
   const isTrustFailed = markFolderTrusted(cwd) === false

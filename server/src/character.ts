@@ -7,12 +7,13 @@ const CHARACTER_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
 const COLOR = /^#[0-9a-f]{6}$/i
 
 /**
- * PUT /api/sessions/:id/character 본문 → 저장할 값 (순수). `{ id: null }` 이면 null (자동으로 복귀).
- * hair·top 은 '#rrggbb'(소문자로 맞춘다) 또는 null·생략(그 인물 기본색). 꼴이 틀리면 undefined (400)
+ * PUT /api/sessions/:id/character 본문·POST /api/sessions 의 character → 저장할 값 (순수). `{ id: null }` 이면 null (자동으로 복귀).
+ * hair·top 은 '#rrggbb'(소문자로 맞춘다) 또는 null·생략(그 인물 기본색). isAuto: true 면 자동 배정으로 저장한다
+ * (화면의 Auto 카드로 뽑은 후보 — 고른 인물과 달리 "Auto" 로 보인다. true 가 아니면 붙이지 않는다). 꼴이 틀리면 undefined (400)
  */
 export function parseCharacter(body: unknown): SessionCharacter | null | undefined {
   if (typeof body !== 'object' || body === null) return undefined
-  const { id, hair, top } = body as { id?: unknown; hair?: unknown; top?: unknown }
+  const { id, hair, top, isAuto } = body as { id?: unknown; hair?: unknown; top?: unknown; isAuto?: unknown }
   if (id === null) return null
   if (typeof id !== 'string' || !CHARACTER_ID.test(id)) return undefined
   const color = (value: unknown): string | null | undefined =>
@@ -20,7 +21,8 @@ export function parseCharacter(body: unknown): SessionCharacter | null | undefin
   const hairColor = color(hair)
   const topColor = color(top)
   if (hairColor === undefined || topColor === undefined) return undefined
-  return { id, hair: hairColor, top: topColor }
+  if (isAuto !== undefined && typeof isAuto !== 'boolean') return undefined
+  return isAuto ? { id, hair: hairColor, top: topColor, isAuto: true } : { id, hair: hairColor, top: topColor }
 }
 
 /**
