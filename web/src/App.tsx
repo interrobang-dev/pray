@@ -1819,9 +1819,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 <PositionChip position={positionOf(selected)} />
                 {displayName(selected)}
               </b>
-              <button className="rename" title="Rename" onClick={() => openRename(selected)}>
-                ✎
-              </button>
               <span className="cwd">{selected.cwd}</span>
               <nav className="tabs">
                 <button className={shownTab === 'chat' ? 'on' : ''} onClick={() => whenLeavingAllowed(() => setTab('chat'))} title="Chat" aria-label="Chat">
@@ -1853,6 +1850,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
                   <SearchTabIcon />
                 </button>
               )}
+              <button className="rename" title="Rename" aria-label="Rename" onClick={() => openRename(selected)}>
+                <RenameIcon />
+              </button>
               {isSelectedLiveWeb && (
                 <button
                   className="end-session"
@@ -2276,6 +2276,16 @@ function TerminalTabIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  )
+}
+
+/** 패널 헤더 이름 바꾸기 버튼 아이콘: 연필 (Files 탭 편집 버튼 PencilIcon 과 같은 그림) */
+function RenameIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   )
 }
