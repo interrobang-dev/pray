@@ -93,9 +93,9 @@ describe('withPosition', () => {
 describe('pickMemberName', () => {
   const ALL = [...FEMALE_NAMES, ...MALE_NAMES]
 
-  it('has about 25 names per gender and no duplicates across both', () => {
-    expect(FEMALE_NAMES.length).toBe(25)
-    expect(MALE_NAMES.length).toBe(25)
+  it('has 50 names per gender and no duplicates across both', () => {
+    expect(FEMALE_NAMES.length).toBe(50)
+    expect(MALE_NAMES.length).toBe(50)
     expect(new Set(ALL.map((n) => n.toLowerCase())).size).toBe(ALL.length)
   })
 

@@ -6,11 +6,15 @@ import { parsePosition, splitPositionName, type SessionGender } from '@pray/host
  */
 export const FEMALE_NAMES = [
   'Minji', 'Jisoo', 'Seoyeon', 'Soyeon', 'Yuna', 'Haeun', 'Eunji', 'Sujin', 'Hyejin', 'Yejin', 'Dahye', 'Seulgi', 'Jieun',
+  'Yerin', 'Chaewon', 'Nayeon', 'Dayeon', 'Somin', 'Eunbi', 'Hyewon', 'Jiyeon', 'Seohyun', 'Yoona', 'Mina', 'Areum', 'Bora',
   'Emma', 'Olivia', 'Sophia', 'Emily', 'Grace', 'Chloe', 'Hannah', 'Lily', 'Sarah', 'Mia', 'Anna', 'Ella',
+  'Ava', 'Isabella', 'Charlotte', 'Amelia', 'Harper', 'Evelyn', 'Abigail', 'Scarlett', 'Victoria', 'Natalie', 'Zoe', 'Lucy',
 ]
 export const MALE_NAMES = [
   'Junho', 'Minjun', 'Seojun', 'Dohyun', 'Jihoon', 'Hyunwoo', 'Donghyun', 'Jaewon', 'Minho', 'Taehyun', 'Sangwoo', 'Joonyoung', 'Kyungsoo',
+  'Seungwoo', 'Jinwoo', 'Hyunjun', 'Minseok', 'Jaehyun', 'Woojin', 'Taeyang', 'Sungmin', 'Youngho', 'Dongwook', 'Kangmin', 'Jungho', 'Sunghoon',
   'Daniel', 'James', 'Ethan', 'Noah', 'Liam', 'Lucas', 'Henry', 'Oliver', 'Jacob', 'Ryan', 'Samuel', 'Owen',
+  'William', 'Benjamin', 'Alexander', 'Michael', 'Matthew', 'David', 'Joseph', 'Andrew', 'Nathan', 'Thomas', 'Leo', 'Jack',
 ]
 
 /** trim 한 역할. 1~12자이고 `[`·`]`·줄바꿈이 없어야 한다. 아니면 null. 규칙은 hq 의 parsePosition (옛 이름 옮기기와 같은 꼴) */
