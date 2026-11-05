@@ -2733,10 +2733,19 @@ li.group.drop-after::after {
 }
 .ws-add-chat,
 .ws-file-history,
+.ws-md-toggle,
 .ws-edit {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+/* md 미리보기·원본 전환 (눈·꺾쇠) */
+.ws-md-toggle {
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  flex-shrink: 0;
+  color: var(--text);
 }
 /* 편집 버튼(연필): 편집 중이면 눌린 모양 */
 .ws-edit {
@@ -2861,6 +2870,112 @@ li.group.drop-after::after {
 .ws-view > .hint {
   margin: auto;
   text-align: center;
+}
+/* Files 탭 md 문서 미리보기 (Markdown.tsx 의 MarkdownDocument): GitHub README 처럼 가운데 열에 넉넉한 글자·간격.
+   .markdown(말풍선용 작은 제목·간격) 위에 덮어쓴다. 색은 변수만 */
+.md-doc {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+}
+.markdown.md-doc-body {
+  box-sizing: border-box;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+  font-size: calc(14px * var(--font-scale));
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+.markdown.md-doc-body :is(p, ul, ol, blockquote, pre, table, .code-block) {
+  margin: 0 0 14px;
+}
+.markdown.md-doc-body .code-block > pre {
+  margin: 0;
+}
+.markdown.md-doc-body :is(h1, h2, h3, h4, h5, h6) {
+  margin: 26px 0 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+.markdown.md-doc-body > :first-child {
+  margin-top: 0;
+}
+.markdown.md-doc-body h1 {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: calc(26px * var(--font-scale));
+  font-weight: 600;
+}
+.markdown.md-doc-body h2 {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: calc(20px * var(--font-scale));
+}
+.markdown.md-doc-body h3 {
+  font-size: calc(17px * var(--font-scale));
+}
+.markdown.md-doc-body h4 {
+  font-size: calc(15px * var(--font-scale));
+}
+.markdown.md-doc-body h5 {
+  font-size: calc(14px * var(--font-scale));
+}
+.markdown.md-doc-body h6 {
+  font-size: calc(13px * var(--font-scale));
+  color: var(--muted);
+}
+.markdown.md-doc-body :is(ul, ol) {
+  padding-left: 26px;
+}
+.markdown.md-doc-body li + li {
+  margin-top: 4px;
+}
+.markdown.md-doc-body blockquote {
+  padding: 2px 14px;
+  border-left-width: 4px;
+}
+.markdown.md-doc-body hr {
+  margin: 24px 0;
+  border-top-width: 2px;
+}
+.markdown.md-doc-body code {
+  font-size: 0.86em;
+}
+.markdown.md-doc-body :not(pre) > code {
+  padding: 2px 5px;
+}
+.markdown.md-doc-body pre {
+  padding: 12px 14px;
+  line-height: 1.5;
+}
+.markdown.md-doc-body table {
+  font-size: calc(13px * var(--font-scale));
+}
+.markdown.md-doc-body :is(th, td) {
+  padding: 6px 12px;
+}
+.markdown.md-doc-body tbody tr:nth-child(2n) {
+  background: var(--pre-bg);
+}
+.markdown.md-doc-body a {
+  text-decoration: none;
+}
+.markdown.md-doc-body a:hover {
+  text-decoration: underline;
+}
+.markdown.md-doc-body img {
+  max-width: 100%;
+}
+/* 그릴 수 없는 그림 주소(이 PC 절대 경로·폴더 밖): 대체 글만 */
+.md-doc-no-image {
+  padding: 1px 6px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 4px;
+  color: var(--muted);
+  font-style: italic;
 }
 /* 투명한 그림이 보이게 체크무늬 바탕 (작업 파일 미리보기와 같다) */
 .ws-image {
@@ -6624,9 +6739,13 @@ li.group.drop-after::after {
   .ws-add-chat,
   .ws-file-history,
   .ws-edit,
+  .ws-md-toggle,
   .ws-toolbar > .copy-menu > .copy-button {
     width: 40px;
     height: 40px;
+  }
+  .markdown.md-doc-body {
+    padding: 16px 16px 32px;
   }
   .copy-menu > .menu-list button {
     min-height: 40px;
@@ -6634,6 +6753,7 @@ li.group.drop-after::after {
   .ws-save {
     height: 40px;
   }
+  .ws:not(.is-viewing) .ws-md-toggle,
   .ws:not(.is-viewing) .ws-edit,
   .ws:not(.is-viewing) .ws-save {
     display: none;

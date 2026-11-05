@@ -10,6 +10,8 @@ import { alertDialog, choiceDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import { FileName } from './FileName'
 import { formatSize } from './Files'
+import { MarkdownDocument, type DocLinks } from './Markdown'
+import { docImageTarget, isMarkdownPath, resolveDocPath } from './markdownDoc'
 import { CommitDiffView, EMPTY_HISTORY, HistoryPanel, type HistoryState } from './HistoryPanel'
 import {
   formatAgo,
@@ -63,6 +65,8 @@ interface SessionView {
   search: SearchState
   /** 커밋 히스토리 거르기·목록·고른 커밋과 파일 */
   history: HistoryState
+  /** md 파일을 원본(줄 번호 코드 보기)으로 보는지. 기본은 문서 미리보기 */
+  isMarkdownSource: boolean
 }
 type SideMode = 'files' | 'changes' | 'search' | 'history'
 const sessionViews = new Map<string, SessionView>()
@@ -96,6 +100,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const [diffState, setDiffState] = useState<DiffState | null>(null)
   const [search, setSearch] = useState<SearchState>(saved?.search ?? EMPTY_SEARCH)
   const [history, setHistory] = useState<HistoryState>(saved?.history ?? EMPTY_HISTORY)
+  const [isMarkdownSource, setIsMarkdownSource] = useState(saved?.isMarkdownSource ?? false)
   /** Ctrl+Shift+F: Search 입력칸에 포커스 (text 가 있으면 그 글로 찾기) */
   const [searchFocus, setSearchFocus] = useState<{ id: number; text: string | null } | null>(null)
   /** Search 결과에서 마지막으로 연 줄 (표시)과 코드 보기를 그 줄로 스크롤할 요청 */
@@ -129,8 +134,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const rootName = nameOf(cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/')) || cwd
 
   useEffect(() => {
-    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState, search, history })
-  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState, search, history])
+    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState, search, history, isMarkdownSource })
+  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState, search, history, isMarkdownSource])
 
   const loadFolder = useCallback(
     async (path: string) => {
@@ -327,11 +332,31 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const backLabel = isChanges ? 'Back to changes' : isHistory ? 'Back to commit' : sideMode === 'search' ? 'Back to search' : 'Back to files'
   const textFile = isFileSide && shownFile?.status === 'ok' && shownFile.file.kind === 'text' ? shownFile.file : null
   const isEditing = textFile !== null && editingPath !== null && editingPath === selectedPath
+  /** 문서 미리보기의 그림 주소·파일 링크. 링크는 그때의 openInFiles 를 ref 로 부른다 (links 를 바꾸지 않아 글을 다시 그리지 않게) */
+  const openDocFileRef = useRef<(path: string) => void>(() => {})
+  openDocFileRef.current = (path) => guardEdit(() => openInFiles(path))
+  const docLinks = useMemo<DocLinks | null>(() => {
+    if (!selectedPath) return null
+    const filePath = selectedPath
+    return {
+      imageUrl: (src) => {
+        const target = docImageTarget(filePath, src)
+        if (!target) return null
+        return 'url' in target ? target.url : `${apiUrl(sessionId, 'file/raw', { path: target.path })}&v=${reloadId}`
+      },
+      openFile: (href) => {
+        const path = resolveDocPath(filePath, href)
+        if (path) openDocFileRef.current(path)
+      },
+    }
+  }, [sessionId, selectedPath, reloadId])
+  /** md 글 파일을 문서 미리보기로 보는 중 (편집 중이면 편집기). 줄 번호가 없어 줄 고르기·Ctrl+F 찾기 막대를 쓰지 않는다 */
+  const isMarkdownPreview = textFile !== null && !isEditing && !isMarkdownSource && isMarkdownPath(selectedPath)
   /** 편집을 막는 이유 (서버가 파일마다 준다. 필드가 없는 옛 서버는 저장 API 도 없다) */
   const editBlock = textFile ? (textFile.editBlockReason === undefined ? 'The server needs a restart to support editing' : textFile.editBlockReason) : null
   /** 위 막대가 가리키는 파일과 공유할 줄 (Changes 면 고른 diff 줄의 새 파일 줄 번호, 편집 중이면 누를 때 편집기에서 고른 줄) */
   const shownPath = isChanges ? selectedChange : isHistory ? null : selectedPath
-  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing || isHistory ? null : lineRange
+  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing || isHistory || isMarkdownPreview ? null : lineRange
   /** 경로 표시줄의 파일. History 면 고른 커밋의 파일이고 Add to chat·Copy path 는 없다 (지난 커밋의 줄 번호라 위치로 공유하지 않는다) */
   const navPath = isHistory ? (history.selectedHash ? history.selectedFile : null) : shownPath
   /** Changes 에서 고른 파일이 지운·없어진 것 — Copy file 을 막는다 */
@@ -456,7 +481,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const onFindKeyRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {})
   onFindKeyRef.current = (event) => {
     if (!event.shiftKey) {
-      if (!textFile) return
+      if (!textFile || isMarkdownPreview) return
       event.preventDefault()
       setIsViewing(true)
       if (isEditing) editorRef.current?.openSearch()
@@ -485,6 +510,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
     }
     const open = () => {
       setOpenedMatch({ path, line, stamp: Date.now() })
+      // 미리보기에는 줄이 없어 그 줄을 보이게 원본으로 바꾼다
+      if (isMarkdownPath(path)) setIsMarkdownSource(true)
       openFile(path)
       setLineRanges((previous) => ({ ...previous, [path]: { start: line, end: line } }))
     }
@@ -556,6 +583,17 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
         {isEditing && (
           <button type="button" className="ws-save" disabled={!isDirty || isSaving} onClick={() => void save()} title="Save (Ctrl+S)">
             {isSaving ? 'Saving…' : 'Save'}
+          </button>
+        )}
+        {textFile && !isEditing && isMarkdownPath(selectedPath) && (
+          <button
+            type="button"
+            className="ws-md-toggle"
+            onClick={() => setIsMarkdownSource((previous) => !previous)}
+            title={isMarkdownSource ? 'Show preview' : 'Show source'}
+            aria-label={isMarkdownSource ? 'Show preview' : 'Show source'}
+          >
+            {isMarkdownSource ? <PreviewIcon /> : <SourceIcon />}
           </button>
         )}
         {textFile && (
@@ -768,6 +806,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
               onFindChange={changeCodeFind}
               onFindClose={closeCodeFind}
               editor={isEditing ? { ref: editorRef, onDirtyChange: setIsDirty, onSave: () => void saveRef.current() } : null}
+              markdown={isMarkdownPreview ? docLinks : null}
             />
           )}
         </section>
@@ -907,6 +946,25 @@ function HistoryIcon() {
 }
 
 /** 연필 (Edit) */
+/** 문서 미리보기로: 눈 */
+function PreviewIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  )
+}
+
+/** 원본으로: 꺾쇠 괄호 */
+function SourceIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function PencilIcon() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -916,7 +974,7 @@ function PencilIcon() {
   )
 }
 
-/** 오른쪽 파일 보기. 글 파일은 CodeView(줄 고르기 포함), 편집 모드면 그 자리에 CodeEditor */
+/** 오른쪽 파일 보기. 글 파일은 CodeView(줄 고르기 포함), 편집 모드면 그 자리에 CodeEditor, md 미리보기면 MarkdownDocument */
 function FileView({
   sessionId,
   path,
@@ -929,6 +987,7 @@ function FileView({
   onFindChange,
   onFindClose,
   editor,
+  markdown,
 }: {
   sessionId: string
   path: string | null
@@ -942,6 +1001,8 @@ function FileView({
   onFindClose: () => void
   /** 편집 모드면 편집기에 줄 것 */
   editor: { ref: Ref<CodeEditorHandle>; onDirtyChange: (isDirty: boolean) => void; onSave: () => void } | null
+  /** md 문서 미리보기면 그림·링크 처리 (아니면 null — 코드 보기) */
+  markdown: DocLinks | null
 }) {
   if (!path) return <p className="hint">Select a file to view it</p>
   if (isImagePath(path)) {
@@ -957,6 +1018,7 @@ function FileView({
   if (file.kind === 'binary') return <p className="hint">Binary file · {formatSize(file.size)} · No preview</p>
   if (file.kind === 'too-large') return <p className="hint">Too large to show · {formatSize(file.size)} (limit 1 MB)</p>
   if (editor) return <CodeEditor key={path} ref={editor.ref} text={file.text} path={path} onDirtyChange={editor.onDirtyChange} onSave={editor.onSave} />
+  if (markdown) return <MarkdownDocument key={path} text={file.text} links={markdown} />
   return (
     <CodeView
       key={path}

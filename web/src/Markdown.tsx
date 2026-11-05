@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { createContext, memo, useContext, type MouseEvent, type ReactNode } from 'react'
 import Markdown, { defaultUrlTransform, type Components, type Options, type UrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -6,6 +6,7 @@ import { ChatImage, MarkdownSource } from './ChatImage'
 import { ChatLink } from './ChatLink'
 import { CopyButton } from './CopyButton'
 import { codeBlockText, type HastNode } from './codeText'
+import { docLinkKind, headingSlug } from './markdownDoc'
 import { rehypeHighlightTokens } from './markdownHighlight'
 
 const REMARK_PLUGINS: Options['remarkPlugins'] = [remarkGfm]
@@ -65,6 +66,103 @@ export const MarkdownText = memo(function MarkdownText({ text, isChat = false }:
           {text}
         </Markdown>
       </MarkdownSource.Provider>
+    </div>
+  )
+})
+
+/** Files 탭 md 미리보기가 주는 것: 그림 주소 바꾸기(그리지 않으면 null)와 세션 폴더 안 파일 링크 열기 */
+export interface DocLinks {
+  imageUrl: (src: string) => string | null
+  openFile: (href: string) => void
+}
+
+const DocLinksContext = createContext<DocLinks | null>(null)
+
+/** 문서 그림: 바꾼 주소로 그리고, 그릴 수 없는 주소(이 PC 절대 경로·폴더 밖)는 대체 글만 흐리게 */
+function DocImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
+  const links = useContext(DocLinksContext)
+  const url = src && links ? links.imageUrl(src) : null
+  if (!url) return <span className="md-doc-no-image" title={src ? `Can't show ${src}` : undefined}>{alt || src}</span>
+  return <img src={url} alt={alt} title={title} loading="lazy" />
+}
+
+/** 문서 링크: 웹 주소는 새 탭, `#제목` 은 그 제목으로 스크롤, 세션 폴더 안 상대 경로는 Files 에서 연다. 그 밖은 아무것도 하지 않는다 */
+function DocLink({ href, title, children }: { href?: string; title?: string; children?: ReactNode }) {
+  const links = useContext(DocLinksContext)
+  const kind = href ? docLinkKind(href) : 'other'
+  if (kind === 'external') {
+    return (
+      <a href={href} title={title} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    )
+  }
+  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault()
+    if (!href) return
+    if (kind === 'file') links?.openFile(href)
+    else if (kind === 'anchor') scrollToHeading(event.currentTarget, decodeURIComponentSafe(href.slice(1)))
+  }
+  return (
+    <a href={kind === 'other' ? undefined : href} title={title ?? (kind === 'file' ? `Open ${href} in Files` : undefined)} onClick={onClick}>
+      {children}
+    </a>
+  )
+}
+
+function decodeURIComponentSafe(text: string): string {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
+}
+
+/** 같은 문서에서 slug 가 맞는 제목으로 문서 칸만 스크롤한다 (scrollIntoView 는 overflow hidden 인 패널까지 움직여서). 같은 제목이 여럿이면 GitHub 처럼 -1, -2 */
+function scrollToHeading(from: HTMLElement, slug: string) {
+  const scroller = from.closest<HTMLElement>('.md-doc')
+  if (!scroller) return
+  const counts = new Map<string, number>()
+  for (const heading of scroller.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')) {
+    const base = headingSlug(heading.textContent ?? '')
+    const count = counts.get(base) ?? 0
+    counts.set(base, count + 1)
+    if ((count === 0 ? base : `${base}-${count}`) !== slug.toLowerCase()) continue
+    scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 12
+    return
+  }
+}
+
+const DOC_MARKDOWN_COMPONENTS: Components = {
+  ...MARKDOWN_COMPONENTS,
+  img: ({ src, alt, title }) => <DocImage src={typeof src === 'string' ? src : undefined} alt={alt} title={title} />,
+  a: ({ href, title, children }) => (
+    <DocLink href={href} title={title}>
+      {children}
+    </DocLink>
+  ),
+}
+
+/**
+ * Files 탭 md 미리보기 (GitHub README 같은 문서 모양, 스크롤 칸 `.md-doc` 까지 그린다). 대화용 숫자·경로 강조는 없고 코드 블록 강조·복사 버튼은 같다.
+ * links 는 그림·링크 처리 — 바뀔 때 글을 다시 파싱하지 않게 context 로 넘긴다 (memo 는 text 기준)
+ */
+export function MarkdownDocument({ text, links }: { text: string; links: DocLinks }) {
+  return (
+    <DocLinksContext.Provider value={links}>
+      <div className="md-doc">
+        <MarkdownDocumentBody text={text} />
+      </div>
+    </DocLinksContext.Provider>
+  )
+}
+
+const MarkdownDocumentBody = memo(function MarkdownDocumentBody({ text }: { text: string }) {
+  return (
+    <div className="markdown md-doc-body">
+      <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={DOC_MARKDOWN_COMPONENTS}>
+        {text}
+      </Markdown>
     </div>
   )
 })
