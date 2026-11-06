@@ -158,6 +158,10 @@ function createWindow(): BrowserWindow {
     show: false,
   })
   win.once('ready-to-show', () => win.show())
+  // 작업 표시줄에 고정할 때 쓸 명령: 없으면 인자 없는 electron.exe 가 고정돼 꺼진 상태에서 누르면 Electron 기본 앱이 뜬다
+  if (!app.isPackaged) {
+    win.setAppDetails({ appId: 'pray', relaunchCommand: launchCommand(), relaunchDisplayName: 'Pray', appIconPath: process.execPath })
+  }
   // 대화 속 웹 링크(target=_blank)가 새 Pray 창이 아니라 기본 브라우저로 열리게
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!isExternalUrl(url, SERVER_URL)) return { action: 'allow' }
@@ -171,6 +175,12 @@ function createWindow(): BrowserWindow {
   })
   return win
 }
+
+/**
+ * 창을 열 때 서버를 기다리는 시간. 부팅 직후(로그인 시 자동 실행)는 node·tsx 가 느려 서버가 20초 넘게 걸렸다(실측 21초) —
+ * 15초일 때 서버는 결국 떴는데 "didn't start" 창이 떴다. 자식이 계속 죽는 경우는 gaveUp 창이 따로 알린다
+ */
+const SERVER_START_TIMEOUT_MS = 60_000
 
 async function waitForServer(timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
@@ -191,7 +201,7 @@ async function showWindow(sessionId?: string): Promise<void> {
   const hash = sessionId ? `#session=${encodeURIComponent(sessionId)}` : ''
   if (!window || window.isDestroyed()) {
     window = createWindow()
-    const isUp = await waitForServer(15_000)
+    const isUp = await waitForServer(SERVER_START_TIMEOUT_MS)
     if (!isUp) {
       dialog.showErrorBox('Pray', `The server didn't start. Check the logs:\n${logDir}`)
     }
@@ -435,8 +445,32 @@ function refreshTray(): void {
 }
 
 /** 개발 실행(electron .)에서는 execPath 가 electron.exe 라 앱 경로를 인자로 넘겨야 한다 */
+/** 트레이 앱 폴더 (`desktop`). 저장소에서 실행하므로 electron.exe 에 이 폴더를 인자로 줘야 Pray 가 뜬다 (없으면 Electron 기본 앱) */
+const appDir = resolve(__dirname, '..')
+
 function loginItemOptions() {
-  return app.isPackaged ? {} : { path: process.execPath, args: [resolve(__dirname, '..')] }
+  return app.isPackaged ? {} : { path: process.execPath, args: [appDir] }
+}
+
+function launchCommand(): string {
+  return `"${process.execPath}" "${appDir}"`
+}
+
+/**
+ * 시작 메뉴 `Pray.lnk` 에 앱 폴더 인자를 넣는다. Electron 이 알림 때 만드는 이 바로가기(알림 머리 이름)는 인자 없는 electron.exe 라,
+ * 시작 메뉴에서 누르거나 거기서 복사된 작업 표시줄 고정을 누르면 Electron 기본 앱이 떴다. 'update' 는 알림 ID 등 다른 값을 그대로 둔다
+ */
+function fixStartMenuShortcut(): void {
+  if (app.isPackaged) return
+  const path = join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Pray.lnk')
+  if (!existsSync(path)) return
+  try {
+    const link = shell.readShortcutLink(path)
+    if (link.args?.trim()) return
+    shell.writeShortcutLink(path, 'update', { target: link.target, args: `"${appDir}"`, cwd: repoDir })
+  } catch (error) {
+    console.warn(`시작 메뉴 바로가기 ${path} 에 인자를 못 넣었다: ${String(error)}`)
+  }
 }
 
 async function quit(): Promise<void> {
@@ -490,6 +524,7 @@ if (!app.requestSingleInstanceLock()) {
       return
     }
     loadSettings()
+    fixStartMenuShortcut()
     tray = new Tray(trayIcon(false))
     tray.on('click', () => void showWindow())
     for (const child of [children.host, children.server]) {
