@@ -23,7 +23,6 @@ import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
 import { memoryLabel, memoryPercent, parseSystemMemory } from './systemMemory'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
-import { FlowPanel } from './FlowPanel'
 import { KEY_STEP, clampPanelWidth, parsePanelWidth } from './panelWidth'
 import { NewTeamModal } from './NewTeamModal'
 import { TeamTodosModal } from './TeamTodosModal'
@@ -47,7 +46,6 @@ import {
   offDutyLabel,
   statusLabel,
   vcsLabel,
-  type FlowStatus,
   type Office as OfficeData,
   type Group,
   type TeamTodo,
@@ -230,10 +228,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
   /** 화면 ↻ 로 시작한 재시작 (곧 끊기면 "Restarting …") */
   const restartRequestRef = useRef<{ target: RestartTarget; at: number } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  /** 오른쪽 패널 자리에 플로우 알림 패널을 열었는지. 세션 패널과 같은 자리라 세션을 고르면 닫힌다 */
-  const [isFlowOpen, setIsFlowOpen] = useState(false)
-  /** 플로우 안 읽은 수 (전역 SSE flow). 아직 못 받았으면(flow 를 모르는 옛 서버 포함) null */
-  const [flowStatus, setFlowStatus] = useState<FlowStatus | null>(null)
   const [isGroupForm, setIsGroupForm] = useState(false)
   /** 팀 추가 모달. 그룹 헤더의 "+ 팀" 으로 열리며 그 그룹에 고정 */
   const [teamForm, setTeamForm] = useState<{ groupId: string } | null>(null)
@@ -398,7 +392,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
         setIsConnected(true)
       })
       current.addEventListener('office', (event) => setOffice(JSON.parse((event as MessageEvent).data)))
-      current.addEventListener('flow', (event) => setFlowStatus(JSON.parse((event as MessageEvent).data)))
       current.addEventListener('transcript', (event) => {
         const { sessionId } = JSON.parse((event as MessageEvent).data) as { sessionId: string }
         setTranscriptVersions((prev) => ({ ...prev, [sessionId]: (prev[sessionId] ?? 0) + 1 }))
@@ -559,7 +552,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
       setJump(null)
       setJumpBack(null)
     }
-    setIsFlowOpen(false)
     setSelectedId(sessionId)
     if (isOfficeFocused && !isNarrow && !isOfficeHidden) {
       setOfficeFocus({ id: nextFocusIdRef.current++, kind: 'session', sessionId })
@@ -571,20 +563,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setOfficeFocus({ id: nextFocusIdRef.current++, kind: 'team', teamId })
   }
 
-  /** 오른쪽 패널을 플로우 알림으로 바꾼다. 세션 선택은 닫힌다 (다시 고르면 대화 탭부터, 점프·돌아가기도 끝) */
-  function openFlow() {
-    if (hasUnsavedEdit()) {
-      void confirmDiscardUnsaved().then((isAllowed) => isAllowed && openFlow())
-      return
-    }
-    setSelectedId(null)
-    setIsFlowOpen(true)
-  }
-
   /** 세션의 대화 탭을 열고 target 으로 간다 (점프·돌아가기) */
   function openJump(sessionId: string, target: JumpTarget) {
     setTab('chat')
-    setIsFlowOpen(false)
     setSelectedId(sessionId)
     setJump({ id: nextJumpIdRef.current++, sessionId, target })
   }
@@ -1659,8 +1640,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const presentSessions = snapshot.sessions.filter((s) => attendanceOf(s) === 'present')
   const workingCount = presentSessions.filter((s) => s.status === 'working' || s.status === 'waiting').length
   const approvalSessions = presentSessions.filter((s) => s.status === 'needs-approval')
-  /** 오른쪽 패널 자리에 무엇이든 열려 있는지 (세션 또는 플로우) */
-  const hasPanel = selected !== null || isFlowOpen
+  /** 오른쪽 패널(세션)이 열려 있는지 */
+  const hasPanel = selected !== null
 
   return (
     <div className="app">
@@ -1716,7 +1697,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
               <NewSessionIcon />
               New Session
             </button>
-            <FlowRow status={flowStatus} isSelected={isFlowOpen} onOpen={openFlow} />
           </div>
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
             {office.groups.map((group, groupIndex) => {
@@ -1933,15 +1913,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
             tabIndex={0}
             onPointerDown={startPanelResize}
             onKeyDown={resizePanelByKey}
-          />
-        )}
-        {isFlowOpen && !selected && (
-          <FlowPanel
-            unreadAlarmCount={flowStatus?.unreadAlarmCount ?? null}
-            unreadChatCount={flowStatus?.unreadChatCount ?? null}
-            isNarrow={isNarrow}
-            onStatus={setFlowStatus}
-            onClose={() => setIsFlowOpen(false)}
           />
         )}
         {selected && (
@@ -2197,81 +2168,6 @@ function OffDutyBar({
         </div>
       )}
     </div>
-  )
-}
-
-/**
- * 툴바 세 번째(New Session 아래) Flow 버튼: 플로우 로고 · "Flow" · [종] N · [말풍선] N (안 읽은 알림·채팅). 누르면 오른쪽 패널이 플로우 알림이 된다.
- * 둘 다 0 이면 회색, 하나라도 있으면 강조. 아직 못 셌으면 "…", 키 없음이면 "No key", 확인 실패면 짧게 (전문은 title. 앞 수가 있으면 수 + ⚠)
- */
-function FlowRow({ status, isSelected, onOpen }: { status: FlowStatus | null; isSelected: boolean; onOpen: () => void }) {
-  const hasCounts = status !== null && status.unreadAlarmCount !== null && status.unreadChatCount !== null
-  const hasUnread = hasCounts && (status.unreadAlarmCount! > 0 || status.unreadChatCount! > 0)
-  let summary: ReactNode
-  let title = 'Show Flow alerts'
-  if (status === null) summary = '…'
-  else if (!status.isConfigured) {
-    summary = 'No key'
-    title = 'No FLOW_API_KEY in ~/.claude/flow-key.env'
-  } else if (hasCounts) {
-    summary = (
-      <>
-        <span className="flow-row-count">
-          <AlertsIcon />
-          {status.unreadAlarmCount}
-        </span>
-        ·
-        <span className="flow-row-count">
-          <ChatsIcon />
-          {status.unreadChatCount}
-        </span>
-      </>
-    )
-    title = `Show Flow alerts · Alerts ${status.unreadAlarmCount} · Chats ${status.unreadChatCount}`
-  } else summary = status.error ? 'Check failed' : '…'
-  if (status?.isConfigured && status.error) title = `Flow check failed: ${status.error}`
-  return (
-    <button
-      className={['flow-row', isSelected ? 'selected' : '', hasUnread ? 'unread' : ''].join(' ')}
-      onClick={onOpen}
-      title={title}
-    >
-      <img className="flow-logo" src="/flow-logo.png" alt="" width={16} height={16} />
-      <span>Flow</span>
-      <span className={status?.isConfigured && status.error && !hasCounts ? 'flow-row-summary error' : 'flow-row-summary'}>{summary}</span>
-      {status?.isConfigured && status.error && hasCounts && <span className="flow-row-warning">⚠</span>}
-    </button>
-  )
-}
-
-/** Flow 버튼 요약의 안 읽은 알림 아이콘: 종 */
-function AlertsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="12" height="12" role="img" aria-label="Alerts">
-      <path
-        d="M4 11.5V7a4 4 0 0 1 8 0v4.5l1 1.5H3l1-1.5zM6.5 13.5a1.5 1.5 0 0 0 3 0"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-/** Flow 버튼 요약의 안 읽은 채팅 아이콘: 말풍선 (ChatTabIcon 과 같은 그림) */
-function ChatsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="12" height="12" role="img" aria-label="Chats">
-      <path
-        d="M4 2.5h8a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5v-2.5H4a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 4 2.5z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        strokeLinejoin="round"
-      />
-    </svg>
   )
 }
 

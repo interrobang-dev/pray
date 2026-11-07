@@ -107,7 +107,6 @@ import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
 import { AccountError, accountErrorBody, makeAccountStore } from './accountStore.js'
 import { makeLoginManager, runClaudeAuth } from './accountLogin.js'
-import { FlowError, makeFlowClient, makeFlowPoller, type AlarmQuery } from './flow.js'
 import { TaskConflictError, TaskStore, type RestoredMember } from './teamState.js'
 import { idleSinceOf, teamStatusMembers, teamStatusTasks } from './teamMembers.js'
 import { readTaskEnd } from './taskUsage.js'
@@ -1930,66 +1929,6 @@ app.delete('/api/accounts/:id', async (req, res) => {
   }
 })
 
-// ---------- 플로우(flow.team) 알림 중계. 키는 ~/.claude/flow-key.env ----------
-
-const flow = makeFlowClient()
-const FLOW_POLL_MS = 30_000
-const flowPoller = makeFlowPoller(flow, (status) => {
-  for (const res of subscribers) sendSse(res, 'flow', status)
-})
-
-function sendFlowError(res: Response, error: unknown): void {
-  if (!(error instanceof FlowError)) throw error
-  res.status(error.status).json({ message: error.message })
-}
-
-app.get('/api/flow', (_req, res) => {
-  res.json(flowPoller.status())
-})
-
-// 공식 알림 목록 한 쪽(50개) + 프로젝트 이름. readYn 이 없으면 전부
-app.get('/api/flow/alarms', async (req, res) => {
-  const { readYn, cursor } = req.query
-  if ((readYn !== undefined && readYn !== 'Y' && readYn !== 'N') || (cursor !== undefined && !/^\d{1,9}$/.test(String(cursor)))) {
-    res.status(400).json({ message: 'readYn must be Y or N, and cursor a number' })
-    return
-  }
-  const query: AlarmQuery = { readYn: readYn as AlarmQuery['readYn'], cursor: cursor as string | undefined }
-  try {
-    res.json(await flow.listAlarms(query))
-  } catch (error) {
-    sendFlowError(res, error)
-  }
-})
-
-// 읽음 처리 뒤 안 읽은 수를 바로 다시 세어 화면에 알리고, 그 상태를 응답으로도 준다
-app.post('/api/flow/alarms/read-all', async (_req, res) => {
-  try {
-    await flow.readAllAlarms()
-  } catch (error) {
-    sendFlowError(res, error)
-    return
-  }
-  await flowPoller.check()
-  res.json(flowPoller.status())
-})
-
-app.post('/api/flow/alarms/:alarmId/read', async (req, res) => {
-  const { alarmId } = req.params
-  if (!/^\d{1,20}$/.test(alarmId)) {
-    res.status(400).json({ message: 'alarmId must be a number' })
-    return
-  }
-  try {
-    await flow.readAlarm(alarmId)
-  } catch (error) {
-    sendFlowError(res, error)
-    return
-  }
-  await flowPoller.check()
-  res.json(flowPoller.status())
-})
-
 // ---------- 팀 (같은 폴더의 세션 묶음. 팀장 세션이 MCP 도구로도 호출) ----------
 
 const MEMBER_FIRST_INPUT_DELAY_MS = 4_000
@@ -3029,7 +2968,6 @@ app.get('/api/events', (req, res) => {
   openSse(res)
   subscribers.add(res)
   req.on('close', () => subscribers.delete(res))
-  sendSse(res, 'flow', flowPoller.status())
   void broadcast()
 })
 
@@ -3096,8 +3034,6 @@ void reconcileRestoredTasks()
 setInterval(() => void broadcast(), 5000)
 setInterval(() => void reconcileRestoredTasks(), 5000)
 setInterval(() => tasks.expireUnacknowledged(), 1000)
-void flowPoller.check()
-setInterval(() => void flowPoller.check(), FLOW_POLL_MS)
 
 // 예전 그룹 대기 메모(waitingNote)를 할 일로 한 번 옮긴다. 요청 처리 밖이라 hq.json 을 못 읽어도 죽지 않게 로그만 (다음 시작 때 다시 한다)
 try {

@@ -37,7 +37,6 @@ Express 서버의 API 경로 전부, 세션 목록 합치기, jsonl 요약, 훅 
 - 곁가지 질문의 흐름·실측·`btw.ts` → queue-interrupt.md (API 꼴은 아래 `index.ts`)
 - 팀·파트·팀원 이름·모델 규칙 → team.md
 - 계정 API 규칙 → accounts.md
-- 플로우 API → flow.md
 - 대화 메시지(`messages.ts`) → chat.md (그 응답 캐시·증분 `messageCache.ts` 는 여기)
 - 화면 쪽 증분 받기(`chatDelta.ts`) → chat.md
 - 팀 할 일 저장 규칙·시작 때 옮기기 → host.md

@@ -20,7 +20,6 @@
 | `server-api.md` | 서버 API 경로 전부(`index.ts` 전문), 세션 목록·jsonl 요약·훅 상태·표시 상태 계산, shell·작업 파일·첨부·세션 cwd 파일 읽기(`workspaceFiles.ts`)·저장(`workspaceSave.ts`), AskUserQuestion, 세션 이름·역할·인물, 폴더 신뢰, 모델·effort 바꾸기 |
 | `queue-interrupt.md` | mod(입력 제안·입력칸 알림·곁가지 질문), 보내기의 함정, 대기열·대기 메시지 취소, 작업 중지, 곁가지 질문 흐름(`btw.ts`) |
 | `accounts.md` | 사용량 조회·사용량 창, Claude 계정 보관·전환·로그인·로그아웃 (서버·화면) |
-| `flow.md` | 플로우(flow.team) 알림 서버·화면 |
 | `chat.md` | 대화 메시지(`messages.ts`)와 대화 탭 전체, 마크다운, 작업 파일, Shells, 터미널 탭 |
 | `workspace.md` | 세션 패널 Files 탭(세션 cwd 트리·코드 보기·빠른 찾기·줄 고르기·Add to chat·git/SVN 변경 목록과 diff·git 커밋 히스토리·이 PC 에서만 되는 편집). 그 서버 API 는 `server-api.md`, 단 변경 보기(`workspaceChanges.ts`)·커밋 히스토리(`workspaceHistory.ts`)·내용 찾기 API 는 이 파일 |
 | `web-app.md` | App.tsx(목록·패널·상태 표시줄·폰·사무실 숨기기), 응답 타입·공통 문구, 모달·메뉴, 팀 만들기 창·폴더 고르기, 팀 할 일 화면, 역할 칩, 모델 변경 창 |
@@ -83,7 +82,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/worktree.ts` — 파트 worktree 만들기·지우기, `~/.claude.json` 폴더 신뢰 기록
 - `mcp/src/index.ts`·`teamServer.ts`·`teamApi.ts` — 팀장·파트장 claude 에 붙는 stdio MCP 서버 (`team_spawn_member`·`team_assign`·`team_wait`·`team_status`·`team_dismiss`. 이름을 바꾸기 전 리드는 env 로 옛 모드 `jk_*`)
 
-서버 → `server-api.md` (계정·플로우·대화·대기열은 각 파일)
+서버 → `server-api.md` (계정·대화·대기열은 각 파일)
 - `server/src/index.ts` — Express: 모든 API·SSE·훅 수신
 - `server/src/sessions.ts` — 세션 목록(근무·휴식·퇴근 합치기, 생성순) · `transcript.ts` — jsonl 요약 · `transcriptWatcher.ts` — jsonl 감시 → SSE
 - `server/src/vcs.ts` — 팀 폴더의 형상관리(git·SVN) 판정·5분 캐시 → office 응답의 `vcs`
@@ -93,12 +92,12 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/chatImage.ts` — 대화 속 그림 API 의 경로 꼴·허용 범위(세션 cwd·Claude 임시 폴더) 판정, .html 링크 열기도 같은 판정 (→ `server-api.md`·`security.md`)
 - `server/src/askQuestion.ts` — AskUserQuestion 해석·답 · `serialRunner.ts` — 한 번에 하나 실행기 · `hostClient.ts` — pipe 클라이언트
 - `server/src/auth.ts`·`mail.ts`·`config.ts` — 메일 인증·토큰·config.json · `requestGuard.ts` — Host·Origin 머리 판정 · `openFolder.ts` — 팀 폴더를 이 PC 탐색기로 열기 · `fileClipboard.ts` — Files 탭 파일을 이 PC 클립보드에 파일로 넣기 · `openInChrome.ts` — 대화 속 .html 링크를 이 PC 의 Chrome 으로 열기 · `folderPicker.ts` — 팀 만들기 창의 폴더 고르기·새 폴더·git init, 이 PC 전용 (→ `security.md`)
-- `server/src/messages.ts` — jsonl → 대화 메시지 (→ `chat.md`) · `flow.ts` — 플로우 (→ `flow.md`)
+- `server/src/messages.ts` — jsonl → 대화 메시지 (→ `chat.md`)
 - `server/src/messageCache.ts` — 대화 API 의 해석 캐시·버전·바뀐 뒤쪽만 보내기
 - `server/src/suggestion.ts`·`unqueue.ts`·`interrupt.ts`·`btw.ts` — 입력 제안·대기 취소·작업 중지·곁가지 질문(`/btw`) (→ `queue-interrupt.md`) · `mod/` — 웹 세션 전용 mod (→ 같은 파일)
 - `server/src/usage.ts`·`accounts.ts`·`accountStore.ts`·`accountLogin.ts`·`switchImpact.ts` — 사용량·계정 (→ `accounts.md`)
 
-웹 → `web-app.md` · `chat.md` · `workspace.md` · `office.md` · `office-art.md` · `accounts.md` · `flow.md`
+웹 → `web-app.md` · `chat.md` · `workspace.md` · `office.md` · `office-art.md` · `accounts.md`
 - `web/src/main.tsx` — 로그인 또는 App (`legacyStorage.ts`·`copyLegacyStorage.ts` — 옛 localStorage 키 한 번 옮기기) · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `reconnect.ts` — 서버·호스트가 끊겼다 붙을 때까지 위쪽 띠 단계 · `HomePanel.tsx`·`home.ts` — 사무실을 숨기고 세션을 안 골랐을 때의 첫 화면(새 세션·최근 세션) · `sessionLink.ts` — 트레이 알림이 여는 `#session=<id>` 읽기 · `listCollapse.ts` — 목록 그룹 접기 저장 값·접힌 라벨 상태 요약 · `panelWidth.ts` — 사무실이 보일 때 끌어 바꾸는 패널 폭 · `types.ts` — 응답 타입·공통 문구 함수 · `contextSize.ts` — 입력 상자 아래 문맥 크기 글자("143k")·주의/경고 단계 · `handOver.ts` — 문맥 경고 단계 팀장·파트장의 입력 상자 아래 문맥 크기 Hand over(새 지시자 창 열기) 판정
 - `web/src/theme.ts` — 테마·스타일 적용 · `appearance.ts`·`palettes.ts`·`AppearanceModal.tsx`·`ChatStyleTab.tsx` — 스타일 설정(팔레트·강조색·글자 크기·대화 모양) 계산·값·창 · `Modal.tsx` — 모달·세그먼트 · `Dialog.tsx`·`dialogQueue.ts` — 브라우저 confirm·alert·prompt 대신 쓰는 앱 안 확인·알림·입력 창 · `sessionMenu.ts` — 세션 줄 ⋯ 메뉴 · `sessionPosition.ts`·`PositionChip.tsx` — 역할·이름
 - `web/src/NewTeamModal.tsx`·`FolderPicker.tsx`·`folderChoice.ts` — 팀 만들기 창(이 PC 면 폴더 고르기·git init 칸) · `web/src/TeamTodosModal.tsx`·`teamTodos.ts` — 팀 TODO · `web/src/TeamTasksModal.tsx`·`teamTasks.ts` — 팀 Tasks 창(팀원 task·들고 남 기록) · `ModelSettingModal.tsx`·`modelSetting.ts` — 모델·effort 변경 창
@@ -106,7 +105,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `web/src/FilesTab.tsx`·`CodeView.tsx`·`DiffView.tsx`·`codeLines.ts`·`codeSelection.ts`·`changes.ts`·`lineSelection.ts`·`workspaceTree.ts`·`composerDraft.ts`·`CodeEditor.tsx`·`codeMirrorEditor.ts`·`unsavedEdits.ts`·`CodeFindBar.tsx`·`codeFind.ts`·`codeViewDom.ts`·`SearchPanel.tsx`·`workspaceSearch.ts`·`workspaceApi.ts`·`HistoryPanel.tsx`·`commitHistory.ts`·`AddToChatIcon.tsx`·`FileName.tsx`·`CopyMenu.tsx`·`markdownDoc.ts` — 세션 패널 Files 탭(트리·줄 번호 코드 보기·md 문서 미리보기·Changes 변경 목록·diff·History 커밋 히스토리·줄 고르기·Add to chat·빠른 찾기·CodeMirror 편집(동적 import), 코드 보기 안 찾기 Ctrl+F·작업 폴더 내용 찾기 Search Ctrl+Shift+F, 탭을 오가도 남는 입력칸 글·커서) (→ `workspace.md`)
 - `web/src/Office.tsx` — PixiJS 사무실 · `officeLayout.ts` — 배치 · `officeFixtures.ts` — 고정 꾸미기 · `lounge.ts` — 라운지 자리 · `dotState.ts` — 인물 상태·라운지 판정 · `offDutyStreet.ts` — 퇴근 거리 배치 (→ `office.md`)
 - `web/src/characterArt.ts`·`recolor.ts`·`headRect.ts`·`CharacterPicker.tsx` — 인물 그림·고르기·색·목록 아바타 머리 자리 · `host/src/dotCharacter.ts` — 인물 후보·해시·새 세션 자동 배정 규칙(화면·서버 공용, `@pray/host/dotCharacter`) · `tools/sprites/` — 스프라이트 파이프라인 · `web/public/office/` — 아틀라스 (→ `office-art.md`)
-- `web/src/UsagePanel.tsx`·`Accounts.tsx`·`accountLabels.ts` — 사용량·계정 (→ `accounts.md`) · `FlowPanel.tsx` — 플로우 (→ `flow.md`)
+- `web/src/UsagePanel.tsx`·`Accounts.tsx`·`accountLabels.ts` — 사용량·계정 (→ `accounts.md`)
 
 ## 어디서나 지킬 규칙
 

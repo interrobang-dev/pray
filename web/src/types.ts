@@ -489,51 +489,6 @@ export interface SwitchResponse {
   hasBusyWebSessions?: boolean
 }
 
-/** 플로우(flow.team) 안 읽은 수 (`GET /api/flow`, 전역 SSE `flow`). 서버 flow.ts 와 손으로 맞춘다 */
-export interface FlowStatus {
-  /** 키 파일에 FLOW_API_KEY 가 있는지. 서버가 막 떠 아직 확인 전이면 true (수는 null 이라 "…") */
-  isConfigured: boolean
-  /** 안 읽은 알림 수. 한 번도 못 셌으면 null */
-  unreadAlarmCount: number | null
-  /** 채팅방 안 읽은 메시지 수 합계. 한 번도 못 셌으면 null */
-  unreadChatCount: number | null
-  checkedAt: string | null
-  /** 마지막 확인이 실패했으면 그 이유 (수는 그 전 성공 값 그대로) */
-  error: string | null
-}
-
-/** 플로우 알림 하나 (`GET /api/flow/alarms`) */
-export interface FlowAlarm {
-  alarmId: string
-  projectId: string
-  /** 참여 프로젝트 목록에 없으면 null */
-  projectName: string | null
-  postId: string
-  /** 댓글 알림이 아니면 "-1" */
-  remarkId: string
-  /** 답글 알림이 아니면 "-1" */
-  replyId: string
-  registerId: string
-  registerName: string
-  /** 플로우 원본 YYYYMMDDHHmmss (한국 시각) */
-  registeredDateTime: string
-  /** 같은 시각의 ISO 8601 (`+09:00`). 꼴이 틀리면 null */
-  registeredAt: string | null
-  message: string | null
-  content: string
-  isRead: boolean
-  isMention: boolean
-  isWorker: boolean
-  isRegistrant: boolean
-}
-
-export interface FlowAlarmPage {
-  alarms: FlowAlarm[]
-  hasNext: boolean
-  /** 다음 쪽을 받을 cursor. 마지막 쪽이면 null */
-  nextCursor: string | null
-}
-
 /** 팀 머리줄 형상관리 칩의 툴팁·aria-label: "Git · <루트 경로>"·"SVN · <루트 경로>" */
 export function vcsLabel(vcs: { kind: 'git' | 'svn'; root: string }): string {
   return `${vcs.kind === 'git' ? 'Git' : 'SVN'} · ${vcs.root}`
