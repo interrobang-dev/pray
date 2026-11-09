@@ -406,6 +406,22 @@ async function loadDotArt(): Promise<DotArt> {
   }
 }
 
+/**
+ * 사무실 그림 모듈 캐시. 처음 마운트할 때 app.init 과 같이 읽기 시작해 페이지가 살아 있는 동안 계속 쓴다 — 숨김→보임(언마운트→마운트) 때
+ * 아틀라스·props sheet 를 다시 받거나 색 바꾸기·창 얼굴·소품 조각을 다시 만들지 않는다. 못 읽으면 비워 다음 마운트 때 다시 읽는다.
+ * 텍스처를 들고 있어도 되는 이유: 언마운트의 stage.destroy({ children: true }) 는 텍스처를 지우지 않고(texture 옵션이 없다),
+ * renderer destroy 는 텍스처 source 의 GPU 데이터와 리스너만 떼어 다음 Application 이 다시 올린다 (pixi.js 8.22 GCManagedHash.destroy)
+ */
+let dotArtPromise: Promise<DotArt> | null = null
+
+function dotArtOnce(): Promise<DotArt> {
+  dotArtPromise ??= loadDotArt().catch((error: unknown) => {
+    dotArtPromise = null
+    throw error
+  })
+  return dotArtPromise
+}
+
 /** 그 방향 색 바꾸기. 아직 안 읽었으면 읽기 시작하고 null (다 읽으면 onRecolorLoaded) */
 function recolorOf(art: DotArt, direction: CharacterDirection): RecolorArt | null {
   const state = art.recolor.get(direction)
@@ -1616,22 +1632,27 @@ export function Office(props: Props) {
     let removeListeners = () => {}
     let disconnectResize = () => {}
     let stopPhaseTimer = () => {}
+    let releaseArt = () => {}
 
     const animations = new Set<AnimatedSprite>()
 
-    void app
-      .init({ resizeTo: host, background: COLOR.floor, antialias: false, roundPixels: true, resolution: 1 })
-      .then(async () => {
-        // 첫 그리기 전에 아틀라스를 다 읽는다. 못 읽으면 캔버스 없이 안내만 (목록·대화는 그대로)
-        let art: DotArt
-        try {
-          art = await loadDotArt()
-        } catch (error) {
-          console.error('사무실 그림(도트 에셋)을 읽지 못함', error)
+    // 아틀라스 읽기(렌더러가 필요 없다)를 app.init 과 같이 시작한다. 첫 그리기 전에 둘 다 끝나야 한다
+    const artLoad = dotArtOnce().then(
+      (loaded) => loaded,
+      (error: unknown) => {
+        console.error('사무실 그림(도트 에셋)을 읽지 못함', error)
+        return null
+      },
+    )
+    void Promise.all([app.init({ resizeTo: host, background: COLOR.floor, antialias: false, roundPixels: true, resolution: 1 }), artLoad])
+      .then(([, loaded]) => {
+        // 못 읽으면 캔버스 없이 안내만 (목록·대화는 그대로)
+        if (!loaded) {
           app.destroy(true)
           if (!isDisposed) setIsArtFailed(true)
           return
         }
+        const art = loaded
         if (isDisposed) {
           app.destroy(true)
           return
@@ -1697,8 +1718,17 @@ export function Office(props: Props) {
           setHoveredCard(card)
         }
         streetPlacesRef.current = art.streetMeta.places
-        art.onRecolorLoaded = () => {
+        // 못 읽은 방향 색 바꾸기는 마운트마다 다시 읽어 본다 (그림이 마운트마다 새로 읽히던 때와 같게. 다 읽으면 다시 그린다)
+        for (const [direction, state] of art.recolor) {
+          if (state === 'failed') art.recolor.delete(direction)
+        }
+        const onRecolorLoaded = () => {
           if (!isDisposed) redraw()
+        }
+        art.onRecolorLoaded = onRecolorLoaded
+        // 모듈 캐시가 언마운트한 화면(app·world)을 붙잡고 있지 않게 떼어 낸다
+        releaseArt = () => {
+          if (art.onRecolorLoaded === onRecolorLoaded) art.onRecolorLoaded = () => {}
         }
 
         /** 화면 좌표 → world 아트 픽셀 */
@@ -2503,6 +2533,7 @@ export function Office(props: Props) {
       removeListeners()
       disconnectResize()
       stopPhaseTimer()
+      releaseArt()
       host.replaceChildren()
       if (appRef.current) {
         appRef.current.destroy(true, { children: true })
