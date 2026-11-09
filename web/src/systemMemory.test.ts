@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { memoryLabel, memoryPercent, parseSystemMemory } from './systemMemory'
+import { memoryLabel, memoryLevel, memoryPercent, parseSystemMemory } from './systemMemory'
 
 const GB = 1024 ** 3
+
+describe('memoryLevel', () => {
+  it('80% 미만 normal, 80~89 caution, 90 이상 warn', () => {
+    expect(memoryLevel(0)).toBe('normal')
+    expect(memoryLevel(79)).toBe('normal')
+    expect(memoryLevel(80)).toBe('caution')
+    expect(memoryLevel(89)).toBe('caution')
+    expect(memoryLevel(90)).toBe('warn')
+    expect(memoryLevel(100)).toBe('warn')
+  })
+})
 
 describe('memoryPercent', () => {
   it('(전체 − 여유) / 전체 를 정수로 반올림', () => {

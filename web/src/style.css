@@ -5069,6 +5069,14 @@ li.group.drop-after::after {
 .status-memory {
   font-variant-numeric: tabular-nums;
 }
+/* RAM 사용률 단계 (systemMemory.ts memoryLevel): 80% 이상 주의색, 90% 이상 빨강 굵게. 문맥 크기 .context-size 와 같은 색 */
+.status-memory.caution {
+  color: var(--caution-text);
+}
+.status-memory.warn {
+  color: var(--red);
+  font-weight: 600;
+}
 .status-link {
   display: flex;
   align-items: center;

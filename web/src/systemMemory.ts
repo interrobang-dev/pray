@@ -9,6 +9,17 @@ export function memoryPercent(memory: SystemMemory): number | null {
   return Math.round((usedBytes / memory.totalBytes) * 100)
 }
 
+/** 상태 표시줄 RAM 강조 단계: 80% 이상 주의, 90% 이상 경고 (메모리가 모자라 Windows 가 디스크로 내보내기 시작하는 즈음) */
+export type MemoryLevel = 'normal' | 'caution' | 'warn'
+const MEMORY_CAUTION_PERCENT = 80
+const MEMORY_WARN_PERCENT = 90
+
+export function memoryLevel(percent: number): MemoryLevel {
+  if (percent >= MEMORY_WARN_PERCENT) return 'warn'
+  if (percent >= MEMORY_CAUTION_PERCENT) return 'caution'
+  return 'normal'
+}
+
 /** 툴팁·aria-label "Memory 19.8 / 32.0 GB" (사용량 / 전체) */
 export function memoryLabel(memory: SystemMemory): string {
   const usedBytes = Math.min(Math.max(memory.totalBytes - memory.freeBytes, 0), memory.totalBytes)

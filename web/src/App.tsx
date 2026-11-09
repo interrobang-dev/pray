@@ -21,7 +21,7 @@ import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
-import { memoryLabel, memoryPercent, parseSystemMemory } from './systemMemory'
+import { memoryLabel, memoryLevel, memoryPercent, parseSystemMemory } from './systemMemory'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import { KEY_STEP, clampPanelWidth, parsePanelWidth } from './panelWidth'
 import { NewTeamModal } from './NewTeamModal'
@@ -307,6 +307,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [now, setNow] = useState(() => Date.now())
   /** 이 PC 메모리 (상태 표시줄 RAM). 5초마다 받고 실패하면 null 이라 칸을 숨긴다 */
   const [systemMemory, setSystemMemory] = useState<SystemMemory | null>(null)
+  /** 상태 표시줄 RAM 사용률(%). 모르면 null 이라 칸을 숨긴다 */
+  const memoryPercentShown = systemMemory ? memoryPercent(systemMemory) : null
   /**
    * 목록에서 끌고 있는 그룹·팀과 놓일 자리 (끌기로 판정된 뒤에만).
    * dropIndex 는 형제 목록에서 이 순번 앞(길이면 맨 끝)이고, 놓아도 순서가 그대로인 자리면 null (선을 안 그린다)
@@ -2056,9 +2058,14 @@ export function App({ isLocal }: { isLocal: boolean }) {
             </button>
           )}
           <ShellsStatus lines={shellLines(office, snapshot.sessions)} onOpen={openShell} />
-          {systemMemory && memoryPercent(systemMemory) !== null && (
-            <span className="status-memory" role="img" title={memoryLabel(systemMemory)} aria-label={memoryLabel(systemMemory)}>
-              RAM {memoryPercent(systemMemory)}%
+          {memoryPercentShown !== null && systemMemory && (
+            <span
+              className={`status-memory ${memoryLevel(memoryPercentShown)}`}
+              role="img"
+              title={memoryLabel(systemMemory)}
+              aria-label={memoryLabel(systemMemory)}
+            >
+              RAM {memoryPercentShown}%
             </span>
           )}
           <span className="status-counts">
