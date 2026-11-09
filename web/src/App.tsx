@@ -231,7 +231,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [isGroupForm, setIsGroupForm] = useState(false)
   /** 팀 추가 모달. 그룹 헤더의 "+ 팀" 으로 열리며 그 그룹에 고정 */
   const [teamForm, setTeamForm] = useState<{ groupId: string } | null>(null)
-  /** 세션 추가 모달. 팀 헤더의 "+" 면 그 팀 직속, 파트 소제목의 "+" 면 그 파트, 툴바의 "New Session" 이면 로비(폴더 직접 입력) */
+  /** 세션 추가 모달. 팀 헤더의 "+" 면 그 팀 직속, 파트 소제목의 "+" 면 그 파트, Focus Zone 라벨의 "+"·첫 화면 New session 이면 로비(폴더 직접 입력) */
   const [sessionForm, setSessionForm] = useState<{ teamId: string | null; partId: string | null } | null>(null)
   const [sessionRole, setSessionRole] = useState<'member' | 'lead'>('member')
   /** 세션 추가 모달의 "Carry over previous lead's history" 칸 (직전 지시자 기록이 있는 팀·파트에서 Lead 를 고를 때만 보인다) */
@@ -1695,10 +1695,6 @@ export function App({ isLocal }: { isLocal: boolean }) {
               <NewGroupIcon />
               New Group
             </button>
-            <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable} title="New session in Focus Zone">
-              <NewSessionIcon />
-              New Session
-            </button>
           </div>
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
             {office.groups.map((group, groupIndex) => {
@@ -1746,6 +1742,18 @@ export function App({ isLocal }: { isLocal: boolean }) {
                   lobbySessions.length > 0 ? lobbySessions.length : null,
                   isFocusZoneCollapsed ? statusSummary(lobbySessions) : [],
                 )}
+                {/* 팀 없이 세션 추가 (폴더 직접 입력). 그룹 라벨의 "+" 와 같은 세로줄에 오게 ⋯·⠿ 자리는 보이지 않는 빈칸 */}
+                <span className="head-actions">
+                  <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable} title="New session in Focus Zone">
+                    +
+                  </button>
+                  <span className="menu menu-spacer" aria-hidden="true">
+                    <button tabIndex={-1} disabled>
+                      ⋯
+                    </button>
+                  </span>
+                  {renderDragSpacer()}
+                </span>
               </div>
               {!isFocusZoneCollapsed && lobbySessions.map((session) => renderSession(session, true))}
             </li>
@@ -2354,16 +2362,6 @@ function NewGroupIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </svg>
-  )
-}
-
-/** 툴바 New Session 아이콘: 사람 (세션 = 사무실 직원. 패널 탭의 말풍선·터미널과 겹치지 않게) */
-function NewSessionIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <circle cx="8" cy="5" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M3.5 13.5a4.5 4.5 0 0 1 9 0" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   )
 }
