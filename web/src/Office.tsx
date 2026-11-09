@@ -17,6 +17,7 @@ import {
   type SpritesheetData,
 } from 'pixi.js'
 import { attendanceOf, offDutyLabel, statusLabel, type Office as OfficeData, type Session, type Team } from './types'
+import { officeSceneKey } from './officeScene'
 import { remainingCount } from './teamTodos'
 import { dotLookOf, type DotCharacter, type DotLook } from '@pray/host/dotCharacter'
 import { dotStateOf, loungeLabel, seatPlaceKey, seatPlaceOf, turnEndedAtOf, type DotState } from './dotState'
@@ -328,7 +329,7 @@ interface DotArt {
   recolored: Map<string, Record<string, Texture>>
   /** 퇴근 거리 창 얼굴 (정면 idle 을 창만큼 자른 프레임들): `인물|머리|윗옷|원본 source|자른 곳` → 텍스처 */
   faces: Map<string, Texture[]>
-  /** 라운지 사람 위에 덮는 소품 조각: `소품|자른 곳` → 텍스처 (창 얼굴과 같은 이유로 한 번 만든다) */
+  /** 라운지 사람 위에 덮는 소품 조각·지휘자 책상 앞쪽: `텍스처 키|자른 곳` → 텍스처 (창 얼굴과 같은 이유로 한 번 만든다) */
   fronts: Map<string, Texture>
 }
 
@@ -900,16 +901,24 @@ function drawDotZone(zone: Rect, booths: Seat[], art: DotArt, occupied: Set<stri
 /** 라운지 바닥 = 통로 타일에 따뜻한 색을 곱한 것 (통로·데스크존과 구분) */
 const LOUNGE_FLOOR_TINT = 0xfaf0e2
 
-/** 라운지 사람 위에 덮는 소품 조각 (그 소품 프레임 안 frame). 조합마다 한 번 만든다 */
-function frontTexture(art: DotArt, prop: string, frame: Rect): Texture {
-  const key = `${prop}|${frame.x},${frame.y},${frame.w},${frame.h}`
+/**
+ * v5-props 텍스처(textureKey) 안 frame 조각. 조합마다 한 번 만들어 art.fronts 에 둔다 —
+ * 새 Texture 는 원본 source 에 리스너를 남겨 다시 그릴 때마다 만들면 쌓인다 (그린 것을 destroy 해도 텍스처는 지우지 않는다)
+ */
+function croppedPropTexture(art: DotArt, textureKey: string, frame: Rect): Texture {
+  const key = `${textureKey}|${frame.x},${frame.y},${frame.w},${frame.h}`
   let texture = art.fronts.get(key)
   if (!texture) {
-    const base = art.props.textures[`prop/${prop}`]
+    const base = art.props.textures[textureKey]
     texture = new Texture({ source: base.source, frame: new Rectangle(base.frame.x + frame.x, base.frame.y + frame.y, frame.w, frame.h) })
     art.fronts.set(key, texture)
   }
   return texture
+}
+
+/** 라운지 사람 위에 덮는 소품 조각 (그 소품 프레임 안 frame) */
+function frontTexture(art: DotArt, prop: string, frame: Rect): Texture {
+  return croppedPropTexture(art, `prop/${prop}`, frame)
 }
 
 /**
@@ -1113,10 +1122,9 @@ function drawBlockRow(art: DotArt, row: BlockRow, sessionById: Map<string, Sessi
     'lead.front': () => {
       // 지휘자 책상의 frontFrom 아래(타자 치는 손 아래 끝 + 1)를 사람 위에 한 번 더: 손은 키보드 위, 허벅지·무릎은 책상 윗면 뒤
       if (!leadModule || !isSeatedPerson(lead, now)) return
-      const texture = art.props.textures[leadModule]
-      const { frame } = texture
+      const { frame } = art.props.textures[leadModule]
       const from = block.lead.frontFrom
-      const front = new Texture({ source: texture.source, frame: new Rectangle(frame.x, frame.y + from, frame.width, frame.height - from) })
+      const front = croppedPropTexture(art, leadModule, { x: 0, y: from, w: frame.width, h: frame.height - from })
       dot.addChild(v5Prop(art, front, block.lead.moduleAt[0], block.lead.moduleAt[1] + from))
     },
     'bottom.char': () => eachPair((pair, dx) => addPerson(sessionOf(pair.bottom), 'up', block.pair.bottom.char, dx)),
@@ -1618,7 +1626,8 @@ export function Office(props: Props) {
   const appRef = useRef<Application | null>(null)
   const latest = useRef(props)
   latest.current = props
-  const redrawRef = useRef<() => void>(() => {})
+  /** 다시 그리기 요청 (장면 키가 그대로면 건너뛰고, 문서가 숨겨져 있으면 보일 때로 미룬다) */
+  const requestRedrawRef = useRef<() => void>(() => {})
   const focusRef = useRef<(target: OfficeFocus) => void>(() => {})
   const handledFocusIdRef = useRef(focus?.id ?? 0)
 
@@ -1700,12 +1709,15 @@ export function Office(props: Props) {
         let isDragged = false
         /** 이름표를 끄는 동안 미룬 다시 그리기 (그 사이 다시 그리면 끌던 그림이 원래 자리로 돌아간다) */
         let isRedrawPending = false
-        /** 지금 그려진 시간대. 1분마다 바뀌었는지 보고 바뀌었으면 다시 그린다 */
+        /** 지금 그려진 시간대 (창밖·퇴근 거리 색) */
         let drawnPhase = dayPhaseOf(new Date())
-        /** 지금 그려진 근무 세션마다 있는 곳 (seatPlaceKey). 시간이 흘러 라운지로 가거나 라운지에서 졸기 시작하는 것도 1분마다 보고 바뀌었으면 다시 그린다 */
-        let drawnSeatPlaces = ''
-        /** 지금 그려진 퇴근 세션마다 거리 장소 (streetPlaceKey). 누가 1·6·24시간 경계를 넘으면 1분 안에 다시 그린다 */
-        let drawnStreet = ''
+        /**
+         * 지금 그려진 장면 키 (sceneKeyAt). 다시 그리기 요청 때 이것과 같으면 건너뛴다.
+         * null = 키 밖의 것(배율·캔버스 크기·색 바꾸기 그림·끌어 놓기)이 바뀌어 다음 요청에 꼭 그린다
+         */
+        let drawnSceneKey: string | null = null
+        /** 문서가 숨겨진 동안(트레이 창 숨김·다른 탭) 온 다시 그리기 요청. 보이면 장면 키가 바뀌었을 때만 한 번 그린다 */
+        let isHiddenRedrawPending = false
         /** 마우스를 올린 카드 키(HoveredCard 의 rectKey·key). 이벤트 처리기가 지금 값을 보도록 여기도 둔다 (카드는 React 상태 hoveredCard) */
         let hoveredKey: string | null = null
         /**
@@ -1723,7 +1735,7 @@ export function Office(props: Props) {
           if (state === 'failed') art.recolor.delete(direction)
         }
         const onRecolorLoaded = () => {
-          if (!isDisposed) redraw()
+          if (!isDisposed) requestRedraw(true)
         }
         art.onRecolorLoaded = onRecolorLoaded
         // 모듈 캐시가 언마운트한 화면(app·world)을 붙잡고 있지 않게 떼어 낸다
@@ -1832,8 +1844,8 @@ export function Office(props: Props) {
           world.y = cursor.y - ((cursor.y - world.y) * next) / zoom
           zoom = next
           world.scale.set(zoom)
-          // 바탕 크기(화면 한 장 여유)가 배율에 따라 달라 다시 그린다 (그 안에서 clampPan)
-          redraw()
+          // 바탕 크기(화면 한 장 여유)·글자 해상도·아이콘 크기가 배율에 따라 달라 다시 그린다 (그 안에서 clampPan)
+          requestRedraw(true)
         }
 
         let isPointerInside = host.matches(':hover')
@@ -1872,13 +1884,19 @@ export function Office(props: Props) {
         }
         host.addEventListener('wheel', onWheel, { passive: false })
         host.addEventListener('mouseleave', onMouseLeave)
+        // 숨긴 동안 미룬 다시 그리기: 보이면 장면 키가 바뀌었을 때만 한 번
+        const onVisibilityChange = () => {
+          if (!document.hidden && isHiddenRedrawPending) requestRedraw()
+        }
         window.addEventListener('mousemove', onMouseMove)
         window.addEventListener('keydown', onKeyDown)
+        document.addEventListener('visibilitychange', onVisibilityChange)
         removeListeners = () => {
           host.removeEventListener('wheel', onWheel)
           host.removeEventListener('mouseleave', onMouseLeave)
           window.removeEventListener('mousemove', onMouseMove)
           window.removeEventListener('keydown', onKeyDown)
+          document.removeEventListener('visibilitychange', onVisibilityChange)
         }
 
         // resizeTo 는 창 크기가 바뀔 때만 다시 잰다. 패널을 여닫을 때처럼 사무실 칸만 바뀌어도 캔버스가 따라가게
@@ -1937,7 +1955,6 @@ export function Office(props: Props) {
             if (look) looks.set(session.id, look)
           }
           const people = streetPeopleOf(sessions, now)
-          drawnStreet = streetPlaceKey(art.streetMeta.places, people)
           const plan = planStreet(
             art.streetMeta,
             planWidth * DOT_SCALE,
@@ -2089,13 +2106,42 @@ export function Office(props: Props) {
           return plan
         }
 
+        /**
+         * 장면 키 = 그리는 데 읽는 데이터(officeSceneKey) + 시간이 흘러 바뀌는 것: 시간대, 근무 세션마다 책상·라운지·라운지 졸기(seatPlaceKey),
+         * 퇴근 세션마다 거리 장소(streetPlaceKey). 배율·캔버스 크기는 넣지 않는다 (바뀌는 곳에서 requestRedraw(true))
+         */
+        const sceneKeyAt = (now: number) => {
+          const { office, sessions, selectedId } = latest.current
+          return [
+            dayPhaseOf(new Date(now)),
+            seatPlaceKey(sessions, now),
+            streetPlaceKey(art.streetMeta.places, streetPeopleOf(sessions, now)),
+            officeSceneKey(office, sessions, selectedId, now),
+          ].join('\n')
+        }
+
+        /** 다시 그리기 요청. isForced = 장면 키 밖의 것이 바뀜. 숨겨져 있으면 보일 때로 미루고, 장면 키가 그대로면 건너뛴다 */
+        const requestRedraw = (isForced = false) => {
+          if (isForced) drawnSceneKey = null
+          if (document.hidden) {
+            isHiddenRedrawPending = true
+            return
+          }
+          isHiddenRedrawPending = false
+          if (drawnSceneKey !== null && sceneKeyAt(Date.now()) === drawnSceneKey) return
+          redraw()
+        }
+
         const redraw = () => {
           if (signDrag) {
             isRedrawPending = true
             return
           }
           const { office, sessions, selectedId } = latest.current
-          world.removeChildren()
+          const now = Date.now()
+          drawnSceneKey = sceneKeyAt(now)
+          // 지난 그림은 destroy 해 글자 텍스처·Graphics 의 GPU 자료를 돌려준다. 텍스처(모듈 캐시 dotArtOnce 의 것)는 지우지 않는다 — texture: true 를 주면 안 된다
+          for (const child of world.removeChildren()) child.destroy({ children: true })
           desks.clear()
           animations.clear()
           offDutyTargets.clear()
@@ -2120,9 +2166,7 @@ export function Office(props: Props) {
           // 띠는 늘 내용(그룹·섬·Focus Zone·라운지) 아래 끝 + 1타일. 바닥 격자에 맞는다
           const streetY = PAD_Y + (layout.bottom + 1) * TILE
           map.h = streetY + OFF_DUTY_HEIGHT + Math.ceil(app.screen.height / zoom / TILE) * TILE
-          const now = Date.now()
           drawnPhase = dayPhaseOf(new Date(now))
-          drawnSeatPlaces = seatPlaceKey(sessions, now)
           dotTextResolution = zoom / DOT_SCALE
           world.addChild(drawDotBackground(map.w, map.h, art, drawnPhase, wallFixtures(layout, PAD_X / TILE)))
           drawStreet(streetY, streetPlanWidth, now, selectedId, moreCards)
@@ -2250,7 +2294,7 @@ export function Office(props: Props) {
           // 마우스를 올려 둔 "+N" 의 수가 바뀌었거나 명판이 없어졌으면 카드도 따라간다 (다시 그린 자리에는 pointerout 이 안 온다)
           if (hoveredKey?.startsWith('more:')) setHovered(moreCards.get(hoveredKey) ?? null)
         }
-        redrawRef.current = redraw
+        requestRedrawRef.current = () => requestRedraw()
 
         /** 자리 카드: React 가 내용을 그리고 여기서 자리 위(넘치면 아래)에 붙인다. 자리가 화면 밖이면 숨긴다. 값이 바뀔 때만 쓴다 */
         let placedCard = ''
@@ -2295,18 +2339,9 @@ export function Office(props: Props) {
           card.style.transform = `translate(${position.x}px, ${position.y}px)`
           card.style.visibility = 'visible'
         }
-        // 시간대가 바뀌면 창밖·Off Duty 띠를, 근무 세션이 책상·라운지·라운지 졸기 사이를 옮기면 책상·라운지를, 퇴근 세션의 장소가 바뀌면 거리를 다시 그린다 (매 프레임이 아니라 1분마다 확인)
-        const phaseTimer = setInterval(() => {
-          const now = Date.now()
-          const { sessions } = latest.current
-          if (
-            dayPhaseOf(new Date(now)) !== drawnPhase ||
-            seatPlaceKey(sessions, now) !== drawnSeatPlaces ||
-            streetPlaceKey(art.streetMeta.places, streetPeopleOf(sessions, now)) !== drawnStreet
-          ) {
-            redraw()
-          }
-        }, 60_000)
+        // 시간대가 바뀌면 창밖·Off Duty 띠를, 근무 세션이 책상·라운지·라운지 졸기 사이를 옮기면 책상·라운지를, 퇴근 세션의 장소가 바뀌면 거리를 다시 그린다
+        // (매 프레임이 아니라 1분마다 확인. 셋 다 장면 키에 들어 있어 키가 바뀌었을 때만 그린다)
+        const phaseTimer = setInterval(() => requestRedraw(), 60_000)
         stopPhaseTimer = () => clearInterval(phaseTimer)
 
         // 승인 대기 책상이 화면 밖이면 그쪽 가장자리에 빨간 화살표. 화면 좌표라 world 가 아니라 stage 에 둔다 (redraw 가 지우지 않는다)
@@ -2446,7 +2481,7 @@ export function Office(props: Props) {
           if (hoveredDirection) showArrowTooltip(hoveredDirection)
         }
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
-        app.renderer.on('resize', redraw)
+        app.renderer.on('resize', () => requestRedraw(true))
 
         // 이름표가 아닌 곳(배경·그룹·섬·로비·라운지·책상)을 누르면 맵 이동 후보. 이름표는 stopPropagation 해서 여기 안 온다
         app.stage.on('pointerdown', (event: FederatedPointerEvent) => {
@@ -2487,8 +2522,9 @@ export function Office(props: Props) {
           host.classList.remove('is-label-dragging')
           if (hover !== hoveredLabel) hover.visible = false
           if (delta.x !== 0 || delta.y !== 0) {
-            // 저장하면 office 가 바뀌어 다시 그려진다 (미룬 다시 그리기도 그때 같이)
+            // 저장하면 office 가 바뀌어 다시 그려진다 (미룬 다시 그리기도 그때 같이). 놓은 자리가 저장된 자리와 같아도(장면 키가 그대로) 옮긴 그림을 되돌리게 꼭 그린다
             isRedrawPending = false
+            drawnSceneKey = null
             drop(delta)
           } else if (isRedrawPending) {
             isRedrawPending = false
@@ -2542,8 +2578,9 @@ export function Office(props: Props) {
     }
   }, [])
 
+  // 세션 목록 SSE 는 몇 초마다 새 배열을 준다. 그리는 값이 그대로면(장면 키) 다시 그리지 않는다
   useEffect(() => {
-    redrawRef.current()
+    requestRedrawRef.current()
   }, [office, sessions, selectedId])
 
   useEffect(() => {
