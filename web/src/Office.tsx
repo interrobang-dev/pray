@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { PositionChip } from './PositionChip'
 import { nameOf as sessionNameOf, positionOf } from './sessionPosition'
 import {
@@ -92,6 +92,8 @@ const WHEEL_STEP = 50
 const DRAG_THRESHOLD_PX = 5
 /** 팀·책상으로 부드럽게 이동하는 시간 (ms) */
 const FOCUS_DURATION_MS = 300
+/** 조작(마우스·휠·다시 그리기·크기 바뀜) 뒤 이만큼(ms)은 매 프레임 그린다. 그 뒤로는 그림이 바뀔 때(인물 프레임·깜박임)만 */
+const ACTIVE_TAIL_MS = 500
 const TILE = 16
 const WALL_H = 40
 /** 그룹·책상 원점. 바닥 격자가 x=0, y=WALL_H 부터 TILE 간격이라 둘 다 TILE 배수여야 격자선과 맞는다 */
@@ -1628,6 +1630,8 @@ export function Office(props: Props) {
   latest.current = props
   /** 다시 그리기 요청 (장면 키가 그대로면 건너뛰고, 문서가 숨겨져 있으면 보일 때로 미룬다) */
   const requestRedrawRef = useRef<() => void>(() => {})
+  /** 자리 카드를 자리 옆에 놓기. 카드가 바뀌어 React 가 다시 그린 뒤에도 부른다 (가만히 있을 때는 ticker 가 놓지 않아서) */
+  const placeCardRef = useRef<() => void>(() => {})
   const focusRef = useRef<(target: OfficeFocus) => void>(() => {})
   const handledFocusIdRef = useRef(focus?.id ?? 0)
 
@@ -1677,6 +1681,14 @@ export function Office(props: Props) {
         let zoom = ZOOM_STEPS[zoomIndex] * DOT_SCALE
         world.scale.set(zoom)
         app.stage.addChild(world)
+        /**
+         * 이 시각(performance.now)까지는 매 프레임 그린다. 지나면 ticker 는 인물 프레임·화살표 깜박임이 바뀐 프레임만 그린다.
+         * 화면이 움직일 일(마우스·휠·다시 그리기·크기 바뀜·포커스 이동)이 생기면 wake 로 늘린다
+         */
+        let renderUntil = 0
+        const wake = () => {
+          renderUntil = Math.max(renderUntil, performance.now() + ACTIVE_TAIL_MS)
+        }
 
         /** 바탕 크기 (아트 px): 내용 + Off Duty 띠 + 오른쪽·아래로 화면 한 장 (그룹을 옮겨 놓을 빈 자리) */
         const map = { w: 0, h: 0 }
@@ -1769,6 +1781,7 @@ export function Office(props: Props) {
         /** 타일 사각형이 화면 가운데 오도록 이동한다. isOnlyOutside 면 이미 화면 안에 다 보일 때는 움직이지 않는다 */
         const moveToRect = (rect: Rect, isOnlyOutside: boolean) => {
           syncSize()
+          wake()
           const left = PAD_X + rect.x * TILE
           const top = PAD_Y + rect.y * TILE
           const width = rect.w * TILE
@@ -1886,12 +1899,18 @@ export function Office(props: Props) {
         host.addEventListener('mouseleave', onMouseLeave)
         // 숨긴 동안 미룬 다시 그리기: 보이면 장면 키가 바뀌었을 때만 한 번
         const onVisibilityChange = () => {
-          if (!document.hidden && isHiddenRedrawPending) requestRedraw()
+          if (document.hidden) return
+          wake()
+          if (isHiddenRedrawPending) requestRedraw()
         }
+        // 마우스를 움직이거나 누르거나 휠을 굴리면 그동안 매 프레임 그린다 (hover 테두리·툴팁·끌기·맵 이동이 바로 보이게)
+        const activityEvents = ['pointerdown', 'pointermove', 'pointerup', 'pointerleave', 'wheel'] as const
+        for (const type of activityEvents) host.addEventListener(type, wake, { passive: true })
         window.addEventListener('mousemove', onMouseMove)
         window.addEventListener('keydown', onKeyDown)
         document.addEventListener('visibilitychange', onVisibilityChange)
         removeListeners = () => {
+          for (const type of activityEvents) host.removeEventListener(type, wake)
           host.removeEventListener('wheel', onWheel)
           host.removeEventListener('mouseleave', onMouseLeave)
           window.removeEventListener('mousemove', onMouseMove)
@@ -2140,6 +2159,8 @@ export function Office(props: Props) {
           const { office, sessions, selectedId } = latest.current
           const now = Date.now()
           drawnSceneKey = sceneKeyAt(now)
+          // 새 그림을 그리고, 화살표·자리 카드도 새 자리를 따라가게
+          wake()
           // 지난 그림은 destroy 해 글자 텍스처·Graphics 의 GPU 자료를 돌려준다. 텍스처(모듈 캐시 dotArtOnce 의 것)는 지우지 않는다 — texture: true 를 주면 안 된다
           for (const child of world.removeChildren()) child.destroy({ children: true })
           desks.clear()
@@ -2339,6 +2360,7 @@ export function Office(props: Props) {
           card.style.transform = `translate(${position.x}px, ${position.y}px)`
           card.style.visibility = 'visible'
         }
+        placeCardRef.current = placeCard
         // 시간대가 바뀌면 창밖·Off Duty 띠를, 근무 세션이 책상·라운지·라운지 졸기 사이를 옮기면 책상·라운지를, 퇴근 세션의 장소가 바뀌면 거리를 다시 그린다
         // (매 프레임이 아니라 1분마다 확인. 셋 다 장면 키에 들어 있어 키가 바뀌었을 때만 그린다)
         const phaseTimer = setInterval(() => requestRedraw(), 60_000)
@@ -2481,7 +2503,11 @@ export function Office(props: Props) {
           if (hoveredDirection) showArrowTooltip(hoveredDirection)
         }
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
-        app.renderer.on('resize', () => requestRedraw(true))
+        app.renderer.on('resize', () => {
+          // 캔버스 크기를 바꾸면 그림이 지워진다. 숨겨져 다시 그리기를 미뤄도 보이면 바로 그리게
+          wake()
+          requestRedraw(true)
+        })
 
         // 이름표가 아닌 곳(배경·그룹·섬·로비·라운지·책상)을 누르면 맵 이동 후보. 이름표는 stopPropagation 해서 여기 안 온다
         app.stage.on('pointerdown', (event: FederatedPointerEvent) => {
@@ -2516,6 +2542,8 @@ export function Office(props: Props) {
         })
         const endDrag = () => {
           pan = null
+          // 놓은 뒤 모습(테두리 끄기·옮긴 그림)을 그린다. 캔버스 밖에서 놓으면 host 의 pointerup 이 오지 않는다
+          wake()
           if (!signDrag) return
           const { delta, drop, hover } = signDrag
           signDrag = null
@@ -2534,6 +2562,9 @@ export function Office(props: Props) {
         app.stage.on('pointerup', endDrag)
         app.stage.on('pointerupoutside', endDrag)
 
+        // 렌더는 Application 이 매 프레임 하지 않고 아래 ticker 가 필요한 프레임만 한다 (가만히 있을 때 CPU).
+        // ticker(rAF)는 계속 돈다 — 인물 프레임·깜박임 시각을 지금과 같이 재고, Pixi 이벤트용 Ticker.system 도 어차피 rAF 를 돈다
+        app.ticker.remove(app.render, app)
         let elapsed = 0
         app.ticker.add((ticker) => {
           if (focusMove) {
@@ -2545,17 +2576,38 @@ export function Office(props: Props) {
               focusMove.from.y + (focusMove.to.y - focusMove.from.y) * eased,
             )
             world.position.set(next.x, next.y)
-            if (progress >= 1) focusMove = null
+            if (progress >= 1) {
+              focusMove = null
+              // 멈춘 자리에서 hover(Pixi 가 정지한 마우스 아래를 다시 맞혀 본다)·카드가 바뀔 수 있어 조금 더 그린다
+              wake()
+            }
           }
-          // 확대·이동·데이터 갱신을 따라가게 매 프레임 (승인 대기 책상은 몇 개뿐이라 가볍다)
-          updateApprovalArrows()
-          placeCard()
-          for (const animation of animations) animation.update(ticker)
+          // 포커스 이동·맵 이동·이름표 끌기 중이거나 조작 직후면 매 프레임 그린다
+          const isActive = focusMove !== null || pan !== null || signDrag !== null || performance.now() < renderUntil
+          let isChanged = isActive
+          if (isActive) {
+            // 확대·이동·데이터 갱신을 따라가게 (가만히 있으면 화면 좌표가 그대로라 건너뛴다. 카드 내용이 바뀌면 React 가 placeCardRef 로 놓는다)
+            updateApprovalArrows()
+            placeCard()
+          }
+          // 인물·점 셋은 3~8fps 라 프레임이 바뀐 때만 그린다
+          for (const animation of animations) {
+            const before = animation.currentFrame
+            animation.update(ticker)
+            if (animation.currentFrame !== before) isChanged = true
+          }
           elapsed += ticker.deltaMS
-          if (elapsed < 350) return
-          elapsed = 0
-          frame = (frame + 1) % 2
-          for (const arrow of arrows.values()) arrow.container.alpha = frame && !reducedMotion.matches ? 0.55 : 1
+          if (elapsed >= 350) {
+            elapsed = 0
+            frame = (frame + 1) % 2
+            const alpha = frame && !reducedMotion.matches ? 0.55 : 1
+            for (const arrow of arrows.values()) {
+              if (arrow.container.alpha === alpha) continue
+              arrow.container.alpha = alpha
+              isChanged = true
+            }
+          }
+          if (isChanged) app.render()
         })
 
         redraw()
@@ -2570,6 +2622,7 @@ export function Office(props: Props) {
       disconnectResize()
       stopPhaseTimer()
       releaseArt()
+      placeCardRef.current = () => {}
       host.replaceChildren()
       if (appRef.current) {
         appRef.current.destroy(true, { children: true })
@@ -2582,6 +2635,11 @@ export function Office(props: Props) {
   useEffect(() => {
     requestRedrawRef.current()
   }, [office, sessions, selectedId])
+
+  // 카드가 바뀌거나(마우스 올림) 내용이 바뀌어 크기가 달라지면 바로 자리 옆에 다시 놓는다 (가만히 있을 때 ticker 는 놓지 않는다)
+  useLayoutEffect(() => {
+    placeCardRef.current()
+  })
 
   useEffect(() => {
     if (!focus || focus.id === handledFocusIdRef.current) return
