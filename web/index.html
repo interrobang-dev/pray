@@ -28,10 +28,8 @@
         for (var name in vars) root.style.setProperty('--' + name, vars[name])
       })()
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- 앱 제목 글꼴: Fraunces 정체 500 + 로그인 문구 이탤릭 400 (둘 다 SOFT 50, opsz 는 글자 크기를 따른다) -->
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,500,50;1,9..144,400,50&display=swap" rel="stylesheet" />
+    <!-- 앱 제목 글꼴 Fraunces 는 public/fonts/fraunces/ 에서 직접 준다 (@font-face 는 src/fonts.css). 첫 화면 제목용 정체 latin 만 미리 받는다 -->
+    <link rel="preload" href="/fonts/fraunces/fraunces-normal-500-latin.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <div id="root"></div>

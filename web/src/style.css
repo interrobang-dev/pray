@@ -300,7 +300,7 @@ header {
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
 }
-/* 앱 이름 "Pray" 글자 로고: Fraunces(index.html 의 Google Fonts) 500, SOFT 50, 본문색.
+/* 앱 이름 "Pray" 글자 로고: Fraunces(src/fonts.css, public/fonts/fraunces) 500, SOFT 50, 본문색.
    글자 크기는 마크 높이에 대해 대문자 높이가 같은 비율이 되게 정했다 (헤더 마크 16 : 대문자 10.5 → 15px, 로그인 마크 32 : 18.5 → 26.5px. 글자 크기 설정 --font-scale 을 따른다). 색은 강조색이 아니라 본문색 */
 h1 {
   font-family: 'Fraunces', Georgia, serif;

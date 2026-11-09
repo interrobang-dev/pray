@@ -7,6 +7,7 @@ import { IsLocalPage } from './ChatLink'
 import { DialogHost } from './Dialog'
 import { Login } from './Login'
 import './theme'
+import './fonts.css'
 import './style.css'
 
 interface Me {
