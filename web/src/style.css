@@ -1960,11 +1960,28 @@ li.group.drop-after::after {
   --scrollbar-thumb-hover: rgba(227, 229, 234, 0.36);
 }
 .chat {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg);
+}
+/* 파일을 대화 탭 위로 끌고 있을 때 덮는 안내 (Chat.tsx). 포인터를 받지 않아 끌기 이벤트는 밑 요소로 간다 */
+.drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent-soft) 85%, transparent);
+  color: var(--accent-text);
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 600;
+  pointer-events: none;
 }
 /* 대화 목록 + 오른쪽 아래 버튼 묶음. 버튼이 승인 막대·입력칸 바깥(위)에 뜨도록 목록만 감싼다 */
 .messages-pane {

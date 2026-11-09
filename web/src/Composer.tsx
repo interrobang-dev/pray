@@ -55,6 +55,8 @@ export interface ComposerHandle {
   focus: () => void
   /** composerDraft 의 글·커서로 다시 그리고 포커스한다 (되돌아온 글을 저장소에 넣은 뒤. restoreToComposerDraft) */
   reload: () => void
+  /** 대화 탭에 끌어 놓은 파일을 첨부한다 (클립 버튼·붙여넣기와 같은 길. 막혀 있으면 무시) */
+  attach: (files: File[]) => void
 }
 
 interface Props {
@@ -148,7 +150,13 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
     const { selection } = composerDraft
     if (selection) textarea.setSelectionRange(selection.start, selection.end)
   }
-  useImperativeHandle(ref, () => ({ fill, focus: () => composerRef.current?.focus(), reload }))
+  /** 끌어 놓은 파일: 첨부하고 입력칸에 포커스한다 (이어서 글을 쓰고 Enter) */
+  function attachDropped(files: File[]) {
+    if (files.length === 0 || isLocked) return
+    attachFiles(files)
+    composerRef.current?.focus()
+  }
+  useImperativeHandle(ref, () => ({ fill, focus: () => composerRef.current?.focus(), reload, attach: attachDropped }))
 
   function submit(event?: FormEvent) {
     event?.preventDefault()
@@ -167,7 +175,7 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
     onSend(text)
   }
 
-  /** 고르거나 붙여 넣은 파일을 칩으로 붙이고 바로 올린다. 20MB 를 넘으면 올리지 않고 칩에 알린다 */
+  /** 고르거나 붙여 넣거나 끌어 놓은 파일을 칩으로 붙이고 바로 올린다. 20MB 를 넘으면 올리지 않고 칩에 알린다 */
   function attachFiles(files: File[]) {
     if (files.length === 0 || isLocked) return
     const added = files.map(

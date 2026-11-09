@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { buildChatRows, hidingWorkKey, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
 import { reuseMessages, reuseRows } from './chatReuse'
@@ -1116,6 +1116,22 @@ const MessageRows = memo(function MessageRows({
   })
 })
 
+/** 끌고 있는 것이 파일인지 (대화 속 글자·그림을 끌 때는 반응하지 않는다) */
+function isFileDrag(dataTransfer: DataTransfer): boolean {
+  return Array.from(dataTransfer.types).includes('Files')
+}
+
+/** 놓은 파일. 폴더는 뺀다 (통째로 올리지 않는다. 폴더도 크기 0 인 File 로 오고 읽으면 실패한다) */
+function droppedFiles(dataTransfer: DataTransfer): File[] {
+  const items = Array.from(dataTransfer.items).filter((item) => item.kind === 'file')
+  if (items.length === 0) return Array.from(dataTransfer.files)
+  return items.flatMap((item) => {
+    if (item.webkitGetAsEntry()?.isDirectory) return []
+    const file = item.getAsFile()
+    return file ? [file] : []
+  })
+}
+
 export function Chat({
   sessionId,
   isWritable,
@@ -1168,6 +1184,10 @@ export function Chat({
   const isAsking = Boolean(question) || pendingTool === ASK_TOOL
   /** 인계 중에도 입력칸을 막는다 (서버 /input·btw 409). 쓰던 글은 남긴다 */
   const isHandingOver = handoverFrom !== null
+  /** 파일을 끌어 놓아 첨부할 수 있는지 (클립 버튼과 같은 조건: 근무 중인 웹 세션, 질문·인계 중 아님) */
+  const canDropFiles = isWritable && !isAsking && !isHandingOver
+  /** 파일을 대화 탭 위로 끌고 있는 중 (놓을 곳 안내를 덮어 보인다) */
+  const [isFileOver, setIsFileOver] = useState(false)
   /** 입력 상자의 흐린 제안 글 (조건은 composerText.ts isSuggestionVisible) */
   const isSuggestionShown = isSuggestionVisible({
     suggestion,
@@ -1690,8 +1710,31 @@ export function Chat({
     setCancelNotice(notice)
   }, [sessionId])
 
+  /** 파일을 끌고 들어오거나 위에서 움직일 때: 놓을 수 있으면 복사 커서와 안내, 아니면 금지 커서 (어느 쪽이든 브라우저가 파일을 열지 않게 막는다) */
+  function onFileDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event.dataTransfer)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = canDropFiles ? 'copy' : 'none'
+    if (canDropFiles && !isFileOver) setIsFileOver(true)
+  }
+  /** 대화 탭 밖으로 나갈 때만 안내를 끈다 (안쪽 요소 사이를 지날 때도 dragleave 가 온다) */
+  function onFileDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsFileOver(false)
+  }
+  function onFileDrop(event: DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event.dataTransfer)) return
+    event.preventDefault()
+    setIsFileOver(false)
+    if (canDropFiles) composerRef.current?.attach(droppedFiles(event.dataTransfer))
+  }
+
   return (
-    <div className="chat">
+    <div className="chat" onDragEnter={onFileDragOver} onDragOver={onFileDragOver} onDragLeave={onFileDragLeave} onDrop={onFileDrop}>
+      {isFileOver && canDropFiles && (
+        <div className="drop-overlay" aria-hidden="true">
+          <span>Drop files to attach</span>
+        </div>
+      )}
       <div className="messages-pane">
         {isSearchOpen && (
           <ChatSearch
