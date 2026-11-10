@@ -27,7 +27,7 @@ import { KEY_STEP, clampPanelWidth, parsePanelWidth } from './panelWidth'
 import { NewTeamModal } from './NewTeamModal'
 import { TeamTodosModal } from './TeamTodosModal'
 import { TeamTasksModal } from './TeamTasksModal'
-import { remainingCount, todosOf } from './teamTodos'
+import { DESK_NAME, remainingCount, scopeTodos, teamScope, updateScopeTodos, type TodoScope } from './teamTodos'
 import { Modal, Segmented } from './Modal'
 import { alertDialog, confirmDialog, promptDialog } from './Dialog'
 import { copyText } from './copyText'
@@ -331,9 +331,12 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [isPanelResizing, setIsPanelResizing] = useState(false)
   const layoutRef = useRef<HTMLElement>(null)
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
-  /** TODO 모달을 연 팀. 목록 팀 머리줄의 버튼과 사무실 팀 명판 옆 버튼이 같은 모달을 연다 */
-  const [todoTeamId, setTodoTeamId] = useState<string | null>(null)
-  const todoTeam = todoTeamId ? office.teams.find((t) => t.id === todoTeamId) : undefined
+  /** TODO 모달을 연 범위(팀·내 책상). 목록 팀 머리줄의 버튼·사무실 팀 명판 옆 버튼·All TODOs 창 머리줄이 같은 모달을 연다 */
+  const [todoScope, setTodoScope] = useState<TodoScope | null>(null)
+  /** 그 범위의 todos. 팀이 사라지면 null 이라 모달을 그리지 않아 닫힌다 */
+  const todoScopeTodos = todoScope ? scopeTodos(office, todoScope) : null
+  const todoScopeName =
+    todoScope?.kind === 'team' ? (office.teams.find((t) => t.id === todoScope.teamId)?.name ?? '') : DESK_NAME
   /** Tasks 창을 연 팀 (팀 ⋯ 메뉴 Tasks). 팀이 사라지면 그리지 않아 닫힌다 */
   const [tasksTeamId, setTasksTeamId] = useState<string | null>(null)
   const tasksTeam = tasksTeamId ? office.teams.find((t) => t.id === tasksTeamId) : undefined
@@ -1100,8 +1103,12 @@ export function App({ isLocal }: { isLocal: boolean }) {
   }
 
   /** TODO 모달이 서버 응답으로 화면 목록을 먼저 바꾼다. 사무실 SSE 가 오면 서버 것으로 바뀐다 */
-  function changeTodos(teamId: string, update: (todos: TeamTodo[]) => TeamTodo[]) {
-    setOffice((prev) => ({ ...prev, teams: prev.teams.map((t) => (t.id === teamId ? { ...t, todos: update(todosOf(t)) } : t)) }))
+  function changeTodos(scope: TodoScope, update: (todos: TeamTodo[]) => TeamTodo[]) {
+    setOffice((prev) => updateScopeTodos(prev, scope, update))
+  }
+
+  function openTeamTodos(teamId: string) {
+    setTodoScope(teamScope(teamId))
   }
 
   /** 그룹 안의 팀들도 같은 만큼 옮긴다 (서버도 PATCH 한 번에 같이 옮긴다) */
@@ -1255,7 +1262,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
     return (
       <button
         className={remaining > 0 ? 'todo-button has-todos' : 'todo-button'}
-        onClick={() => setTodoTeamId(team.id)}
+        onClick={() => openTeamTodos(team.id)}
         title="TODO"
         aria-label={remaining > 0 ? `TODO · ${remaining} left` : 'TODO'}
       >
@@ -1699,7 +1706,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
               New Group
             </button>
             <NeedsYouButton sessions={snapshot.sessions} teams={office.teams} now={now} renderAvatar={renderAvatar} onSelect={selectSession} />
-            <AllTodosButton office={office} icon={<TodoIcon />} onChangeTodos={changeTodos} onOpenTeam={setTodoTeamId} />
+            <AllTodosButton office={office} icon={<TodoIcon />} onChangeTodos={changeTodos} onOpenTodos={setTodoScope} />
           </div>
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
             {office.groups.map((group, groupIndex) => {
@@ -1795,7 +1802,16 @@ export function App({ isLocal }: { isLocal: boolean }) {
           />
         )}
         {sessionForm && renderSessionModal(sessionForm.teamId, sessionForm.partId)}
-        {todoTeam && <TeamTodosModal key={todoTeam.id} team={todoTeam} onClose={() => setTodoTeamId(null)} onChangeTodos={changeTodos} />}
+        {todoScope && todoScopeTodos && (
+          <TeamTodosModal
+            key={todoScope.kind === 'team' ? `team:${todoScope.teamId}` : 'desk'}
+            scope={todoScope}
+            name={todoScopeName}
+            todos={todoScopeTodos}
+            onClose={() => setTodoScope(null)}
+            onChangeTodos={changeTodos}
+          />
+        )}
         {tasksTeam && <TeamTasksModal key={tasksTeam.id} team={tasksTeam} onClose={() => setTasksTeamId(null)} />}
         {partForm && (
           <Modal
@@ -1908,7 +1924,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
             onMoveGroup={moveGroup}
             onMoveTeam={moveTeam}
             onEditTeam={(team) => void editTeam(team)}
-            onOpenTeamTodos={setTodoTeamId}
+            onOpenTeamTodos={openTeamTodos}
           />
         )}
         {/* 사무실이 보일 때만 패널 폭을 끈다 (숨기면 패널이 남는 폭을 다 쓰고, 폰은 한 열). 패널 바로 앞 형제라 키보드 폭 계산이 패널을 잰다 */}

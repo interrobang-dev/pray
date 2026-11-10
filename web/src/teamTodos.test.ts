@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { applyTodo, clearDone, moveTo, openTodoGroups, remainingCount, removeTodo, reorderOpen, splitTodos, teamsInListOrder, todosOf, totalRemaining } from './teamTodos'
+import {
+  applyTodo,
+  clearDone,
+  deskTodosOf,
+  DESK_SCOPE,
+  moveTo,
+  openTodoGroups,
+  remainingCount,
+  removeTodo,
+  reorderOpen,
+  scopeTodos,
+  splitTodos,
+  teamScope,
+  teamsInListOrder,
+  todosOf,
+  todosUrl,
+  totalRemaining,
+  updateScopeTodos,
+} from './teamTodos'
 import type { Group, Team, TeamTodo } from './types'
 
 const todo = (id: string, isDone = false): TeamTodo => ({
@@ -120,10 +138,42 @@ describe('teamsInListOrder·openTodoGroups·totalRemaining', () => {
   it('모두 없으면 빈 목록, 합계는 0', () => {
     const empty = { groups: [group('g1')], teams: [teamIn('a', 'g1', [todo('a1', true)]), teamIn('d', 'g1')] }
     expect(openTodoGroups(empty)).toEqual([])
-    expect(totalRemaining(empty.teams)).toBe(0)
+    expect(totalRemaining(empty)).toBe(0)
   })
 
-  it('합계는 모든 팀(그룹이 지워진 팀 포함)의 미완료 수', () => {
-    expect(totalRemaining(office().teams)).toBe(4)
+  it('합계는 내 책상 + 모든 팀(그룹이 지워진 팀 포함)의 미완료 수', () => {
+    expect(totalRemaining(office())).toBe(4)
+    expect(totalRemaining({ ...office(), todos: [todo('m1'), todo('m2'), todo('m3', true)] })).toBe(6)
+  })
+
+  it('내 책상은 팀 묶음에 들지 않는다', () => {
+    expect(openTodoGroups({ ...office(), todos: [todo('m1')] }).map((item) => item.team.id)).toEqual(['e', 'a', 'c'])
+  })
+})
+
+describe('범위 (팀 / 내 책상)', () => {
+  const office = () => ({ groups: [], teams: [{ ...team([todo('t1')]), id: 'a b' }], todos: [todo('m1'), todo('m2', true)] })
+
+  it('API 경로: 내 책상은 /api/todos, 팀은 팀 ID 를 인코딩한다', () => {
+    expect(todosUrl(DESK_SCOPE)).toBe('/api/todos')
+    expect(todosUrl(teamScope('a b'))).toBe('/api/team/a%20b/todos')
+  })
+
+  it('필드가 없는 옛 응답의 내 책상은 빈 목록, 없는 팀은 null', () => {
+    expect(deskTodosOf({ groups: [], teams: [] })).toEqual([])
+    expect(ids(scopeTodos(office(), DESK_SCOPE)!)).toEqual(['m1', 'm2'])
+    expect(ids(scopeTodos(office(), teamScope('a b'))!)).toEqual(['t1'])
+    expect(scopeTodos(office(), teamScope('none'))).toBeNull()
+  })
+
+  it('그 범위만 바꾸고 다른 범위는 그대로', () => {
+    const add = (todos: TeamTodo[]) => applyTodo(todos, todo('new'))
+    const desk = updateScopeTodos(office(), DESK_SCOPE, add)
+    expect(ids(desk.todos!)).toEqual(['m1', 'new', 'm2'])
+    expect(ids(todosOf(desk.teams[0]))).toEqual(['t1'])
+    const teamChanged = updateScopeTodos(office(), teamScope('a b'), add)
+    expect(ids(todosOf(teamChanged.teams[0]))).toEqual(['t1', 'new'])
+    expect(ids(teamChanged.todos!)).toEqual(['m1', 'm2'])
+    expect(ids(updateScopeTodos({ groups: [], teams: [] }, DESK_SCOPE, add).todos!)).toEqual(['new'])
   })
 })

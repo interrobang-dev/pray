@@ -46,6 +46,9 @@ import {
   reorderTodos,
   TodoNotFoundError,
   updateTodo,
+  DESK_SCOPE,
+  teamScope,
+  type TodoScope,
   updateGroup,
   updatePart,
   updateTeam,
@@ -2727,112 +2730,123 @@ app.patch('/api/groups/:id', (req, res) => {
   broadcastOffice()
 })
 
-// ---------- 팀 할 일 (배열 순서 = 표시 순서. hq 가 늘 [할 일…, 완료…] 로 나눠 둔다) ----------
+// ---------- 할 일: 팀 할 일·내 책상 (배열 순서 = 표시 순서. hq 가 늘 [할 일…, 완료…] 로 나눠 둔다) ----------
 
 const TODO_TEXT_MESSAGE = 'Text must be 1 to 500 characters'
 
-/** 할 일 구역 맨 끝(첫 완료 앞)에 넣는다 */
-app.post('/api/team/:teamId/todos', (req, res) => {
-  const text = parseTodoText(((req.body ?? {}) as { text?: unknown }).text)
-  if (text === null) {
-    res.status(400).json({ message: TODO_TEXT_MESSAGE })
-    return
-  }
-  const todo = addTodo(req.params.teamId, text)
-  if (!todo) {
-    res.status(404).json({ message: 'Team not found' })
-    return
-  }
-  res.json({ todo })
-  broadcastOffice()
-})
-
-/** 할 일(미완료) 구역 순서. ids 는 지금 할 일 전부 (다르면 400). 완료 구역은 그대로. `:todoId` 라우트보다 앞에 둔다 */
-app.put('/api/team/:teamId/todos/order', (req, res) => {
-  const { ids } = (req.body ?? {}) as { ids?: unknown }
-  if (!isIdList(ids)) {
-    res.status(400).json({ message: 'ids (array of strings) required' })
-    return
-  }
-  try {
-    if (!reorderTodos(req.params.teamId, ids)) {
-      res.status(404).json({ message: 'Team not found' })
+/**
+ * 할 일 API 다섯 개를 basePath 아래에 단다. 팀 할 일(`/api/team/:teamId/todos`)과 내 책상(`/api/todos`)은 규칙·응답이 같고
+ * scopeOf 가 요청에서 범위를 고른다. 범위가 없으면(팀 없음) 404 "Team not found" — 내 책상은 늘 있다.
+ * `order`·`done` 이 `:todoId` 로 잡히지 않게 그 라우트들을 앞에 둔다
+ */
+function addTodoRoutes(basePath: string, scopeOf: (req: Request) => TodoScope): void {
+  /** 할 일 구역 맨 끝(첫 완료 앞)에 넣는다 */
+  app.post(basePath, (req, res) => {
+    const text = parseTodoText(((req.body ?? {}) as { text?: unknown }).text)
+    if (text === null) {
+      res.status(400).json({ message: TODO_TEXT_MESSAGE })
       return
     }
-  } catch (error) {
-    if (error instanceof OrderMismatchError) {
-      res.status(400).json({ message: "IDs don't match the current list (missing, unknown or duplicate). Reload and try again" })
-      return
-    }
-    throw error
-  }
-  res.json({})
-  broadcastOffice()
-})
-
-/** 글·완료 변경. 완료가 되면 맨 끝, 되돌리면 할 일 구역 맨 끝으로 (hq updateTodo) */
-app.patch('/api/team/:teamId/todos/:todoId', (req, res) => {
-  const body = (req.body ?? {}) as { text?: unknown; isDone?: unknown }
-  if (body.text === undefined && body.isDone === undefined) {
-    res.status(400).json({ message: 'text or isDone required' })
-    return
-  }
-  if (body.isDone !== undefined && typeof body.isDone !== 'boolean') {
-    res.status(400).json({ message: 'isDone must be true or false' })
-    return
-  }
-  const text = body.text === undefined ? undefined : parseTodoText(body.text)
-  if (text === null) {
-    res.status(400).json({ message: TODO_TEXT_MESSAGE })
-    return
-  }
-  try {
-    const todo = updateTodo(req.params.teamId, req.params.todoId, {
-      text,
-      isDone: typeof body.isDone === 'boolean' ? body.isDone : undefined,
-    })
+    const todo = addTodo(scopeOf(req), text)
     if (!todo) {
       res.status(404).json({ message: 'Team not found' })
       return
     }
     res.json({ todo })
-  } catch (error) {
-    if (error instanceof TodoNotFoundError) {
-      res.status(404).json({ message: 'To-do not found' })
+    broadcastOffice()
+  })
+
+  /** 할 일(미완료) 구역 순서. ids 는 지금 할 일 전부 (다르면 400). 완료 구역은 그대로 */
+  app.put(`${basePath}/order`, (req, res) => {
+    const { ids } = (req.body ?? {}) as { ids?: unknown }
+    if (!isIdList(ids)) {
+      res.status(400).json({ message: 'ids (array of strings) required' })
       return
     }
-    throw error
-  }
-  broadcastOffice()
-})
+    try {
+      if (!reorderTodos(scopeOf(req), ids)) {
+        res.status(404).json({ message: 'Team not found' })
+        return
+      }
+    } catch (error) {
+      if (error instanceof OrderMismatchError) {
+        res.status(400).json({ message: "IDs don't match the current list (missing, unknown or duplicate). Reload and try again" })
+        return
+      }
+      throw error
+    }
+    res.json({})
+    broadcastOffice()
+  })
 
-/** 완료한 할 일 모두 삭제. 할 일 ID 는 randomUUID 앞 8자리 hex 라 "done" 과 겹치지 않는다. `:todoId` 라우트보다 앞에 둔다 */
-app.delete('/api/team/:teamId/todos/done', (req, res) => {
-  const removedCount = clearDoneTodos(req.params.teamId)
-  if (removedCount === null) {
-    res.status(404).json({ message: 'Team not found' })
-    return
-  }
-  res.json({ removed: removedCount })
-  if (removedCount > 0) broadcastOffice()
-})
+  /** 글·완료 변경. 완료가 되면 맨 끝, 되돌리면 할 일 구역 맨 끝으로 (hq updateTodo) */
+  app.patch(`${basePath}/:todoId`, (req, res) => {
+    const body = (req.body ?? {}) as { text?: unknown; isDone?: unknown }
+    if (body.text === undefined && body.isDone === undefined) {
+      res.status(400).json({ message: 'text or isDone required' })
+      return
+    }
+    if (body.isDone !== undefined && typeof body.isDone !== 'boolean') {
+      res.status(400).json({ message: 'isDone must be true or false' })
+      return
+    }
+    const text = body.text === undefined ? undefined : parseTodoText(body.text)
+    if (text === null) {
+      res.status(400).json({ message: TODO_TEXT_MESSAGE })
+      return
+    }
+    try {
+      const todo = updateTodo(scopeOf(req), req.params.todoId, {
+        text,
+        isDone: typeof body.isDone === 'boolean' ? body.isDone : undefined,
+      })
+      if (!todo) {
+        res.status(404).json({ message: 'Team not found' })
+        return
+      }
+      res.json({ todo })
+    } catch (error) {
+      if (error instanceof TodoNotFoundError) {
+        res.status(404).json({ message: 'To-do not found' })
+        return
+      }
+      throw error
+    }
+    broadcastOffice()
+  })
 
-app.delete('/api/team/:teamId/todos/:todoId', (req, res) => {
-  try {
-    if (!removeTodo(req.params.teamId, req.params.todoId)) {
+  /** 완료한 할 일 모두 삭제. 할 일 ID 는 randomUUID 앞 8자리 hex 라 "done" 과 겹치지 않는다 */
+  app.delete(`${basePath}/done`, (req, res) => {
+    const removedCount = clearDoneTodos(scopeOf(req))
+    if (removedCount === null) {
       res.status(404).json({ message: 'Team not found' })
       return
     }
-  } catch (error) {
-    if (error instanceof TodoNotFoundError) {
-      res.status(404).json({ message: 'To-do not found' })
-      return
+    res.json({ removed: removedCount })
+    if (removedCount > 0) broadcastOffice()
+  })
+
+  app.delete(`${basePath}/:todoId`, (req, res) => {
+    try {
+      if (!removeTodo(scopeOf(req), req.params.todoId)) {
+        res.status(404).json({ message: 'Team not found' })
+        return
+      }
+    } catch (error) {
+      if (error instanceof TodoNotFoundError) {
+        res.status(404).json({ message: 'To-do not found' })
+        return
+      }
+      throw error
     }
-    throw error
-  }
-  res.json({})
-  broadcastOffice()
-})
+    res.json({})
+    broadcastOffice()
+  })
+}
+
+addTodoRoutes('/api/team/:teamId/todos', (req) => teamScope(req.params.teamId as string))
+/** 팀과 무관한 내 할 일 (화면 All TODOs 의 "My desk"). hq.json 최상위 todos */
+addTodoRoutes('/api/todos', () => DESK_SCOPE)
 
 app.post('/api/hook', (req, res) => {
   const payload = req.body as HookPayload

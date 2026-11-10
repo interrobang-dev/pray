@@ -50,6 +50,8 @@ type LegacyGroup = Group & { todos?: Todo[]; waitingNote?: unknown }
 export interface Office {
   groups: Group[]
   teams: Team[]
+  /** 팀과 무관한 내 할 일 (화면 "My desk"). 팀 할 일과 같은 꼴·순서 규칙. 서버만 쓴다 */
+  todos: Todo[]
 }
 
 /**
@@ -112,6 +114,7 @@ function readHq(): HqFile {
     characters: rest.characters ?? {},
     genders: rest.genders ?? {},
     positions: rest.positions ?? {},
+    todos: rest.todos ?? [],
   }
 }
 
@@ -349,8 +352,8 @@ export function migratePositionNames(): number {
 
 /** 화면용. 팀이 없어 못 옮긴 그룹의 옛 todos 는 싣지 않는다 */
 export function readOffice(): Office {
-  const { groups, teams } = readHq()
-  return { groups: groups.map(({ todos: _legacyTodos, ...group }: LegacyGroup) => group), teams }
+  const { groups, teams, todos } = readHq()
+  return { groups: groups.map(({ todos: _legacyTodos, ...group }: LegacyGroup) => group), teams, todos }
 }
 
 export class OrderMismatchError extends Error {
@@ -447,7 +450,7 @@ export function reorderGroups(ids: string[]): Group[] {
   return hq.groups
 }
 
-// ---------- 팀 할 일 ----------
+// ---------- 할 일 (팀 할 일·내 책상) ----------
 
 export const MAX_TODO_LENGTH = 500
 
@@ -491,14 +494,28 @@ function splitTodos(todos: Todo[]): { open: Todo[]; done: Todo[] } {
   return { open: todos.filter((t) => !t.isDone), done: todos.filter((t) => t.isDone) }
 }
 
+/** 할 일이 사는 곳: 팀 할 일(`teams[].todos`) 또는 팀과 무관한 내 책상(최상위 `todos`). 규칙(구역·글·ID)은 둘이 같다 */
+export type TodoScope = { kind: 'team'; teamId: string } | { kind: 'desk' }
+
+export const DESK_SCOPE: TodoScope = { kind: 'desk' }
+
+export function teamScope(teamId: string): TodoScope {
+  return { kind: 'team', teamId }
+}
+
+/** 그 범위의 todos 를 가진 객체 (팀 또는 hq 자체). 팀이 없으면 null. 내 책상은 늘 있다 */
+function todoHolder(hq: HqFile, scope: TodoScope): { todos: Todo[] } | null {
+  return scope.kind === 'desk' ? hq : (hq.teams.find((t) => t.id === scope.teamId) ?? null)
+}
+
 /** 할 일 구역 맨 끝(첫 완료 앞)에 넣는다. 글은 부른 쪽이 parseTodoText 로 거른다. 팀이 없으면 null */
-export function addTodo(teamId: string, text: string, now = new Date()): Todo | null {
+export function addTodo(scope: TodoScope, text: string, now = new Date()): Todo | null {
   const hq = readHq()
-  const team = hq.teams.find((t) => t.id === teamId)
-  if (!team) return null
+  const holder = todoHolder(hq, scope)
+  if (!holder) return null
   const todo = newTodo(text, now)
-  const { open, done } = splitTodos(team.todos)
-  team.todos = [...open, todo, ...done]
+  const { open, done } = splitTodos(holder.todos)
+  holder.todos = [...open, todo, ...done]
   writeHq(hq)
   return todo
 }
@@ -509,55 +526,55 @@ export type TodoPatch = { text?: string; isDone?: boolean }
  * 글·완료 변경. 완료가 되면 doneAt = now 이고 맨 끝(완료한 순서)으로, 할 일로 되돌리면 doneAt null 이고 할 일 구역 맨 끝으로.
  * 완료 값이 그대로면 자리를 안 바꾼다. 팀이 없으면 null, 할 일이 없으면 TodoNotFoundError
  */
-export function updateTodo(teamId: string, todoId: string, patch: TodoPatch, now = new Date()): Todo | null {
+export function updateTodo(scope: TodoScope, todoId: string, patch: TodoPatch, now = new Date()): Todo | null {
   const hq = readHq()
-  const team = hq.teams.find((t) => t.id === teamId)
-  if (!team) return null
-  const todo = team.todos.find((t) => t.id === todoId)
+  const holder = todoHolder(hq, scope)
+  if (!holder) return null
+  const todo = holder.todos.find((t) => t.id === todoId)
   if (!todo) throw new TodoNotFoundError()
   if (patch.text !== undefined) todo.text = patch.text
   if (patch.isDone !== undefined && patch.isDone !== todo.isDone) {
     todo.isDone = patch.isDone
     todo.doneAt = patch.isDone ? now.toISOString() : null
-    const { open, done } = splitTodos(team.todos.filter((t) => t.id !== todoId))
-    team.todos = patch.isDone ? [...open, ...done, todo] : [...open, todo, ...done]
+    const { open, done } = splitTodos(holder.todos.filter((t) => t.id !== todoId))
+    holder.todos = patch.isDone ? [...open, ...done, todo] : [...open, todo, ...done]
   }
   writeHq(hq)
   return todo
 }
 
 /** 남은 할 일 목록. 팀이 없으면 null, 할 일이 없으면 TodoNotFoundError */
-export function removeTodo(teamId: string, todoId: string): Todo[] | null {
+export function removeTodo(scope: TodoScope, todoId: string): Todo[] | null {
   const hq = readHq()
-  const team = hq.teams.find((t) => t.id === teamId)
-  if (!team) return null
-  if (!team.todos.some((t) => t.id === todoId)) throw new TodoNotFoundError()
-  team.todos = team.todos.filter((t) => t.id !== todoId)
+  const holder = todoHolder(hq, scope)
+  if (!holder) return null
+  if (!holder.todos.some((t) => t.id === todoId)) throw new TodoNotFoundError()
+  holder.todos = holder.todos.filter((t) => t.id !== todoId)
   writeHq(hq)
-  return team.todos
+  return holder.todos
 }
 
 /** 완료한 할 일을 모두 지우고 지운 개수를 돌려준다. 지울 것이 없으면 쓰지 않는다. 팀이 없으면 null */
-export function clearDoneTodos(teamId: string): number | null {
+export function clearDoneTodos(scope: TodoScope): number | null {
   const hq = readHq()
-  const team = hq.teams.find((t) => t.id === teamId)
-  if (!team) return null
-  const remaining = team.todos.filter((t) => !t.isDone)
-  const removedCount = team.todos.length - remaining.length
+  const holder = todoHolder(hq, scope)
+  if (!holder) return null
+  const remaining = holder.todos.filter((t) => !t.isDone)
+  const removedCount = holder.todos.length - remaining.length
   if (removedCount === 0) return 0
-  team.todos = remaining
+  holder.todos = remaining
   writeHq(hq)
   return removedCount
 }
 
 /** 할 일(미완료) 구역 순서를 통째로 바꾼다. ids 는 그 구역 전부여야 한다. 완료 구역은 그대로. 팀이 없으면 null */
-export function reorderTodos(teamId: string, ids: string[]): Todo[] | null {
+export function reorderTodos(scope: TodoScope, ids: string[]): Todo[] | null {
   const hq = readHq()
-  const team = hq.teams.find((t) => t.id === teamId)
-  if (!team) return null
-  team.todos = reorderSlots(team.todos, ids, (t) => !t.isDone)
+  const holder = todoHolder(hq, scope)
+  if (!holder) return null
+  holder.todos = reorderSlots(holder.todos, ids, (t) => !t.isDone)
   writeHq(hq)
-  return team.todos
+  return holder.todos
 }
 
 /**

@@ -6,6 +6,8 @@ import {
   addGroup,
   addTeam,
   addTodo,
+  DESK_SCOPE,
+  teamScope,
   addWebSession,
   discardWebSession,
   MAX_TODO_LENGTH,
@@ -443,88 +445,88 @@ describe('team todos', () => {
 
   it('adds to the end of the open section, before the done ones', () => {
     const team = newTeam()
-    const first = addTodo(team.id, '가', at('2026-10-25T01:00:00.000Z'))
+    const first = addTodo(teamScope(team.id), '가', at('2026-10-25T01:00:00.000Z'))
     expect(first).toEqual({ id: first?.id, text: '가', isDone: false, createdAt: '2026-10-25T01:00:00.000Z', doneAt: null })
     expect(first?.id).toMatch(/^[0-9a-f]{8}$/)
-    addTodo(team.id, '나')
-    updateTodo(team.id, first!.id, { isDone: true })
-    addTodo(team.id, '다')
+    addTodo(teamScope(team.id), '나')
+    updateTodo(teamScope(team.id), first!.id, { isDone: true })
+    addTodo(teamScope(team.id), '다')
     expect(texts(team.id)).toEqual(['나', '다', '가✓'])
   })
 
   it('moves a todo to the very end when done and to the end of the open section when undone', () => {
     const team = newTeam()
-    const [a, b, , d] = ['가', '나', '다', '라'].map((text) => addTodo(team.id, text)!)
-    expect(updateTodo(team.id, b.id, { isDone: true }, at('2026-10-25T02:00:00.000Z'))).toMatchObject({
+    const [a, b, , d] = ['가', '나', '다', '라'].map((text) => addTodo(teamScope(team.id), text)!)
+    expect(updateTodo(teamScope(team.id), b.id, { isDone: true }, at('2026-10-25T02:00:00.000Z'))).toMatchObject({
       isDone: true,
       doneAt: '2026-10-25T02:00:00.000Z',
     })
-    updateTodo(team.id, d.id, { isDone: true })
-    updateTodo(team.id, a.id, { isDone: true })
+    updateTodo(teamScope(team.id), d.id, { isDone: true })
+    updateTodo(teamScope(team.id), a.id, { isDone: true })
     expect(texts(team.id)).toEqual(['다', '나✓', '라✓', '가✓'])
-    expect(updateTodo(team.id, d.id, { isDone: false })).toMatchObject({ isDone: false, doneAt: null })
+    expect(updateTodo(teamScope(team.id), d.id, { isDone: false })).toMatchObject({ isDone: false, doneAt: null })
     expect(texts(team.id)).toEqual(['다', '라', '나✓', '가✓'])
   })
 
   it('keeps the place and done time when the done value stays and changes only the text', () => {
     const team = newTeam()
-    const [a, b, c] = ['가', '나', '다'].map((text) => addTodo(team.id, text)!)
-    updateTodo(team.id, a.id, { isDone: true }, at('2026-10-25T02:00:00.000Z'))
-    updateTodo(team.id, c.id, { isDone: true })
-    updateTodo(team.id, a.id, { isDone: true, text: '가2' }, at('2026-10-25T03:00:00.000Z'))
-    updateTodo(team.id, b.id, { isDone: false })
+    const [a, b, c] = ['가', '나', '다'].map((text) => addTodo(teamScope(team.id), text)!)
+    updateTodo(teamScope(team.id), a.id, { isDone: true }, at('2026-10-25T02:00:00.000Z'))
+    updateTodo(teamScope(team.id), c.id, { isDone: true })
+    updateTodo(teamScope(team.id), a.id, { isDone: true, text: '가2' }, at('2026-10-25T03:00:00.000Z'))
+    updateTodo(teamScope(team.id), b.id, { isDone: false })
     expect(texts(team.id)).toEqual(['나', '가2✓', '다✓'])
     expect(readOffice().teams[0].todos[1].doneAt).toBe('2026-10-25T02:00:00.000Z')
-    expect(updateTodo(team.id, b.id, { text: '나2' })).toMatchObject({ text: '나2', isDone: false })
+    expect(updateTodo(teamScope(team.id), b.id, { text: '나2' })).toMatchObject({ text: '나2', isDone: false })
     expect(texts(team.id)).toEqual(['나2', '가2✓', '다✓'])
   })
 
   it('removes a todo', () => {
     const team = newTeam()
-    const [a, b] = ['가', '나'].map((text) => addTodo(team.id, text)!)
-    updateTodo(team.id, a.id, { isDone: true })
-    expect(removeTodo(team.id, a.id)?.map((t) => t.text)).toEqual(['나'])
-    expect(removeTodo(team.id, b.id)).toEqual([])
+    const [a, b] = ['가', '나'].map((text) => addTodo(teamScope(team.id), text)!)
+    updateTodo(teamScope(team.id), a.id, { isDone: true })
+    expect(removeTodo(teamScope(team.id), a.id)?.map((t) => t.text)).toEqual(['나'])
+    expect(removeTodo(teamScope(team.id), b.id)).toEqual([])
     expect(texts(team.id)).toEqual([])
   })
 
   it('clears every done todo, keeps the open order, and does not write when none is done', () => {
     const team = newTeam()
-    const [a, b, c, d] = ['가', '나', '다', '라'].map((text) => addTodo(team.id, text)!)
+    const [a, b, c, d] = ['가', '나', '다', '라'].map((text) => addTodo(teamScope(team.id), text)!)
     const before = readFileSync(hqPath, 'utf8')
-    expect(clearDoneTodos(team.id)).toBe(0)
+    expect(clearDoneTodos(teamScope(team.id))).toBe(0)
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
-    updateTodo(team.id, b.id, { isDone: true })
-    updateTodo(team.id, a.id, { isDone: true })
-    reorderTodos(team.id, [d.id, c.id])
-    expect(clearDoneTodos(team.id)).toBe(2)
+    updateTodo(teamScope(team.id), b.id, { isDone: true })
+    updateTodo(teamScope(team.id), a.id, { isDone: true })
+    reorderTodos(teamScope(team.id), [d.id, c.id])
+    expect(clearDoneTodos(teamScope(team.id))).toBe(2)
     expect(texts(team.id)).toEqual(['라', '다'])
-    expect(clearDoneTodos('nope')).toBeNull()
+    expect(clearDoneTodos(teamScope('nope'))).toBeNull()
   })
 
   it('reorders only the open section and refuses anything but exactly the open IDs', () => {
     const team = newTeam()
-    const [a, b, c, d] = ['가', '나', '다', '라'].map((text) => addTodo(team.id, text)!)
-    updateTodo(team.id, b.id, { isDone: true })
-    expect(reorderTodos(team.id, [d.id, a.id, c.id])?.map((t) => t.text)).toEqual(['라', '가', '다', '나'])
+    const [a, b, c, d] = ['가', '나', '다', '라'].map((text) => addTodo(teamScope(team.id), text)!)
+    updateTodo(teamScope(team.id), b.id, { isDone: true })
+    expect(reorderTodos(teamScope(team.id), [d.id, a.id, c.id])?.map((t) => t.text)).toEqual(['라', '가', '다', '나'])
     expect(texts(team.id)).toEqual(['라', '가', '다', '나✓'])
     const before = readFileSync(hqPath, 'utf8')
     for (const ids of [[d.id, a.id], [d.id, a.id, c.id, b.id], [d.id, a.id, a.id], [d.id, a.id, 'zzz']]) {
-      expect(() => reorderTodos(team.id, ids)).toThrow(OrderMismatchError)
+      expect(() => reorderTodos(teamScope(team.id), ids)).toThrow(OrderMismatchError)
     }
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
   })
 
   it('returns null for a missing team and throws for a missing todo without writing', () => {
     const team = newTeam()
-    const todo = addTodo(team.id, '가')!
+    const todo = addTodo(teamScope(team.id), '가')!
     const before = readFileSync(hqPath, 'utf8')
-    expect(addTodo('nope', '나')).toBeNull()
-    expect(updateTodo('nope', todo.id, { isDone: true })).toBeNull()
-    expect(removeTodo('nope', todo.id)).toBeNull()
-    expect(reorderTodos('nope', [todo.id])).toBeNull()
-    expect(() => updateTodo(team.id, 'nope', { isDone: true })).toThrow(TodoNotFoundError)
-    expect(() => removeTodo(team.id, 'nope')).toThrow(TodoNotFoundError)
+    expect(addTodo(teamScope('nope'), '나')).toBeNull()
+    expect(updateTodo(teamScope('nope'), todo.id, { isDone: true })).toBeNull()
+    expect(removeTodo(teamScope('nope'), todo.id)).toBeNull()
+    expect(reorderTodos(teamScope('nope'), [todo.id])).toBeNull()
+    expect(() => updateTodo(teamScope(team.id), 'nope', { isDone: true })).toThrow(TodoNotFoundError)
+    expect(() => removeTodo(teamScope(team.id), 'nope')).toThrow(TodoNotFoundError)
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
   })
 
@@ -535,6 +537,49 @@ describe('team todos', () => {
     expect(saved).toMatchObject({ name: '나' })
     expect(saved).not.toHaveProperty('waitingNote')
     expect(saved).not.toHaveProperty('todos')
+  })
+})
+
+describe('my desk todos', () => {
+  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
+  afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
+
+  const deskTexts = () => readOffice().todos.map((t) => `${t.text}${t.isDone ? '✓' : ''}`)
+
+  it('starts empty without a file and for an old record without the key', () => {
+    expect(readOffice().todos).toEqual([])
+    mkdirSync(hqDir, { recursive: true })
+    writeFileSync(hqPath, JSON.stringify({ groups: [], teams: [] }))
+    expect(readOffice().todos).toEqual([])
+  })
+
+  it('keeps the same section rules as team todos at the top level, apart from every team', () => {
+    const team = addTeam({ name: '팀', cwd: 'D:/repo', groupId: addGroup('가').id })
+    addTodo(teamScope(team.id), '팀 할 일')
+    const [a, b, c] = ['가', '나', '다'].map((text) => addTodo(DESK_SCOPE, text)!)
+    expect(a.id).toMatch(/^[0-9a-f]{8}$/)
+    updateTodo(DESK_SCOPE, a.id, { isDone: true })
+    expect(deskTexts()).toEqual(['나', '다', '가✓'])
+    expect(reorderTodos(DESK_SCOPE, [c.id, b.id])?.map((t) => t.text)).toEqual(['다', '나', '가'])
+    expect(() => reorderTodos(DESK_SCOPE, [c.id])).toThrow(OrderMismatchError)
+    expect(updateTodo(DESK_SCOPE, b.id, { text: '나2' })).toMatchObject({ text: '나2', isDone: false })
+    expect(clearDoneTodos(DESK_SCOPE)).toBe(1)
+    expect(removeTodo(DESK_SCOPE, c.id)?.map((t) => t.text)).toEqual(['나2'])
+    expect(() => updateTodo(DESK_SCOPE, 'nope', { isDone: true })).toThrow(TodoNotFoundError)
+    expect(() => removeTodo(DESK_SCOPE, 'nope')).toThrow(TodoNotFoundError)
+    expect(deskTexts()).toEqual(['나2'])
+    expect(readOffice().teams[0].todos.map((t) => t.text)).toEqual(['팀 할 일'])
+    expect(JSON.parse(readFileSync(hqPath, 'utf8')).todos.map((t: Todo) => t.text)).toEqual(['나2'])
+  })
+
+  it('keeps keys it does not know when writing desk todos', () => {
+    mkdirSync(hqDir, { recursive: true })
+    writeFileSync(hqPath, JSON.stringify({ webSessions: [{ sessionId: 's', cwd: 'D:/x', createdAt: '' }], futureKey: { a: 1 } }))
+    addTodo(DESK_SCOPE, '가')
+    const saved = JSON.parse(readFileSync(hqPath, 'utf8'))
+    expect(saved.futureKey).toEqual({ a: 1 })
+    expect(saved.webSessions).toHaveLength(1)
+    expect(saved.todos.map((t: Todo) => t.text)).toEqual(['가'])
   })
 })
 

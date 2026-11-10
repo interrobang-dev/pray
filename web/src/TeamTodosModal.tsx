@@ -1,8 +1,8 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Modal } from './Modal'
 import { confirmDialog } from './Dialog'
-import { applyTodo, clearDone, moveTo, removeTodo, reorderOpen, splitTodos, todosOf } from './teamTodos'
-import type { Team, TeamTodo } from './types'
+import { applyTodo, clearDone, moveTo, removeTodo, reorderOpen, splitTodos, todosUrl, type TodoScope } from './teamTodos'
+import type { TeamTodo } from './types'
 
 /** 끌기로 보는 최소 이동 (px) — App.tsx 목록 끌어 놓기와 같은 값 */
 const DRAG_THRESHOLD_PX = 5
@@ -13,10 +13,15 @@ const AUTO_SCROLL_MAX_PX = 14
 const TOUCH_QUERY = '(hover: none)'
 
 interface Props {
-  team: Team
+  /** 팀 할 일 또는 내 책상 — 요청 경로와 화면 반영 자리를 정한다 */
+  scope: TodoScope
+  /** 제목 "TODO · <name>" (팀 이름 또는 "My desk") */
+  name: string
+  /** 그 범위의 todos (App 의 office 그대로라 열린 동안 SSE 를 따라간다) */
+  todos: TeamTodo[]
   onClose: () => void
   /** 화면의 todos 를 먼저 바꾼다 (App 의 office 상태). 사무실 SSE 가 오면 서버 것으로 바뀐다 */
-  onChangeTodos: (teamId: string, update: (todos: TeamTodo[]) => TeamTodo[]) => void
+  onChangeTodos: (scope: TodoScope, update: (todos: TeamTodo[]) => TeamTodo[]) => void
 }
 
 /** 응답 본문과 실패 문구 (서버 message, 없으면 HTTP 코드, 닿지 못하면 "Network error") */
@@ -35,11 +40,11 @@ export async function requestTodo(url: string, method: string, body?: unknown): 
 }
 
 /**
- * 팀 TODO 모달: 맨 위 입력칸(Enter 로 추가), 할 일(체크 · 글 · × · ⠿, 글을 누르면 그 자리에서 고치기, ⠿ 로 끌어 순서 바꾸기),
- * 그 아래 완료 "Done (N)"(줄 긋고 흐리게, 최근 완료부터, 체크를 풀면 할 일로). 목록은 props 의 team.todos 그대로라 열린 동안 SSE 를 따라간다
+ * TODO 모달 (팀 할 일·내 책상 공용): 맨 위 입력칸(Enter 로 추가), 할 일(체크 · 글 · × · ⠿, 글을 누르면 그 자리에서 고치기, ⠿ 로 끌어 순서 바꾸기),
+ * 그 아래 완료 "Done (N)"(줄 긋고 흐리게, 최근 완료부터, 체크를 풀면 할 일로). 목록은 props 의 todos 그대로라 열린 동안 SSE 를 따라간다
  */
-export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
-  const { open, done } = splitTodos(todosOf(team))
+export function TeamTodosModal({ scope, name, todos, onClose, onChangeTodos }: Props) {
+  const { open, done } = splitTodos(todos)
   const [draft, setDraft] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
@@ -49,7 +54,7 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
   const [isTouch] = useState(() => window.matchMedia(TOUCH_QUERY).matches)
   const listRef = useRef<HTMLUListElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const baseUrl = `/api/team/${encodeURIComponent(team.id)}/todos`
+  const baseUrl = todosUrl(scope)
 
   /** 요청을 보내고 실패하면 빨간 줄. 성공하면 응답 본문 */
   async function send(url: string, method: string, body?: unknown) {
@@ -67,7 +72,7 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
     setIsAdding(false)
     if (!result) return
     const added = result.todo
-    if (added) onChangeTodos(team.id, (todos) => applyTodo(todos, added))
+    if (added) onChangeTodos(scope, (todos) => applyTodo(todos, added))
     // 기다리는 사이 더 친 글은 남긴다
     setDraft((current) => (current === draft ? '' : current))
   }
@@ -81,12 +86,12 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
   async function update(todo: TeamTodo, patch: { text?: string; isDone?: boolean }) {
     const result = await send(`${baseUrl}/${encodeURIComponent(todo.id)}`, 'PATCH', patch)
     const updated = result?.todo
-    if (updated) onChangeTodos(team.id, (todos) => applyTodo(todos, updated))
+    if (updated) onChangeTodos(scope, (todos) => applyTodo(todos, updated))
   }
 
   async function remove(todo: TeamTodo) {
     const result = await send(`${baseUrl}/${encodeURIComponent(todo.id)}`, 'DELETE')
-    if (result) onChangeTodos(team.id, (todos) => removeTodo(todos, todo.id))
+    if (result) onChangeTodos(scope, (todos) => removeTodo(todos, todo.id))
   }
 
   /** 완료 항목을 모두 지운다: 확인 창 뒤 DELETE, 응답을 기다려 화면에서 뺀다 */
@@ -97,7 +102,7 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
     setIsClearing(true)
     const result = await send(`${baseUrl}/done`, 'DELETE')
     setIsClearing(false)
-    if (result) onChangeTodos(team.id, clearDone)
+    if (result) onChangeTodos(scope, clearDone)
   }
 
   /** 고친 글 저장: 빈 글이면 저장하지 않고 되돌리고, 그대로면 보내지 않는다 */
@@ -109,11 +114,11 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
 
   /** 화면 순서를 먼저 바꾸고 저장한다. 실패하면 원래 순서로 되돌리고 빨간 줄로 알린다 */
   async function saveOrder(previousIds: string[], ids: string[]) {
-    onChangeTodos(team.id, (todos) => reorderOpen(todos, ids))
+    onChangeTodos(scope, (todos) => reorderOpen(todos, ids))
     setErrorMessage(null)
     const result = await requestTodo(`${baseUrl}/order`, 'PUT', { ids })
     if (result.failure === null) return
-    onChangeTodos(team.id, (todos) => reorderOpen(todos, previousIds))
+    onChangeTodos(scope, (todos) => reorderOpen(todos, previousIds))
     setErrorMessage(`Couldn't change the order: ${result.failure}`)
   }
 
@@ -198,7 +203,7 @@ export function TeamTodosModal({ team, onClose, onChangeTodos }: Props) {
   }
 
   return (
-    <Modal title={`TODO · ${team.name}`} onClose={onClose} className="todo-modal" hasCloseButton>
+    <Modal title={`TODO · ${name}`} onClose={onClose} className="todo-modal" hasCloseButton>
       {/* 글 길이(trim 뒤 1~500자)는 서버가 보고 넘으면 400 빨간 줄. maxLength 를 두면 붙여 넣은 긴 글 끝이 알림 없이 잘려 저장된다 */}
       <input
         className="todo-add"

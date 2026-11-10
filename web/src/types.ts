@@ -106,7 +106,7 @@ export interface Group {
   h: number
 }
 
-/** 팀 TODO 한 줄. 시각은 ISO */
+/** TODO 한 줄 (팀 할 일·내 책상 공용). 시각은 ISO */
 export interface TeamTodo {
   id: string
   text: string
@@ -153,6 +153,8 @@ export interface Team {
 export interface Office {
   groups: Group[]
   teams: Team[]
+  /** 팀과 무관한 내 할 일 (All TODOs 의 My desk). 순서 규칙은 Team.todos 와 같다. 옛 서버 응답은 없다 (teamTodos.ts deskTodosOf) */
+  todos?: TeamTodo[]
 }
 
 export interface ToolUse {

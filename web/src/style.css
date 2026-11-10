@@ -510,9 +510,13 @@ header button.icon svg {
   padding: 0 12px 6px;
   color: var(--error);
 }
-.all-todos-empty {
-  padding: 4px 12px 6px;
-  color: var(--muted);
+/* My desk 입력칸: 머리줄 아래, 할 일 줄과 같은 양옆 여백 */
+.all-todos-add {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 24px);
+  margin: 2px 12px 4px;
+  padding: 5px 8px;
   font-size: calc(13px * var(--font-scale));
 }
 .all-todos-team + .all-todos-team {
@@ -6481,6 +6485,11 @@ li.group.drop-after::after {
     width: 22px;
     height: 22px;
     margin: 0;
+  }
+  /* My desk 입력칸: 줄과 같은 44px. 데스크톱 13px 가 클래스라 위 input 16px 규칙을 이겨서 다시 16px (아이폰 포커스 확대 방지) */
+  .all-todos-add {
+    min-height: 44px;
+    font-size: 16px;
   }
   /* 목록 라벨의 접기 단추도 40px (버튼이 없는 Focus Zone·Off Duty 라벨도 같은 높이) */
   .group-toggle {
