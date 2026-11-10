@@ -94,6 +94,8 @@ const DRAG_THRESHOLD_PX = 5
 const FOCUS_DURATION_MS = 300
 /** 조작(마우스·휠·다시 그리기·크기 바뀜) 뒤 이만큼(ms)은 매 프레임 그린다. 그 뒤로는 그림이 바뀔 때(인물 프레임·깜박임)만 */
 const ACTIVE_TAIL_MS = 500
+/** 첫 그리기가 이보다(ms) 빨리 끝나면 로딩 표시를 띄우지 않는다 (CSS .office-loading 의 animation-delay 와 같은 값) */
+const LOADING_SHOW_DELAY_MS = 200
 const TILE = 16
 const WALL_H = 40
 /** 그룹·책상 원점. 바닥 격자가 x=0, y=WALL_H 부터 TILE 간격이라 둘 다 TILE 배수여야 격자선과 맞는다 */
@@ -1619,6 +1621,8 @@ export function Office(props: Props) {
   const { office, sessions, selectedId, focus } = props
   /** 아틀라스를 못 읽어 캔버스를 만들지 않았다 */
   const [isArtFailed, setIsArtFailed] = useState(false)
+  /** 첫 그리기 전 로딩 표시: loading(그리는 중) → fading(흐려지는 중) → done(없앰) */
+  const [loadingPhase, setLoadingPhase] = useState<'loading' | 'fading' | 'done'>('loading')
   /** 마우스를 올린 자리·퇴근한 사람·"+N". 카드는 이것, 없으면 고른 세션 */
   const [hoveredCard, setHoveredCard] = useState<HoveredCard | null>(null)
   /** 퇴근 거리 장소 (아틀라스를 읽으면 정해진다). 카드의 장소 이름을 지금 시각으로 고른다 */
@@ -1639,6 +1643,7 @@ export function Office(props: Props) {
     const host = hostRef.current
     if (!host) return
     let isDisposed = false
+    const loadStartedAt = performance.now()
     const app = new Application()
     const desks = new Map<string, SeatParts>()
     let frame = 0
@@ -2611,6 +2616,8 @@ export function Office(props: Props) {
         })
 
         redraw()
+        // 로딩 표시가 아직 안 떴으면(LOADING_SHOW_DELAY_MS 안) 바로 없애고, 떴으면 흐려지며 사라진다
+        setLoadingPhase(performance.now() - loadStartedAt < LOADING_SHOW_DELAY_MS ? 'done' : 'fading')
         if (latest.current.focus && latest.current.focus.id !== handledFocusIdRef.current) {
           applyFocus(latest.current.focus)
         }
@@ -2669,6 +2676,18 @@ export function Office(props: Props) {
   return (
     <div className="office">
       <div ref={hostRef} className="office-canvas" />
+      {loadingPhase !== 'done' && (
+        <div
+          className={`office-loading${loadingPhase === 'fading' ? ' is-fading' : ''}`}
+          role="status"
+          onAnimationEnd={(event) => {
+            if (event.animationName === 'office-loading-out') setLoadingPhase('done')
+          }}
+        >
+          <span className="reconnect-spinner" aria-hidden="true" />
+          Loading office
+        </div>
+      )}
       {hoveredCard?.kind === 'more' ? (
         <div key={hoveredCard.key} ref={cardRef} className="office-card" data-card-key={hoveredCard.key} style={{ visibility: 'hidden' }}>
           <div className="office-card-head">
