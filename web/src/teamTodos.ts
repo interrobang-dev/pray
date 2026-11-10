@@ -1,4 +1,4 @@
-import type { Office, Team, TeamTodo } from './types'
+import type { Office, Team, TeamTodo, TodoPriority } from './types'
 
 /**
  * TODO 목록의 순수 함수 (팀 할 일·내 책상 공용). 서버 배열 순서는 늘 [할 일(사용자가 정한 순서)…, 완료(완료한 순서, 오래된 것 먼저)…] 이고,
@@ -114,4 +114,47 @@ export function openTodoGroups(office: Office): { team: Team; open: TeamTodo[] }
 /** 툴바 All TODOs 배지: 내 책상 + 모든 팀의 남은(미완료) 개수 합 */
 export function totalRemaining(office: Office): number {
   return office.teams.reduce((sum, team) => sum + remainingCount(team), openCount(deskTodosOf(office)))
+}
+
+/** 우선순위 값 (높은 것부터) */
+export const TODO_PRIORITIES: readonly TodoPriority[] = ['critical', 'high', 'medium', 'low']
+
+const PRIORITY_LABELS: Record<TodoPriority, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' }
+
+/** 그 할 일의 우선순위. 키가 없거나 null·모르는 값이면 없음(null) — 칩을 그리지 않는다 */
+export function priorityOf(todo: TeamTodo): TodoPriority | null {
+  const { priority } = todo
+  return priority && TODO_PRIORITIES.includes(priority) ? priority : null
+}
+
+/** 칩·메뉴 글자 ("Critical"…). 없음은 "None" */
+export function priorityLabel(priority: TodoPriority | null): string {
+  return priority ? PRIORITY_LABELS[priority] : 'None'
+}
+
+/** 우선순위 메뉴 줄: Critical·High·Medium·Low·None */
+export const PRIORITY_CHOICES: readonly (TodoPriority | null)[] = [...TODO_PRIORITIES, null]
+
+interface Box {
+  left: number
+  top: number
+  bottom: number
+}
+
+/**
+ * 우선순위 메뉴(position: fixed)의 화면 좌표: 칩 바로 아래, 화면 아래에 자리가 없으면 칩 위. 왼쪽은 칩 왼쪽에 맞추고
+ * 화면 가장자리 margin 안으로 당긴다 (모달 목록이 스크롤 칸이라 absolute 로 두면 아래쪽 줄의 메뉴가 잘린다)
+ */
+export function priorityMenuPlacement(
+  anchor: Box,
+  menu: { width: number; height: number },
+  viewport: { width: number; height: number },
+  gap = 4,
+  margin = 8,
+): { left: number; top: number } {
+  const below = anchor.bottom + gap
+  const above = anchor.top - gap - menu.height
+  const top = below + menu.height <= viewport.height - margin || above < margin ? below : above
+  const left = Math.max(margin, Math.min(anchor.left, viewport.width - margin - menu.width))
+  return { left, top: Math.max(margin, top) }
 }

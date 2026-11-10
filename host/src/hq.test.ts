@@ -14,6 +14,8 @@ import {
   migrateGroupTodosToTeams,
   migrateWaitingNotes,
   parseTodoText,
+  isTodoPriority,
+  TODO_PRIORITIES,
   removeTodo,
   clearDoneTodos,
   reorderTodos,
@@ -418,6 +420,16 @@ describe('group todo text', () => {
   })
 })
 
+describe('todo priority value', () => {
+  it('takes only the four values, highest first', () => {
+    expect(TODO_PRIORITIES).toEqual(['critical', 'high', 'medium', 'low'])
+    for (const value of TODO_PRIORITIES) expect(isTodoPriority(value)).toBe(true)
+    for (const value of [null, undefined, '', 'Critical', ' high', 'none', 'urgent', 1, ['low'], { priority: 'low' }]) {
+      expect(isTodoPriority(value)).toBe(false)
+    }
+  })
+})
+
 describe('team todos', () => {
   beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
   afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
@@ -530,6 +542,33 @@ describe('team todos', () => {
     expect(readFileSync(hqPath, 'utf8')).toBe(before)
   })
 
+  it('sets, changes and clears a priority in place without moving the todo, and drops the key when cleared', () => {
+    const team = newTeam()
+    const [a, b, c] = ['가', '나', '다'].map((text) => addTodo(teamScope(team.id), text)!)
+    expect(a).not.toHaveProperty('priority')
+    expect(updateTodo(teamScope(team.id), b.id, { priority: 'critical' })).toMatchObject({ text: '나', priority: 'critical' })
+    updateTodo(teamScope(team.id), c.id, { priority: 'low' })
+    updateTodo(teamScope(team.id), c.id, { priority: 'high' })
+    expect(texts(team.id)).toEqual(['가', '나', '다'])
+    expect(readOffice().teams[0].todos.map((t) => t.priority)).toEqual([undefined, 'critical', 'high'])
+    // 글·완료만 바꾸면 우선순위는 그대로, 완료해도 남는다
+    updateTodo(teamScope(team.id), b.id, { text: '나2', isDone: true })
+    expect(readOffice().teams[0].todos.find((t) => t.id === b.id)).toMatchObject({ text: '나2', isDone: true, priority: 'critical' })
+    const cleared = updateTodo(teamScope(team.id), b.id, { priority: null })
+    expect(cleared).not.toHaveProperty('priority')
+    expect(JSON.parse(readFileSync(hqPath, 'utf8')).teams[0].todos.find((t: Todo) => t.id === b.id)).not.toHaveProperty('priority')
+    expect(() => updateTodo(teamScope(team.id), 'nope', { priority: 'low' })).toThrow(TodoNotFoundError)
+  })
+
+  it('reads an old record without a priority, or with null, as none', () => {
+    mkdirSync(hqDir, { recursive: true })
+    const old = { id: 'a', text: '가', isDone: false, createdAt: '', doneAt: null }
+    writeFileSync(hqPath, JSON.stringify({ groups: [], teams: [{ id: 't', name: '팀', cwd: 'D:/x', todos: [old, { ...old, id: 'b', priority: null }] }] }))
+    expect(readOffice().teams[0].todos.map((t) => t.priority ?? null)).toEqual([null, null])
+    updateTodo(teamScope('t'), 'b', { priority: 'medium' })
+    expect(readOffice().teams[0].todos.map((t) => t.priority ?? null)).toEqual([null, 'medium'])
+  })
+
   it('ignores a waiting note sent to updateGroup', () => {
     const group = addGroup('가')
     updateGroup(group.id, { name: '나', waitingNote: '메모' } as Parameters<typeof updateGroup>[1])
@@ -563,6 +602,8 @@ describe('my desk todos', () => {
     expect(reorderTodos(DESK_SCOPE, [c.id, b.id])?.map((t) => t.text)).toEqual(['다', '나', '가'])
     expect(() => reorderTodos(DESK_SCOPE, [c.id])).toThrow(OrderMismatchError)
     expect(updateTodo(DESK_SCOPE, b.id, { text: '나2' })).toMatchObject({ text: '나2', isDone: false })
+    expect(updateTodo(DESK_SCOPE, b.id, { priority: 'high' })).toMatchObject({ text: '나2', priority: 'high' })
+    expect(updateTodo(DESK_SCOPE, b.id, { priority: null })).not.toHaveProperty('priority')
     expect(clearDoneTodos(DESK_SCOPE)).toBe(1)
     expect(removeTodo(DESK_SCOPE, c.id)?.map((t) => t.text)).toEqual(['나2'])
     expect(() => updateTodo(DESK_SCOPE, 'nope', { isDone: true })).toThrow(TodoNotFoundError)

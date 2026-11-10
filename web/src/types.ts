@@ -106,6 +106,9 @@ export interface Group {
   h: number
 }
 
+/** TODO 우선순위 (서버 host/src/team.ts 의 TodoPriority 와 같은 값) */
+export type TodoPriority = 'critical' | 'high' | 'medium' | 'low'
+
 /** TODO 한 줄 (팀 할 일·내 책상 공용). 시각은 ISO */
 export interface TeamTodo {
   id: string
@@ -113,6 +116,8 @@ export interface TeamTodo {
   isDone: boolean
   createdAt: string
   doneAt: string | null
+  /** 없음이면 키가 없다 (옛 서버·null 도 없음 — teamTodos.ts priorityOf) */
+  priority?: TodoPriority | null
 }
 
 /** 파트 = 팀 안의 선택적 지휘 단위 (파트장 + 파트 팀원). worktree 가 있으면 그 폴더에서 일한다 */

@@ -9,6 +9,10 @@ export interface Part {
   createdAt: string
 }
 
+/** 할 일 우선순위 값 (높은 것부터). 없음은 키를 빼거나 null */
+export const TODO_PRIORITIES = ['critical', 'high', 'medium', 'low'] as const
+export type TodoPriority = (typeof TODO_PRIORITIES)[number]
+
 /** 팀 할 일 한 줄. 시각은 ISO */
 export interface Todo {
   id: string
@@ -17,6 +21,8 @@ export interface Todo {
   createdAt: string
   /** 완료한 시각. 할 일이면 null */
   doneAt: string | null
+  /** 우선순위. 없음이면 키가 없다 (hq.ts 는 null 을 쓰지 않고 키를 지운다. 옛 기록·손으로 넣은 null 도 없음) */
+  priority?: TodoPriority | null
 }
 
 /** 팀 = 같은 작업 폴더를 쓰는 세션 묶음. 그룹 안의 책상 섬. 세션의 소속은 저장하지 않고 cwd 로 판정한다 */

@@ -2,9 +2,10 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { dataDir } from './dataDir.js'
-import { normalizeCwd, type Part, type Team, type Todo } from './team.js'
+import { normalizeCwd, TODO_PRIORITIES, type Part, type Team, type Todo, type TodoPriority } from './team.js'
 
-export type { Part, Team, Todo } from './team.js'
+export type { Part, Team, Todo, TodoPriority } from './team.js'
+export { TODO_PRIORITIES } from './team.js'
 
 export interface WebSessionRecord {
   sessionId: string
@@ -479,6 +480,11 @@ export function splitWaitingNote(note: string): string[] {
     .filter((item) => item)
 }
 
+/** API 로 받은 우선순위가 4값(critical·high·medium·low) 중 하나인지. 없음(null)은 따로 본다 — 부른 쪽이 틀린 값을 400 으로 바꾼다 */
+export function isTodoPriority(value: unknown): value is TodoPriority {
+  return typeof value === 'string' && (TODO_PRIORITIES as readonly string[]).includes(value)
+}
+
 export class TodoNotFoundError extends Error {
   constructor() {
     super('할 일을 찾을 수 없음')
@@ -520,10 +526,11 @@ export function addTodo(scope: TodoScope, text: string, now = new Date()): Todo 
   return todo
 }
 
-export type TodoPatch = { text?: string; isDone?: boolean }
+/** priority: 4값이면 그 값으로, null 이면 없음(키를 지운다), 빼면 그대로. 값은 부른 쪽이 isTodoPriority 로 거른다 */
+export type TodoPatch = { text?: string; isDone?: boolean; priority?: TodoPriority | null }
 
 /**
- * 글·완료 변경. 완료가 되면 doneAt = now 이고 맨 끝(완료한 순서)으로, 할 일로 되돌리면 doneAt null 이고 할 일 구역 맨 끝으로.
+ * 글·완료·우선순위 변경. 우선순위는 자리를 바꾸지 않는다 (자동 정렬 없음). 완료가 되면 doneAt = now 이고 맨 끝(완료한 순서)으로, 할 일로 되돌리면 doneAt null 이고 할 일 구역 맨 끝으로.
  * 완료 값이 그대로면 자리를 안 바꾼다. 팀이 없으면 null, 할 일이 없으면 TodoNotFoundError
  */
 export function updateTodo(scope: TodoScope, todoId: string, patch: TodoPatch, now = new Date()): Todo | null {
@@ -533,6 +540,8 @@ export function updateTodo(scope: TodoScope, todoId: string, patch: TodoPatch, n
   const todo = holder.todos.find((t) => t.id === todoId)
   if (!todo) throw new TodoNotFoundError()
   if (patch.text !== undefined) todo.text = patch.text
+  if (patch.priority === null) delete todo.priority
+  else if (patch.priority !== undefined) todo.priority = patch.priority
   if (patch.isDone !== undefined && patch.isDone !== todo.isDone) {
     todo.isDone = patch.isDone
     todo.doneAt = patch.isDone ? now.toISOString() : null

@@ -574,6 +574,10 @@ header button.icon svg {
   accent-color: var(--accent);
   cursor: pointer;
 }
+/* 우선순위 칩: 첫 줄 글 높이에 맞춘다 (바꾸기는 모달에서) */
+.all-todos-item .todo-priority {
+  margin-top: 1px;
+}
 /* 긴 글은 두 줄까지 (전문은 title·팀 모달) */
 .all-todos-text {
   flex: 1;
@@ -6159,6 +6163,123 @@ li.group.drop-after::after {
 .todo-item.drop-after::after {
   bottom: -2px;
 }
+/* 우선순위 칩 (TeamTodosModal.tsx PriorityChip·PriorityPicker, All TODOs 창): 줄 글 앞 작은 알약. 색은 글자색 + 같은 색 테두리,
+   Critical 만 옅은 빨강 바탕. 없음이면 그리지 않는다 */
+.todo-priority {
+  flex-shrink: 0;
+  display: inline-block;
+  padding: 0 6px;
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+  border-radius: 9px;
+  color: var(--muted);
+}
+.todo-priority[data-priority='critical'] {
+  color: var(--red);
+  background: var(--red-soft);
+}
+.todo-priority[data-priority='high'] {
+  color: var(--caution-text);
+}
+.todo-priority[data-priority='medium'] {
+  color: var(--blue-dot);
+}
+.todo-priority[data-priority='low'] {
+  color: var(--muted);
+}
+/* 완료 줄의 칩: 흐리게 (글처럼 줄 긋지는 않는다) */
+.todo-list.done .todo-priority {
+  opacity: 0.5;
+}
+/* 모달 할 일 줄의 칩 버튼: 칩만 보이는 투명 버튼. 없음이면 × 앞의 흐린 점선 "Priority" 자리이고 ×·⠿ 처럼 줄에 마우스를 올리거나 포커스가 있을 때만 */
+.todo-priority-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  background: transparent;
+  border-color: transparent;
+}
+.todo-priority-button:hover {
+  border-color: transparent;
+}
+.todo-priority-button:hover .todo-priority,
+.todo-priority-button[aria-expanded='true'] .todo-priority {
+  box-shadow: 0 0 0 1px currentColor;
+}
+.todo-priority-button.is-empty {
+  opacity: 0;
+}
+.todo-priority-button.is-empty .todo-priority {
+  font-weight: 400;
+  border-style: dashed;
+}
+.todo-item:hover .todo-priority-button.is-empty,
+.todo-item:focus-within .todo-priority-button.is-empty,
+.todo-priority-button.is-empty[aria-expanded='true'] {
+  opacity: 0.75;
+}
+/* 우선순위 메뉴: 칩 아래(자리가 없으면 위)에 fixed 로 뜬다 (위치는 TeamTodosModal.tsx 가 잰 뒤 정하고 그때 보인다). 모달(10) 위, 대화 창(20) 아래 */
+.todo-priority-menu {
+  position: fixed;
+  z-index: 15;
+  visibility: hidden;
+  min-width: 128px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.todo-priority-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  text-align: left;
+  font-size: calc(12px * var(--font-scale));
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+}
+.todo-priority-menu button:hover,
+.todo-priority-menu button:focus-visible {
+  background: var(--bg);
+}
+.todo-priority-name {
+  flex: 1;
+}
+.todo-priority-check {
+  color: var(--muted);
+}
+/* 메뉴 줄 앞 색 점 (칩 색과 같다). None 은 속이 빈 점 */
+.todo-priority-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: currentColor;
+  color: var(--muted);
+}
+.todo-priority-dot[data-priority='critical'] {
+  color: var(--red);
+}
+.todo-priority-dot[data-priority='high'] {
+  color: var(--caution-text);
+}
+.todo-priority-dot[data-priority='medium'] {
+  color: var(--blue-dot);
+}
+.todo-priority-dot[data-priority='none'] {
+  background: transparent;
+  border: 1px solid currentColor;
+}
 
 /* 데스크톱에서 사무실을 숨긴 화면 (App.tsx isOfficeHiddenLayout. 폰 폭에는 이 클래스가 붙지 않는다).
    세션을 골랐으면 패널이 목록 오른쪽 폭을 다 쓰고, 안 골랐으면 그 자리에 첫 화면 (.home) */
@@ -6388,6 +6509,22 @@ li.group.drop-after::after {
     min-width: 40px;
     min-height: 40px;
     font-size: calc(18px * var(--font-scale));
+  }
+  /* 우선순위 칩 버튼: 누르는 자리 40px (칩 모양은 그대로 작게). 없음 자리도 늘 흐리게 보인다. 메뉴 줄은 44px */
+  .todo-priority-button {
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+  }
+  .todo-priority-button.is-empty {
+    opacity: 0.6;
+  }
+  .todo-priority-menu {
+    min-width: 168px;
+  }
+  .todo-priority-menu button {
+    min-height: 44px;
+    font-size: calc(15px * var(--font-scale));
   }
   /* 복사 버튼: 늘 흐리게 보이고 손가락으로 누를 수 있게 키운다 (성공·실패 표시 중에는 선명) */
   .copy-button {

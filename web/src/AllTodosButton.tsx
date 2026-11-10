@@ -1,7 +1,7 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { useDismiss } from './Shells'
-import { requestTodo } from './TeamTodosModal'
-import { applyTodo, DESK_NAME, DESK_SCOPE, deskTodosOf, openTodoGroups, splitTodos, teamScope, todosUrl, totalRemaining, type TodoScope } from './teamTodos'
+import { PriorityChip, requestTodo } from './TeamTodosModal'
+import { applyTodo, DESK_NAME, DESK_SCOPE, deskTodosOf, openTodoGroups, priorityOf, splitTodos, teamScope, todosUrl, totalRemaining, type TodoScope } from './teamTodos'
 import type { Office, TeamTodo } from './types'
 
 interface Props {
@@ -18,6 +18,7 @@ interface Props {
  * 목록 툴바의 "All TODOs" 버튼 + 남은 개수 배지와, 누르면 툴바 바로 아래에 붙는 창.
  * 맨 위는 늘 "My desk"(팀과 무관한 내 할 일. 입력칸으로 바로 추가), 그 아래 미완료가 있는 팀을 목록 순서로 묶는다.
  * 다시 누르기·바깥 클릭·Esc 로 닫힌다. 체크하면 완료(PATCH), 묶음 머리줄을 누르면 이 창을 닫고 그 범위의 TODO 모달을 연다.
+ * 우선순위는 칩만 보이고 바꾸기는 모달에서 한다.
  * 0 이면 배지 없이 흐리지만 눌린다
  */
 export function AllTodosButton({ office, icon, onChangeTodos, onOpenTodos }: Props) {
@@ -107,6 +108,7 @@ export function AllTodosButton({ office, icon, onChangeTodos, onOpenTodos }: Pro
                     onChange={() => void complete(scope, todo)}
                     aria-label={`Mark "${todo.text}" done`}
                   />
+                  <PriorityChip priority={priorityOf(todo)} />
                   <span className="all-todos-text" title={todo.text}>
                     {todo.text}
                   </span>

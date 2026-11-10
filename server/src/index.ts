@@ -41,6 +41,7 @@ import {
   migratePositionNames,
   migrateWaitingNotes,
   parseTodoText,
+  isTodoPriority,
   removeTodo,
   clearDoneTodos,
   reorderTodos,
@@ -2779,15 +2780,20 @@ function addTodoRoutes(basePath: string, scopeOf: (req: Request) => TodoScope): 
     broadcastOffice()
   })
 
-  /** 글·완료 변경. 완료가 되면 맨 끝, 되돌리면 할 일 구역 맨 끝으로 (hq updateTodo) */
+  /** 글·완료·우선순위 변경. 완료가 되면 맨 끝, 되돌리면 할 일 구역 맨 끝으로, 우선순위는 제자리 (hq updateTodo) */
   app.patch(`${basePath}/:todoId`, (req, res) => {
-    const body = (req.body ?? {}) as { text?: unknown; isDone?: unknown }
-    if (body.text === undefined && body.isDone === undefined) {
-      res.status(400).json({ message: 'text or isDone required' })
+    const body = (req.body ?? {}) as { text?: unknown; isDone?: unknown; priority?: unknown }
+    if (body.text === undefined && body.isDone === undefined && body.priority === undefined) {
+      res.status(400).json({ message: 'text, isDone or priority required' })
       return
     }
     if (body.isDone !== undefined && typeof body.isDone !== 'boolean') {
       res.status(400).json({ message: 'isDone must be true or false' })
+      return
+    }
+    const priority = body.priority
+    if (priority !== undefined && priority !== null && !isTodoPriority(priority)) {
+      res.status(400).json({ message: 'Priority must be critical, high, medium, low or null' })
       return
     }
     const text = body.text === undefined ? undefined : parseTodoText(body.text)
@@ -2799,6 +2805,7 @@ function addTodoRoutes(basePath: string, scopeOf: (req: Request) => TodoScope): 
       const todo = updateTodo(scopeOf(req), req.params.todoId, {
         text,
         isDone: typeof body.isDone === 'boolean' ? body.isDone : undefined,
+        priority,
       })
       if (!todo) {
         res.status(404).json({ message: 'Team not found' })

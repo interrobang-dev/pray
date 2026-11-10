@@ -6,6 +6,10 @@ import {
   DESK_SCOPE,
   moveTo,
   openTodoGroups,
+  PRIORITY_CHOICES,
+  priorityLabel,
+  priorityMenuPlacement,
+  priorityOf,
   remainingCount,
   removeTodo,
   reorderOpen,
@@ -175,5 +179,48 @@ describe('범위 (팀 / 내 책상)', () => {
     expect(ids(todosOf(teamChanged.teams[0]))).toEqual(['t1', 'new'])
     expect(ids(teamChanged.todos!)).toEqual(['m1', 'm2'])
     expect(ids(updateScopeTodos({ groups: [], teams: [] }, DESK_SCOPE, add).todos!)).toEqual(['new'])
+  })
+})
+
+describe('우선순위', () => {
+  it('키가 없거나 null·모르는 값이면 없음', () => {
+    expect(priorityOf(todo('a'))).toBeNull()
+    expect(priorityOf({ ...todo('a'), priority: null })).toBeNull()
+    expect(priorityOf({ ...todo('a'), priority: 'urgent' as never })).toBeNull()
+    expect(priorityOf({ ...todo('a'), priority: 'high' })).toBe('high')
+  })
+
+  it('메뉴는 높은 것부터 네 값 뒤에 None, 글자는 첫 글자만 대문자', () => {
+    expect(PRIORITY_CHOICES.map(priorityLabel)).toEqual(['Critical', 'High', 'Medium', 'Low', 'None'])
+  })
+
+  it('applyTodo 는 우선순위만 바뀐 항목을 제자리에서 바꾼다 (자동 정렬 없음)', () => {
+    const next = applyTodo(sample(), { ...todo('c'), priority: 'critical' })
+    expect(ids(next)).toEqual(['a', 'b', 'c', 'x', 'y'])
+    expect(priorityOf(next[2])).toBe('critical')
+    const cleared = applyTodo(next, todo('c'))
+    expect(priorityOf(cleared[2])).toBeNull()
+  })
+})
+
+describe('priorityMenuPlacement', () => {
+  const viewport = { width: 400, height: 600 }
+  const menu = { width: 120, height: 150 }
+
+  it('칩 아래, 왼쪽은 칩 왼쪽', () => {
+    expect(priorityMenuPlacement({ left: 50, top: 100, bottom: 120 }, menu, viewport)).toEqual({ left: 50, top: 124 })
+  })
+
+  it('아래에 자리가 없으면 칩 위', () => {
+    expect(priorityMenuPlacement({ left: 50, top: 500, bottom: 520 }, menu, viewport)).toEqual({ left: 50, top: 346 })
+  })
+
+  it('위에도 자리가 없으면 아래 (화면이 아주 낮을 때)', () => {
+    expect(priorityMenuPlacement({ left: 50, top: 60, bottom: 80 }, menu, { width: 400, height: 200 })).toEqual({ left: 50, top: 84 })
+  })
+
+  it('오른쪽 끝을 넘으면 화면 안으로 당긴다', () => {
+    expect(priorityMenuPlacement({ left: 350, top: 100, bottom: 120 }, menu, viewport).left).toBe(272)
+    expect(priorityMenuPlacement({ left: 2, top: 100, bottom: 120 }, menu, viewport).left).toBe(8)
   })
 })

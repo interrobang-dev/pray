@@ -1,8 +1,28 @@
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { Modal } from './Modal'
 import { confirmDialog } from './Dialog'
-import { applyTodo, clearDone, moveTo, removeTodo, reorderOpen, splitTodos, todosUrl, type TodoScope } from './teamTodos'
-import type { TeamTodo } from './types'
+import {
+  applyTodo,
+  clearDone,
+  moveTo,
+  PRIORITY_CHOICES,
+  priorityLabel,
+  priorityMenuPlacement,
+  priorityOf,
+  removeTodo,
+  reorderOpen,
+  splitTodos,
+  todosUrl,
+  type TodoScope,
+} from './teamTodos'
+import type { TeamTodo, TodoPriority } from './types'
 
 /** 끌기로 보는 최소 이동 (px) — App.tsx 목록 끌어 놓기와 같은 값 */
 const DRAG_THRESHOLD_PX = 5
@@ -40,7 +60,8 @@ export async function requestTodo(url: string, method: string, body?: unknown): 
 }
 
 /**
- * TODO 모달 (팀 할 일·내 책상 공용): 맨 위 입력칸(Enter 로 추가), 할 일(체크 · 글 · × · ⠿, 글을 누르면 그 자리에서 고치기, ⠿ 로 끌어 순서 바꾸기),
+ * TODO 모달 (팀 할 일·내 책상 공용): 맨 위 입력칸(Enter 로 추가), 할 일(체크 · [우선순위 칩] · 글 · [Priority] · × · ⠿, 글을 누르면 그 자리에서 고치기,
+ * 칩을 누르면 우선순위 메뉴 — 없음이면 칩 대신 × 앞의 흐린 "Priority" 자리, ⠿ 로 끌어 순서 바꾸기),
  * 그 아래 완료 "Done (N)"(줄 긋고 흐리게, 최근 완료부터, 체크를 풀면 할 일로). 목록은 props 의 todos 그대로라 열린 동안 SSE 를 따라간다
  */
 export function TeamTodosModal({ scope, name, todos, onClose, onChangeTodos }: Props) {
@@ -83,7 +104,7 @@ export function TeamTodosModal({ scope, name, todos, onClose, onChangeTodos }: P
     void add()
   }
 
-  async function update(todo: TeamTodo, patch: { text?: string; isDone?: boolean }) {
+  async function update(todo: TeamTodo, patch: { text?: string; isDone?: boolean; priority?: TodoPriority | null }) {
     const result = await send(`${baseUrl}/${encodeURIComponent(todo.id)}`, 'PATCH', patch)
     const updated = result?.todo
     if (updated) onChangeTodos(scope, (todos) => applyTodo(todos, updated))
@@ -223,6 +244,7 @@ export function TeamTodosModal({ scope, name, todos, onClose, onChangeTodos }: P
             {open.map((todo, index) => (
               <li key={todo.id} className={['todo-item', dragClass(todo.id, index)].join(' ')} data-todo-id={todo.id}>
                 <input type="checkbox" checked={false} onChange={() => void update(todo, { isDone: true })} aria-label={`Mark "${todo.text}" done`} />
+                {priorityOf(todo) && <PriorityPicker todo={todo} onPick={(priority) => void update(todo, { priority })} />}
                 {editingId === todo.id ? (
                   <TodoEditor text={todo.text} onSave={(text) => saveEdit(todo, text)} onCancel={() => setEditingId(null)} />
                 ) : (
@@ -230,6 +252,7 @@ export function TeamTodosModal({ scope, name, todos, onClose, onChangeTodos }: P
                     {todo.text}
                   </button>
                 )}
+                {!priorityOf(todo) && <PriorityPicker todo={todo} onPick={(priority) => void update(todo, { priority })} />}
                 <button type="button" className="todo-delete" onClick={() => void remove(todo)} title="Delete" aria-label={`Delete "${todo.text}"`}>
                   ×
                 </button>
@@ -258,6 +281,7 @@ export function TeamTodosModal({ scope, name, todos, onClose, onChangeTodos }: P
               {done.map((todo) => (
                 <li key={todo.id} className="todo-item">
                   <input type="checkbox" checked onChange={() => void update(todo, { isDone: false })} aria-label={`Mark "${todo.text}" not done`} />
+                  <PriorityChip priority={priorityOf(todo)} />
                   <span className="todo-text">{todo.text}</span>
                   <button type="button" className="todo-delete" onClick={() => void remove(todo)} title="Delete" aria-label={`Delete "${todo.text}"`}>
                     ×
@@ -269,6 +293,129 @@ export function TeamTodosModal({ scope, name, todos, onClose, onChangeTodos }: P
         )}
       </div>
     </Modal>
+  )
+}
+
+/** 우선순위 칩 (글만, 누를 수 없다). 없음이면 그리지 않는다. All TODOs 창·완료 줄이 쓴다 (완료 줄은 CSS 로 흐리게) */
+export function PriorityChip({ priority }: { priority: TodoPriority | null }) {
+  if (!priority) return null
+  return (
+    <span className="todo-priority" data-priority={priority}>
+      {priorityLabel(priority)}
+    </span>
+  )
+}
+
+/**
+ * 할 일 줄의 우선순위 고르기: 칩(없음이면 흐린 "Priority" 자리 — 줄에 마우스를 올리거나 포커스가 있을 때만, 터치 기기는 늘)을 누르면
+ * 그 아래에 메뉴 Critical·High·Medium·Low·None. 메뉴는 position: fixed 라 모달 목록 스크롤 칸에 잘리지 않는다.
+ * 바깥 누르기·Esc(모달은 닫지 않는다)·스크롤·창 크기 바꾸기로 닫힌다. 같은 값을 고르면 보내지 않는다
+ */
+function PriorityPicker({ todo, onPick }: { todo: TeamTodo; onPick: (priority: TodoPriority | null) => void }) {
+  const priority = priorityOf(todo)
+  const [isOpen, setIsOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // 메뉴 크기를 잰 뒤 칩 아래(자리가 없으면 위)에 놓고, 지금 값(없으면 첫 줄)에 포커스
+  useLayoutEffect(() => {
+    const button = buttonRef.current
+    const menu = menuRef.current
+    if (!isOpen || !button || !menu) return
+    const anchor = button.getBoundingClientRect()
+    const { left, top } = priorityMenuPlacement(
+      anchor,
+      { width: menu.offsetWidth, height: menu.offsetHeight },
+      { width: window.innerWidth, height: window.innerHeight },
+    )
+    menu.style.left = `${left}px`
+    menu.style.top = `${top}px`
+    menu.style.visibility = 'visible'
+    const current = menu.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? menu.querySelector<HTMLButtonElement>('button')
+    current?.focus()
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const close = () => setIsOpen(false)
+    // Modal 이 mousedown 을 멈추므로 캡처로 본다
+    const onDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (!menuRef.current?.contains(target) && !buttonRef.current?.contains(target)) close()
+    }
+    // 캡처에서 멈춰 Modal 의 Esc(창 닫기)까지 가지 않게
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      close()
+      buttonRef.current?.focus()
+    }
+    // 목록·창이 움직이면 칩과 어긋나므로 닫는다 (메뉴 안에는 스크롤이 없다)
+    window.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [isOpen])
+
+  function pick(next: TodoPriority | null) {
+    setIsOpen(false)
+    buttonRef.current?.focus()
+    if (next !== priority) onPick(next)
+  }
+
+  /** ↑↓ 로 줄 사이 이동 (끝에서 반대 끝으로), Tab 은 메뉴를 닫는다 */
+  function onMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Tab') {
+      setIsOpen(false)
+      return
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    event.preventDefault()
+    const items = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+    const index = items.indexOf(document.activeElement as HTMLButtonElement)
+    const step = event.key === 'ArrowDown' ? 1 : -1
+    items[(index + step + items.length) % items.length]?.focus()
+  }
+
+  const label = priority ? `Priority: ${priorityLabel(priority)}` : 'Set priority'
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={priority ? 'todo-priority-button' : 'todo-priority-button is-empty'}
+        onClick={() => setIsOpen((previous) => !previous)}
+        title={label}
+        aria-label={`${label} — "${todo.text}"`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+      >
+        <span className="todo-priority" data-priority={priority ?? undefined}>
+          {priority ? priorityLabel(priority) : 'Priority'}
+        </span>
+      </button>
+      {isOpen && (
+        <div ref={menuRef} className="todo-priority-menu" role="menu" aria-label="Priority" onKeyDown={onMenuKeyDown}>
+          {PRIORITY_CHOICES.map((choice) => (
+            <button key={choice ?? 'none'} type="button" role="menuitemradio" aria-checked={choice === priority} onClick={() => pick(choice)}>
+              <span className="todo-priority-dot" data-priority={choice ?? 'none'} aria-hidden="true" />
+              <span className="todo-priority-name">{priorityLabel(choice)}</span>
+              {choice === priority && (
+                <span className="todo-priority-check" aria-hidden="true">
+                  ✓
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 
