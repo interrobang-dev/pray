@@ -20,7 +20,7 @@ interface Props {
 }
 
 /** 응답 본문과 실패 문구 (서버 message, 없으면 HTTP 코드, 닿지 못하면 "Network error") */
-async function requestTodo(url: string, method: string, body?: unknown): Promise<{ todo?: TeamTodo; failure: string | null }> {
+export async function requestTodo(url: string, method: string, body?: unknown): Promise<{ todo?: TeamTodo; failure: string | null }> {
   try {
     const response = await fetch(url, {
       method,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyTodo, clearDone, moveTo, remainingCount, removeTodo, reorderOpen, splitTodos, todosOf } from './teamTodos'
-import type { Team, TeamTodo } from './types'
+import { applyTodo, clearDone, moveTo, openTodoGroups, remainingCount, removeTodo, reorderOpen, splitTodos, teamsInListOrder, todosOf, totalRemaining } from './teamTodos'
+import type { Group, Team, TeamTodo } from './types'
 
 const todo = (id: string, isDone = false): TeamTodo => ({
   id,
@@ -89,5 +89,41 @@ describe('moveTo', () => {
     expect(moveTo(['a', 'b', 'c', 'd'], 'a', 4)).toEqual(['b', 'c', 'd', 'a'])
     expect(moveTo(['a', 'b', 'c', 'd'], 'd', 0)).toEqual(['d', 'a', 'b', 'c'])
     expect(moveTo(['a', 'b', 'c', 'd'], 'c', 1)).toEqual(['a', 'c', 'b', 'd'])
+  })
+})
+
+describe('teamsInListOrder·openTodoGroups·totalRemaining', () => {
+  const group = (id: string): Group => ({ id, name: id, x: 0, y: 0, w: 0, h: 0 })
+  const teamIn = (id: string, groupId: string, todos?: TeamTodo[]): Team => ({ ...team(todos), id, name: id, groupId })
+  // 그룹 순서 g2 → g1, 팀 배열 순서 a(g1)·b(g2)·c(없는 그룹)·d(g1)·e(g2)
+  const office = () => ({
+    groups: [group('g2'), group('g1')],
+    teams: [
+      teamIn('a', 'g1', [todo('a1'), todo('a2', true)]),
+      teamIn('b', 'g2', [todo('b1', true)]),
+      teamIn('c', 'gone', [todo('c1')]),
+      teamIn('d', 'g1'),
+      teamIn('e', 'g2', [todo('e2'), todo('e1'), todo('e3', true)]),
+    ],
+  })
+
+  it('그룹 순 → 그 그룹 팀의 배열 순, 그룹이 지워진 팀은 맨 뒤', () => {
+    expect(teamsInListOrder(office()).map((item) => item.id)).toEqual(['b', 'e', 'a', 'd', 'c'])
+  })
+
+  it('미완료가 없는 팀(완료만·필드 없음)은 빼고, 할 일은 서버 순서 그대로', () => {
+    const groups = openTodoGroups(office())
+    expect(groups.map((item) => item.team.id)).toEqual(['e', 'a', 'c'])
+    expect(groups.map((item) => ids(item.open))).toEqual([['e2', 'e1'], ['a1'], ['c1']])
+  })
+
+  it('모두 없으면 빈 목록, 합계는 0', () => {
+    const empty = { groups: [group('g1')], teams: [teamIn('a', 'g1', [todo('a1', true)]), teamIn('d', 'g1')] }
+    expect(openTodoGroups(empty)).toEqual([])
+    expect(totalRemaining(empty.teams)).toBe(0)
+  })
+
+  it('합계는 모든 팀(그룹이 지워진 팀 포함)의 미완료 수', () => {
+    expect(totalRemaining(office().teams)).toBe(4)
   })
 })

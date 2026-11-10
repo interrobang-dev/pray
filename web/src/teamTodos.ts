@@ -1,4 +1,4 @@
-import type { Team, TeamTodo } from './types'
+import type { Office, Team, TeamTodo } from './types'
 
 /**
  * 팀 TODO 목록의 순수 함수. 서버 배열 순서는 늘 [할 일(사용자가 정한 순서)…, 완료(완료한 순서, 오래된 것 먼저)…] 이고,
@@ -55,4 +55,23 @@ export function moveTo(ids: string[], id: string, dropIndex: number): string[] {
   const rest = ids.filter((other) => other !== id)
   rest.splice(dropIndex > ids.indexOf(id) ? dropIndex - 1 : dropIndex, 0, id)
   return rest
+}
+
+/** 목록 순서의 팀: 그룹(hq 배열 순) → 그 그룹의 팀(hq 배열 순), 그 뒤 그룹이 지워진 팀 (App.tsx 목록과 같은 순서) */
+export function teamsInListOrder(office: Office): Team[] {
+  const grouped = office.groups.flatMap((group) => office.teams.filter((team) => team.groupId === group.id))
+  const orphans = office.teams.filter((team) => !office.groups.some((group) => group.id === team.groupId))
+  return [...grouped, ...orphans]
+}
+
+/** All TODOs 창의 묶음: 목록 순서대로 팀마다 미완료 할 일(서버 순서). 미완료가 없는 팀은 뺀다 */
+export function openTodoGroups(office: Office): { team: Team; open: TeamTodo[] }[] {
+  return teamsInListOrder(office)
+    .map((team) => ({ team, open: splitTodos(todosOf(team)).open }))
+    .filter((group) => group.open.length > 0)
+}
+
+/** 모든 팀의 남은(미완료) 개수 합 */
+export function totalRemaining(teams: Team[]): number {
+  return teams.reduce((sum, team) => sum + remainingCount(team), 0)
 }

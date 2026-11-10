@@ -415,8 +415,9 @@ header button.icon svg {
   background: var(--red-fill);
   color: var(--on-red);
 }
-/* Needs you 창: 툴바 바로 아래, 툴바 안쪽 폭. 목록(.sessions) 위에 뜬다 */
-.needs-you-popover {
+/* Needs you·All TODOs 창: 툴바 바로 아래, 툴바 안쪽 폭. 목록(.sessions) 위에 뜬다 */
+.needs-you-popover,
+.all-todos-popover {
   position: absolute;
   top: calc(100% + 4px);
   left: 12px;
@@ -477,6 +478,108 @@ header button.icon svg {
 .needs-you-time {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+/* All TODOs (AllTodosButton.tsx): 체크리스트 아이콘 + 남은 합계 배지(Needs you 배지 모양). 0 이면 배지 없이 흐리지만 눌린다 */
+.all-todos {
+  display: flex;
+}
+.toolbar .all-todos-toggle {
+  gap: 4px;
+  padding: 5px 8px;
+  color: var(--muted);
+}
+.toolbar .all-todos-toggle.has-todos {
+  color: var(--text);
+}
+.toolbar .all-todos-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+.toolbar .all-todos-toggle:not(.has-todos):not([aria-expanded='true']) {
+  opacity: 0.5;
+}
+.toolbar .all-todos-toggle[aria-expanded='true'] {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+/* 할 일이 많을 수 있어 Needs you 창보다 길게 둔다 */
+.all-todos-popover {
+  max-height: min(70vh, 600px);
+}
+.all-todos-error {
+  padding: 0 12px 6px;
+  color: var(--error);
+}
+.all-todos-empty {
+  padding: 4px 12px 6px;
+  color: var(--muted);
+  font-size: calc(13px * var(--font-scale));
+}
+.all-todos-team + .all-todos-team {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+/* 팀 이름 머리줄: 누르면 그 팀의 TODO 모달 */
+.toolbar .all-todos-team-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-weight: 600;
+  text-align: left;
+}
+.toolbar .all-todos-team-head:hover {
+  background: var(--bg);
+}
+.all-todos-team-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.all-todos-team-count {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.all-todos-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.all-todos-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 12px 4px 14px;
+}
+.all-todos-item:hover {
+  background: var(--bg);
+}
+.all-todos-item input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 1px 0 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+/* 긴 글은 두 줄까지 (전문은 title·팀 모달) */
+.all-todos-text {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: calc(13px * var(--font-scale));
 }
 /* 모달 안의 폼 */
 .create {
@@ -6352,18 +6455,32 @@ li.group.drop-after::after {
     min-height: 40px;
     padding: 0 14px;
   }
-  .toolbar .needs-you-toggle {
+  .toolbar .needs-you-toggle,
+  .toolbar .all-todos-toggle {
     min-width: 40px;
     padding: 0 10px;
     justify-content: center;
   }
-  /* Needs you 창: 사용량·Shells 창처럼 화면 폭에 맞춘다 (양옆 16px). 줄은 44px */
-  .needs-you-popover {
+  /* Needs you·All TODOs 창: 사용량·Shells 창처럼 화면 폭에 맞춘다 (양옆 16px). 줄은 44px */
+  .needs-you-popover,
+  .all-todos-popover {
     left: 16px;
     right: 16px;
   }
-  .toolbar .needs-you-row {
+  .toolbar .needs-you-row,
+  .toolbar .all-todos-team-head {
     min-height: 44px;
+  }
+  /* All TODOs 할 일 줄: 44px, 체크박스 22px (TODO 모달과 같다) */
+  .all-todos-item {
+    min-height: 44px;
+    align-items: center;
+    box-sizing: border-box;
+  }
+  .all-todos-item input[type='checkbox'] {
+    width: 22px;
+    height: 22px;
+    margin: 0;
   }
   /* 목록 라벨의 접기 단추도 40px (버튼이 없는 Focus Zone·Off Duty 라벨도 같은 높이) */
   .group-toggle {

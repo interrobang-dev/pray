@@ -61,6 +61,7 @@ import { contextSizeOf, turnCacheOf } from './contextSize'
 import { handOverUnit } from './handOver'
 import { HomePanel } from './HomePanel'
 import { NeedsYouButton } from './NeedsYouButton'
+import { AllTodosButton } from './AllTodosButton'
 import { bannerOf, nextOutage, presentWebIds, type Outage, type RestartTarget } from './reconnect'
 
 interface Snapshot {
@@ -1698,6 +1699,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
               New Group
             </button>
             <NeedsYouButton sessions={snapshot.sessions} teams={office.teams} now={now} renderAvatar={renderAvatar} onSelect={selectSession} />
+            <AllTodosButton office={office} icon={<TodoIcon />} onChangeTodos={changeTodos} onOpenTeam={setTodoTeamId} />
           </div>
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
             {office.groups.map((group, groupIndex) => {
