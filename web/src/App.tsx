@@ -60,6 +60,7 @@ import { AppearanceModal } from './AppearanceModal'
 import { contextSizeOf, turnCacheOf } from './contextSize'
 import { handOverUnit } from './handOver'
 import { HomePanel } from './HomePanel'
+import { NeedsYouButton } from './NeedsYouButton'
 import { bannerOf, nextOutage, presentWebIds, type Outage, type RestartTarget } from './reconnect'
 
 interface Snapshot {
@@ -1690,11 +1691,13 @@ export function App({ isLocal }: { isLocal: boolean }) {
               </button>
             )}
           </header>
+          {/* 한 줄: New Group(남는 폭) · 아이콘 버튼들. 아이콘 버튼의 창은 툴바 바로 아래에 붙는다 (.toolbar 기준 absolute) */}
           <div className="toolbar">
-            <button onClick={() => setIsGroupForm(true)} title="Create a group">
+            <button className="toolbar-new-group" onClick={() => setIsGroupForm(true)} title="Create a group">
               <NewGroupIcon />
               New Group
             </button>
+            <NeedsYouButton sessions={snapshot.sessions} teams={office.teams} now={now} renderAvatar={renderAvatar} onSelect={selectSession} />
           </div>
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
             {office.groups.map((group, groupIndex) => {

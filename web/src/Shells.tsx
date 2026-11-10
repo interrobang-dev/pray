@@ -50,8 +50,8 @@ function useSecondTick(isActive: boolean): number {
   return now
 }
 
-/** 열려 있으면 바깥 클릭·Esc 로 닫는다 (UsagePanel 과 같은 방식). Esc 때 포커스가 안쪽이었으면 여는 버튼으로 돌린다 */
-function useDismiss(
+/** 열려 있으면 바깥 클릭·Esc 로 닫는다 (UsagePanel 과 같은 방식). Esc 때 포커스가 안쪽이었으면 여는 버튼으로 돌린다. 목록 툴바 Needs you 창도 쓴다 */
+export function useDismiss(
   isOpen: boolean,
   rootRef: RefObject<HTMLElement | null>,
   toggleRef: RefObject<HTMLButtonElement | null>,

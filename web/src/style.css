@@ -355,14 +355,16 @@ header button.icon svg {
   display: block;
   margin: 2px 0;
 }
+/* 툴바 한 줄: [New Group (남는 폭)] [아이콘 버튼들]. 아이콘 버튼의 창(Needs you)은 툴바 기준 absolute 로 바로 아래에 붙는다 */
 .toolbar {
+  position: relative;
   display: flex;
-  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
-/* New Group: 툴바 폭 전체를 쓰고, 아이콘(App.tsx NewGroupIcon)과 글자는 버튼 안 왼쪽에 한 줄로. 세션 추가는 Focus Zone 라벨의 "+" */
+/* New Group: 남는 폭을 다 쓰고, 아이콘(App.tsx NewGroupIcon)과 글자는 버튼 안 왼쪽에 한 줄로. 세션 추가는 Focus Zone 라벨의 "+" */
 .toolbar button {
   display: inline-flex;
   align-items: center;
@@ -370,8 +372,111 @@ header button.icon svg {
   gap: 6px;
   white-space: nowrap;
 }
+.toolbar .toolbar-new-group {
+  flex: 1;
+  min-width: 0;
+}
 .toolbar button svg {
   flex-shrink: 0;
+}
+/* Needs you (NeedsYouButton.tsx): 아이콘 + 개수 배지. 0 이면 배지 없이 disabled 로 흐리다 */
+.needs-you {
+  display: flex;
+}
+.toolbar .needs-you-toggle {
+  gap: 4px;
+  padding: 5px 8px;
+  color: var(--muted);
+}
+.toolbar .needs-you-toggle:not(:disabled) {
+  color: var(--text);
+}
+.toolbar .needs-you-toggle:disabled:hover {
+  border-color: var(--line);
+}
+.toolbar .needs-you-toggle[aria-expanded='true'] {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+.needs-you-count {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: calc(11px * var(--font-scale));
+  line-height: 16px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--chip-bg);
+  color: var(--text);
+}
+/* 승인 대기가 있으면 빨강 (상태 표시줄 Needs approval 과 같은 급함) */
+.needs-you-count.urgent {
+  background: var(--red-fill);
+  color: var(--on-red);
+}
+/* Needs you 창: 툴바 바로 아래, 툴바 안쪽 폭. 목록(.sessions) 위에 뜬다 */
+.needs-you-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 12px;
+  right: 12px;
+  z-index: 8;
+  box-sizing: border-box;
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
+  padding: 8px 0;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.needs-you-head {
+  padding: 2px 12px 6px;
+  font-size: calc(11px * var(--font-scale));
+  color: var(--muted);
+}
+/* 한 줄: 아바타(두 줄에 걸침) · 역할 칩 + 이름 · 지난 시각 / 팀 · 상태 */
+.toolbar .needs-you-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 1px;
+  width: 100%;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+.toolbar .needs-you-row:hover {
+  background: var(--bg);
+}
+.needs-you-row .avatar {
+  grid-row: 1 / 3;
+}
+.needs-you-name,
+.needs-you-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.needs-you-name {
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+}
+.needs-you-meta {
+  grid-column: 2 / 4;
+  color: var(--muted);
+}
+.needs-you-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 /* 모달 안의 폼 */
 .create {
@@ -1296,16 +1401,16 @@ li.group.drop-after::after {
 }
 /* 목록 세션 줄의 상태 테두리: 아바타 둘레 2px 바깥에 두른 ::after 고리라 칩 크기·줄 높이가 그대로고 머리 그림을 덮지 않으며, 숨쉬기도 테두리만 흐려진다 (그림은 그대로).
    working 파랑 실선(숨쉬기)·waiting 파랑 점선(움직임 없음)·needs-approval 빨강·my-turn 주황(--yellow)·done 초록·break 회색 점선. 그 밖(idle·unknown·ended·off)은 테두리 없음 */
-:is(.session, .home-row) .avatar {
+:is(.session, .home-row, .needs-you-row) .avatar {
   position: relative;
 }
-:is(.session, .home-row) .avatar.working::after,
-:is(.session, .home-row) .avatar.waiting::after,
-:is(.session, .home-row) .avatar.needs-approval::after,
-:is(.session, .home-row) .avatar.my-turn::after,
-:is(.session, .home-row) .avatar.done::after,
-:is(.session, .home-row) .avatar.lounge::after,
-:is(.session, .home-row) .avatar.break::after {
+:is(.session, .home-row, .needs-you-row) .avatar.working::after,
+:is(.session, .home-row, .needs-you-row) .avatar.waiting::after,
+:is(.session, .home-row, .needs-you-row) .avatar.needs-approval::after,
+:is(.session, .home-row, .needs-you-row) .avatar.my-turn::after,
+:is(.session, .home-row, .needs-you-row) .avatar.done::after,
+:is(.session, .home-row, .needs-you-row) .avatar.lounge::after,
+:is(.session, .home-row, .needs-you-row) .avatar.break::after {
   content: '';
   position: absolute;
   inset: -2px;
@@ -1313,32 +1418,32 @@ li.group.drop-after::after {
   border-radius: 8px;
   pointer-events: none;
 }
-:is(.session, .home-row) .avatar.working::after {
+:is(.session, .home-row, .needs-you-row) .avatar.working::after {
   border-color: var(--blue-dot);
   animation: dot-breathe 1.6s ease-in-out infinite;
 }
-:is(.session, .home-row) .avatar.needs-approval::after {
+:is(.session, .home-row, .needs-you-row) .avatar.needs-approval::after {
   border-color: var(--red-dot);
 }
-:is(.session, .home-row) .avatar.waiting::after {
+:is(.session, .home-row, .needs-you-row) .avatar.waiting::after {
   border-style: dashed;
   border-color: var(--blue-dot);
 }
-:is(.session, .home-row) .avatar.my-turn::after {
+:is(.session, .home-row, .needs-you-row) .avatar.my-turn::after {
   border-color: var(--yellow);
 }
-:is(.session, .home-row) .avatar.done::after {
+:is(.session, .home-row, .needs-you-row) .avatar.done::after {
   border-color: var(--success);
 }
-:is(.session, .home-row) .avatar.lounge::after {
+:is(.session, .home-row, .needs-you-row) .avatar.lounge::after {
   border-color: var(--line-strong);
 }
-:is(.session, .home-row) .avatar.break::after {
+:is(.session, .home-row, .needs-you-row) .avatar.break::after {
   border-style: dashed;
   border-color: var(--line-strong);
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.session, .home-row) .avatar.working::after {
+  :is(.session, .home-row, .needs-you-row) .avatar.working::after {
     animation: none;
   }
 }
@@ -6242,10 +6347,23 @@ li.group.drop-after::after {
   .approval {
     flex-wrap: wrap;
   }
-  /* New Group: 손가락으로 누르기 쉽게 40px */
+  /* New Group·Needs you: 손가락으로 누르기 쉽게 40px */
   .toolbar button {
     min-height: 40px;
     padding: 0 14px;
+  }
+  .toolbar .needs-you-toggle {
+    min-width: 40px;
+    padding: 0 10px;
+    justify-content: center;
+  }
+  /* Needs you 창: 사용량·Shells 창처럼 화면 폭에 맞춘다 (양옆 16px). 줄은 44px */
+  .needs-you-popover {
+    left: 16px;
+    right: 16px;
+  }
+  .toolbar .needs-you-row {
+    min-height: 44px;
   }
   /* 목록 라벨의 접기 단추도 40px (버튼이 없는 Focus Zone·Off Duty 라벨도 같은 높이) */
   .group-toggle {
