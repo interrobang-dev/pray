@@ -1005,8 +1005,7 @@ header button.icon svg {
   border-top: 1px solid var(--line);
 }
 /* 끌 수 없는 팀(그룹이 지워진 팀)의 빈 ⠿ 칸: 자리만 차지해 "+"·"⋯"·⠿ 열이 그룹·팀 줄과 세로로 맞는다 */
-.head-actions .drag-spacer,
-.head-actions .menu-spacer {
+.head-actions .drag-spacer {
   visibility: hidden;
 }
 /* 목록 끌어 놓기 (App.tsx). 손잡이는 head-actions 안이라 "+"·"⋯" 와 같이 hover 때만 보이고 터치 기기는 늘 보인다.

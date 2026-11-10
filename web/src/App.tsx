@@ -1742,17 +1742,11 @@ export function App({ isLocal }: { isLocal: boolean }) {
                   lobbySessions.length > 0 ? lobbySessions.length : null,
                   isFocusZoneCollapsed ? statusSummary(lobbySessions) : [],
                 )}
-                {/* 팀 없이 세션 추가 (폴더 직접 입력). 그룹 라벨의 "+" 와 같은 세로줄에 오게 ⋯·⠿ 자리는 보이지 않는 빈칸 */}
+                {/* 팀 없이 세션 추가 (폴더 직접 입력). 라벨 오른쪽 끝 */}
                 <span className="head-actions">
                   <button onClick={() => openSessionForm(null)} disabled={!snapshot.isHostReachable} title="New session in Focus Zone">
                     +
                   </button>
-                  <span className="menu menu-spacer" aria-hidden="true">
-                    <button tabIndex={-1} disabled>
-                      ⋯
-                    </button>
-                  </span>
-                  {renderDragSpacer()}
                 </span>
               </div>
               {!isFocusZoneCollapsed && lobbySessions.map((session) => renderSession(session, true))}
