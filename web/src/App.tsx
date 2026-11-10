@@ -1951,7 +1951,19 @@ export function App({ isLocal }: { isLocal: boolean }) {
                   <FilesTabIcon />
                 </button>
               </nav>
-              {shownTab === 'chat' && (
+              {/* 폰은 머리 한 줄에 이름이 보이게 검색·이름 바꾸기·종료를 ⋯ 메뉴 하나로 묶는다 */}
+              {isNarrow && (
+                <span className="panel-more">
+                  <MoreMenu
+                    items={[
+                      ...(shownTab === 'chat' ? [{ label: isChatSearchOpen ? 'Close search' : 'Search conversation', onClick: toggleChatSearch }] : []),
+                      { label: 'Rename…', onClick: () => openRename(selected) },
+                      ...(isSelectedLiveWeb ? (['separator', { label: 'End session', onClick: () => void endSession(selected.id) }] as MenuItem[]) : []),
+                    ]}
+                  />
+                </span>
+              )}
+              {!isNarrow && shownTab === 'chat' && (
                 <button
                   type="button"
                   className={`search-toggle${isChatSearchOpen ? ' on' : ''}`}
@@ -1963,10 +1975,12 @@ export function App({ isLocal }: { isLocal: boolean }) {
                   <SearchTabIcon />
                 </button>
               )}
-              <button className="rename" title="Rename" aria-label="Rename" onClick={() => openRename(selected)}>
-                <RenameIcon />
-              </button>
-              {isSelectedLiveWeb && (
+              {!isNarrow && (
+                <button className="rename" title="Rename" aria-label="Rename" onClick={() => openRename(selected)}>
+                  <RenameIcon />
+                </button>
+              )}
+              {!isNarrow && isSelectedLiveWeb && (
                 <button
                   className="end-session"
                   title="End session"
