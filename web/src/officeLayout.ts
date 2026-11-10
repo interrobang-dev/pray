@@ -41,7 +41,7 @@ const NEW_ISLAND = { w: LEAD_W + PAIR_W + PLANT_W + 2 * ISLAND_PADDING, h: BLOCK
 /** 팀 없는 그룹 크기 = 새 팀 하나 + 위 이름표 줄 */
 const MIN_GROUP = { w: NEW_ISLAND.w, h: GROUP_LABEL_H + NEW_ISLAND.h }
 const LOBBY_COLUMNS = 2
-/** Focus Zone 부스 간격. 부스 그림이 자리 폭보다 넓고 의자가 자리 아래로 나와 3×4 */
+/** Focus Zone 부스 간격 3×4. 부스 그림이 자리 폭보다 넓어 가로 3, 세로는 자리 3 + 통로 1 (의자는 자리 안에 든다) */
 const BOOTH_STEP_X = 3
 const BOOTH_STEP_Y = 4
 /** 부스 자리 사각형 */

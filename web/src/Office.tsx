@@ -788,7 +788,7 @@ function drawDotIsland(island: Island, memberCount: number, onEdit: () => void, 
   const h = island.h * TILE * DOT_SCALE
   /** 섬 안 타일 좌표 → 이 섬 도트 px */
   const local = (point: Point) => ({ x: (point.x - island.x) * DOT_TILE, y: (point.y - island.y) * DOT_TILE })
-  // 받침: 단위들(테두리 1타일 안쪽)에서 왼쪽 24(지휘자 없는 블록의 왼쪽 끝 판 12 바깥)·오른쪽 12·위 12·아래 24(아랫자리 의자가 블록 줄 아래로 23 나온다) 넓게
+  // 받침: 단위들(테두리 1타일 안쪽)에서 왼쪽 24(지휘자 없는 블록의 왼쪽 끝 판 12 바깥)·오른쪽 12·위 12·아래 24(아랫자리 의자가 블록 줄 아래로 13 나온다) 넓게
   dot.addChild(
     new Graphics()
       .rect(DOT_TILE - 24, DOT_TILE - 12, w - 2 * DOT_TILE + 36, h - 2 * DOT_TILE + 36)
@@ -819,7 +819,7 @@ function drawDotIsland(island: Island, memberCount: number, onEdit: () => void, 
     const { x, y } = local(plant)
     dot.addChild(v5Prop(art, 'plant-large', x + 6, y + 40))
   }
-  // 명판: 받침 왼쪽 끝에 맞춰 섬 테두리(1타일) 안. 아래 끝이 첫 블록 줄 윗자리 머리·아이콘(섬 y 31~)보다 위
+  // 명판: 받침 왼쪽 끝에 맞춰 섬 테두리(1타일) 안. 아래 끝이 첫 블록 줄 윗자리 아이콘(섬 y 31~)·머리(33~)보다 위. 든 손(18~)은 명판 줄까지 올라온다
   const name = dotLabelText(island.team.name, DOT_FONT.team, COLOR.text, 'bold')
   const count = memberCount > 0 ? dotLabelText(` · ${memberCount}`, DOT_FONT.team, COLOR.labelMuted) : null
   const plateW = Math.ceil(name.width + (count?.width ?? 0)) + 16
