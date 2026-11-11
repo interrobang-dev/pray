@@ -80,6 +80,14 @@ interface HqFile extends Office {
   genders: Record<string, SessionGender>
   /** 세션 역할 (FE·BE·Lead 등, parsePosition 꼴). 이름(sessionNames)에는 넣지 않는다 — 화면이 따로 붙인다. 이름과 같이 지운다 */
   positions: Record<string, string>
+  /** 대화 탭에서 마크한 말풍선 (세션 ID → 마크한 순서). 외부 세션에도 붙일 수 있다. 이름과 같이 지운다 */
+  chatMarks: Record<string, ChatMark[]>
+}
+
+/** 대화 탭에서 마크한 말풍선 하나. key = 그 말풍선의 data-jump-key(메시지 ID). 미리보기 글은 화면이 대화로 만든다 */
+export interface ChatMark {
+  key: string
+  createdAt: string
 }
 
 /** 설정 폴더는 처음 읽고 쓸 때 정한다 (dataDir) */
@@ -115,6 +123,7 @@ function readHq(): HqFile {
     characters: rest.characters ?? {},
     genders: rest.genders ?? {},
     positions: rest.positions ?? {},
+    chatMarks: rest.chatMarks ?? {},
     todos: rest.todos ?? [],
   }
 }
@@ -188,7 +197,7 @@ export function removeWebSession(sessionId: string): void {
   writeHq(hq)
 }
 
-/** 다시 출근할 수 없는 웹 세션(대화가 없음)의 기록과 이름·고른 인물·성별·역할을 지운다. webSessions 에 없으면 아무것도 쓰지 않고 false */
+/** 다시 출근할 수 없는 웹 세션(대화가 없음)의 기록과 이름·고른 인물·성별·역할·마크를 지운다. webSessions 에 없으면 아무것도 쓰지 않고 false */
 export function discardWebSession(sessionId: string): boolean {
   const hq = readHq()
   if (!hq.webSessions.some((s) => s.sessionId === sessionId)) return false
@@ -197,6 +206,7 @@ export function discardWebSession(sessionId: string): boolean {
   delete hq.characters[sessionId]
   delete hq.genders[sessionId]
   delete hq.positions[sessionId]
+  delete hq.chatMarks[sessionId]
   writeHq(hq)
   return true
 }
@@ -230,7 +240,7 @@ export function returnFromOffDuty(sessionId: string): WebSessionRecord | null {
   return webSession
 }
 
-/** 퇴근 기록과 그 세션 이름·고른 인물·성별·역할을 지운다. 없으면 false */
+/** 퇴근 기록과 그 세션 이름·고른 인물·성별·역할·마크를 지운다. 없으면 false */
 export function removeOffDuty(sessionId: string): boolean {
   const hq = readHq()
   if (!hq.offDuty.some((s) => s.sessionId === sessionId)) return false
@@ -239,11 +249,12 @@ export function removeOffDuty(sessionId: string): boolean {
   delete hq.characters[sessionId]
   delete hq.genders[sessionId]
   delete hq.positions[sessionId]
+  delete hq.chatMarks[sessionId]
   writeHq(hq)
   return true
 }
 
-/** 이유별 보관 기간이 지난 퇴근 기록과 그 이름·고른 인물·성별·역할을 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
+/** 이유별 보관 기간이 지난 퇴근 기록과 그 이름·고른 인물·성별·역할·마크를 지운다. 지운 세션 ID 들 (없으면 쓰지 않는다) */
 export function pruneOffDuty(now = Date.now()): string[] {
   const hq = readHq()
   const expired = hq.offDuty.filter((s) => now - Date.parse(s.endedAt) > retentionOf(s.reason)).map((s) => s.sessionId)
@@ -254,6 +265,7 @@ export function pruneOffDuty(now = Date.now()): string[] {
     delete hq.characters[sessionId]
     delete hq.genders[sessionId]
     delete hq.positions[sessionId]
+  delete hq.chatMarks[sessionId]
   }
   writeHq(hq)
   return expired
@@ -294,6 +306,36 @@ export function setGender(sessionId: string, gender: SessionGender | null): void
   if (gender) hq.genders[sessionId] = gender
   else delete hq.genders[sessionId]
   writeHq(hq)
+}
+
+// ---------- 대화 마크 ----------
+
+/** 그 세션의 마크 (마크한 순서). 없으면 [] */
+export function listChatMarks(sessionId: string): ChatMark[] {
+  return readHq().chatMarks[sessionId] ?? []
+}
+
+/** 마크를 끝에 더한다. 이미 있으면 쓰지 않고 그대로. 그 세션의 마크 전부를 돌려준다 */
+export function addChatMark(sessionId: string, key: string, now = new Date()): ChatMark[] {
+  const hq = readHq()
+  const marks = hq.chatMarks[sessionId] ?? []
+  if (marks.some((mark) => mark.key === key)) return marks
+  const next = [...marks, { key, createdAt: now.toISOString() }]
+  hq.chatMarks[sessionId] = next
+  writeHq(hq)
+  return next
+}
+
+/** 마크를 지운다. 없으면 쓰지 않는다. 마지막 마크면 세션 키도 지운다. 남은 마크 전부를 돌려준다 */
+export function removeChatMark(sessionId: string, key: string): ChatMark[] {
+  const hq = readHq()
+  const marks = hq.chatMarks[sessionId] ?? []
+  if (!marks.some((mark) => mark.key === key)) return marks
+  const next = marks.filter((mark) => mark.key !== key)
+  if (next.length > 0) hq.chatMarks[sessionId] = next
+  else delete hq.chatMarks[sessionId]
+  writeHq(hq)
+  return next
 }
 
 // ---------- 세션 역할 ----------

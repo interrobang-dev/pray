@@ -15,6 +15,8 @@ import { runningToolNames, shortToolName } from './runningTools'
 import { isTeamWaitSummary, teamToolOf } from './teamTools'
 import { FilesButton } from './Files'
 import { CopyButton } from './CopyButton'
+import { isMarkableMessage, withMark, withoutMark, type ChatMark } from './chatMarks'
+import { MarkButton, MarksButton } from './MarksButton'
 import { MarkdownText } from './Markdown'
 import { PositionChip } from './PositionChip'
 import { memberOf as memberDisplay } from './sessionPosition'
@@ -923,10 +925,14 @@ interface ChatRowViewProps {
   canCancelQueued: boolean
   /** [Cancel] 을 누른 대기 메시지 ID (대기 메시지 줄만) */
   cancellingId: string | null
+  /** 이 줄의 claude 답·내 말 말풍선을 마크했는지 */
+  isMarked: boolean
   /** 묶음 키와 지금 펼쳐졌는지 (누르면 그 반대로 정한다) */
   onToggleWork: (key: string, isOpen: boolean) => void
   onOpenRelay: (relay: Relay, rowKey: string) => void
   onCancelQueued: (message: ChatMessage) => void
+  /** 말풍선 마크하기·풀기 (Chat 이 고정해 넘긴다) */
+  onSetMark: (key: string, isMarked: boolean) => void
 }
 
 /** 대화 줄 하나. memo 라 대화를 다시 받아도 줄 객체(chatReuse 가 바뀌지 않은 줄은 이전 객체를 쓴다)와 넘긴 값이 그대로면 다시 그리지 않는다 */
@@ -939,9 +945,11 @@ const ChatRowView = memo(function ChatRowView({
   memberOf,
   canCancelQueued,
   cancellingId,
+  isMarked,
   onToggleWork,
   onOpenRelay,
   onCancelQueued,
+  onSetMark,
 }: ChatRowViewProps) {
   /** 점프로 찾아 간 말풍선이면 강조 클래스 */
   function highlightClass(key: string): string {
@@ -969,8 +977,9 @@ const ChatRowView = memo(function ChatRowView({
   // claude 답변 (구간의 마지막 글. 도구 없는 구간이면 글마다)
   if (row.kind === 'text') {
     return (
-      <div className={`msg assistant${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
+      <div className={`msg assistant${isMarked ? ' marked' : ''}${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
         <CopyButton text={row.message.text} />
+        <MarkButton messageKey={row.message.id} isMarked={isMarked} onSetMark={onSetMark} />
         <MarkdownText text={row.message.text} isChat />
       </div>
     )
@@ -1031,9 +1040,14 @@ const ChatRowView = memo(function ChatRowView({
       </>
     )
   }
-  // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다)
+  // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다). 내 말이면 마크 버튼
+  const isMarkable = isMarkableMessage(message)
   return (
-    <div className={`msg ${message.role}${message.isQueued ? ' queued' : ''}${highlightClass(message.id)}`} data-jump-key={message.id}>
+    <div
+      className={`msg ${message.role}${message.isQueued ? ' queued' : ''}${isMarkable && isMarked ? ' marked' : ''}${highlightClass(message.id)}`}
+      data-jump-key={message.id}
+    >
+      {isMarkable && <MarkButton messageKey={message.id} isMarked={isMarked} onSetMark={onSetMark} />}
       {message.text && <div className="text">{message.text}</div>}
       {message.isQueued && (
         <div className="queued-label">
@@ -1070,9 +1084,11 @@ const MessageRows = memo(function MessageRows({
   lastQueuedId,
   canCancelQueued,
   cancellingId,
+  markedKeys,
   onToggleWork,
   onOpenRelay,
   onCancelQueued,
+  onSetMark,
 }: {
   rows: ChatRow<Special>[]
   memberOf: MemberOf
@@ -1088,9 +1104,12 @@ const MessageRows = memo(function MessageRows({
   lastQueuedId: string | null
   canCancelQueued: boolean
   cancellingId: string | null
+  /** 마크한 말풍선 키 (줄에는 그 줄 것인지만 boolean 으로 넘긴다) */
+  markedKeys: ReadonlySet<string>
   onToggleWork: (key: string, isOpen: boolean) => void
   onOpenRelay: (relay: Relay, rowKey: string) => void
   onCancelQueued: (message: ChatMessage) => void
+  onSetMark: (key: string, isMarked: boolean) => void
 }) {
   const highlightRow = highlightKey === null ? -1 : rowIndexOfJumpKey(rows, highlightKey)
   const searchRow = searchKey === null ? -1 : rowIndexOfJumpKey(rows, searchKey)
@@ -1108,9 +1127,11 @@ const MessageRows = memo(function MessageRows({
         memberOf={row.kind === 'message' ? memberOf : null}
         canCancelQueued={isQueuedRow && row.kind === 'message' && row.message.id === lastQueuedId && canCancelQueued}
         cancellingId={isQueuedRow ? cancellingId : null}
+        isMarked={(row.kind === 'text' || row.kind === 'message') && markedKeys.has(row.message.id)}
         onToggleWork={onToggleWork}
         onOpenRelay={onOpenRelay}
         onCancelQueued={onCancelQueued}
+        onSetMark={onSetMark}
       />
     )
   })
@@ -1334,6 +1355,70 @@ export function Chat({
     revealRow(rowIndexOfJumpKey(rowsRef.current, target.key))
     setSearchScroll({ key: target.key, id: nextSearchScrollIdRef.current++ })
   }, [revealRow])
+
+  /** 마크한 말풍선 (hq.json chatMarks, 마크한 순서). 대화 탭을 열거나 세션을 바꾸면 받는다. 세션 목록 SSE 에는 없다 */
+  const [marks, setMarks] = useState<ChatMark[]>([])
+  const marksRef = useRef(marks)
+  marksRef.current = marks
+  /** 줄에는 그 줄 것인지만 넘긴다 (마크 하나를 바꾸면 그 줄만 다시 그린다) */
+  const markedKeys = useMemo(() => new Set(marks.map((mark) => mark.key)), [marks])
+  /** 마크 요청은 보낸 순서대로 하나씩 (빨리 두 번 누르면 PUT·DELETE 가 거꾸로 닿지 않게) */
+  const markQueueRef = useRef<Promise<void>>(Promise.resolve())
+  useEffect(() => {
+    setMarks([])
+    let isCancelled = false
+    fetch(`/api/sessions/${sessionId}/marks`, { cache: 'no-store' })
+      .then((response) => (response.ok ? (response.json() as Promise<{ marks: ChatMark[] }>) : null))
+      .then((data) => {
+        if (!isCancelled && data) setMarks(data.marks)
+      })
+      .catch(() => {})
+    return () => {
+      isCancelled = true
+    }
+  }, [sessionId])
+  /**
+   * 말풍선 마크하기·풀기. 화면을 먼저 바꾸고 요청이 실패하면 그 마크만 되돌린 뒤 대화 맨 아래 한 줄로 알린다 (점프 "Message not found" 와 같은 자리).
+   * 고정 함수라 줄 memo 를 깨지 않는다
+   */
+  const setMark = useCallback((key: string, isMarked: boolean) => {
+    const targetSessionId = sessionIdRef.current
+    const previous = marksRef.current.find((mark) => mark.key === key)
+    if (isMarked === Boolean(previous)) return
+    setMarks((current) => (isMarked ? withMark(current, key, new Date().toISOString()) : withoutMark(current, key)))
+    markQueueRef.current = markQueueRef.current.then(async () => {
+      let failure: string | null = null
+      try {
+        const response = await fetch(`/api/sessions/${targetSessionId}/marks/${encodeURIComponent(key)}`, { method: isMarked ? 'PUT' : 'DELETE' })
+        if (!response.ok) failure = ((await response.json().catch(() => ({}))) as { message?: string }).message ?? `HTTP ${response.status}`
+      } catch {
+        failure = 'Network error'
+      }
+      if (failure === null || sessionIdRef.current !== targetSessionId) return
+      setMarks((current) => (isMarked ? withoutMark(current, key) : previous ? withMark(current, key, previous.createdAt) : current))
+      setJumpNotice(`Couldn't ${isMarked ? 'mark' : 'unmark'} the message · ${failure}`)
+    })
+  }, [])
+  /** 마크 창에서 고른 말풍선으로 간다: 점프와 같이 안 그린 줄이면 거기까지 그리고, 끝난 작업 묶음 안이면 펼친 뒤 강조 효과가 스크롤한다 */
+  const nextMarkJumpIdRef = useRef(-1)
+  const goToMark = useCallback(
+    (key: string) => {
+      const index = rowIndexOfJumpKey(rowsRef.current, key)
+      if (index < 0) {
+        setJumpNotice('Message not found')
+        return
+      }
+      const row = rowsRef.current[index]
+      if (row.kind === 'work' && !row.work.isInProgress) {
+        const workKey = row.work.key
+        setWorkToggles((current) => (current.get(workKey) ? current : new Map(current).set(workKey, true)))
+      }
+      revealRow(index)
+      // 점프의 id(App 이 1부터 올린다)와 겹치지 않게 음수로
+      setHighlight({ key, id: nextMarkJumpIdRef.current-- })
+    },
+    [revealRow],
+  )
 
   /** 마지막으로 받은 대화와 그 서버 버전. 같은 세션을 다시 받을 때 바뀐 뒤쪽만 받는다 (chatDelta.ts). 세션을 열거나 바꾸면 전체를 받는다 */
   const heldRef = useRef<HeldMessages | null>(null)
@@ -1767,9 +1852,11 @@ export function Chat({
               lastQueuedId={lastQueuedId}
               canCancelQueued={canCancelQueued}
               cancellingId={cancellingId}
+              markedKeys={markedKeys}
               onToggleWork={toggleWork}
               onOpenRelay={openRelay}
               onCancelQueued={cancelQueued}
+              onSetMark={setMark}
             />
           </ChatImageSession.Provider>
           {pendings.map((pending) => (
@@ -1811,7 +1898,7 @@ export function Chat({
           )}
           <div ref={bottomRef} />
         </div>
-        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 폴더 → shell → "↓" 로 쌓인다.
+        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 폴더 → 마크 → shell → "↓" 로 쌓인다.
             자주 뜨고 숨는 것일수록 위에 둔다: "↓" 가 스크롤마다 바뀌어도 아래 버튼은 그대로이고, shell 이 뜨고 끝나도 폴더는 그대로다 */}
         <div className="pane-buttons">
           {!isAtBottom && (
@@ -1826,6 +1913,7 @@ export function Chat({
             </button>
           )}
           <ShellsButton key={`shells:${sessionId}`} sessionId={sessionId} shells={shells} request={shellRequest} onRequestHandled={onShellRequestHandled} />
+          <MarksButton key={`marks:${sessionId}`} marks={marks} messages={messages} onGo={goToMark} onSetMark={setMark} />
           <FilesButton key={sessionId} sessionId={sessionId} version={version} />
         </div>
       </div>

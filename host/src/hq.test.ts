@@ -24,6 +24,9 @@ import {
   updateTodo,
   type Todo,
   listCharacters,
+  listChatMarks,
+  addChatMark,
+  removeChatMark,
   listGenders,
   listOffDuty,
   listPositions,
@@ -264,6 +267,8 @@ describe('off duty records', () => {
     setGender('other', 'male')
     setPosition('a', 'BE')
     setPosition('other', 'QA')
+    addChatMark('a', 'm1')
+    addChatMark('other', 'm2')
     moveToOffDuty('a', end)
     expect(removeOffDuty('a')).toBe(true)
     expect(listOffDuty()).toEqual([])
@@ -271,6 +276,30 @@ describe('off duty records', () => {
     expect(listCharacters()).toEqual({ other: { id: 'lead', hair: null, top: null } })
     expect(listGenders()).toEqual({ other: 'male' })
     expect(listPositions()).toEqual({ other: 'QA' })
+    expect(listChatMarks('a')).toEqual([])
+    expect(listChatMarks('other').map((mark) => mark.key)).toEqual(['m2'])
+  })
+
+  it('adds chat marks in order and keeps an existing one as is', () => {
+    const first = new Date('2026-11-11T01:00:00.000Z')
+    expect(addChatMark('a', 'm1', first)).toEqual([{ key: 'm1', createdAt: first.toISOString() }])
+    addChatMark('a', 'm2', new Date('2026-11-11T02:00:00.000Z'))
+    const before = readFileSync(hqPath, 'utf8')
+    expect(addChatMark('a', 'm1', new Date('2026-11-11T03:00:00.000Z')).map((mark) => mark.key)).toEqual(['m1', 'm2'])
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+    expect(listChatMarks('a')[0].createdAt).toBe(first.toISOString())
+    expect(listChatMarks('b')).toEqual([])
+  })
+
+  it('removes a chat mark and drops the session key when none are left', () => {
+    addChatMark('a', 'm1')
+    addChatMark('a', 'm2')
+    expect(removeChatMark('a', 'm1').map((mark) => mark.key)).toEqual(['m2'])
+    const before = readFileSync(hqPath, 'utf8')
+    expect(removeChatMark('a', 'nope').map((mark) => mark.key)).toEqual(['m2'])
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+    expect(removeChatMark('a', 'm2')).toEqual([])
+    expect(JSON.parse(readFileSync(hqPath, 'utf8')).chatMarks).toEqual({})
   })
 
   it('sets and clears a position', () => {
@@ -300,6 +329,7 @@ describe('off duty records', () => {
     setCharacter('a', { id: 'afro', hair: null, top: null })
     setGender('a', 'male')
     setPosition('a', 'FE')
+    addChatMark('a', 'm1')
     expect(discardWebSession('a')).toBe(true)
     expect(listWebSessions()).toEqual([])
     expect(listOffDuty()).toEqual([])
@@ -307,6 +337,7 @@ describe('off duty records', () => {
     expect(listCharacters()).toEqual({})
     expect(listGenders()).toEqual({})
     expect(listPositions()).toEqual({})
+    expect(listChatMarks('a')).toEqual([])
   })
 
   it('prunes records older than the retention period with their names', () => {
@@ -321,6 +352,7 @@ describe('off duty records', () => {
       setCharacter(sessionId, { id: 'lead', hair: null, top: null })
       setGender(sessionId, 'female')
       setPosition(sessionId, 'FE')
+      addChatMark(sessionId, 'm1')
       moveToOffDuty(sessionId, { ...end, endedAt })
     }
     expect(pruneOffDuty(now)).toEqual(['old'])
@@ -329,6 +361,8 @@ describe('off duty records', () => {
     expect(Object.keys(listCharacters())).toEqual(['edge', 'new'])
     expect(Object.keys(listGenders())).toEqual(['edge', 'new'])
     expect(Object.keys(listPositions())).toEqual(['edge', 'new'])
+    expect(listChatMarks('old')).toEqual([])
+    expect(listChatMarks('edge').map((mark) => mark.key)).toEqual(['m1'])
     const before = readFileSync(hqPath, 'utf8')
     expect(pruneOffDuty(now)).toEqual([])
     expect(readFileSync(hqPath, 'utf8')).toBe(before)

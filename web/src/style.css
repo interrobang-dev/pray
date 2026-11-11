@@ -2586,7 +2586,8 @@ li.group.drop-after::after {
 /* 원 버튼 모양 */
 .to-bottom,
 .files-button,
-.shells-button {
+.shells-button,
+.marks-button {
   position: relative;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -2609,15 +2610,17 @@ li.group.drop-after::after {
   border: 2px solid var(--panel);
   background: var(--accent);
 }
-/* 작업 파일 폴더 버튼 (Files.tsx)·실행 중인 shell ">_" 버튼 (Shells.tsx) */
+/* 작업 파일 폴더 버튼 (Files.tsx)·실행 중인 shell ">_" 버튼 (Shells.tsx)·마크 버튼 (MarksButton.tsx) */
 .files-button,
-.shells-button {
+.shells-button,
+.marks-button {
   display: flex;
   align-items: center;
   justify-content: center;
 }
-/* shell 개수: 원 오른쪽 위의 작은 숫자. 원 크기는 그대로 */
-.shells-button-count {
+/* shell·마크 개수: 원 오른쪽 위의 작은 숫자. 원 크기는 그대로 */
+.shells-button-count,
+.marks-button-count {
   position: absolute;
   top: -3px;
   right: -3px;
@@ -2634,6 +2637,87 @@ li.group.drop-after::after {
   line-height: 14px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+/* 마크 창 (MarksButton.tsx): 북마크 원 버튼 왼쪽 위로 뜬다. 줄 = [You·Claude · 첫 줄 · 시각] ×. 대화에 없는 말풍선은 흐리게 */
+.marks {
+  position: relative;
+}
+.marks-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: 8px 0;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.marks-head {
+  padding: 2px 12px 6px;
+  font-size: calc(11px * var(--font-scale));
+  color: var(--muted);
+}
+.marks-row {
+  display: flex;
+  align-items: stretch;
+}
+.marks-row:hover {
+  background: var(--bg);
+}
+.marks-go {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px 6px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+.marks-go:disabled {
+  cursor: default;
+}
+.marks-role {
+  font-weight: 600;
+}
+.marks-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.marks-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.marks-row.missing .marks-go {
+  color: var(--muted);
+  opacity: 0.7;
+}
+.marks-remove {
+  flex-shrink: 0;
+  width: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: calc(16px * var(--font-scale));
+  line-height: 1;
+}
+.marks-remove:hover {
+  color: var(--text);
 }
 /* shell 모달 (Shells.tsx): 작업 파일 모달(.files-modal)의 틀·크기·폰 화면을 그대로 쓰고 여기만 다르다.
    머리줄은 개수 요약 ··· ×, 목록 줄은 [명령 ··· 경과 시간] / [설명], 오른쪽은 출력 마지막 200줄 */
@@ -4578,6 +4662,55 @@ li.group.drop-after::after {
   .copy-button:focus-visible,
   .copy-button[data-status='copied'],
   .copy-button[data-status='failed'] {
+    opacity: 1;
+  }
+}
+/* 말풍선 마크 버튼 (MarksButton.tsx 의 MarkButton): 복사 버튼과 같은 모양·자리 규칙. 복사 버튼이 있는 claude 말풍선은 그 왼쪽, 내 말은 오른쪽 위.
+   마우스 기기는 올렸거나 포커스가 있거나 마크했을 때 보이고, 터치 기기는 늘 보인다. 마크한 말풍선은 강조색 테두리와 왼쪽 선 */
+.msg.user {
+  position: relative;
+}
+.msg > .mark-button {
+  position: absolute;
+  z-index: 1;
+  top: -11px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  line-height: 0;
+  cursor: pointer;
+}
+.msg > .copy-button + .mark-button {
+  right: 38px;
+}
+.msg > .mark-button:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+.msg > .mark-button[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.msg.marked {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+@media (hover: hover) {
+  .msg > .mark-button {
+    opacity: 0;
+  }
+  .msg:hover > .mark-button,
+  .msg > .mark-button:focus-visible,
+  .msg > .mark-button[aria-pressed='true'] {
     opacity: 1;
   }
 }
@@ -6596,6 +6729,20 @@ li.group.drop-after::after {
     margin-top: -6px;
     margin-bottom: -6px;
   }
+  /* 말풍선 마크 버튼: 복사 버튼처럼 32px 로 키운다 (터치 기기는 늘 보인다) */
+  .msg > .mark-button {
+    top: -14px;
+    right: 6px;
+    width: 32px;
+    height: 32px;
+  }
+  .msg > .copy-button + .mark-button {
+    right: 44px;
+  }
+  .msg > .mark-button svg {
+    width: 18px;
+    height: 18px;
+  }
 }
 
 /* 폰 폭: 한 열. 기본은 목록 전체 폭이고 세션을 고르면 패널이 화면 전체를 쓴다 (사무실은 App 이 마운트하지 않는다).
@@ -7254,6 +7401,13 @@ li.group.drop-after::after {
   }
   .chat-image-frame img {
     max-height: 300px;
+  }
+  /* 마크 창: 줄 44px, × 44px (창 폭은 화면 폭 - 32px) */
+  .marks-row {
+    min-height: 44px;
+  }
+  .marks-remove {
+    width: 44px;
   }
 }
 

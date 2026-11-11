@@ -38,6 +38,9 @@ import {
   WorktreePartError,
   addTodo,
   migrateGroupTodosToTeams,
+  addChatMark,
+  listChatMarks,
+  removeChatMark,
   migratePositionNames,
   migrateWaitingNotes,
   parseTodoText,
@@ -1321,6 +1324,43 @@ app.put('/api/sessions/:id/character', async (req, res) => {
   }
   res.json({})
   void broadcast()
+})
+
+/** 대화 마크의 key = 말풍선의 data-jump-key (메시지 ID: jsonl uuid 등) */
+const CHAT_MARK_KEY = /^[A-Za-z0-9_.:-]{1,128}$/
+
+/** 마크 경로의 세션 ID·key 꼴. 틀리면 400 을 보내고 false */
+function isValidMarkRequest(req: Request, res: Response, hasKey: boolean): boolean {
+  if (!isSessionId(req.params.id as string)) {
+    res.status(400).json({ message: 'Invalid session ID' })
+    return false
+  }
+  if (hasKey && !CHAT_MARK_KEY.test(req.params.key as string)) {
+    res.status(400).json({ message: 'Mark key must be 1–128 letters, digits or _ . : -' })
+    return false
+  }
+  return true
+}
+
+/**
+ * 대화 탭 말풍선 마크 (hq.json chatMarks). 세션 목록·SSE 에는 싣지 않고 대화 탭이 열 때 받는다. 근무·휴식·퇴근·외부 세션 모두 된다.
+ * 응답 marks 는 마크한 순서 그대로 (대화 순서는 화면이 정한다)
+ */
+app.get('/api/sessions/:id/marks', (req, res) => {
+  if (!isValidMarkRequest(req, res, false)) return
+  res.set('Cache-Control', 'no-store').json({ marks: listChatMarks(req.params.id) })
+})
+
+/** 마크 더하기. 이미 있으면 그대로 */
+app.put('/api/sessions/:id/marks/:key', (req, res) => {
+  if (!isValidMarkRequest(req, res, true)) return
+  res.json({ marks: addChatMark(req.params.id, req.params.key) })
+})
+
+/** 마크 지우기. 없어도 성공 */
+app.delete('/api/sessions/:id/marks/:key', (req, res) => {
+  if (!isValidMarkRequest(req, res, true)) return
+  res.json({ marks: removeChatMark(req.params.id, req.params.key) })
 })
 
 /**
