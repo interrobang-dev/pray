@@ -20,7 +20,9 @@ import {
   todosOf,
   todosUrl,
   totalRemaining,
+  totalUrgentPriority,
   updateScopeTodos,
+  urgentPriorityOf,
 } from './teamTodos'
 import type { Group, Team, TeamTodo } from './types'
 
@@ -200,6 +202,21 @@ describe('우선순위', () => {
     expect(priorityOf(next[2])).toBe('critical')
     const cleared = applyTodo(next, todo('c'))
     expect(priorityOf(cleared[2])).toBeNull()
+  })
+
+  it('배지 색: 미완료 중 Critical 이 High 보다 앞서고, Medium·Low·완료는 바꾸지 않는다', () => {
+    const withPriority = (id: string, priority: TeamTodo['priority'], isDone = false): TeamTodo => ({ ...todo(id, isDone), priority })
+    expect(urgentPriorityOf([withPriority('a', 'high'), withPriority('b', 'critical')])).toBe('critical')
+    expect(urgentPriorityOf([withPriority('a', 'high'), withPriority('b', 'critical', true)])).toBe('high')
+    expect(urgentPriorityOf([withPriority('a', 'medium'), withPriority('b', 'low'), todo('c')])).toBeNull()
+    expect(urgentPriorityOf([])).toBeNull()
+  })
+
+  it('툴바 배지 색은 내 책상과 모든 팀을 합쳐 본다', () => {
+    const base = { groups: [], teams: [team([{ ...todo('a'), priority: 'high' }])] }
+    expect(totalUrgentPriority(base)).toBe('high')
+    expect(totalUrgentPriority({ ...base, todos: [{ ...todo('m'), priority: 'critical' }] })).toBe('critical')
+    expect(totalUrgentPriority({ groups: [], teams: [team()] })).toBeNull()
   })
 })
 

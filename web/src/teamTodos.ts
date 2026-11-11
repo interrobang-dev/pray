@@ -127,6 +127,19 @@ export function priorityOf(todo: TeamTodo): TodoPriority | null {
   return priority && TODO_PRIORITIES.includes(priority) ? priority : null
 }
 
+/** 남은 수 배지 색을 바꾸는 급한 우선순위: 미완료 중 Critical 이 있으면 critical, 없고 High 가 있으면 high, 그 밖은 null (Medium·Low 는 바꾸지 않는다) */
+export function urgentPriorityOf(todos: readonly TeamTodo[]): 'critical' | 'high' | null {
+  const open = todos.filter((todo) => !todo.isDone).map(priorityOf)
+  if (open.includes('critical')) return 'critical'
+  if (open.includes('high')) return 'high'
+  return null
+}
+
+/** 툴바 All TODOs 배지 색: 내 책상 + 모든 팀 할 일에서 urgentPriorityOf */
+export function totalUrgentPriority(office: Office): 'critical' | 'high' | null {
+  return urgentPriorityOf([...deskTodosOf(office), ...office.teams.flatMap(todosOf)])
+}
+
 /** 칩·메뉴 글자 ("Critical"…). 없음은 "None" */
 export function priorityLabel(priority: TodoPriority | null): string {
   return priority ? PRIORITY_LABELS[priority] : 'None'

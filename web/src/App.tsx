@@ -27,7 +27,7 @@ import { KEY_STEP, clampPanelWidth, parsePanelWidth } from './panelWidth'
 import { NewTeamModal } from './NewTeamModal'
 import { TeamTodosModal } from './TeamTodosModal'
 import { TeamTasksModal } from './TeamTasksModal'
-import { DESK_NAME, remainingCount, scopeTodos, teamScope, updateScopeTodos, type TodoScope } from './teamTodos'
+import { DESK_NAME, remainingCount, scopeTodos, teamScope, todosOf, updateScopeTodos, urgentPriorityOf, type TodoScope } from './teamTodos'
 import { Modal, Segmented } from './Modal'
 import { alertDialog, confirmDialog, promptDialog } from './Dialog'
 import { copyText } from './copyText'
@@ -1259,6 +1259,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
   /** 팀 머리줄의 TODO 버튼: 체크리스트 아이콘 + 남은 개수. 남은 것이 있으면 늘 보이고 0 이면 "+"·"⋯" 처럼 마우스를 올렸을 때만 (터치 기기는 늘) */
   function renderTodoButton(team: Team) {
     const remaining = remainingCount(team)
+    const urgentPriority = urgentPriorityOf(todosOf(team))
     return (
       <button
         className={remaining > 0 ? 'todo-button has-todos' : 'todo-button'}
@@ -1267,7 +1268,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
         aria-label={remaining > 0 ? `TODO · ${remaining} left` : 'TODO'}
       >
         <TodoIcon />
-        {remaining > 0 && <span>{remaining}</span>}
+        {remaining > 0 && (urgentPriority ? <span className="needs-you-count" data-priority={urgentPriority}>{remaining}</span> : <span>{remaining}</span>)}
       </button>
     )
   }

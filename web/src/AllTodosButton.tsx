@@ -1,7 +1,7 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { useDismiss } from './Shells'
 import { PriorityChip, requestTodo } from './TeamTodosModal'
-import { applyTodo, DESK_NAME, DESK_SCOPE, deskTodosOf, openTodoGroups, priorityOf, splitTodos, teamScope, todosUrl, totalRemaining, type TodoScope } from './teamTodos'
+import { applyTodo, DESK_NAME, DESK_SCOPE, deskTodosOf, openTodoGroups, priorityOf, splitTodos, teamScope, todosUrl, totalRemaining, totalUrgentPriority, type TodoScope } from './teamTodos'
 import type { Office, TeamTodo } from './types'
 
 interface Props {
@@ -31,6 +31,7 @@ export function AllTodosButton({ office, icon, onChangeTodos, onOpenTodos }: Pro
   const toggleRef = useRef<HTMLButtonElement>(null)
   useDismiss(isOpen, rootRef, toggleRef, setIsOpen)
   const total = totalRemaining(office)
+  const urgentPriority = totalUrgentPriority(office)
   const deskOpen = isOpen ? splitTodos(deskTodosOf(office)).open : []
   const groups = isOpen ? openTodoGroups(office) : []
 
@@ -136,7 +137,11 @@ export function AllTodosButton({ office, icon, onChangeTodos, onOpenTodos }: Pro
         aria-label="All TODOs"
       >
         {icon}
-        {total > 0 && <span className="needs-you-count">{total}</span>}
+        {total > 0 && (
+          <span className="needs-you-count" data-priority={urgentPriority ?? undefined}>
+            {total}
+          </span>
+        )}
       </button>
       {isOpen && (
         <div id="all-todos-popover" className="all-todos-popover" role="dialog" aria-label="All TODOs">
