@@ -79,6 +79,7 @@ import {
   findScratchpad,
   isSessionId,
   listScratchpad,
+  resolveScratchpadDir,
   resolveScratchpadFile,
   resolveSessionTempFile,
   saveAttachment,
@@ -709,6 +710,34 @@ app.get('/api/sessions/:id/files', async (req, res) => {
   }
   const scratchpad = await findScratchpad(req.params.id)
   res.json(scratchpad ? await listScratchpad(scratchpad) : { files: [], isTruncated: false })
+})
+
+/**
+ * 작업 파일 창의 폴더(scratchpad 기준 상대 경로 `{ path }`, '' 은 scratchpad 자신)를 이 PC 의 탐색기로 연다.
+ * 팀 폴더 열기와 같이 다른 PC 를 먼저 막는다 (이 PC 화면에 창을 띄우는 것이라 의미가 없고, 폴더 유무도 알려 주지 않는다)
+ */
+app.post('/api/sessions/:id/files/open-folder', async (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress)) {
+    res.status(403).json({ message: 'Folders open only on this PC' })
+    return
+  }
+  const path = (req.body as { path?: unknown } | undefined)?.path ?? ''
+  if (!isSessionId(req.params.id) || typeof path !== 'string') {
+    res.status(400).json({ message: 'Invalid session ID or path' })
+    return
+  }
+  const scratchpad = await findScratchpad(req.params.id)
+  if (!scratchpad) {
+    res.status(404).json({ message: 'Work files folder not found' })
+    return
+  }
+  const folder = await resolveScratchpadDir(scratchpad, path)
+  if (!folder) {
+    res.status(404).json({ message: 'Folder not found' })
+    return
+  }
+  openInExplorer(folder)
+  res.json({})
 })
 
 /**

@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
+import { IsLocalPage } from './ChatLink'
+import { alertDialog } from './Dialog'
 import { MarkdownText } from './Markdown'
 import { Modal, Segmented } from './Modal'
 import { formatDateTime, type ScratchpadFile, type ScratchpadListing } from './types'
@@ -228,6 +230,23 @@ function FilesModal({ sessionId, listing, isRefreshing, onRefresh, onClose }: Fi
   const [sortOrder, setSortOrder] = useState<SortOrder>('recent')
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const selected = listing.files.find((file) => file.path === selectedPath) ?? null
+  const isLocal = useContext(IsLocalPage)
+
+  /** 경로 표시줄의 지금 폴더를 이 PC 의 탐색기로 연다 (서버가 연다. 이 PC 에서 연 화면에만 버튼이 있다) */
+  async function openFolder() {
+    try {
+      const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/files/open-folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: folder }),
+      })
+      if (response.ok) return
+      const { message } = (await response.json().catch(() => ({}))) as { message?: string }
+      void alertDialog(`Couldn't open folder: ${message ?? `HTTP ${response.status}`}`)
+    } catch {
+      void alertDialog("Couldn't open folder: Network error")
+    }
+  }
 
   const contents = useMemo(() => {
     const { folders, files } = folderContents(listing.files, folder)
@@ -267,6 +286,19 @@ function FilesModal({ sessionId, listing, isRefreshing, onRefresh, onClose }: Fi
             { value: 'name', label: 'Name' },
           ]}
         />
+        {isLocal && (
+          <button type="button" className="files-icon-button" onClick={() => void openFolder()} title="Open folder" aria-label="Open folder">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path
+                d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.2h8.4A1.5 1.5 0 0 1 21 8.7v8.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
         <button type="button" className="files-icon-button" onClick={onRefresh} disabled={isRefreshing} title="Reload" aria-label="Reload">
           ↻
         </button>

@@ -107,6 +107,24 @@ export async function resolveSessionTempFile(sessionId: string, path: string, ba
 }
 
 /** 요청 경로를 scratchpad 안 실제 파일 경로로. 꼴이 잘못됐거나, 링크를 풀어 밖이거나, 없거나, 파일이 아니면 null */
+/**
+ * 작업 파일 창의 폴더(scratchpad 기준 상대 경로, '' 은 scratchpad 자신)의 실제 경로. 파일 대신 폴더를 보는 것 말고는 resolveScratchpadFile 과 같은 검사.
+ * 밖으로 나가거나(링크 포함) 없거나 폴더가 아니면 null
+ */
+export async function resolveScratchpadDir(scratchpad: string, path: string): Promise<string | null> {
+  if (path === '') return scratchpad
+  if (!isSafeRelativePath(path)) return null
+  const requested = resolve(scratchpad, path)
+  if (!isInside(scratchpad, requested)) return null
+  try {
+    const real = await realpath(requested)
+    if (!isInside(scratchpad, real)) return null
+    return (await stat(real)).isDirectory() ? real : null
+  } catch {
+    return null
+  }
+}
+
 export async function resolveScratchpadFile(scratchpad: string, path: string): Promise<string | null> {
   if (!isSafeRelativePath(path)) return null
   const requested = resolve(scratchpad, path)

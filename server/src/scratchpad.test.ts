@@ -10,6 +10,7 @@ import {
   isSafeRelativePath,
   isSessionId,
   listScratchpad,
+  resolveScratchpadDir,
   resolveScratchpadFile,
   resolveSessionTempFile,
   safeAttachmentName,
@@ -119,6 +120,23 @@ describe('scratchpad on disk', () => {
       'note.md:hidden',
     ]
     for (const path of rejected) expect(await resolveScratchpadFile(real, path), path).toBeNull()
+  })
+
+  it('resolves folders inside (empty path is the scratchpad itself) and rejects files and escapes', async () => {
+    const real = (await findScratchpad(SESSION, base))!
+    expect(await resolveScratchpadDir(real, '')).toBe(real)
+    expect(await resolveScratchpadDir(real, 'shots/deep')).toBe(join(real, 'shots', 'deep'))
+    const rejected = [
+      '..',
+      '../../' + OTHER + '/scratchpad',
+      outside,
+      'note.md',
+      'missing',
+      '.',
+      'shots:hidden',
+    ]
+    for (const path of rejected) expect(await resolveScratchpadDir(real, path), path).toBeNull()
+    if (hasJunction) expect(await resolveScratchpadDir(real, 'escape')).toBeNull()
   })
 
   it('rejects paths that leave through a junction', async () => {

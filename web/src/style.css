@@ -2817,6 +2817,11 @@ li.group.drop-after::after {
   padding: 0;
   font-size: calc(15px * var(--font-scale));
 }
+/* Open folder 아이콘 (작업 파일 버튼과 같은 폴더 모양) */
+.files-icon-button svg {
+  display: block;
+  margin: auto;
+}
 .files-body {
   flex: 1;
   min-height: 0;
