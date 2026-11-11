@@ -4665,7 +4665,7 @@ li.group.drop-after::after {
     opacity: 1;
   }
 }
-/* 말풍선 마크 버튼 (MarksButton.tsx 의 MarkButton): 복사 버튼과 같은 모양·자리 규칙. 복사 버튼이 있는 claude 말풍선은 그 왼쪽, 내 말은 오른쪽 위.
+/* 말풍선 마크 버튼 (MarksButton.tsx 의 MarkButton): 복사 버튼과 같은 모양·자리 규칙. 늘 오른쪽 위 끝이고, 복사 버튼이 있는 claude 말풍선은 복사 버튼이 그 왼쪽으로 비킨다.
    마우스 기기는 올렸거나 포커스가 있거나 마크했을 때 보이고, 터치 기기는 늘 보인다. 마크한 말풍선은 강조색 테두리와 왼쪽 선 */
 .msg.user {
   position: relative;
@@ -4689,7 +4689,7 @@ li.group.drop-after::after {
   line-height: 0;
   cursor: pointer;
 }
-.msg > .copy-button + .mark-button {
+.msg > .copy-button:has(+ .mark-button) {
   right: 38px;
 }
 .msg > .mark-button:hover {
@@ -6736,7 +6736,7 @@ li.group.drop-after::after {
     width: 32px;
     height: 32px;
   }
-  .msg > .copy-button + .mark-button {
+  .msg > .copy-button:has(+ .mark-button) {
     right: 44px;
   }
   .msg > .mark-button svg {
