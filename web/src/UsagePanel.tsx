@@ -3,6 +3,8 @@ import { Accounts, AddAccountModal } from './Accounts'
 import type { UsageLimit, UsageResult } from './types'
 
 const POLL_MS = 60_000
+/** 손으로 누른 ↻ 가 도는 최소 시간. 서버 60초 캐시 안이면 응답이 바로 와서 이게 없으면 돌지 않는다 */
+const REFRESH_SPIN_MIN_MS = 600
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -84,6 +86,8 @@ export function UsagePanel() {
   /** .usage. 계정 모달을 이 안(상세 창 밖)에 띄우므로 Accounts 에도 넘긴다 */
   const [rootElement, setRootElement] = useState<HTMLDivElement | null>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
+  /** 손으로 누른 새로고침이 도는 중 (폴링·계정 전환 뒤 다시 받기는 돌지 않는다) */
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +126,13 @@ export function UsagePanel() {
     }
   }, [isOpen, isAddingAccount, isSwitchOpen, rootElement])
 
+  async function refresh() {
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    await Promise.all([load(), new Promise((resolve) => setTimeout(resolve, REFRESH_SPIN_MIN_MS))])
+    setIsRefreshing(false)
+  }
+
   function toggle() {
     // 열 때 "Updated 3m ago"·리셋까지 남은 시간을 지금 기준으로 다시 잰다
     setNow(Date.now())
@@ -145,8 +156,8 @@ export function UsagePanel() {
             )
           })}
       </button>
-      <button className="usage-refresh" onClick={load} title="Refresh">
-        ↻
+      <button className={isRefreshing ? 'usage-refresh is-spinning' : 'usage-refresh'} onClick={() => void refresh()} title="Refresh">
+        <span className="restart-glyph">↻</span>
       </button>
       {isOpen && (
         <div id="usage-popover" className="usage-popover" role="dialog" aria-label="Claude usage">
