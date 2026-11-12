@@ -17,6 +17,7 @@ import {
   parseAppearance,
   parseThemeChoice,
   resolveMode,
+  serializeAppearance,
   type Appearance,
   type Mode,
   type ThemeChoice,
@@ -113,7 +114,7 @@ export function appearance(): Appearance {
 export function setAppearance(next: Appearance) {
   currentAppearance = next
   try {
-    localStorage.setItem(APPEARANCE_KEY, JSON.stringify(next))
+    localStorage.setItem(APPEARANCE_KEY, serializeAppearance(next))
   } catch {
     // 저장하지 못하면 이 페이지에서만 바뀐다
   }

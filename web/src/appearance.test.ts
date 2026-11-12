@@ -23,6 +23,7 @@ import {
   parseAppearance,
   parseThemeChoice,
   resolveMode,
+  serializeAppearance,
   type Appearance,
   type Mode,
   type ThemeChoice,
@@ -273,6 +274,22 @@ describe('대화 모양', () => {
     expect(new Set(CHAT_ATTRIBUTE_NAMES).size).toBe(CHAT_ATTRIBUTE_NAMES.length)
   })
 
+  it('저장: chat 은 기본값과 다른 것만 두고, 되읽으면 같은 설정이다', () => {
+    const appearance: Appearance = { palette: 'nord', accent: 'blue', fontSize: 'large', chat: { ...DEFAULT_CHAT_STYLE, reply: 'card', tables: 'rules', colors: { ...DEFAULT_CHAT_STYLE.colors, path: '#007766' } } }
+    expect(JSON.parse(serializeAppearance(appearance))).toEqual({ format: 2, palette: 'nord', accent: 'blue', fontSize: 'large', chat: { reply: 'card', tables: 'rules', colors: { path: '#007766' } } })
+    expect(parseAppearance(serializeAppearance(appearance))).toEqual(appearance)
+    expect(JSON.parse(serializeAppearance(DEFAULT_APPEARANCE)).chat).toEqual({})
+    expect(parseAppearance(serializeAppearance(DEFAULT_APPEARANCE))).toEqual(DEFAULT_APPEARANCE)
+  })
+
+  it('예전 꼴(chat 통째, format 없음)의 claude 답 Card 는 그때 기본값이라 지금 기본값 Plain 으로 읽는다', () => {
+    const legacy = JSON.stringify({ palette: 'default', accent: 'palette', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, reply: 'card', user: 'bar' } })
+    expect(parseAppearance(legacy).chat).toMatchObject({ reply: 'plain', user: 'bar' })
+    // 예전 꼴에서 Plain 을 골랐던 것은 그대로, 새 꼴의 Card 는 고른 값이라 그대로
+    expect(parseAppearance(JSON.stringify({ chat: { reply: 'plain' } })).chat.reply).toBe('plain')
+    expect(parseAppearance(JSON.stringify({ format: 2, chat: { reply: 'card' } })).chat.reply).toBe('card')
+  })
+
   it('색 줄 스위치: 기본 On 이라 속성이 없고, Off 만 걸리며, 옛 저장 값은 그대로 읽힌다', () => {
     expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, codeColor: 'off', headingColor: 'off' })).toEqual({
       'code-color': 'off',
@@ -377,7 +394,7 @@ describe('index.html 첫 화면 스크립트', () => {
     { palette: 'nord', accent: 'palette', fontSize: 'small', chat: DEFAULT_CHAT_STYLE },
     { palette: 'default', accent: 'blue', fontSize: 'large', chat: { ...DEFAULT_CHAT_STYLE, user: 'bar', tables: 'minimal' } },
     { palette: 'catppuccin', accent: '#e05a00', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, fontSize: 'large', colors: { ...DEFAULT_CHAT_STYLE.colors, heading: '#ff0088' } } },
-    { palette: 'default', accent: 'palette', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, reply: 'plain', width: 'full', workBundles: 'expanded', colors: { code: '#123456', heading: '#abcdef', number: '#aa5500', path: '#007766' } } },
+    { palette: 'default', accent: 'palette', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, reply: 'card', width: 'full', workBundles: 'expanded', colors: { code: '#123456', heading: '#abcdef', number: '#aa5500', path: '#007766' } } },
     { palette: 'solarized', accent: 'slate', fontSize: 'large', chat: DEFAULT_CHAT_STYLE },
   ]
   const CHOICES: ThemeChoice[] = ['light', 'dark', 'system']

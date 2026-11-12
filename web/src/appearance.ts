@@ -37,8 +37,8 @@ export function resolveMode(choice: ThemeChoice, isOsDark: boolean): Mode {
 export interface ChatStyle {
   /** 내 말: 말풍선 / 왼쪽 강조색 세로줄 / 꾸밈 없이 */
   user: 'bubble' | 'bar' | 'plain'
-  /** claude 답: 카드 / 테두리·바탕 없이 본문처럼 */
-  reply: 'card' | 'plain'
+  /** claude 답: 테두리·바탕 없이 본문처럼 / 채운 카드 */
+  reply: 'plain' | 'card'
   /** 사무실을 숨긴 넓은 화면의 대화 열 폭: 960px / 1200px / 양옆 16px 만 */
   width: 'normal' | 'wide' | 'full'
   /** 말풍선·마크다운 글자 크기. app = App 탭의 Font size 그대로 */
@@ -88,8 +88,8 @@ export const CHAT_OPTIONS: { [K in ChatChoiceKey]: { attribute: string; label: s
     attribute: 'reply',
     label: 'Claude replies',
     options: [
-      { value: 'card', label: 'Card' },
       { value: 'plain', label: 'Plain' },
+      { value: 'card', label: 'Card' },
     ],
   },
   width: {
@@ -168,7 +168,7 @@ export const CHAT_COLOR_OPTIONS: { key: keyof ChatColors; label: string; variabl
 
 export const DEFAULT_CHAT_STYLE: ChatStyle = {
   user: 'bubble',
-  reply: 'card',
+  reply: 'plain',
   width: 'normal',
   fontSize: 'app',
   lineSpacing: 'normal',
@@ -197,6 +197,14 @@ export const APPEARANCE_BOOT_KEY = 'pray.appearanceBoot'
 
 const HEX_PATTERN = /^#[0-9a-f]{6}$/
 
+/**
+ * 저장 꼴 판. 2 = chat 에 기본값과 다른 것만 둔다 (기본값을 바꾸면 고른 적 없는 항목은 새 기본값을 따르게).
+ * format 이 없는 예전 꼴은 chat 을 통째로 저장했으므로, 그때의 기본값과 같은 값은 고른 것이 아니라 기본값으로 읽는다
+ */
+const APPEARANCE_FORMAT = 2
+/** 예전 꼴(format 없음)에서 기본값이던 값 중 지금 기본값과 다른 것 — 예전 꼴에서 이 값이면 버리고 지금 기본값을 쓴다 */
+const LEGACY_CHAT_DEFAULTS: Partial<Record<ChatChoiceKey, string>> = { reply: 'card' }
+
 /** '#RGB'·'#RRGGBB'·앞뒤 공백·대문자를 '#rrggbb' 로. 아니면 null */
 export function normalizeHex(value: string): string | null {
   const text = value.trim().toLowerCase()
@@ -222,13 +230,14 @@ export function parseAppearance(raw: string | null): Appearance {
     else if (HEX_PATTERN.test(value.accent)) accent = value.accent
   }
   const fontSize = FONT_SIZE_OPTIONS.some((option) => option.value === value.fontSize) ? (value.fontSize as FontSize) : DEFAULT_APPEARANCE.fontSize
-  return { palette, accent, fontSize, chat: parseChatStyle(value.chat) }
+  return { palette, accent, fontSize, chat: parseChatStyle(value.chat, value.format !== APPEARANCE_FORMAT) }
 }
 
-function parseChatStyle(raw: unknown): ChatStyle {
+function parseChatStyle(raw: unknown, isLegacy: boolean): ChatStyle {
   const value = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
   const chat: Record<string, unknown> = { ...DEFAULT_CHAT_STYLE }
   for (const key of CHAT_CHOICE_KEYS) {
+    if (isLegacy && value[key] === LEGACY_CHAT_DEFAULTS[key]) continue
     if (CHAT_OPTIONS[key].options.some((option) => option.value === value[key])) chat[key] = value[key]
   }
   const rawColors = value.colors && typeof value.colors === 'object' ? (value.colors as Record<string, unknown>) : {}
@@ -238,6 +247,17 @@ function parseChatStyle(raw: unknown): ChatStyle {
     if (typeof color === 'string' && HEX_PATTERN.test(color)) colors[key] = color
   }
   return { ...(chat as unknown as ChatStyle), colors }
+}
+
+/** 설정 → 저장할 글(JSON). chat 은 기본값과 다른 것만 (고른 색만) 두고 format 을 붙인다 — parseAppearance 가 되읽으면 같은 설정이다 */
+export function serializeAppearance(appearance: Appearance): string {
+  const chat: Record<string, unknown> = {}
+  for (const key of CHAT_CHOICE_KEYS) {
+    if (appearance.chat[key] !== DEFAULT_CHAT_STYLE[key]) chat[key] = appearance.chat[key]
+  }
+  const colors = Object.fromEntries(Object.entries(appearance.chat.colors).filter(([, color]) => color !== null))
+  if (Object.keys(colors).length > 0) chat.colors = colors
+  return JSON.stringify({ format: APPEARANCE_FORMAT, palette: appearance.palette, accent: appearance.accent, fontSize: appearance.fontSize, chat })
 }
 
 /** <html data-chat-…> 에 걸 것 (기본값이 아닌 것만. 속성이 없으면 style.css 는 기본 모양이다) */

@@ -18,7 +18,7 @@
   --accent-hover: #388c43;
   --accent-active: #317a3a;
   --accent-soft: #e3f3e5;
-  /* 내 말풍선 테두리·대기 중 점선 테두리 */
+  /* 옅은 강조 선 (대화 입력 상자·곁가지 질문 칸 포커스 링 등) / 대기 중 점선 테두리 */
   --accent-line: #cfe7d2;
   --accent-dash: #9fcca6;
   /* 옅은 강조 바탕 위 강조 글자 (질문 칩·"질문" 라벨) */
@@ -268,9 +268,7 @@ textarea::placeholder {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
-/* 감싼 상자가 포커스를 보여 주는 입력칸 (대화 입력 상자·곁가지 질문 칸·작업 폴더 찾기 칸)은 링을 그리지 않는다 */
-.composer textarea:focus-visible,
-.btw-input textarea:focus-visible,
+/* 감싼 상자가 포커스를 보여 주는 입력칸 (작업 폴더 찾기 칸)은 링을 그리지 않는다. 대화 입력 상자·곁가지 질문 칸은 그 규칙(.composer textarea·.btw-input textarea)에서 끈다 */
 .ws-search-box input:focus-visible {
   outline: none;
 }
@@ -2069,9 +2067,8 @@ li.group.drop-after::after {
   gap: 8px;
   max-height: 320px;
   overflow-y: auto;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
   background: var(--bg);
 }
 /* 안쪽은 누를 수 없다 (링크·복사·묶음 줄). 미리보기 자체는 스크롤된다 */
@@ -2333,18 +2330,18 @@ li.group.drop-after::after {
   flex-direction: column;
   gap: 10px;
 }
+/* 말풍선: 테두리 없이 채운 둥근 면 (claude 답 Card·질문 기록 = 패널 면). 1px 투명 테두리 자리는 의미 테두리(대기 점선·보내기 실패 빨강·마크)용.
+   claude 답의 기본 모양(Plain, 바탕 위 글)은 아래 "대화 모양" 규칙 */
 .msg {
   max-width: 82%;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 8px 12px;
   background: var(--panel);
-  border: 1px solid var(--line);
-  box-shadow: 0 1px 2px rgba(20, 24, 40, 0.04);
+  border: 1px solid transparent;
 }
 .msg.user {
   align-self: flex-end;
   background: var(--accent-soft);
-  border-color: var(--accent-line);
 }
 .msg.system {
   align-self: center;
@@ -2353,7 +2350,6 @@ li.group.drop-after::after {
   color: var(--muted);
   background: transparent;
   border: 0;
-  box-shadow: none;
 }
 /* 백그라운드 작업 알림·대화 압축 요약 한 줄 (Chat.tsx). system 글처럼 가운데 작은 회색, 길면 말줄임. 누르면 원문 */
 .msg.notice {
@@ -2364,7 +2360,6 @@ li.group.drop-after::after {
   color: var(--muted);
   background: transparent;
   border: 0;
-  box-shadow: none;
 }
 .msg.notice summary {
   cursor: pointer;
@@ -2381,12 +2376,12 @@ li.group.drop-after::after {
   background: var(--code-bg);
   padding: 6px;
   margin: 4px 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   white-space: pre-wrap;
   word-break: break-all;
   text-align: left;
 }
-/* 답변 전 작업 묶음 (Chat.tsx). 알림 한 줄처럼 가운데 작은 회색, 길면 말줄임. 누르면 아래에 설명 글·도구 줄 말풍선이 펼쳐지고 왼쪽 옅은 선으로 묶음을 표시한다 */
+/* 답변 전 작업 묶음 (Chat.tsx). 알림 한 줄처럼 가운데 작은 회색, 길면 말줄임(올리면 옅은 알약 면). 누르면 아래에 설명 글·도구 줄이 패널 면의 둥근 상자로 펼쳐진다 */
 .work {
   display: flex;
   flex-direction: column;
@@ -2396,7 +2391,7 @@ li.group.drop-after::after {
 .work-summary {
   align-self: center;
   max-width: 95%;
-  padding: 0 8px;
+  padding: 1px 10px;
   border: 0;
   background: transparent;
   font-size: calc(11px * var(--font-scale));
@@ -2406,6 +2401,7 @@ li.group.drop-after::after {
   text-overflow: ellipsis;
 }
 .work-summary:hover {
+  background: var(--surface-2);
   color: var(--text);
 }
 /* 가운데 한 줄(작업 묶음·알림)의 접기 화살표. 둘이 같은 크기로 보이게 브라우저 기본 표시 대신 이 규칙 하나로 그린다.
@@ -2430,17 +2426,21 @@ li.group.drop-after::after {
 .work-summary[aria-expanded='true']::before {
   content: '▼';
 }
+/* 펼친 묶음: 대화 바탕(--bg) 위 패널 면 상자. 안의 말풍선(Card 답·질문 기록)은 같은 패널 면이라 한 단 짙은 면으로 바꾼다 */
 .work-items {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-left: 10px;
-  border-left: 2px solid var(--line);
+  padding: 6px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
 }
-/* 팀원 대화의 팀장·파트장 지시 (Chat.tsx). 사람 말풍선(초록)·claude 응답(흰색)과 다른 색. 위에 "<팀장> 지시" 라벨 */
+.work-items .msg:not(.user, .system, .notice) {
+  background: var(--surface-1);
+}
+/* 팀원 대화의 팀장·파트장 지시 (Chat.tsx). 사람 말풍선(초록)·claude 응답과 다른 지시 색 면. 위에 "<팀장> 지시" 라벨 */
 .msg.relay {
   background: var(--relay-bg);
-  border-color: var(--relay-line);
 }
 .relay-label {
   margin-bottom: 4px;
@@ -2455,8 +2455,7 @@ li.group.drop-after::after {
   align-self: center;
   max-width: 95%;
   padding: 1px 10px;
-  border-color: var(--relay-line);
-  border-radius: 10px;
+  border-radius: var(--radius-pill);
   background: var(--relay-bg);
   font-size: calc(11px * var(--font-scale));
   color: var(--relay-text);
@@ -2464,8 +2463,10 @@ li.group.drop-after::after {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.relay-line:hover:not(:disabled) {
-  border-color: var(--relay-text);
+/* 올리면 지시 색 면이 한 단 짙어진다 (테두리 대신) */
+.relay-line:hover:not(:disabled),
+.jump-back button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--relay-text) 14%, var(--relay-bg));
 }
 /* 점프로 찾아 간 줄 (Chat.tsx). 노란 테두리가 2초(Chat.tsx JUMP_HIGHLIGHT_MS) 동안 옅어진다. 움직임을 줄이면 2초 동안 그대로 있다가 사라진다.
    outline 이라 말풍선 크기·그림자가 그대로다 */
@@ -2502,7 +2503,8 @@ li.group.drop-after::after {
   background-color: var(--search-current-bg);
   color: var(--search-current-text);
 }
-/* 대화 안 검색 막대 (ChatSearch.tsx): 대화(.messages) 바로 위에 붙는다. 사무실 숨기기 넓은 화면에서는 대화 열(--chat-gutter)과 맞춘다 */
+/* 대화 안 검색 막대 (ChatSearch.tsx): 대화(.messages) 바로 위에 붙는다. 사무실 숨기기 넓은 화면에서는 대화 열(--chat-gutter)과 맞춘다.
+   아래 기본 모양(패널 띠 + 아래 선)은 코드 보기 찾기 막대(.chat-search.code-find, Files 탭)가 같이 쓴다 — 대화 쪽은 바로 뒤 .messages-pane > .chat-search 가 덮는다 */
 .chat-search {
   display: flex;
   align-items: center;
@@ -2542,6 +2544,17 @@ li.group.drop-after::after {
 .chat-search button svg {
   display: block;
 }
+/* 대화의 검색 막대: 패널 머리·대화와 같은 --bg 면에 선 없이 이어진다. 입력칸은 채운 알약, 버튼은 투명 아이콘(올리면 면) */
+.messages-pane > .chat-search {
+  border-bottom: 0;
+  background: var(--bg);
+}
+.messages-pane > .chat-search button {
+  background: transparent;
+}
+.messages-pane > .chat-search button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
 .layout.office-hidden .chat-search {
   padding-left: var(--chat-gutter);
   padding-right: var(--chat-gutter);
@@ -2553,15 +2566,12 @@ li.group.drop-after::after {
 }
 .jump-back button {
   max-width: 100%;
-  border-color: var(--relay-line);
+  background: transparent;
   font-size: calc(12px * var(--font-scale));
   color: var(--relay-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.jump-back button:hover:not(:disabled) {
-  border-color: var(--relay-text);
 }
 /* shell 명령(고정폭, 한 줄 말줄임. 전체는 툴팁)·경과 시간·설명. shell 모달 목록과 상태 표시줄 Shells 창이 같이 쓴다 (Shells.tsx) */
 .shell-command {
@@ -2625,8 +2635,7 @@ li.group.drop-after::after {
 }
 /* 마지막 "대기 중" 말풍선의 [취소] (Chat.tsx). 라벨 옆 작은 버튼, 누르면 "취소 중…" */
 .queued-cancel {
-  padding: 0 6px;
-  border-radius: 4px;
+  padding: 0 8px;
   font-size: calc(11px * var(--font-scale));
   line-height: 16px;
   color: var(--muted);
@@ -2674,7 +2683,6 @@ li.group.drop-after::after {
   border-radius: 50%;
   font-size: calc(15px * var(--font-scale));
   line-height: 1;
-  box-shadow: 0 2px 6px rgba(20, 24, 40, 0.15);
 }
 /* 원 버튼 모양 */
 .files-button,
@@ -2689,7 +2697,20 @@ li.group.drop-after::after {
   border-radius: 50%;
   font-size: calc(18px * var(--font-scale));
   line-height: 1;
-  box-shadow: 0 2px 6px rgba(20, 24, 40, 0.15);
+}
+/* 대화 위에 떠 있는 원 버튼(↓·폴더·마크·shell): 패널 면 + 떠 있는 그림자, 올리면 면 한 단 */
+.to-bottom,
+.files-button,
+.shells-button,
+.marks-button {
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+}
+.to-bottom:hover,
+.files-button:hover,
+.shells-button:hover,
+.marks-button:hover {
+  background: var(--surface-2);
 }
 /* 점 = 위를 보는 사이 새 메시지 */
 .to-bottom-dot {
@@ -4144,9 +4165,8 @@ li.group.drop-after::after {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
   background: var(--panel);
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
@@ -4214,13 +4234,12 @@ li.group.drop-after::after {
 .interrupt {
   flex-shrink: 0;
   white-space: nowrap;
-  padding: 4px 10px;
-  border-radius: 10px;
+  padding: 4px 12px;
   font-size: calc(12px * var(--font-scale));
   color: var(--red);
 }
 .interrupt:hover:not(:disabled) {
-  border-color: var(--red);
+  background: var(--red-soft);
 }
 @media (prefers-reduced-motion: reduce) {
   .typing-dots span {
@@ -4553,6 +4572,10 @@ li.group.drop-after::after {
 .chat-scope .markdown a {
   text-decoration: underline;
 }
+/* 대화의 코드 블록은 크게 둥글게. 선은 남긴다 — 라이트의 --pre-bg 가 대화 바탕 --bg 와 거의 같아 선이 상자를 보이게 한다 */
+.chat-scope .markdown pre {
+  border-radius: var(--radius-md);
+}
 .chat-scope .markdown :not(pre) > code {
   color: var(--chat-code, var(--md-code));
 }
@@ -4585,7 +4608,6 @@ li.group.drop-after::after {
   border: 0;
   border-left: 3px solid var(--accent);
   border-radius: 0;
-  box-shadow: none;
 }
 :root[data-chat-user='bar'] .chat-scope .msg.user.queued:not(.relay) {
   border-left-style: dashed;
@@ -4596,8 +4618,6 @@ li.group.drop-after::after {
 }
 :root[data-chat-user='plain'] .chat-scope .msg.user:not(.relay) {
   background: transparent;
-  border-color: transparent;
-  box-shadow: none;
 }
 :root[data-chat-user='plain'] .chat-scope .msg.user.queued:not(.relay) {
   border-color: var(--accent-dash);
@@ -4605,14 +4625,36 @@ li.group.drop-after::after {
 :root[data-chat-user='plain'] .chat-scope .msg.user.pending.failed:not(.relay) {
   border-color: var(--red-border);
 }
-/* claude 답: Plain = 카드 테두리·바탕 없이 열 폭 전부 (작업 묶음 안 설명 글도) */
-:root[data-chat-reply='plain'] .chat-scope .msg.assistant {
+/* claude 답: 기본 Plain = 말풍선 없이 바탕 위 글, 열 폭 전부 (작업 묶음 안 설명 글도). Card(data-chat-reply='card') = 위 .msg 의 채운 패널 면 그대로.
+   Plain 은 좌우 여백이 없어 마크 표시(아래 .msg.marked 의 테두리·안쪽 선)가 글에 붙으므로 글 왼쪽 바깥의 세로 막대로 그린다 */
+:root:not([data-chat-reply='card']) .chat-scope .msg.assistant {
   max-width: none;
   padding-left: 0;
   padding-right: 0;
   background: transparent;
+}
+:root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .copy-button {
+  right: 0;
+}
+:root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .copy-button:has(+ .mark-button) {
+  right: 28px;
+}
+:root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .mark-button {
+  right: 0;
+}
+:root:not([data-chat-reply='card']) .chat-scope .msg.assistant.marked {
   border-color: transparent;
   box-shadow: none;
+}
+:root:not([data-chat-reply='card']) .chat-scope .msg.assistant.marked::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: -10px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 /* 대화 글자 크기: 말풍선 안의 --font-scale 만 바꾼다 (말풍선 안 글자 크기는 모두 이 변수를 쓴다). 말풍선 밖(묶음 줄·relay 한 줄·입력칸)은 App 크기 */
 :root[data-chat-font-size='small'] .chat-scope .msg {
@@ -4706,9 +4748,9 @@ li.group.drop-after::after {
   width: 22px;
   height: 22px;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
   color: var(--muted);
   line-height: 0;
   cursor: pointer;
@@ -4719,7 +4761,7 @@ li.group.drop-after::after {
 }
 .copy-button:hover {
   color: var(--text);
-  border-color: var(--line-strong);
+  background: var(--surface-3);
 }
 .copy-button[data-status='copied'] {
   color: var(--success);
@@ -4779,9 +4821,9 @@ li.group.drop-after::after {
   width: 22px;
   height: 22px;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
   color: var(--muted);
   line-height: 0;
   cursor: pointer;
@@ -4791,7 +4833,7 @@ li.group.drop-after::after {
 }
 .msg > .mark-button:hover {
   color: var(--text);
-  border-color: var(--line-strong);
+  background: var(--surface-3);
 }
 .msg > .mark-button[aria-pressed='true'] {
   color: var(--accent);
@@ -4815,9 +4857,8 @@ li.group.drop-after::after {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 8px 8px 18px;
   background: var(--red-soft);
-  border: 1px solid var(--red-line);
 }
 .approval .yes {
   background: var(--accent);
@@ -4835,7 +4876,6 @@ li.group.drop-after::after {
   flex-direction: column;
   max-height: 60vh;
   overflow: hidden;
-  border: 1px solid var(--accent);
   background: var(--panel);
 }
 .question-tabs {
@@ -4851,14 +4891,16 @@ li.group.drop-after::after {
   padding: 4px 10px;
   font-size: calc(12px * var(--font-scale));
   color: var(--muted);
-  background: var(--bg);
-  border-color: transparent;
+  background: transparent;
+}
+.question-tabs button:not(.on):hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 .question-tabs button.on {
-  color: var(--text);
+  color: var(--accent-text);
   font-weight: 600;
-  background: var(--panel);
-  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .question-tabs .tab-mark {
   font-size: calc(11px * var(--font-scale));
@@ -4884,7 +4926,7 @@ li.group.drop-after::after {
 }
 .question-chip {
   padding: 1px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-pill);
   background: var(--accent-soft);
   color: var(--accent-text);
   font-weight: 600;
@@ -4905,7 +4947,8 @@ li.group.drop-after::after {
   gap: 10px;
   width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
+  /* 여러 줄 카드라 알약이 아니라 md */
+  border-radius: var(--radius-md);
   text-align: left;
 }
 .question-option.selected {
@@ -4960,9 +5003,8 @@ li.group.drop-after::after {
   max-height: 200px;
   overflow: auto;
   padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--pre-bg);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   font-size: calc(12px * var(--font-scale));
   line-height: 1.35;
@@ -4978,8 +5020,7 @@ li.group.drop-after::after {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  padding: 8px 16px;
-  border-top: 1px solid var(--line);
+  padding: 8px 16px 12px;
 }
 .question-actions .primary {
   background: var(--accent);
@@ -5022,21 +5063,23 @@ li.group.drop-after::after {
   display: inline-block;
   margin-top: 3px;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--accent-soft);
   font-weight: 600;
 }
-/* 입력칸 자리의 떠 있는 카드: 승인 막대·질문 카드·입력 상자·퇴근 막대 (App.tsx OffDutyBar).
-   패널 바닥에 붙은 막대가 아니라 대화 열과 같은 양옆 여백(사무실을 숨기면 960px 열의 --chat-gutter, 아니면 16px)과 아래 12px 을 둔다 */
+/* 입력칸 자리의 떠 있는 카드: 승인 막대·질문 카드·입력 상자·퇴근 막대 (App.tsx OffDutyBar). 테두리 없이 채운 면 + 떠 있는 그림자.
+   패널 바닥에 붙은 막대가 아니라 대화 열과 같은 양옆 여백(사무실을 숨기면 960px 열의 --chat-gutter, 아니면 16px)과 아래 12px 을 둔다.
+   한 줄짜리(승인 막대·입력 상자·퇴근 막대)는 크게 둥근 xl, 여러 칸인 질문 카드는 lg */
 .approval,
 .question-card,
 .composer,
 .off-duty {
   margin: 0 var(--chat-gutter, 16px) 12px;
-  border-radius: 16px;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 14px rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-pop);
+}
+.question-card {
+  border-radius: var(--radius-lg);
 }
 /* 대화 입력 상자 (Chat.tsx): 왼쪽 아래 첨부 + 여러 줄 입력칸 + 오른쪽 아래 보내기. 버튼은 아래에 붙어 글이 길어지면 입력칸만 위로 자란다.
    첨부 칩이 있으면 그 위에 한 줄을 다 쓰는 칩 줄이 생긴다 (그래서 flex-wrap. 입력칸은 flex-basis 0 이라 버튼과 같은 줄에 남는다) */
@@ -5046,8 +5089,8 @@ li.group.drop-after::after {
   align-items: flex-end;
   gap: 8px;
   padding: 8px;
-  border: 1px solid var(--line);
   background: var(--panel);
+  transition: box-shadow 0.12s;
 }
 /* 입력 상자 오른쪽 아래 "143k · Opus 5.5" (Chat.tsx). 상자의 아래 간격 12px 안으로 끌어올려 상자에 붙인다 */
 .composer-meta {
@@ -5059,9 +5102,11 @@ li.group.drop-after::after {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 포커스는 입력칸이 아니라 상자 테두리로 보인다 (입력칸 포커스 초록 규칙과 같은 색) */
+/* 포커스는 입력칸이 아니라 상자 둘레의 옅은 강조색 링으로 보인다 (입력칸 자체의 링은 끈다). 입력 상자는 거의 늘 포커스라 진한 --accent 대신 --accent-line */
 .composer:has(textarea:focus) {
-  border-color: var(--accent);
+  box-shadow:
+    0 0 0 2px var(--accent-line),
+    var(--shadow-pop);
 }
 .composer textarea {
   flex: 1;
@@ -5072,6 +5117,7 @@ li.group.drop-after::after {
   border: 0;
   border-radius: 0;
   background: transparent;
+  outline: none;
 }
 /* 인계 중 띠 (Chat.tsx). 입력 상자 바로 위 한 줄, 지시 말풍선과 같은 파란 계열. 점은 작업 중 표시기의 .typing-dots 를 그대로 쓴다 */
 .handover-band {
@@ -5079,9 +5125,8 @@ li.group.drop-after::after {
   align-items: center;
   gap: 8px;
   margin: 0 var(--chat-gutter, 16px) 8px;
-  padding: 6px 12px;
-  border: 1px solid var(--relay-line);
-  border-radius: 12px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
   background: var(--relay-bg);
   color: var(--relay-text);
   font-size: calc(12px * var(--font-scale));
@@ -5097,20 +5142,20 @@ li.group.drop-after::after {
 }
 /* 질문 중·인계 중 (Chat.tsx isAsking·isHandingOver). 상자가 회색이 되고 쓰던 글은 남아 흐리게 보인다 */
 .composer:has(textarea:disabled) {
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .composer textarea:disabled {
   color: var(--muted);
   cursor: not-allowed;
 }
-/* 보내기: 종이비행기 아이콘의 둥근 정사각형. 한 변 = 한 줄 입력칸 높이(줄 높이 1.4em + 위아래 padding 6px).
+/* 보내기: 종이비행기 아이콘의 원. 지름 = 한 줄 입력칸 높이(줄 높이 1.4em + 위아래 padding 6px).
    em 이라 입력칸과 글자 크기가 같아야 맞는다 */
 .composer .send {
   flex-shrink: 0;
   width: calc(1.4em + 12px);
   height: calc(1.4em + 12px);
   padding: 0;
-  border-radius: 8px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5136,7 +5181,7 @@ li.group.drop-after::after {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-/* 첨부 버튼: 보내기와 같은 크기의 테두리 없는 클립 아이콘. 질문 중에는 막힌다.
+/* 첨부 버튼: 보내기와 같은 크기의 투명 원 클립 아이콘(올리면 면). 질문 중에는 막힌다.
    곁가지 질문 버튼(btw-open)은 그 옆에 같은 크기·같은 모양 */
 .composer .attach,
 .composer .btw-open {
@@ -5144,18 +5189,16 @@ li.group.drop-after::after {
   width: calc(1.4em + 12px);
   height: calc(1.4em + 12px);
   padding: 0;
-  border-radius: 8px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-color: transparent;
   background: transparent;
   color: var(--muted);
 }
 .composer .attach:hover:not(:disabled),
 .composer .btw-open:hover:not(:disabled) {
-  border-color: transparent;
-  background: var(--chip-bg);
+  background: var(--surface-2);
   color: var(--text);
 }
 /* 첨부 칩 줄: 상자 안 위쪽 한 줄을 다 쓰고, 칩이 많으면 여러 줄로 */
@@ -5175,20 +5218,21 @@ li.group.drop-after::after {
   gap: 6px;
   max-width: 100%;
   height: 28px;
-  padding: 0 2px 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--chip-bg);
+  padding: 0 2px 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
   font-size: calc(12px * var(--font-scale));
 }
 .attachment:has(.attachment-thumb) {
   padding-left: 3px;
 }
+/* 칩 안쪽 3px 에 맞춘 둥글기 (칩 둥글기 - 안쪽 여백) */
 .attachment-thumb {
   flex-shrink: 0;
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: calc(var(--radius-md) - 4px);
   object-fit: cover;
 }
 .attachment-name {
@@ -5224,7 +5268,7 @@ li.group.drop-after::after {
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5234,7 +5278,7 @@ li.group.drop-after::after {
   line-height: 1;
 }
 .attachment-remove:hover {
-  background: var(--line);
+  background: var(--surface-3);
   color: var(--text);
 }
 /* 올리는 중에는 보내기가 막힌 이유 */
@@ -5249,12 +5293,9 @@ li.group.drop-after::after {
   flex-direction: column;
   max-height: 45vh;
   margin: 0 var(--chat-gutter, 16px) 8px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--panel);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 14px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-pop);
   overflow: hidden;
 }
 .btw-head {
@@ -5286,7 +5327,7 @@ li.group.drop-after::after {
 .btw-nav button:hover:not(:disabled),
 .btw-clear:hover,
 .btw-close:hover {
-  background: var(--chip-bg);
+  background: var(--surface-2);
   color: var(--text);
 }
 .btw-nav button:disabled {
@@ -5359,19 +5400,19 @@ li.group.drop-after::after {
   color: var(--muted);
   font-size: calc(13px * var(--font-scale));
 }
-/* 카드 자신의 입력칸: 카드 아래쪽. 대화 입력 상자와 같은 모양의 한 줄(4줄까지 자란다) + 보내기 */
+/* 카드 자신의 입력칸: 카드 아래쪽. 채운 면(공통 입력칸과 같은 --surface-2)의 한 줄(4줄까지 자란다) + 원 보내기.
+   포커스는 대화 입력 상자처럼 둘레의 옅은 강조색 링 (안쪽 textarea 의 링은 끈다) */
 .btw-input {
   display: flex;
   align-items: flex-end;
   gap: 6px;
   margin: 0 8px 8px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg);
+  padding: 4px 4px 4px 8px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
 }
 .btw-input:has(textarea:focus) {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-line);
 }
 .btw-input textarea {
   flex: 1;
@@ -5382,6 +5423,7 @@ li.group.drop-after::after {
   border: 0;
   border-radius: 0;
   background: transparent;
+  outline: none;
 }
 .btw-send {
   flex-shrink: 0;
@@ -5391,7 +5433,7 @@ li.group.drop-after::after {
   width: calc(1.4em + 8px);
   height: calc(1.4em + 8px);
   padding: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
@@ -5418,8 +5460,7 @@ li.group.drop-after::after {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 8px;
-  padding: 10px 16px;
-  border: 1px solid var(--line);
+  padding: 10px 10px 10px 18px;
   background: var(--panel);
 }
 .off-duty .off-duty-reason {
@@ -5473,15 +5514,13 @@ li.group.drop-after::after {
   flex-shrink: 0;
   align-self: flex-end;
   height: calc(1.4em + 12px);
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg);
+  padding: 0 10px;
+  background: var(--surface-2);
   color: var(--muted);
   font-size: calc(11px * var(--font-scale));
 }
 .composer .suggestion-tab:hover {
-  border-color: var(--accent);
+  background: var(--surface-3);
   color: var(--text);
 }
 .composer .suggestion-tab:focus-visible {
@@ -6832,6 +6871,10 @@ li.group.drop-after::after {
   }
   .msg > .copy-button:has(+ .mark-button) {
     right: 44px;
+  }
+  /* Plain claude 답은 오른쪽 여백이 없어 버튼이 오른쪽 끝(0)에 붙는다 */
+  :root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .copy-button:has(+ .mark-button) {
+    right: 38px;
   }
   .msg > .mark-button svg {
     width: 18px;
