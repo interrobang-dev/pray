@@ -53,7 +53,15 @@ import {
   setSessionName,
   setWebSessionArgs,
   updateGroup,
+  acknowledgeReminder,
+  addReminder,
+  fireDueReminders,
+  listReminders,
+  removeReminder,
+  ReminderNotFiredError,
+  ReminderNotFoundError,
 } from './hq.js'
+import { REMINDER_RETENTION_MS } from './reminder.js'
 
 // hq.ts 는 homedir() 아래 설정 폴더(dataDir)를 쓴다. 실제 ~/.claude/pray/hq.json 대신 임시 폴더를 쓴다
 vi.mock('node:os', async (importOriginal) => {
@@ -655,6 +663,78 @@ describe('my desk todos', () => {
     expect(saved.futureKey).toEqual({ a: 1 })
     expect(saved.webSessions).toHaveLength(1)
     expect(saved.todos.map((t: Todo) => t.text)).toEqual(['가'])
+  })
+})
+
+describe('reminders', () => {
+  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
+  afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
+
+  const now = new Date('2026-11-12T05:00:00.000Z')
+  const later = (ms: number) => new Date(now.getTime() + ms)
+
+  it('starts empty without a file and for an old record without the key', () => {
+    expect(listReminders()).toEqual([])
+    expect(readOffice().reminders).toEqual([])
+    mkdirSync(hqDir, { recursive: true })
+    writeFileSync(hqPath, JSON.stringify({ groups: [], teams: [] }))
+    expect(readOffice().reminders).toEqual([])
+  })
+
+  it('adds at the end, fires once when due, acknowledges and removes', () => {
+    const lead = { kind: 'lead' as const, teamId: 't1', partId: null, sessionId: 's1' }
+    const a = addReminder('가', later(60_000).toISOString(), { kind: 'user' }, now)
+    const b = addReminder('나', later(120_000).toISOString(), lead, now)
+    expect(a).toMatchObject({ text: '가', createdAt: now.toISOString(), createdBy: { kind: 'user' }, firedAt: null, acknowledgedAt: null })
+    expect(a.id).toMatch(/^[0-9a-f]{8}$/)
+    expect(readOffice().reminders.map((r) => r.text)).toEqual(['가', '나'])
+
+    expect(() => acknowledgeReminder(a.id, true, now)).toThrow(ReminderNotFiredError)
+    expect(fireDueReminders(later(59_000))).toEqual({ fired: [], prunedCount: 0 })
+    const { fired } = fireDueReminders(later(60_000))
+    expect(fired.map((r) => [r.id, r.isLate])).toEqual([[a.id, false]])
+    expect(fireDueReminders(later(61_000)).fired).toEqual([])
+
+    expect(acknowledgeReminder(a.id, true, later(70_000)).acknowledgedAt).toBe(later(70_000).toISOString())
+    expect(acknowledgeReminder(a.id, true, later(80_000)).acknowledgedAt).toBe(later(70_000).toISOString())
+    expect(acknowledgeReminder(a.id, false, later(90_000)).acknowledgedAt).toBeNull()
+    expect(() => acknowledgeReminder('nope', true)).toThrow(ReminderNotFoundError)
+
+    removeReminder(b.id)
+    expect(() => removeReminder(b.id)).toThrow(ReminderNotFoundError)
+    expect(listReminders().map((r) => r.id)).toEqual([a.id])
+  })
+
+  it('fires overdue reminders late and drops acknowledged ones after the retention', () => {
+    const overdue = addReminder('지난 것', now.toISOString(), { kind: 'user' }, now)
+    const done = addReminder('확인한 것', now.toISOString(), { kind: 'user' }, now)
+    fireDueReminders(now)
+    acknowledgeReminder(done.id, true, now)
+    // 서버가 오래 꺼져 있었다: 첫 것은 이미 울렸으니 그대로, 확인한 것은 보관 기간이 지나 지운다
+    const fresh = addReminder('늦은 것', later(1000).toISOString(), { kind: 'user' }, now)
+    const result = fireDueReminders(later(REMINDER_RETENTION_MS + 1))
+    expect(result.fired.map((r) => [r.id, r.isLate])).toEqual([[fresh.id, true]])
+    expect(result.prunedCount).toBe(1)
+    expect(listReminders().map((r) => r.id)).toEqual([overdue.id, fresh.id])
+  })
+
+  it('does not write when nothing is due', () => {
+    addReminder('가', later(60_000).toISOString(), { kind: 'user' }, now)
+    const before = readFileSync(hqPath, 'utf8')
+    writeFileSync(hqPath, before.replace('"가"', '"가" '))
+    fireDueReminders(now)
+    expect(readFileSync(hqPath, 'utf8')).toBe(before.replace('"가"', '"가" '))
+  })
+
+  it('keeps keys it does not know when writing reminders', () => {
+    mkdirSync(hqDir, { recursive: true })
+    writeFileSync(hqPath, JSON.stringify({ webSessions: [{ sessionId: 's', cwd: 'D:/x', createdAt: '' }], futureKey: { a: 1 } }))
+    addReminder('가', now.toISOString(), { kind: 'user' }, now)
+    fireDueReminders(now)
+    const saved = JSON.parse(readFileSync(hqPath, 'utf8'))
+    expect(saved.futureKey).toEqual({ a: 1 })
+    expect(saved.webSessions).toHaveLength(1)
+    expect(saved.reminders.map((r: { text: string }) => r.text)).toEqual(['가'])
   })
 })
 

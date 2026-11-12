@@ -8,7 +8,8 @@
     "./runtime": "./src/runtime.ts",
     "./dataDir": "./src/dataDir.ts",
     "./team": "./src/team.ts",
-    "./dotCharacter": "./src/dotCharacter.ts"
+    "./dotCharacter": "./src/dotCharacter.ts",
+    "./reminder": "./src/reminder.ts"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

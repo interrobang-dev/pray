@@ -17,6 +17,7 @@ paths:
 - 핵심 개념 "세션 이름은…" → server-api.md
 - mod → queue-interrupt.md
 - 호스트 쪽 모델·effort 바꾸기(`restart-session`)의 서버 규칙 → server-api.md
+- `hq.ts` 의 알림(최상위 `reminders`) 저장 규칙 → reminders.md
 
 ## 구조
 

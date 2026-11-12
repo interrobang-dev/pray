@@ -3,9 +3,11 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { dataDir } from './dataDir.js'
 import { normalizeCwd, TODO_PRIORITIES, type Part, type Team, type Todo, type TodoPriority } from './team.js'
+import { fireDue, type Reminder, type ReminderCreator } from './reminder.js'
 
 export type { Part, Team, Todo, TodoPriority } from './team.js'
 export { TODO_PRIORITIES } from './team.js'
+export type { Reminder, ReminderCreator } from './reminder.js'
 
 export interface WebSessionRecord {
   sessionId: string
@@ -53,6 +55,8 @@ export interface Office {
   teams: Team[]
   /** 팀과 무관한 내 할 일 (화면 "My desk"). 팀 할 일과 같은 꼴·순서 규칙. 서버만 쓴다 */
   todos: Todo[]
+  /** 알림 (넣은 순서. 화면이 정렬한다). 서버만 쓴다 — 규칙은 reminder.ts */
+  reminders: Reminder[]
 }
 
 /**
@@ -125,6 +129,7 @@ function readHq(): HqFile {
     positions: rest.positions ?? {},
     chatMarks: rest.chatMarks ?? {},
     todos: rest.todos ?? [],
+    reminders: rest.reminders ?? [],
   }
 }
 
@@ -395,8 +400,8 @@ export function migratePositionNames(): number {
 
 /** 화면용. 팀이 없어 못 옮긴 그룹의 옛 todos 는 싣지 않는다 */
 export function readOffice(): Office {
-  const { groups, teams, todos } = readHq()
-  return { groups: groups.map(({ todos: _legacyTodos, ...group }: LegacyGroup) => group), teams, todos }
+  const { groups, teams, todos, reminders } = readHq()
+  return { groups: groups.map(({ todos: _legacyTodos, ...group }: LegacyGroup) => group), teams, todos, reminders }
 }
 
 export class OrderMismatchError extends Error {
@@ -626,6 +631,65 @@ export function reorderTodos(scope: TodoScope, ids: string[]): Todo[] | null {
   holder.todos = reorderSlots(holder.todos, ids, (t) => !t.isDone)
   writeHq(hq)
   return holder.todos
+}
+
+export class ReminderNotFoundError extends Error {
+  constructor() {
+    super('알림을 찾을 수 없음')
+  }
+}
+
+/** 아직 울리지 않은 알림은 확인할 수 없다 (지우기는 된다) */
+export class ReminderNotFiredError extends Error {
+  constructor() {
+    super('아직 울리지 않은 알림')
+  }
+}
+
+export function listReminders(): Reminder[] {
+  return readHq().reminders
+}
+
+/** 끝에 넣는다. 글은 부른 쪽이 parseTodoText, 시각은 parseReminderAt(UTC ISO)으로 거른다 */
+export function addReminder(text: string, at: string, createdBy: ReminderCreator, now = new Date()): Reminder {
+  const hq = readHq()
+  const reminder: Reminder = { id: randomUUID().slice(0, 8), text, at, createdAt: now.toISOString(), createdBy, firedAt: null, acknowledgedAt: null }
+  hq.reminders = [...hq.reminders, reminder]
+  writeHq(hq)
+  return reminder
+}
+
+/** 확인(acknowledgedAt = now) 또는 확인 취소(null). 값이 그대로면 쓰지 않는다. 없으면 ReminderNotFoundError, 아직 안 울렸으면 ReminderNotFiredError */
+export function acknowledgeReminder(reminderId: string, isAcknowledged: boolean, now = new Date()): Reminder {
+  const hq = readHq()
+  const reminder = hq.reminders.find((r) => r.id === reminderId)
+  if (!reminder) throw new ReminderNotFoundError()
+  if (!reminder.firedAt) throw new ReminderNotFiredError()
+  if (isAcknowledged === (reminder.acknowledgedAt !== null)) return reminder
+  reminder.acknowledgedAt = isAcknowledged ? now.toISOString() : null
+  writeHq(hq)
+  return reminder
+}
+
+/** 울렸든 아니든 지운다. 없으면 ReminderNotFoundError */
+export function removeReminder(reminderId: string): void {
+  const hq = readHq()
+  if (!hq.reminders.some((r) => r.id === reminderId)) throw new ReminderNotFoundError()
+  hq.reminders = hq.reminders.filter((r) => r.id !== reminderId)
+  writeHq(hq)
+}
+
+/**
+ * 시각이 된 알림을 울리고 확인한 지 보관 기간이 지난 것을 지운다 (서버가 시작할 때와 30초마다 부른다. 규칙은 reminder.ts fireDue).
+ * 바뀐 것이 없으면 쓰지 않는다. 울린 알림들과 지운 개수
+ */
+export function fireDueReminders(now = new Date()): { fired: Reminder[]; prunedCount: number } {
+  const hq = readHq()
+  const { reminders, fired, prunedCount } = fireDue(hq.reminders, now)
+  if (fired.length === 0 && prunedCount === 0) return { fired, prunedCount }
+  hq.reminders = reminders
+  writeHq(hq)
+  return { fired, prunedCount }
 }
 
 /**

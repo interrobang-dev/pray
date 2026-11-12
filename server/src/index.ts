@@ -56,6 +56,13 @@ import {
   updateGroup,
   updatePart,
   updateTeam,
+  acknowledgeReminder,
+  addReminder,
+  fireDueReminders,
+  listReminders,
+  removeReminder,
+  ReminderNotFiredError,
+  ReminderNotFoundError,
   type Group,
   type Part,
   type PartPatch,
@@ -65,6 +72,7 @@ import {
   type TeamPatch,
 } from '@pray/host/hq'
 import { normalizeCwd } from '@pray/host/team'
+import { parseReminderAt } from '@pray/host/reminder'
 import { setupFileLog } from '@pray/host/runtime'
 import { dataDir } from '@pray/host/dataDir'
 import { readConfig } from './config.js'
@@ -2962,6 +2970,97 @@ addTodoRoutes('/api/team/:teamId/todos', (req) => teamScope(req.params.teamId as
 /** 팀과 무관한 내 할 일 (화면 All TODOs 의 "My desk"). hq.json 최상위 todos */
 addTodoRoutes('/api/todos', () => DESK_SCOPE)
 
+// ---------- 알림 (hq.json 최상위 reminders. 한 번 울리고 사람에게만 알린다 — 규칙은 @pray/host/reminder) ----------
+
+const REMINDER_AT_MESSAGES = {
+  format: 'Time must be a date and time like 2026-11-12T15:30 (this PC time) or an ISO time with Z or an offset',
+  past: 'Time must be in the future',
+  'too-far': 'Time must be within a year',
+} as const
+
+/** 목록 (넣은 순서). 화면은 office SSE 로 받고, 이 경로는 트레이 폴링용 */
+app.get('/api/reminders', (_req, res) => {
+  res.json({ reminders: listReminders() })
+})
+
+/** 사람이 화면에서 등록. at 은 UTC ISO 로 바꿔 저장한다. 지난 시각(1분 넘게)·1년 넘게 먼 시각은 400 */
+app.post('/api/reminders', (req, res) => {
+  const body = (req.body ?? {}) as { text?: unknown; at?: unknown }
+  const text = parseTodoText(body.text)
+  if (text === null) {
+    res.status(400).json({ message: TODO_TEXT_MESSAGE })
+    return
+  }
+  const parsed = parseReminderAt(body.at, new Date())
+  if ('error' in parsed) {
+    res.status(400).json({ message: REMINDER_AT_MESSAGES[parsed.error] })
+    return
+  }
+  res.json({ reminder: addReminder(text, parsed.at, { kind: 'user' }) })
+  broadcastOffice()
+})
+
+/** 확인·확인 취소. 아직 울리지 않은 것은 409 (지우기는 DELETE) */
+app.patch('/api/reminders/:reminderId', (req, res) => {
+  const { isAcknowledged } = (req.body ?? {}) as { isAcknowledged?: unknown }
+  if (typeof isAcknowledged !== 'boolean') {
+    res.status(400).json({ message: 'isAcknowledged must be true or false' })
+    return
+  }
+  try {
+    res.json({ reminder: acknowledgeReminder(req.params.reminderId, isAcknowledged) })
+  } catch (error) {
+    if (error instanceof ReminderNotFoundError) {
+      res.status(404).json({ message: 'Reminder not found' })
+      return
+    }
+    if (error instanceof ReminderNotFiredError) {
+      res.status(409).json({ message: "This reminder hasn't fired yet" })
+      return
+    }
+    throw error
+  }
+  broadcastOffice()
+})
+
+/** 울렸든 아니든 지운다 */
+app.delete('/api/reminders/:reminderId', (req, res) => {
+  try {
+    removeReminder(req.params.reminderId)
+  } catch (error) {
+    if (error instanceof ReminderNotFoundError) {
+      res.status(404).json({ message: 'Reminder not found' })
+      return
+    }
+    throw error
+  }
+  res.json({})
+  broadcastOffice()
+})
+
+/** 알림 울리기 간격. 화면 입력이 분 단위라 30초면 충분하고 hq.json 읽기를 줄인다 */
+const REMINDER_TICK_MS = 30_000
+/** hq.json 을 못 읽어 울리기를 건너뛰는 중. 30초마다 같은 로그가 쌓이지 않게 상태가 바뀔 때만 로그를 남긴다 */
+let isReminderTickFailing = false
+
+/**
+ * 시각이 된 알림을 울리고(firedAt) 확인한 지 7일 지난 것을 지운다. 울린 것이 있으면 화면에 office 를 다시 보낸다 (트레이는 /api/reminders 를 폴링한다).
+ * 요청 처리 밖(시작·주기)에서 불리므로 던지지 않는다 — hq.json 을 못 읽으면 그 회차만 건너뛴다
+ */
+function fireReminders(): void {
+  try {
+    const { fired, prunedCount } = fireDueReminders()
+    if (isReminderTickFailing) console.log('알림 울리기 복구')
+    isReminderTickFailing = false
+    for (const reminder of fired) console.log(`알림 ${reminder.id} 울림${reminder.isLate ? ' (늦음)' : ''} (예정 ${reminder.at})`)
+    if (prunedCount > 0) console.log(`확인한 지 보관 기간이 지난 알림 ${prunedCount}개를 지움`)
+    if (fired.length > 0) broadcastOffice()
+  } catch (error) {
+    if (!isReminderTickFailing) console.error(`알림 울리기 실패 (${REMINDER_TICK_MS / 1000}초 뒤 다시): ${error}`)
+    isReminderTickFailing = true
+  }
+}
+
 app.post('/api/hook', (req, res) => {
   const payload = req.body as HookPayload
   if (!payload?.session_id || !payload.hook_event_name) {
@@ -3187,6 +3286,9 @@ try {
 } catch (error) {
   console.error(`세션 이름 역할 옮기기 실패: ${error}`)
 }
+// 꺼져 있던 사이 시각이 지난 알림은 지금 늦음으로 한 번 울린다. 그 뒤 30초마다
+fireReminders()
+setInterval(fireReminders, REMINDER_TICK_MS)
 
 // 빌드된 웹이 있으면 서버 하나로 화면까지 제공한다 (개발 중에는 Vite 4711 을 쓴다)
 const webDist = join(import.meta.dirname, '..', '..', 'web', 'dist')

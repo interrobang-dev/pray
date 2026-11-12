@@ -41,6 +41,7 @@ Express 서버의 API 경로 전부, 세션 목록 합치기, jsonl 요약, 훅 
 - 화면 쪽 증분 받기(`chatDelta.ts`) → chat.md
 - 팀 할 일 저장 규칙·시작 때 옮기기 → host.md
 - 인증(`auth.ts`)·Host 검사·Origin(CSRF) 검사·훅 경로 loopback 전용·미들웨어 순서·`isLocalPageRequest` 규칙 → security.md
+- 알림 → reminders.md
 
 ## 구조
 

@@ -26,6 +26,7 @@
 | `toolbar.md` | 목록 툴바 아이콘 버튼: Needs you·All TODOs 사이드바 보기, 팀장·파트장 모델 한꺼번에 바꾸기(Lead models 창) |
 | `office.md` | 사무실 캔버스(Office.tsx 전문), 배치·섬 밀기·그룹 크기, 고정 꾸미기, 라운지·라운지 휴식, 퇴근 거리 |
 | `office-art.md` | 목록 아바타·인물 고르기·색 바꾸기, 스프라이트 파이프라인·아틀라스 |
+| `reminders.md` | 알림(Reminders): 정한 시각에 사람에게 한 번 울리기 — hq.json `reminders` 저장·`/api/reminders`·30초 울리기 |
 | `theme.md` | 화면 테마(모드·팔레트·강조색·글자 크기)·설정 창 App 탭·대비 규칙·스크롤바·로고·대화 모양(설정 창 Chat 탭) |
 
 저절로 읽히는 경로는 각 파일 머리의 `paths:` 를 본다.
@@ -71,7 +72,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 호스트·트레이 → `host.md`
 - `host/src/index.ts` — named pipe `\\.\pipe\pray-host` 서버. spawn·resume·forget·kill·restart·restart-session 처리, 퇴근 기록 보관 기간 정리, 옛 pipe `jk-corp-host` 가 살아 있으면 뜨지 않음 (`legacyHost.ts`)
 - `host/src/ptyPool.ts` — node-pty 로 `claude.exe` 실행·세션별 링버퍼, extraArgs 저장, 끝나면 퇴근 기록, 모델 바꾸기 재시작, 웹 세션에 mod 불러오기
-- `host/src/hq.ts` — `~/.claude/pray/hq.json` 읽기·쓰기 (웹 세션·퇴근 기록·그룹·팀·이름·인물·성별·역할·팀·내 책상 할 일·목록 순서)
+- `host/src/hq.ts` — `~/.claude/pray/hq.json` 읽기·쓰기 (웹 세션·퇴근 기록·그룹·팀·이름·인물·성별·역할·팀·내 책상 할 일·알림·목록 순서)
 - `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=` 파일 로그 · `host/src/dataDir.ts` — 설정 폴더 `~/.claude/pray/` 정하기·옛 폴더 한 번 옮기기 (서버가 `@pray/host/dataDir` 로 import, 트레이는 `desktop/src/dataDir.ts` 에 같은 규칙) · `host/src/protocol.ts` — pipe 메시지 타입·줄 단위 JSON
 - `desktop/src/main.ts`·`children.ts`·`icon.ts`·`notify.ts`·`toast.ts`·`noticeFace.ts`·`externalLink.ts` — Electron 트레이 앱, 자식 재시작 정책, 코드로 만든 트레이·창·알림 그림, 세션 알림 판정·글자, 알림 토스트 XML, 알림 그림의 세션 도트 인물 머리(`dotCharacter.ts`·`recolor.ts` 는 화면 인물·색 규칙 사본), 창의 웹 링크를 기본 브라우저로 넘길지 판정
 - `scripts/*.ps1` — 작업 스케줄러 등록·중지·제거 · `scripts/brand-electron.mts` — postinstall 로 electron.exe 아이콘·이름을 Pray 로 · `hooks/install.mjs` — settings.json 훅 설치
@@ -97,6 +98,9 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/messageCache.ts` — 대화 API 의 해석 캐시·버전·바뀐 뒤쪽만 보내기
 - `server/src/suggestion.ts`·`unqueue.ts`·`interrupt.ts`·`btw.ts` — 입력 제안·대기 취소·작업 중지·곁가지 질문(`/btw`) (→ `queue-interrupt.md`) · `mod/` — 웹 세션 전용 mod (→ 같은 파일)
 - `server/src/usage.ts`·`accounts.ts`·`accountStore.ts`·`accountLogin.ts`·`switchImpact.ts` — 사용량·계정 (→ `accounts.md`)
+
+알림 → `reminders.md`
+- `host/src/reminder.ts` — 알림 꼴·시각 검증·울리기 판정 (순수, `@pray/host/reminder`). 저장은 `hq.ts` 의 `reminders`, API·시작 때와 30초마다 울리기는 `server/src/index.ts`
 
 웹 → `web-app.md` · `toolbar.md` · `chat.md` · `workspace.md` · `office.md` · `office-art.md` · `accounts.md`
 - `web/src/main.tsx` — 로그인 또는 App (`legacyStorage.ts`·`copyLegacyStorage.ts` — 옛 localStorage 키 한 번 옮기기) · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `reconnect.ts` — 서버·호스트가 끊겼다 붙을 때까지 위쪽 띠 단계 · `HomePanel.tsx`·`home.ts` — 사무실을 숨기고 세션을 안 골랐을 때의 첫 화면(새 세션·최근 세션) · `NeedsYouButton.tsx`·`needsYou.ts` — 목록 툴바 Needs you 사이드바 보기(근무 중인 승인 대기·내 차례·끝남 모아 보기) · `AllTodosButton.tsx` — 목록 툴바 All TODOs 사이드바 보기(맨 위 My desk 내 할 일 추가·완료 + 모든 팀의 남은 할 일을 팀마다 묶어 보기·완료) · `LeadModelsModal.tsx`·`leadModels.ts` — 목록 툴바 Lead models 창(근무 중인 팀장·파트장 모델·effort 를 줄마다 골라 한꺼번에 바꾸기) (툴바 셋 → `toolbar.md`) · `sessionLink.ts` — 트레이 알림이 여는 `#session=<id>` 읽기 · `listCollapse.ts` — 목록 그룹 접기 저장 값·접힌 라벨 상태 요약 · `panelWidth.ts` — 사무실이 보일 때 끌어 바꾸는 패널 폭 · `types.ts` — 응답 타입·공통 문구 함수 · `contextSize.ts` — 입력 상자 아래 문맥 크기 글자("143k")·주의/경고 단계 · `handOver.ts` — 문맥 경고 단계 팀장·파트장의 입력 상자 아래 문맥 크기 Hand over(새 지시자 창 열기) 판정
