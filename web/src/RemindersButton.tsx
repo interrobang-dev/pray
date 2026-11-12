@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { SideViewHead } from './NeedsYouButton'
+import { Modal } from './Modal'
 import {
   applyReminder,
   creatorLabel,
@@ -26,17 +26,18 @@ function RemindersIcon() {
 }
 
 /**
- * 목록 툴바의 "Reminders" 버튼 + 울렸고 확인 전인 개수 배지(빨강). 누르면 사이드바가 Reminders 보기로 바뀌고(App 의 sidebarView), 다시 누르면 세션 목록으로.
+ * 목록 툴바의 "Reminders" 줄(아이콘 + 글자 + 울렸고 확인 전인 개수 빨간 배지). 누르면 Reminders 창을 연다.
  * 예정만 있으면 배지 없이 보통, 아무것도 없으면 흐리지만 눌린다 (등록하러 들어가야 해서)
  */
-export function RemindersButton({ office, isActive, onToggle }: { office: Office; isActive: boolean; onToggle: () => void }) {
+export function RemindersButton({ office, onOpen }: { office: Office; onOpen: () => void }) {
   const reminders = remindersOf(office)
   const sections = reminderSections(reminders)
   const firedCount = unacknowledgedCount(reminders)
   const hasAny = sections.fired.length + sections.upcoming.length > 0
   return (
-    <button className={hasAny ? 'reminders-toggle has-reminders' : 'reminders-toggle'} onClick={onToggle} aria-pressed={isActive} title="Reminders" aria-label="Reminders">
+    <button className={hasAny ? 'toolbar-row reminders-toggle has-reminders' : 'toolbar-row reminders-toggle'} onClick={onOpen} title="Reminders">
       <RemindersIcon />
+      Reminders
       {firedCount > 0 && <span className="needs-you-count urgent">{firedCount}</span>}
     </button>
   )
@@ -61,17 +62,17 @@ interface ViewProps {
   office: Office
   sessions: Session[]
   now: number
-  /** 세션 목록으로 돌아간다 */
+  /** 창을 닫는다 */
   onClose: () => void
   /** 응답 항목을 App 의 office 에 먼저 넣는다 (SSE 가 오면 서버 것으로 바뀐다) */
   onChangeReminders: (update: (reminders: Reminder[]) => Reminder[]) => void
 }
 
 /**
- * 사이드바 Reminders 보기. 세션 목록 자리를 다 쓴다.
+ * Reminders 창 (툴바 Reminders 줄이 연다).
  * 맨 위 등록 칸(글 + 날짜·시각 + Add), 그 아래 "Fired"(울렸고 확인 전: 체크 = 확인, × = 지우기), "Upcoming"(아직: × = 지우기). 확인한 것은 보이지 않는다
  */
-export function RemindersView({ office, sessions, now, onClose, onChangeReminders }: ViewProps) {
+export function RemindersModal({ office, sessions, now, onClose, onChangeReminders }: ViewProps) {
   const [draft, setDraft] = useState('')
   const [timeValue, setTimeValue] = useState('')
   const [isAdding, setIsAdding] = useState(false)
@@ -175,8 +176,7 @@ export function RemindersView({ office, sessions, now, onClose, onChangeReminder
   }
 
   return (
-    <section className="side-view" aria-label="Reminders">
-      <SideViewHead title="Reminders" count={fired.length + upcoming.length} onClose={onClose} />
+    <Modal title="Reminders" onClose={onClose} className="reminders-modal" hasCloseButton>
       {errorMessage && <div className="all-todos-error">{errorMessage}</div>}
       <div className="reminders-form">
         {/* 글 길이(trim 뒤 1~500자)는 서버가 보고 넘으면 400 빨간 줄 (할 일 입력칸과 같은 이유로 maxLength 없음) */}
@@ -221,6 +221,6 @@ export function RemindersView({ office, sessions, now, onClose, onChangeReminder
           <ul className="reminders-list">{upcoming.map((reminder) => renderItem(reminder, false))}</ul>
         </section>
       )}
-    </section>
+    </Modal>
   )
 }

@@ -23,8 +23,9 @@ function LeadModelsIcon() {
 export function LeadModelsButton({ sessions, onOpen }: { sessions: Session[]; onOpen: () => void }) {
   const count = leadSessions(sessions).length
   return (
-    <button className="lead-models-toggle" onClick={onOpen} disabled={count === 0} title="Lead models" aria-label="Lead models">
+    <button className="toolbar-row lead-models-toggle" onClick={onOpen} disabled={count === 0} title="Change lead models">
       <LeadModelsIcon />
+      Lead models
     </button>
   )
 }

@@ -1,19 +1,17 @@
 import { useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
-import { SideViewHead } from './NeedsYouButton'
 import { PriorityChip, requestTodo } from './TeamTodosModal'
 import { applyTodo, DESK_NAME, DESK_SCOPE, deskTodosOf, openTodoGroups, priorityOf, splitTodos, teamScope, todosUrl, totalRemaining, totalUrgentPriority, type TodoScope } from './teamTodos'
 import type { Office, TeamTodo } from './types'
 
 /**
- * 목록 툴바의 "All TODOs" 버튼 + 남은 개수 배지(미완료에 Critical·High 가 있으면 그 색). 누르면 사이드바가 All TODOs 보기로 바뀌고(App 의 sidebarView), 다시 누르면 세션 목록으로.
- * 0 이면 배지 없이 흐리지만 눌린다
+ * 사이드바 탭 줄의 "All TODOs" 탭 + 남은 개수 배지(미완료에 Critical·High 가 있으면 그 색). 누르면 사이드바가 All TODOs 보기로 바뀐다(App 의 sidebarView)
  */
-export function AllTodosButton({ office, icon, isActive, onToggle }: { office: Office; icon: ReactNode; isActive: boolean; onToggle: () => void }) {
+export function AllTodosTab({ office, isSelected, onSelect }: { office: Office; isSelected: boolean; onSelect: () => void }) {
   const total = totalRemaining(office)
   const urgentPriority = totalUrgentPriority(office)
   return (
-    <button className={total > 0 ? 'all-todos-toggle has-todos' : 'all-todos-toggle'} onClick={onToggle} aria-pressed={isActive} title="All TODOs" aria-label="All TODOs">
-      {icon}
+    <button className="side-tab" role="tab" aria-selected={isSelected} onClick={onSelect}>
+      All TODOs
       {total > 0 && (
         <span className="needs-you-count" data-priority={urgentPriority ?? undefined}>
           {total}
@@ -25,8 +23,6 @@ export function AllTodosButton({ office, icon, isActive, onToggle }: { office: O
 
 interface ViewProps {
   office: Office
-  /** 세션 목록으로 돌아간다 */
-  onClose: () => void
   /** TeamTodosModal 과 같다: 응답 항목을 App 의 office 에 먼저 넣는다 */
   onChangeTodos: (scope: TodoScope, update: (todos: TeamTodo[]) => TeamTodo[]) => void
   /** 그 범위(팀·내 책상)의 TeamTodosModal 을 연다 (글 고치기·순서 바꾸기·완료 목록은 거기서) */
@@ -38,12 +34,11 @@ interface ViewProps {
  * 맨 위는 늘 "My desk"(팀과 무관한 내 할 일. 입력칸으로 바로 추가), 그 아래 미완료가 있는 팀을 목록 순서로 묶는다.
  * 체크하면 완료(PATCH), 묶음 머리줄을 누르면 그 범위의 TODO 모달을 연다 (보기는 그대로). 우선순위는 칩만 보이고 바꾸기는 모달에서 한다
  */
-export function AllTodosView({ office, onClose, onChangeTodos, onOpenTodos }: ViewProps) {
+export function AllTodosView({ office, onChangeTodos, onOpenTodos }: ViewProps) {
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set())
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [isAdding, setIsAdding] = useState(false)
-  const total = totalRemaining(office)
   const deskOpen = splitTodos(deskTodosOf(office)).open
   const groups = openTodoGroups(office)
 
@@ -131,7 +126,6 @@ export function AllTodosView({ office, onClose, onChangeTodos, onOpenTodos }: Vi
 
   return (
     <section className="side-view" aria-label="All TODOs">
-      <SideViewHead title="All TODOs" count={total} onClose={onClose} />
       {errorMessage && <div className="all-todos-error">{errorMessage}</div>}
       {renderSection(
         'desk',

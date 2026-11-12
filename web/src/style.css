@@ -400,42 +400,65 @@ header button.icon svg {
   display: block;
   margin: 2px 0;
 }
-/* 툴바 한 줄: [New Group (남는 폭)] [아이콘 버튼들]. 아이콘 버튼의 창(Needs you)은 툴바 기준 absolute 로 바로 아래에 붙는다 */
+/* 툴바: 줄마다 하나 — New Group(채운 알약) · Reminders · Lead models(창을 여는 줄, 마우스를 올렸을 때만 면) */
 .toolbar {
-  position: relative;
   display: flex;
-  align-items: stretch;
-  gap: 6px;
-  padding: 4px 12px 8px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 12px 6px;
 }
-/* New Group: 남는 폭을 다 쓰고, 아이콘(App.tsx NewGroupIcon)과 글자는 버튼 안 왼쪽에 한 줄로. 세션 추가는 Focus Zone 라벨의 "+" */
-.toolbar button {
-  display: inline-flex;
+.toolbar .toolbar-row {
+  display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
   white-space: nowrap;
+  text-align: left;
 }
-.toolbar .toolbar-new-group {
-  flex: 1;
-  min-width: 0;
-}
-.toolbar button svg {
+.toolbar .toolbar-row svg {
   flex-shrink: 0;
 }
-/* Needs you (NeedsYouButton.tsx): 아이콘 + 개수 배지. 0 이고 보기가 닫혀 있으면 배지 없이 disabled 로 흐리다 */
-.toolbar .needs-you-toggle {
-  gap: 4px;
-  padding: 5px 8px;
-  color: var(--muted);
+.toolbar .toolbar-row + .toolbar-row {
+  background: transparent;
 }
-.toolbar .needs-you-toggle:not(:disabled) {
+.toolbar .toolbar-row + .toolbar-row:not(:disabled):hover {
+  background: var(--surface-2);
+}
+/* 줄 오른쪽 끝의 개수 배지 (Reminders) */
+.toolbar .toolbar-row .needs-you-count {
+  margin-left: auto;
+}
+/* 탭 줄 (App.tsx): Sessions · Needs you · All TODOs 가 목록 자리의 보기를 바꾼다. 회색 알약 홈 안에서 고른 탭만 옅은 강조 면 (배지 색이 살도록 강조색을 채우지 않는다) */
+.side-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 12px 8px;
+  padding: 2px;
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+}
+.side-tab {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  white-space: nowrap;
+}
+.side-tab:not([aria-selected='true']):hover {
+  background: var(--surface-3);
   color: var(--text);
 }
-/* 지금 열린 보기의 툴바 버튼: 테두리 대신 옅은 강조 면 */
-.toolbar .needs-you-toggle[aria-pressed='true'] {
+.side-tab[aria-selected='true'] {
   background: var(--accent-soft);
   color: var(--accent-text);
+  font-weight: 600;
 }
 .needs-you-count {
   min-width: 16px;
@@ -475,37 +498,6 @@ header button.icon svg {
   padding: 0 0 8px;
   font-size: calc(12px * var(--font-scale));
   color: var(--text);
-}
-/* 머리줄: ← (세션 목록으로) · 제목 · 개수. 스크롤해도 위에 남는다 */
-.side-view-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-  padding: 6px 12px 6px 6px;
-  background: var(--panel);
-}
-.side-view-back {
-  padding: 2px 8px;
-  border-color: transparent;
-  background: transparent;
-  font-size: calc(14px * var(--font-scale));
-  color: var(--muted);
-}
-.side-view-back:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-.side-view-title {
-  font-size: calc(13px * var(--font-scale));
-  font-weight: 600;
-}
-.side-view-count {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 .side-view-empty {
   margin: 0;
@@ -553,26 +545,6 @@ header button.icon svg {
 .needs-you-time {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-/* All TODOs (AllTodosButton.tsx): 체크리스트 아이콘 + 남은 합계 배지(Needs you 배지 모양). 0 이면 배지 없이 흐리지만 눌린다 */
-.toolbar .all-todos-toggle {
-  gap: 4px;
-  padding: 5px 8px;
-  color: var(--muted);
-}
-.toolbar .all-todos-toggle.has-todos {
-  color: var(--text);
-}
-.toolbar .all-todos-toggle svg {
-  width: 14px;
-  height: 14px;
-}
-.toolbar .all-todos-toggle:not(.has-todos):not([aria-pressed='true']) {
-  opacity: 0.5;
-}
-.toolbar .all-todos-toggle[aria-pressed='true'] {
-  background: var(--accent-soft);
-  color: var(--accent-text);
 }
 .all-todos-error {
   padding: 0 12px 6px;
@@ -658,17 +630,28 @@ header button.icon svg {
   overflow-wrap: anywhere;
   font-size: calc(13px * var(--font-scale));
 }
-/* Reminders (RemindersButton.tsx): 알람시계 아이콘 + 울렸고 확인 전인 개수 빨간 배지. 아무것도 없으면 흐리지만 눌린다 (All TODOs 와 같다) */
-.toolbar .reminders-toggle {
-  gap: 4px;
-  padding: 5px 8px;
-}
-.toolbar .reminders-toggle:not(.has-reminders):not([aria-pressed='true']) {
+/* Reminders 줄 (RemindersButton.tsx): 아무것도 없으면 흐리지만 눌린다 (등록하러 들어가야 해서) */
+.toolbar .reminders-toggle:not(.has-reminders) {
   opacity: 0.5;
 }
-.toolbar .reminders-toggle[aria-pressed='true'] {
-  background: var(--accent-soft);
-  color: var(--accent-text);
+/* Reminders 창: 안의 칸은 사이드바 보기였을 때의 좌우 12px 여백을 뺀다. 길면 창 안에서 스크롤 */
+.modal.reminders-modal {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  font-size: calc(12px * var(--font-scale));
+}
+.reminders-modal .reminders-form {
+  margin: 0;
+}
+.reminders-modal .side-view-empty,
+.reminders-modal .reminders-section-head {
+  padding-left: 0;
+  padding-right: 0;
+}
+.reminders-modal .reminders-item {
+  margin: 0;
 }
 /* 등록 칸: 글 한 줄 + [날짜·시각 (남는 폭)] [Add] */
 .reminders-form {
@@ -2352,10 +2335,7 @@ li.group.drop-after::after {
 .model-error {
   color: var(--error);
 }
-/* Lead models (LeadModelsModal.tsx): 툴바 아이콘 버튼 + 팀장·파트장 줄마다 체크·모델·effort */
-.toolbar .lead-models-toggle {
-  padding: 5px 8px;
-}
+/* Lead models (LeadModelsModal.tsx): 툴바 줄이 여는 창. 팀장·파트장 줄마다 체크·모델·effort */
 .modal.lead-models-modal {
   width: min(640px, calc(100vw - 32px));
 }
@@ -7354,18 +7334,14 @@ li.group.drop-after::after {
   .approval {
     flex-wrap: wrap;
   }
-  /* New Group·Needs you: 손가락으로 누르기 쉽게 40px */
+  /* 툴바 줄(New Group·Reminders·Lead models)·탭: 손가락으로 누르기 쉽게 40px */
   .toolbar button {
     min-height: 40px;
     padding: 0 14px;
   }
-  .toolbar .needs-you-toggle,
-  .toolbar .all-todos-toggle,
-  .toolbar .reminders-toggle,
-  .toolbar .lead-models-toggle {
-    min-width: 40px;
-    padding: 0 10px;
-    justify-content: center;
+  .side-tab {
+    min-height: 40px;
+    font-size: 13px;
   }
   /* Lead models: 이름이 한 줄을 다 쓰고 모델·effort 는 그 아래 줄 */
   .lead-models-all,
@@ -7403,14 +7379,10 @@ li.group.drop-after::after {
   .lead-models select {
     min-height: 40px;
   }
-  /* Needs you·All TODOs 보기: 줄·← 는 44px */
+  /* Needs you·All TODOs 보기: 줄은 44px */
   .side-view .needs-you-row,
-  .side-view .all-todos-team-head,
-  .side-view-back {
+  .side-view .all-todos-team-head {
     min-height: 44px;
-  }
-  .side-view-back {
-    min-width: 44px;
   }
   /* All TODOs 할 일 줄: 44px, 체크박스 22px (TODO 모달과 같다) */
   .all-todos-item {
