@@ -697,6 +697,18 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
                   : []),
               ]}
             />
+            {isLocal && (
+              <button
+                type="button"
+                className="ws-reveal"
+                disabled={isShownFileGone}
+                onClick={() => void revealInExplorer(sessionId, shownPath)}
+                title={isShownFileGone ? 'The file is gone from the working copy' : `Show in Explorer: ${fullPathOf(cwd, shownPath)}`}
+                aria-label="Show in folder"
+              >
+                <FolderIcon />
+              </button>
+            )}
           </>
         )}
         <button type="button" className="ws-reload" onClick={() => guardEdit(() => setReloadId((id) => id + 1))} title="Reload" aria-label="Reload">
@@ -879,6 +891,22 @@ async function copyFileToClipboard(sessionId: string, path: string): Promise<boo
   return false
 }
 
+/** 서버가 이 PC 의 탐색기를 그 파일을 고른 채 연다. 실패하면 서버 문구를 창으로 보인다 */
+async function revealInExplorer(sessionId: string, path: string): Promise<void> {
+  let response: Response
+  try {
+    response = await fetch(apiUrl(sessionId, 'file/reveal', { path }), { method: 'POST' })
+  } catch {
+    await alertDialog("Couldn't open the folder: network error", { title: 'Show in folder' })
+    return
+  }
+  if (response.ok) return
+  const body = (await response.json().catch(() => null)) as { message?: string } | null
+  // 재시작 전 옛 서버는 이 경로가 없어 JSON 이 아닌 404 다
+  const reason = body?.message ?? (response.status === 404 ? 'the server needs a restart to support this' : `HTTP ${response.status}`)
+  await alertDialog(`Couldn't open the folder: ${reason}`, { title: 'Show in folder' })
+}
+
 function ChangesList({ state, selectedPath, onOpen, onReload }: { state: ChangesState; selectedPath: string | null; onOpen: (path: string) => void; onReload: () => void }) {
   const changes = state.status === 'ok' ? state.changes : null
   const files: ChangedFile[] = changes && changes.kind !== 'none' ? changes.files : []
@@ -978,6 +1006,15 @@ function HistoryIcon() {
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
       <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" />
       <path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 탐색기에서 보기: 폴더 */
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path d="M1.75 4.25V12.5c0 .41.34.75.75.75h11c.41 0 .75-.34.75-.75V5.75A.75.75 0 0 0 13.5 5H7.6L6.1 3.5H2.5a.75.75 0 0 0-.75.75Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
   )
 }

@@ -3754,6 +3754,7 @@ li.group.drop-after::after {
 .ws-back,
 .ws-add-chat,
 .ws-file-history,
+.ws-reveal,
 .ws-toolbar > .copy-menu > .copy-button {
   width: 32px;
   height: 30px;
@@ -3779,6 +3780,7 @@ li.group.drop-after::after {
 }
 .ws-add-chat,
 .ws-file-history,
+.ws-reveal,
 .ws-md-toggle,
 .ws-edit {
   display: inline-flex;
@@ -8194,6 +8196,7 @@ li.group.drop-after::after {
   .ws-meta,
   .ws:not(.is-viewing) .ws-add-chat,
   .ws:not(.is-viewing) .ws-file-history,
+  .ws:not(.is-viewing) .ws-reveal,
   .ws:not(.is-viewing) .ws-toolbar > .copy-menu,
   .ws.is-viewing .ws-find {
     display: none;
@@ -8207,6 +8210,7 @@ li.group.drop-after::after {
   .ws-back,
   .ws-add-chat,
   .ws-file-history,
+  .ws-reveal,
   .ws-edit,
   .ws-md-toggle,
   .ws-toolbar > .copy-menu > .copy-button {

@@ -115,7 +115,7 @@ import {
   runGitInit,
   teamNameMap,
 } from './folderPicker.js'
-import { openFolderRejection, openInExplorer, selectInExplorer } from './openFolder.js'
+import { openFolderRejection, openInExplorer, revealFileRejection, selectInExplorer } from './openFolder.js'
 import { locateOpenPath, splitLineSuffix } from './openPath.js'
 import { copyFileRejection, copyFileToClipboard } from './fileClipboard.js'
 import { attachInstructions, queuedPrompts, restoredPromptId, withoutQueued, type ChatMessage } from './messages.js'
@@ -959,6 +959,29 @@ app.post('/api/sessions/:id/file/copy', async (req, res) => {
     console.error('파일 클립보드 복사 실패', resolved.target, error)
     res.status(500).json({ message: "Couldn't copy the file to the clipboard" })
   }
+})
+
+/**
+ * 작업 폴더 파일 하나(?path=)를 고른 채 이 PC 의 탐색기로 연다 (Files 탭 Show in Explorer). 성공 { ok: true }.
+ * **이 PC(소켓 주소가 loopback)에서만**, CSRF 는 파일 복사와 같은 Origin·Host 검사. 규칙은 openFolder.ts
+ */
+app.post('/api/sessions/:id/file/reveal', async (req, res) => {
+  const rejection = revealFileRejection({
+    isLocal: isLoopback(req.socket.remoteAddress),
+    isLocalPage: isLocalPageRequest({ origin: req.get('origin'), referer: req.get('referer'), host: req.get('host') }),
+  })
+  if (rejection) {
+    res.status(rejection.status).json({ message: rejection.message })
+    return
+  }
+  const resolved = await resolveWorkspaceRequest(req, res, false)
+  if (!resolved) return
+  if (!(await stat(resolved.target).catch(() => null))?.isFile()) {
+    res.status(404).json({ message: 'Not a file' })
+    return
+  }
+  selectInExplorer(resolved.target)
+  res.json({ ok: true })
 })
 
 /**

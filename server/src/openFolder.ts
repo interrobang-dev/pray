@@ -13,6 +13,16 @@ export function openFolderRejection(input: { isLocal: boolean; hasTeam: boolean;
 }
 
 /**
+ * Files 탭 Show in Explorer(파일을 고른 채 탐색기 열기) 요청을 거절할 이유 (순수). 통과면 null.
+ * 다른 PC 를 먼저 막고(이 PC 화면에 창을 띄우는 것이라 의미가 없고 파일 유무도 알려 주지 않는다), CSRF 는 파일 복사와 같은 Origin·Host 검사
+ */
+export function revealFileRejection(input: { isLocal: boolean; isLocalPage: boolean }): { status: 403; message: string } | null {
+  if (!input.isLocal) return { status: 403, message: 'Folders open only on this PC' }
+  if (!input.isLocalPage) return { status: 403, message: 'Requests must come from this app on this PC' }
+  return null
+}
+
+/**
  * explorer.exe 에 그대로 넘길 인자 (순수): Windows 구분자, 끝 `\` 를 떼고(드라이브 루트는 남긴다) 늘 따옴표로 감싼다.
  * Node 는 공백이 없으면 따옴표를 붙이지 않는데, explorer 는 따옴표 밖의 쉼표를 자기 옵션 구분자로 읽어 `a,b` 폴더를 못 연다.
  * Windows 경로에는 `"` 가 들어갈 수 없어 이스케이프할 것이 없다

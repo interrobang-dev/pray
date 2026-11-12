@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import type { spawn } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
-import { explorerArgument, explorerSelectArgument, openFolderRejection, selectInExplorer } from './openFolder.js'
+import { explorerArgument, explorerSelectArgument, openFolderRejection, revealFileRejection, selectInExplorer } from './openFolder.js'
 
 describe('openFolderRejection', () => {
   it('passes a local request for an existing team folder', () => {
@@ -15,6 +15,17 @@ describe('openFolderRejection', () => {
   it('404 when the team or its folder is missing', () => {
     expect(openFolderRejection({ isLocal: true, hasTeam: false, isDirectory: false })).toEqual({ status: 404, message: 'Team not found' })
     expect(openFolderRejection({ isLocal: true, hasTeam: true, isDirectory: false })).toEqual({ status: 404, message: 'Team folder not found' })
+  })
+})
+
+describe('revealFileRejection', () => {
+  it('passes a local request from this app', () => {
+    expect(revealFileRejection({ isLocal: true, isLocalPage: true })).toBeNull()
+  })
+
+  it('rejects another PC first, then a page that is not this app on this PC', () => {
+    expect(revealFileRejection({ isLocal: false, isLocalPage: false })).toEqual({ status: 403, message: 'Folders open only on this PC' })
+    expect(revealFileRejection({ isLocal: true, isLocalPage: false })).toEqual({ status: 403, message: 'Requests must come from this app on this PC' })
   })
 })
 
