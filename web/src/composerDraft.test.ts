@@ -27,7 +27,7 @@ describe('composerDraft', () => {
   it('adds at the saved caret, or at the end when unknown, and asks for focus', () => {
     composerDraft.text = 'check'
     addToComposerDraft('`a.ts`')
-    expect(composerDraft).toEqual({ text: 'check `a.ts` ', selection: { start: 13, end: 13 }, isFocusPending: true })
+    expect(composerDraft).toEqual({ text: 'check `a.ts` ', selection: { start: 13, end: 13 }, isFocusPending: true, quote: null })
 
     composerDraft.text = 'one two'
     composerDraft.selection = { start: 3, end: 3 }
@@ -45,12 +45,12 @@ describe('composerDraft', () => {
 
   it('puts restored text in front of the draft with the caret at its end, and asks for focus', () => {
     restoreToComposerDraft('sent\nline two')
-    expect(composerDraft).toEqual({ text: 'sent\nline two', selection: { start: 13, end: 13 }, isFocusPending: true })
+    expect(composerDraft).toEqual({ text: 'sent\nline two', selection: { start: 13, end: 13 }, isFocusPending: true, quote: null })
 
     composerDraft.text = 'typing'
     composerDraft.selection = { start: 2, end: 2 }
     composerDraft.isFocusPending = false
     restoreToComposerDraft('queued')
-    expect(composerDraft).toEqual({ text: 'queued\ntyping', selection: { start: 6, end: 6 }, isFocusPending: true })
+    expect(composerDraft).toEqual({ text: 'queued\ntyping', selection: { start: 6, end: 6 }, isFocusPending: true, quote: null })
   })
 })

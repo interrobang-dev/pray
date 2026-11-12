@@ -1,3 +1,5 @@
+import type { ComposerQuote } from './composerText'
+
 /**
  * 대화 입력칸의 글·커서 (한 벌). Composer 가 자기 state 로 글을 들고 있되 여기에도 적어 둔다 —
  * Files·터미널 탭에서는 Chat·Composer 가 언마운트돼, 다시 대화 탭을 열 때 쓰던 글·커서를 되살리고
@@ -9,7 +11,9 @@ export const composerDraft: {
   selection: { start: number; end: number } | null
   /** 다음에 입력칸이 그려질 때 포커스한다 (Add to chat. 터치 기기도) */
   isFocusPending: boolean
-} = { text: '', selection: null, isFocusPending: false }
+  /** 입력 상자의 인용 칩 (탭을 오가도 남게. 세션이 다르면 Composer 가 버린다) */
+  quote: ComposerQuote | null
+} = { text: '', selection: null, isFocusPending: false, quote: null }
 
 /**
  * 글의 start~end(선택이면 그 글을 바꾼다)에 snippet 을 넣는다. 앞 글자가 공백이 아니면 앞에 한 칸,

@@ -9,7 +9,10 @@ import {
   isSuggestionVisible,
   MAX_BTW_ROWS,
   parseBtwCommand,
+  QUOTE_MAX_CHARS,
+  quotePreview,
   withAttachmentPaths,
+  withQuote,
 } from './composerText'
 
 describe('btwBlockReason', () => {
@@ -141,5 +144,28 @@ describe('isSuggestionVisible', () => {
     for (const override of [{ isWritable: false }, { isWorking: true }, { isApprovalNeeded: true }, { isAsking: true }, { isHandingOver: true }, { isDraftEmpty: false }, { hasUnconfirmedPending: true }]) {
       expect(isSuggestionVisible({ ...shown, ...override })).toBe(false)
     }
+  })
+})
+
+describe('withQuote', () => {
+  it('puts the quoted message above the text', () => {
+    expect(withQuote('이거 고쳐줘', { isClaude: true, clock: '10:12', text: '첫 줄\n\n둘째 줄' })).toBe('> 인용 (claude 답 · 10:12):\n> 첫 줄\n>\n> 둘째 줄\n\n이거 고쳐줘')
+    expect(withQuote('ok', { isClaude: false, clock: '', text: 'hi' })).toBe('> 인용 (내 말):\n> hi\n\nok')
+  })
+
+  it('keeps the text as is without a quote', () => {
+    expect(withQuote('ok', null)).toBe('ok')
+  })
+
+  it('clips long quotes', () => {
+    const quoted = withQuote('ok', { isClaude: true, clock: '', text: 'a'.repeat(QUOTE_MAX_CHARS + 50) })
+    expect(quoted).toBe(`> 인용 (claude 답):\n> ${'a'.repeat(QUOTE_MAX_CHARS)}…\n\nok`)
+  })
+})
+
+describe('quotePreview', () => {
+  it('shows the first non-empty line', () => {
+    expect(quotePreview('\n\n  hello  \nworld')).toBe('hello')
+    expect(quotePreview('b'.repeat(130))).toBe(`${'b'.repeat(120)}…`)
   })
 })

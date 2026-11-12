@@ -90,3 +90,36 @@ export function isSuggestionVisible(state: {
     !state.hasUnconfirmedPending
   )
 }
+
+/** 입력 상자의 인용 칩 (말풍선 하나). sessionId 가 지금 세션과 다르면 버린다 */
+export interface ComposerQuote {
+  sessionId: string
+  /** 말풍선의 data-jump-key (메시지 ID) — 칩을 누르면 그 말풍선으로 간다 */
+  key: string
+  isClaude: boolean
+  /** 말풍선 시각 "10:12" (오늘이 아니면 "10/21 10:12"). 모르면 '' */
+  clock: string
+  text: string
+}
+
+/** 인용으로 붙이는 원문 최대 글자 수. claude 는 그 말을 이미 문맥에 갖고 있어 앞부분이면 어느 말인지 안다 */
+export const QUOTE_MAX_CHARS = 1000
+
+/**
+ * 보낼 글 앞에 인용을 붙인다: `> 인용 (claude 답 · 10:12):` + 원문 줄마다 `> ` (앞 1,000자, 넘으면 끝에 …) + 빈 줄 + 글.
+ * 머리 글은 claude 가 읽는 대화 내용이라 한국어다 (첨부 경로의 "첨부 파일:" 과 같다)
+ */
+export function withQuote(text: string, quote: Pick<ComposerQuote, 'isClaude' | 'clock' | 'text'> | null): string {
+  if (!quote) return text
+  const body = quote.text.trim()
+  const clipped = body.length > QUOTE_MAX_CHARS ? `${body.slice(0, QUOTE_MAX_CHARS).trimEnd()}…` : body
+  const header = `> 인용 (${quote.isClaude ? 'claude 답' : '내 말'}${quote.clock ? ` · ${quote.clock}` : ''}):`
+  const lines = clipped.split('\n').map((line) => (line.trim() === '' ? '>' : `> ${line}`))
+  return [header, ...lines, '', text].join('\n')
+}
+
+/** 칩에 보일 글: 비지 않은 첫 줄 (칩은 한 줄 말줄임이라 120자면 넉넉하다) */
+export function quotePreview(text: string): string {
+  const line = text.split('\n').find((candidate) => candidate.trim() !== '')?.trim() ?? ''
+  return line.length > 120 ? `${line.slice(0, 120)}…` : line
+}

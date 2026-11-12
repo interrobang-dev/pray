@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent, type Ref } from 'react'
 import { flushSync } from 'react-dom'
 import { composerDraft } from './composerDraft'
-import { composerPlaceholder, composerRows, parseBtwCommand, withAttachmentPaths } from './composerText'
+import { composerPlaceholder, composerRows, parseBtwCommand, quotePreview, withAttachmentPaths, withQuote, type ComposerQuote } from './composerText'
 import { formatSize } from './Files'
 
 /** 터치 기기(마우스 없음). style.css 의 터치 기기 스타일과 같은 기준. 이 기기에서는 세션을 열 때 입력칸에 포커스하지 않는다 (가상 키보드가 바로 떠 대화를 가린다) */
@@ -57,6 +57,8 @@ export interface ComposerHandle {
   reload: () => void
   /** 대화 탭에 끌어 놓은 파일을 첨부한다 (클립 버튼·붙여넣기와 같은 길. 막혀 있으면 무시) */
   attach: (files: File[]) => void
+  /** 말풍선 인용 버튼: 입력 상자에 인용 칩을 붙인다 (하나만 — 있던 것은 바뀐다). 마우스 기기면 입력칸에 포커스 */
+  quote: (quote: ComposerQuote) => void
 }
 
 interface Props {
@@ -78,13 +80,25 @@ interface Props {
   onBtw: (question: string | null) => void
   /** 곁가지 질문 버튼: 카드를 열고 카드 입력칸에 포커스한다. 이 입력칸의 글은 건드리지 않는다 */
   onOpenBtw: () => void
+  /** 인용 칩을 누르면 그 말풍선으로 간다 (마크 창 줄과 같은 이동) */
+  onGoQuote: (key: string) => void
+}
+
+/** 인용 아이콘: 왼쪽으로 꺾인 답장 화살표 (말풍선 인용 버튼·입력 상자 인용 칩) */
+export function QuoteIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.5 3.5 2.5 7.5l4 4" />
+      <path d="M2.5 7.5h6.5a4.5 4.5 0 0 1 4.5 4.5v.5" />
+    </svg>
+  )
 }
 
 /**
  * 대화 입력 상자: 여러 줄 입력칸·첨부 칩·보내기. 글자 state 를 여기 두어 칠 때마다 대화(Chat)가 다시 그려지지 않는다.
  * 세션을 바꿔도 쓰던 글은 남고 첨부 칩은 비운다. 글·커서는 composerDraft 에도 적어 Files·터미널 탭을 다녀와도(언마운트) 되살린다
  */
-export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw }: Props) {
+export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw, onGoQuote }: Props) {
   /** 입력칸·첨부·보내기를 막는다 (질문 중·인계 중. 회색 상자) */
   const isLocked = isAsking || isHandingOver
   const [draft, setDraft] = useState(() => composerDraft.text)
@@ -94,6 +108,8 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
   const isUploading = attachments.some((attachment) => !attachment.path && !attachment.error)
   /** 다 올라간 첨부. 보낼 때 경로를 글 끝에 붙인다 (실패한 칩은 붙이지 않고 남겨 둔다) */
   const uploaded = attachments.flatMap((attachment) => (attachment.path ? [{ id: attachment.id, path: attachment.path }] : []))
+  /** 인용 칩. 보내면 글 앞에 붙이고 비운다. 탭을 오가도 남게 composerDraft 에도 적는다 */
+  const [quote, setQuoteState] = useState<ComposerQuote | null>(() => (composerDraft.quote?.sessionId === sessionId ? composerDraft.quote : null))
   const nextAttachmentIdRef = useRef(1)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -132,6 +148,15 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
     setAttachments([])
   }, [sessionId])
 
+  function setQuote(next: ComposerQuote | null) {
+    setQuoteState(next)
+    composerDraft.quote = next
+  }
+  // 다른 세션의 말풍선 인용은 버린다 (탭을 다녀와 다시 마운트될 때는 같은 세션이라 남는다)
+  useEffect(() => {
+    if (composerDraft.quote && composerDraft.quote.sessionId !== sessionId) setQuote(null)
+  }, [sessionId])
+
   /** 입력칸에 채우고 커서를 끝에 둔다. 보내지 않는다 (사람이 확인하고 Enter) */
   function fill(text: string) {
     flushSync(() => changeDraft(text))
@@ -156,7 +181,11 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
     attachFiles(files)
     composerRef.current?.focus()
   }
-  useImperativeHandle(ref, () => ({ fill, focus: () => composerRef.current?.focus(), reload, attach: attachDropped }))
+  function quoteMessage(next: ComposerQuote) {
+    setQuote(next)
+    if (!window.matchMedia(TOUCH_QUERY).matches) composerRef.current?.focus()
+  }
+  useImperativeHandle(ref, () => ({ fill, focus: () => composerRef.current?.focus(), reload, attach: attachDropped, quote: quoteMessage }))
 
   function submit(event?: FormEvent) {
     event?.preventDefault()
@@ -167,9 +196,12 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
       onBtw(btw.question)
       return
     }
-    const text = withAttachmentPaths(draft.trim(), uploaded.map((attachment) => attachment.path))
-    if (!text || isLocked || isUploading) return
+    // 인용은 칩만으로는 보내지 않는다 (글이나 첨부가 있어야 한다). 순서는 인용 → 글 → 첨부
+    const body = withAttachmentPaths(draft.trim(), uploaded.map((attachment) => attachment.path))
+    if (!body || isLocked || isUploading) return
+    const text = withQuote(body, quote)
     changeDraft('')
+    setQuote(null)
     const sentIds = new Set(uploaded.map((attachment) => attachment.id))
     setAttachments((current) => current.filter((attachment) => !sentIds.has(attachment.id)))
     onSend(text)
@@ -250,6 +282,21 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
   if (!isWritable) return null
   return (
     <form className="composer" onSubmit={submit}>
+      {quote && (
+        <div className="composer-quote">
+          <button type="button" className="composer-quote-go" onClick={() => onGoQuote(quote.key)} title="Go to the quoted message">
+            <QuoteIcon />
+            <span className="composer-quote-who">
+              {quote.isClaude ? 'Claude' : 'You'}
+              {quote.clock && ` · ${quote.clock}`}
+            </span>
+            <span className="composer-quote-text">{quotePreview(quote.text)}</span>
+          </button>
+          <button type="button" className="composer-quote-remove" onClick={() => setQuote(null)} title="Remove quote" aria-label="Remove quote">
+            ×
+          </button>
+        </div>
+      )}
       {attachments.length > 0 && (
         <div className="attachments" aria-label="Attachments">
           {attachments.map((attachment) => (

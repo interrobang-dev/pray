@@ -5019,6 +5019,46 @@ li.group.drop-after::after {
     opacity: 1;
   }
 }
+/* 말풍선 인용 버튼 (Chat.tsx QuoteButton, 근무 중인 웹 세션만): 마크 버튼과 같은 모양·보이기 규칙. DOM 은 [인용][복사][마크] 라
+   복사·마크 자리 규칙은 그대로이고 인용이 그 왼쪽(28px 간격)에 붙는다 */
+.msg > .quote-button {
+  position: absolute;
+  z-index: 1;
+  top: -11px;
+  right: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  line-height: 0;
+  cursor: pointer;
+}
+.msg > .quote-button:has(+ .copy-button + .mark-button) {
+  right: 66px;
+}
+.msg > .quote-button:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+:root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .quote-button {
+  right: 56px;
+}
+@media (hover: hover) {
+  .msg > .quote-button {
+    opacity: 0;
+  }
+  .msg:hover > .quote-button,
+  .msg > .quote-button:focus-visible {
+    opacity: 1;
+  }
+}
 .approval {
   display: flex;
   align-items: center;
@@ -5451,6 +5491,62 @@ li.group.drop-after::after {
 .attachments-note {
   font-size: calc(11px * var(--font-scale));
   color: var(--muted);
+}
+/* 인용 칩 (Composer.tsx): 입력 상자 안 맨 위 한 줄. [↩ Claude · 10:12  첫 줄…(누르면 그 말풍선으로)] [×] */
+.composer .composer-quote {
+  flex: 0 0 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.composer-quote-go {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  text-align: left;
+}
+.composer-quote-go:hover {
+  color: var(--text);
+}
+.composer-quote-go svg {
+  flex-shrink: 0;
+}
+.composer-quote-who {
+  flex-shrink: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+.composer-quote-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.composer-quote-remove {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-right: 2px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  line-height: 1;
+}
+.composer-quote-remove:hover {
+  background: var(--surface-3);
+  color: var(--text);
 }
 /* 곁가지 질문(btw) 카드 (BtwCard.tsx). 입력 상자 바로 위의 떠 있는 카드: 머리줄(라벨 · ◀ 2/5 ▶ · Clear · ×) + 질문 + 답.
    답이 길면 본문만 스크롤하고 머리줄은 남는다 */
@@ -7040,6 +7136,29 @@ li.group.drop-after::after {
   .msg.assistant:has(> .copy-button, > .mark-button) {
     margin-bottom: 36px;
   }
+  /* 인용 버튼은 복사 · 마크 뒤 (답 아래 줄 76px, 내 말 왼쪽 바깥은 마크 왼쪽) */
+  .msg > .quote-button {
+    width: 32px;
+    height: 32px;
+  }
+  .msg > .quote-button svg {
+    width: 18px;
+    height: 18px;
+  }
+  .msg.assistant > .quote-button {
+    top: calc(100% + 4px);
+    right: auto;
+    left: 76px;
+  }
+  .msg.user > .quote-button {
+    top: 3px;
+    right: calc(100% + 44px);
+  }
+  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) > .quote-button {
+    top: calc(100% + 4px);
+    right: auto;
+    left: 38px;
+  }
   .msg.assistant > .copy-button,
   .msg.assistant > .mark-button {
     top: calc(100% + 4px);
@@ -7089,6 +7208,14 @@ li.group.drop-after::after {
 /* 폰 폭: 한 열. 기본은 목록 전체 폭이고 세션을 고르면 패널이 화면 전체를 쓴다 (사무실은 App 이 마운트하지 않는다).
    App.tsx 의 NARROW_QUERY 와 같은 값. 이 블록 밖의 규칙은 데스크톱 화면이라 건드리지 않는다 */
 @media (max-width: 768px) {
+  /* 인용 칩: 손가락으로 누르기 쉽게 40px */
+  .composer-quote-go {
+    height: 40px;
+  }
+  .composer-quote-remove {
+    width: 36px;
+    height: 36px;
+  }
   /* 모바일 주소창이 보일 때도 아래 입력칸이 화면 안에 있도록 */
   html,
   body,

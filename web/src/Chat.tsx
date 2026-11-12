@@ -6,7 +6,7 @@ import { loadMessages, type HeldMessages } from './chatDelta'
 import { expandedStartIndex, resolveStartIndex, startIndexRevealing, windowStartAt, type WindowStart } from './chatWindow'
 import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
-import { Composer, type ComposerHandle } from './Composer'
+import { Composer, QuoteIcon, type ComposerHandle } from './Composer'
 import { restoreToComposerDraft } from './composerDraft'
 import { handoverBandText, isSuggestionVisible } from './composerText'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
@@ -933,6 +933,27 @@ interface ChatRowViewProps {
   onCancelQueued: (message: ChatMessage) => void
   /** 말풍선 마크하기·풀기 (Chat 이 고정해 넘긴다) */
   onSetMark: (key: string, isMarked: boolean) => void
+  /** 말풍선 인용 버튼 (근무 중인 웹 세션만. 아니면 null 이라 버튼이 없다) */
+  onQuote: ((message: ChatMessage) => void) | null
+}
+
+/** 말풍선 인용 버튼: 입력 상자에 그 말풍선 인용 칩을 붙인다. 자리·보이기 규칙은 마크 버튼과 같다 */
+function QuoteButton({ message, onQuote }: { message: ChatMessage; onQuote: (message: ChatMessage) => void }) {
+  return (
+    <button
+      type="button"
+      className="quote-button"
+      title="Quote in reply"
+      aria-label="Quote in reply"
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onQuote(message)
+      }}
+    >
+      <QuoteIcon />
+    </button>
+  )
 }
 
 /** 대화 줄 하나. memo 라 대화를 다시 받아도 줄 객체(chatReuse 가 바뀌지 않은 줄은 이전 객체를 쓴다)와 넘긴 값이 그대로면 다시 그리지 않는다 */
@@ -950,6 +971,7 @@ const ChatRowView = memo(function ChatRowView({
   onOpenRelay,
   onCancelQueued,
   onSetMark,
+  onQuote,
 }: ChatRowViewProps) {
   /** 점프로 찾아 간 말풍선이면 강조 클래스 */
   function highlightClass(key: string): string {
@@ -978,6 +1000,7 @@ const ChatRowView = memo(function ChatRowView({
   if (row.kind === 'text') {
     return (
       <div className={`msg assistant${isMarked ? ' marked' : ''}${highlightClass(row.message.id)}`} data-jump-key={row.message.id}>
+        {onQuote && <QuoteButton message={row.message} onQuote={onQuote} />}
         <CopyButton text={row.message.text} />
         <MarkButton messageKey={row.message.id} isMarked={isMarked} onSetMark={onSetMark} />
         <MarkdownText text={row.message.text} isChat />
@@ -1047,6 +1070,7 @@ const ChatRowView = memo(function ChatRowView({
       className={`msg ${message.role}${message.isQueued ? ' queued' : ''}${isMarkable && isMarked ? ' marked' : ''}${highlightClass(message.id)}`}
       data-jump-key={message.id}
     >
+      {isMarkable && onQuote && <QuoteButton message={message} onQuote={onQuote} />}
       {isMarkable && <MarkButton messageKey={message.id} isMarked={isMarked} onSetMark={onSetMark} />}
       {message.text && <div className="text">{message.text}</div>}
       {message.isQueued && (
@@ -1089,6 +1113,7 @@ const MessageRows = memo(function MessageRows({
   onOpenRelay,
   onCancelQueued,
   onSetMark,
+  onQuote,
 }: {
   rows: ChatRow<Special>[]
   memberOf: MemberOf
@@ -1110,6 +1135,7 @@ const MessageRows = memo(function MessageRows({
   onOpenRelay: (relay: Relay, rowKey: string) => void
   onCancelQueued: (message: ChatMessage) => void
   onSetMark: (key: string, isMarked: boolean) => void
+  onQuote: ((message: ChatMessage) => void) | null
 }) {
   const highlightRow = highlightKey === null ? -1 : rowIndexOfJumpKey(rows, highlightKey)
   const searchRow = searchKey === null ? -1 : rowIndexOfJumpKey(rows, searchKey)
@@ -1132,6 +1158,7 @@ const MessageRows = memo(function MessageRows({
         onOpenRelay={onOpenRelay}
         onCancelQueued={onCancelQueued}
         onSetMark={onSetMark}
+        onQuote={onQuote}
       />
     )
   })
@@ -1419,6 +1446,17 @@ export function Chat({
     },
     [revealRow],
   )
+
+  /** 말풍선 인용 버튼: 입력 상자에 인용 칩을 붙인다 (보낼 때 글 앞에 붙는다 → composerText.ts withQuote). 고정 함수라 줄 memo 를 깨지 않는다 */
+  const quoteMessage = useCallback((message: ChatMessage) => {
+    composerRef.current?.quote({
+      sessionId: sessionIdRef.current,
+      key: message.id,
+      isClaude: message.role === 'assistant',
+      clock: formatClock(message.timestamp),
+      text: message.text,
+    })
+  }, [])
 
   /** 마지막으로 받은 대화와 그 서버 버전. 같은 세션을 다시 받을 때 바뀐 뒤쪽만 받는다 (chatDelta.ts). 세션을 열거나 바꾸면 전체를 받는다 */
   const heldRef = useRef<HeldMessages | null>(null)
@@ -1879,6 +1917,7 @@ export function Chat({
               onOpenRelay={openRelay}
               onCancelQueued={cancelQueued}
               onSetMark={setMark}
+              onQuote={isWritable ? quoteMessage : null}
             />
           </ChatImageSession.Provider>
           {pendings.map((pending) => (
@@ -2000,6 +2039,7 @@ export function Chat({
         onSend={send}
         onBtw={sendBtw}
         onOpenBtw={openBtwForInput}
+        onGoQuote={goToMark}
       />
       {isWritable && (contextSize || turnCache || modelText || isModelRestarting || onChangeModel) && (
         <div className="composer-meta">
