@@ -276,6 +276,59 @@ textarea::placeholder {
 .ws-search-box input:focus-visible {
   outline: none;
 }
+/* 트레이 창(Electron)의 제목 띠 (TitleBar.tsx). <html data-titlebar> 는 Window Controls Overlay 가 보이는 창에만 걸린다 — 브라우저에는 띠도 변수도 없다.
+   띠는 화면 맨 위에 fixed 로 두고 #root 를 그만큼 내린다. 화면 높이(100vh·100dvh)를 쓰는 곳은 var(--titlebar-height, 0px) 를 뺀다 (브라우저에서는 0).
+   바탕은 아래 칸 색이 위로 이어지게: 사이드바(300px) 위는 --panel, 그 오른쪽은 --bg. 오른쪽 − □ × 는 바탕이 투명한 오버레이라 띠 색이 비친다.
+   글자색 --muted 는 트레이가 읽어 − □ × 기호 색으로 쓴다 (desktop/src/titleBar.ts). 띠 전체가 창 끌기 자리다 */
+:root[data-titlebar] {
+  --titlebar-height: env(titlebar-area-height, 32px);
+}
+:root[data-titlebar] #root {
+  box-sizing: border-box;
+  padding-top: var(--titlebar-height);
+}
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  height: var(--titlebar-height);
+  background: var(--bg);
+  color: var(--muted);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+#root:has(> .app) .titlebar {
+  background: linear-gradient(to right, var(--panel) 300px, var(--bg) 300px);
+}
+/* 로고·이름은 목록 헤더와 같은 x(왼쪽 12px). 오버레이 버튼 자리(titlebar-area 밖)는 침범하지 않는다 */
+.titlebar-title {
+  position: absolute;
+  top: 0;
+  left: env(titlebar-area-x, 0px);
+  box-sizing: border-box;
+  max-width: env(titlebar-area-width, 100%);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  overflow: hidden;
+}
+.titlebar-title .logo {
+  -webkit-user-drag: none;
+}
+/* 글자 로고 규칙(h1)대로 Fraunces·본문색이고 띠에 맞게 작게 */
+.titlebar-name {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 500;
+  font-variation-settings: 'SOFT' 50;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+}
 /* 화면 = 위 layout(목록·사무실·패널) + 아래 상태 표시줄 */
 .app {
   display: flex;
@@ -635,7 +688,7 @@ header button.icon svg {
 /* Reminders 창: 안의 칸은 사이드바 보기였을 때의 좌우 12px 여백을 뺀다. 길면 창 안에서 스크롤 */
 .modal.reminders-modal {
   width: min(480px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
+  max-height: calc(100vh - var(--titlebar-height, 0px) - 48px);
   overflow-y: auto;
   box-sizing: border-box;
   font-size: calc(12px * var(--font-scale));
@@ -1073,7 +1126,7 @@ header button.icon svg {
    창은 화면 높이 안이고 인물 격자만 스크롤한다 (안 묶으면 Save 가 화면 밖으로 잘린다). 폰은 끝의 폰 블록 */
 .modal.character-modal {
   width: 720px;
-  max-height: calc(100dvh - 48px);
+  max-height: calc(100dvh - var(--titlebar-height, 0px) - 48px);
 }
 .character-modal .create {
   flex: 1 1 auto;
@@ -1174,6 +1227,8 @@ header button.icon svg {
 .modal-overlay {
   position: fixed;
   inset: 0;
+  /* 트레이 창이면 제목 띠 아래부터 (띠는 창 끌기 자리라 그 위의 것은 눌리지 않는다) */
+  top: var(--titlebar-height, 0px);
   background: var(--overlay);
   display: flex;
   align-items: center;
@@ -2228,14 +2283,14 @@ li.group.drop-after::after {
 .modal.appearance-modal {
   width: 520px;
   box-sizing: border-box;
-  max-height: calc(100vh - 96px);
+  max-height: calc(100vh - var(--titlebar-height, 0px) - 96px);
   overflow: hidden;
 }
 /* Chat 탭: 창을 넓혀 왼쪽은 미리보기(창 높이를 다 쓰고 넘치면 그 안에서 스크롤), 오른쪽 400px 는 옵션(따로 스크롤). App 탭은 520px 그대로 */
 .modal.appearance-modal.is-chat {
   width: min(1040px, calc(100vw - 48px));
   max-width: none;
-  height: calc(100vh - 96px);
+  height: calc(100vh - var(--titlebar-height, 0px) - 96px);
 }
 .chat-style-layout {
   flex: 1 1 auto;
@@ -3298,7 +3353,7 @@ li.group.drop-after::after {
   box-sizing: border-box;
   width: min(1100px, calc(100vw - 48px));
   max-width: none;
-  height: min(780px, calc(100vh - 48px));
+  height: min(780px, calc(100vh - var(--titlebar-height, 0px) - 48px));
   gap: 10px;
 }
 .files-toolbar {
@@ -4904,7 +4959,7 @@ li.group.drop-after::after {
   box-sizing: border-box;
   width: calc(100vw - 32px);
   max-width: none;
-  height: calc(100dvh - 32px);
+  height: calc(100dvh - var(--titlebar-height, 0px) - 32px);
   gap: 10px;
 }
 .image-viewer-body {
@@ -6431,7 +6486,7 @@ li.group.drop-after::after {
   box-sizing: border-box;
   width: 300px;
   /* 계정이 많아도 화면 안에 (위 여백 14px) */
-  max-height: calc(100dvh - 40px);
+  max-height: calc(100dvh - var(--titlebar-height, 0px) - 40px);
   overflow-y: auto;
   padding: 14px 16px;
   display: flex;
@@ -6743,7 +6798,7 @@ li.group.drop-after::after {
 /* 팀 Tasks 창 (TeamTasksModal.tsx): task 줄(상태 · 팀원 · 시각 / 지시 앞부분 / 걸린 시간 · 문맥) 과 팀원 들고 남 한 줄을 최근순으로. 누르면 전문 */
 .modal.tasks-modal {
   width: 600px;
-  max-height: calc(100vh - 64px);
+  max-height: calc(100vh - var(--titlebar-height, 0px) - 64px);
 }
 .tasks-scroll {
   flex: 1 1 auto;
@@ -6901,7 +6956,7 @@ li.group.drop-after::after {
 /* 팀 TODO 모달 (TeamTodosModal.tsx): 입력칸 · 오류 줄 · 할 일 목록 · 완료 "Done (N)". 목록이 길면 모달 안에서 스크롤한다 */
 .todo-modal {
   width: 440px;
-  max-height: calc(100vh - 64px);
+  max-height: calc(100vh - var(--titlebar-height, 0px) - 64px);
 }
 .todo-error {
   font-size: calc(12px * var(--font-scale));
@@ -7543,6 +7598,13 @@ li.group.drop-after::after {
   .layout.with-panel aside {
     display: none;
   }
+  /* 트레이 창을 이 폭까지 줄였을 때의 제목 띠: 한 열이라 목록(--panel) 또는 패널(--bg) 한 색 */
+  #root:has(> .app) .titlebar {
+    background: var(--panel);
+  }
+  #root:has(.layout.with-panel) .titlebar {
+    background: var(--bg);
+  }
   /* 아이폰은 16px 미만 입력칸에 포커스하면 화면을 확대한다 */
   input,
   textarea,
@@ -7818,7 +7880,7 @@ li.group.drop-after::after {
   /* 이름 바꾸기·세션 추가 창: 프로필 카드 오른쪽은 Role·Name 을 위아래로, Auto 버튼은 전체 폭 40px, 그 아래 인물 격자(이것만 스크롤) */
   .modal.character-modal {
     width: calc(100vw - 32px);
-    max-height: calc(100dvh - 32px);
+    max-height: calc(100dvh - var(--titlebar-height, 0px) - 32px);
   }
   .character-profile {
     gap: 12px;
@@ -7852,7 +7914,7 @@ li.group.drop-after::after {
   }
   .folder-list {
     height: auto;
-    max-height: calc(100dvh - 300px);
+    max-height: calc(100dvh - var(--titlebar-height, 0px) - 300px);
     min-height: 160px;
   }
   .folder-list li {
@@ -7862,7 +7924,7 @@ li.group.drop-after::after {
   /* Tasks 창: 화면 폭(.modal 폰 폭을 다시 덮는다 — 600px 가 더 구체적이라), 주소창이 보여도 화면 안 */
   .modal.tasks-modal {
     width: calc(100vw - 32px);
-    max-height: calc(100dvh - 32px);
+    max-height: calc(100dvh - var(--titlebar-height, 0px) - 32px);
   }
   .task-summary {
     min-height: 44px;
@@ -7872,7 +7934,7 @@ li.group.drop-after::after {
   }
   /* TODO 모달: 주소창이 보여도 화면 안. 줄·체크박스를 손가락으로 누르기 쉽게 */
   .todo-modal {
-    max-height: calc(100dvh - 32px);
+    max-height: calc(100dvh - var(--titlebar-height, 0px) - 32px);
   }
   .todo-item {
     min-height: 44px;
@@ -7940,7 +8002,7 @@ li.group.drop-after::after {
   }
   /* Appearance 창: 화면 높이 안에서 스크롤, 세그먼트·버튼 40px, 강조색 칩 손가락 크기 */
   .modal.appearance-modal {
-    max-height: calc(100dvh - 48px);
+    max-height: calc(100dvh - var(--titlebar-height, 0px) - 48px);
   }
   .appearance-modal .segmented button,
   .appearance-actions button {
@@ -8023,7 +8085,7 @@ li.group.drop-after::after {
   /* 작업 파일 모달: 화면 전체. 목록 → 파일을 누르면 미리보기 → "←" 로 목록. 경로 표시줄은 한 줄을 다 쓴다 */
   .modal.files-modal {
     width: 100vw;
-    height: 100dvh;
+    height: calc(100dvh - var(--titlebar-height, 0px));
     padding: 12px;
     border-radius: 0;
   }
@@ -8267,7 +8329,7 @@ li.group.drop-after::after {
   /* 대화 그림 크게 보기: 화면 전체 (작업 파일 모달과 같다). Open original 은 누르기 쉬운 높이로 */
   .modal.image-viewer {
     width: 100vw;
-    height: 100dvh;
+    height: calc(100dvh - var(--titlebar-height, 0px));
     padding: 12px;
     border: 0;
     border-radius: 0;

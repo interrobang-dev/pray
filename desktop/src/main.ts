@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, Tray, dialog, nativeImage, shell, type NativeImage } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, nativeImage, nativeTheme, shell, type NativeImage } from 'electron'
 import { execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -44,6 +44,7 @@ import {
   type NotifyReminder,
   type ReminderOffice,
 } from './reminderNotice'
+import { DEFAULT_SYMBOL_COLORS, followTitleBarColor, titleBarOverlay } from './titleBar'
 import { toastXml, type ToastContent } from './toast'
 
 const SERVER_URL = 'http://127.0.0.1:4710'
@@ -169,8 +170,12 @@ function createWindow(): BrowserWindow {
     autoHideMenuBar: true,
     icon: windowIcon(),
     show: false,
+    // Windows 기본 제목 표시줄 대신 웹 화면이 띠를 그린다 (− □ × 만 오버레이, 바탕 투명 → titleBar.ts)
+    titleBarStyle: 'hidden',
+    titleBarOverlay: titleBarOverlay(nativeTheme.shouldUseDarkColors ? DEFAULT_SYMBOL_COLORS.dark : DEFAULT_SYMBOL_COLORS.light),
   })
   win.once('ready-to-show', () => win.show())
+  followTitleBarColor(win)
   // 작업 표시줄에 고정할 때 쓸 명령: 없으면 인자 없는 electron.exe 가 고정돼 꺼진 상태에서 누르면 Electron 기본 앱이 뜬다
   if (!app.isPackaged) {
     win.setAppDetails({ appId: 'pray', relaunchCommand: launchCommand(), relaunchDisplayName: 'Pray', appIconPath: process.execPath })
