@@ -7,13 +7,17 @@ import { findHighlights } from './markdownHighlight'
 
 const DRIVE_PATH = /^[A-Za-z]:[\\/]/
 
-/** 서버가 받는 경로 꼴인지. 끝의 `:줄`·`:줄:열` 은 서버가 떼므로 떼고 본다 */
+/**
+ * 서버가 받는 경로 꼴인지. 끝의 `:줄`·`:줄:열` 은 서버가 떼므로 떼고 본다.
+ * 구분자(`/`·`\`)가 없는 파일 이름만(`Chat.tsx`·`.gitignore`)은 누르지 않는다 — 세션 폴더 바로 아래가 아니면 어디 있는지 몰라 매번 Path not found 가 떠서
+ */
 export function isOpenablePath(text: string): boolean {
   if (text === '' || text.length > 2048 || /[\x00-\x1f]/.test(text)) return false
   const path = text.replace(/:\d+(?::\d+)?$/, '')
   const drive = DRIVE_PATH.exec(path)
   const rest = drive ? path.slice(drive[0].length) : path
   if (/[:<>"|?*]/.test(rest)) return false
+  if (!/[\\/]/.test(path)) return false
   return drive !== null || !/^[\\/~]/.test(path)
 }
 
