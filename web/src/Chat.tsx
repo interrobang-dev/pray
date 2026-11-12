@@ -745,7 +745,7 @@ function WorkingIndicator({
         )}
       </div>
       {onInterrupt && (
-        <button type="button" className="interrupt" disabled={isInterrupting} onClick={onInterrupt} title="Stop claude's work (same as Esc in the terminal)">
+        <button type="button" className="interrupt" disabled={isInterrupting} onClick={onInterrupt} title="Stop claude's work (Esc)">
           {isInterrupting ? 'Stopping…' : 'Stop'}
         </button>
       )}
@@ -1721,6 +1721,28 @@ export function Chat({
     const timer = setTimeout(() => setInterruptNotice(null), INTERRUPT_NOTICE_MS)
     return () => clearTimeout(timer)
   }, [interruptNotice])
+
+  /** Esc 단축키가 부를 최신 interrupt (리스너를 렌더마다 다시 달지 않게) */
+  const interruptRef = useRef(interrupt)
+  interruptRef.current = interrupt
+
+  // Esc = [중지]. [중지] 가 보일 때만, 포커스가 입력 상자거나 아무 데도 없을 때만 —
+  // 모달(Modal 의 Esc 닫기는 전파를 안 막는다)·검색 막대·곁가지 카드·팝오버의 Esc 와 같이 일어나지 않게
+  useEffect(() => {
+    if (!canInterrupt || isInterrupting) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.keyCode === 229) return
+      if (event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return
+      if (document.querySelector('[aria-modal="true"]')) return
+      const active = document.activeElement
+      const isComposerFocused = active instanceof HTMLTextAreaElement && active.closest('form.composer') !== null
+      if (!isComposerFocused && active !== document.body && active !== null) return
+      event.preventDefault()
+      void interruptRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [canInterrupt, isInterrupting])
 
   /** 되돌아온 글(응답 전 중지·취소한 대기 메시지)을 웹 입력칸 맨 앞에 넣는다. 대화 탭을 떠나 Composer 가 없으면 저장소에만 넣고 다시 그려질 때 보인다 */
   function restoreToComposer(text: string) {
