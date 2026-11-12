@@ -1898,20 +1898,21 @@ export function Chat({
           )}
           <div ref={bottomRef} />
         </div>
-        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 폴더 → 마크 → shell → "↓" 로 쌓인다.
-            자주 뜨고 숨는 것일수록 위에 둔다: "↓" 가 스크롤마다 바뀌어도 아래 버튼은 그대로이고, shell 이 뜨고 끝나도 폴더는 그대로다 */}
+        {/* 맨 아래가 아닐 때만 뜨는 "↓": 입력칸 위 가운데. 오른쪽 묶음(도구 버튼) 개수와 관계없이 늘 같은 자리다 */}
+        {!isAtBottom && (
+          <button
+            type="button"
+            className="to-bottom"
+            onClick={onToBottomClick}
+            title="Scroll to bottom"
+            aria-label={hasUnread ? 'Scroll to bottom (new messages)' : 'Scroll to bottom'}
+          >
+            ↓{hasUnread && <span className="to-bottom-dot" />}
+          </button>
+        )}
+        {/* 오른쪽 아래 원 버튼 묶음. 화면에서는 아래부터 폴더 → 마크 → shell 로 쌓인다.
+            자주 뜨고 숨는 것일수록 위에 둔다: shell 이 뜨고 끝나도 폴더는 그대로다 */}
         <div className="pane-buttons">
-          {!isAtBottom && (
-            <button
-              type="button"
-              className="to-bottom"
-              onClick={onToBottomClick}
-              title="Scroll to bottom"
-              aria-label={hasUnread ? 'Scroll to bottom (new messages)' : 'Scroll to bottom'}
-            >
-              ↓{hasUnread && <span className="to-bottom-dot" />}
-            </button>
-          )}
           <ShellsButton key={`shells:${sessionId}`} sessionId={sessionId} shells={shells} request={shellRequest} onRequestHandled={onShellRequestHandled} />
           <MarksButton key={`marks:${sessionId}`} marks={marks} messages={messages} onGo={goToMark} onSetMark={setMark} />
           <FilesButton key={sessionId} sessionId={sessionId} version={version} />

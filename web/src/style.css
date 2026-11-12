@@ -2574,8 +2574,8 @@ li.group.drop-after::after {
   font-size: calc(11px * var(--font-scale));
   color: var(--muted);
 }
-/* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 작업 파일 폴더(Files.tsx) → 실행 중인 shell(Shells.tsx) → 맨 아래가 아닐 때 뜨는 "↓".
-   아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않는다. 자주 뜨고 숨는 것이 위라 "↓" 는 아래 버튼을 움직이지 않는다. 빈 자리는 클릭이 대화로 지나간다.
+/* 대화 오른쪽 아래의 40px 원 버튼 묶음 (Chat.tsx. 폰에서도 누르기 쉽다). 아래부터 작업 파일 폴더(Files.tsx) → 마크 → 실행 중인 shell(Shells.tsx).
+   아래에 붙어 위로 쌓이므로 없는 버튼은 자리를 차지하지 않는다. 자주 뜨고 숨는 것이 위라 아래 버튼을 움직이지 않는다. 빈 자리는 클릭이 대화로 지나간다.
    z-index 를 주지 않는다: 폴더·shell 버튼의 모달이 이 안에 렌더돼 묶음의 쌓임 맥락에 갇힌다 */
 .pane-buttons {
   position: absolute;
@@ -2592,8 +2592,22 @@ li.group.drop-after::after {
 .pane-buttons > * {
   pointer-events: auto;
 }
+/* 맨 아래가 아닐 때 뜨는 "↓" (Chat.tsx): 입력칸 위 가운데의 작은 원. 위를 보는 동안만 떠서 마지막 글을 조금만 가리게 32px */
+.to-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: calc(15px * var(--font-scale));
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(20, 24, 40, 0.15);
+}
 /* 원 버튼 모양 */
-.to-bottom,
 .files-button,
 .shells-button,
 .marks-button {
@@ -2611,8 +2625,8 @@ li.group.drop-after::after {
 /* 점 = 위를 보는 사이 새 메시지 */
 .to-bottom-dot {
   position: absolute;
-  top: 1px;
-  right: 1px;
+  top: -2px;
+  right: -2px;
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -7209,6 +7223,12 @@ li.group.drop-after::after {
   }
   .files-icon-button {
     width: 40px;
+  }
+  /* 입력칸 위 가운데 "↓": 손가락으로 누르게 오른쪽 원 버튼과 같은 40px */
+  .to-bottom {
+    width: 40px;
+    height: 40px;
+    font-size: calc(18px * var(--font-scale));
   }
   .files-action {
     display: inline-flex;
