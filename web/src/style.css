@@ -653,7 +653,7 @@ header button.icon svg {
 .reminders-modal .reminders-item {
   margin: 0;
 }
-/* 등록 칸: 글 한 줄 + [날짜·시각 (남는 폭)] [Add] */
+/* 등록 칸: 글 한 줄 + 빠른 칩 줄 + [날짜][시각][Add] + 확인 한 줄 */
 .reminders-form {
   display: flex;
   flex-direction: column;
@@ -671,12 +671,221 @@ header button.icon svg {
   padding: 5px 8px;
   font-size: calc(13px * var(--font-scale));
 }
-.reminders-time {
-  flex: 1;
-}
 .reminders-add {
   flex-shrink: 0;
   padding: 4px 12px;
+}
+.reminders-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.reminders-chip {
+  padding: 3px 10px;
+  font-size: calc(12px * var(--font-scale));
+}
+/* 확인 한 줄 "Fires today at 15:30 · in 42m". 지났으면 주의색 (보내면 서버 400) */
+.reminders-confirm {
+  padding: 0 4px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.reminders-confirm.is-past {
+  color: var(--caution-text);
+}
+/* 날짜·시각 칸 (DateTimePicker.tsx): 채운 알약 둘이 남는 폭을 나눈다. 아이콘·▾ 는 흐린 글자색 */
+.dtp-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: calc(13px * var(--font-scale));
+  color: var(--text);
+}
+.dtp-field svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+/* 바탕을 클래스로 정해 공통 :where hover 를 이기므로 hover 를 따로 준다 */
+.dtp-date:hover,
+.dtp-date[aria-expanded='true'] {
+  background: var(--surface-3);
+}
+.dtp-field-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+/* 시각 칸: 감싼 알약이 포커스 링·틀린 값 빨간 테두리를 그린다 (안의 글 칸은 링 없음) */
+.dtp-time {
+  padding-right: 3px;
+}
+.dtp-time:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.dtp-time.is-invalid {
+  border-color: var(--red);
+}
+/* 틀린 값이면 포커스 링도 빨강 (강조색 링이 빨간 테두리를 덮어서) */
+.dtp-time.is-invalid:focus-within {
+  outline-color: var(--red);
+}
+.dtp-time-icon {
+  display: flex;
+  cursor: pointer;
+}
+.dtp-time-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.dtp-time-input:focus-visible {
+  outline: none;
+}
+.dtp-time-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+}
+.dtp-time-toggle:hover,
+.dtp-time-toggle[aria-expanded='true'] {
+  background: var(--surface-3);
+}
+/* 날짜·시각 팝오버: 칸 아래(자리가 없으면 위)에 fixed 로 뜬다 (위치는 DateTimePicker.tsx 가 잰 뒤 정하고 그때 보인다 — 우선순위 메뉴와 같다). 모달(10) 위 */
+.dtp-popover {
+  position: fixed;
+  z-index: 15;
+  visibility: hidden;
+  box-sizing: border-box;
+  background: var(--pop-bg);
+  box-shadow: var(--shadow-pop);
+}
+/* 달력: 머리(‹ 달 ›) · 요일 줄 · 6주 칸. 오늘 = 강조색 테두리·글자, 고른 날 = 강조색 면, 앞뒤 달 = 흐린 글자, 지난 날 = 더 흐리고 못 누름 */
+.dtp-calendar {
+  padding: 10px;
+  border-radius: var(--radius-lg);
+}
+.dtp-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.dtp-month-title {
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+}
+.dtp-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.dtp-month-nav:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, var(--pop-bg));
+  color: var(--text);
+}
+.dtp-weekdays,
+.dtp-days {
+  display: grid;
+  grid-template-columns: repeat(7, 32px);
+  gap: 2px;
+}
+.dtp-weekdays {
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  line-height: 24px;
+  text-align: center;
+}
+.dtp-day {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  font-size: calc(12px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+.dtp-day:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, var(--pop-bg));
+}
+.dtp-day.is-outside {
+  color: var(--muted);
+}
+.dtp-day:disabled {
+  opacity: 0.35;
+}
+.dtp-day.is-today {
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 650;
+}
+.dtp-day.is-selected,
+.dtp-day.is-selected:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.dtp-day:focus-visible {
+  outline-offset: 1px;
+}
+/* 시각 목록: 메뉴 꼴(안쪽 6px·줄 sm), 15분 칸을 세로로 스크롤. 고른 칸 = 옅은 강조 면, 오늘 지난 칸 = 흐리고 못 누름 */
+.dtp-times {
+  width: 116px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-radius: var(--radius-md);
+}
+.dtp-time-option {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  font-size: calc(13px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+.dtp-time-option:hover:not(:disabled),
+.dtp-time-option:focus-visible {
+  background: color-mix(in srgb, var(--text) 8%, var(--pop-bg));
+  outline: none;
+}
+.dtp-time-option.is-selected {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.dtp-time-option:disabled {
+  opacity: 0.4;
 }
 .reminders-section + .reminders-section {
   margin-top: 12px;
@@ -7400,13 +7609,47 @@ li.group.drop-after::after {
     min-height: 44px;
     font-size: 16px;
   }
-  /* Reminders: 줄·입력칸·Add 44px, 입력 글자 16px (아이폰 포커스 확대 방지 — 데스크톱 13px 클래스가 폰 input 16px 를 이겨서 다시 준다), 체크박스 22px, × 44px */
-  .reminders-input,
-  .reminders-add {
-    min-height: 44px;
-  }
+  /* Reminders: 줄·글 칸 44px, 입력 글자 16px (아이폰 포커스 확대 방지 — 데스크톱 13px 클래스가 폰 input 16px 를 이겨서 다시 준다), 체크박스 22px, × 44px.
+     빠른 칩·날짜·시각 칸·Add·시각 목록 줄·달력 칸 40px */
   .reminders-input {
+    min-height: 44px;
     font-size: 16px;
+  }
+  .reminders-chip,
+  .reminders-add,
+  .dtp-field,
+  .dtp-time-option {
+    min-height: 40px;
+  }
+  .reminders-chip {
+    padding: 0 14px;
+  }
+  .dtp-field {
+    font-size: 16px;
+  }
+  .dtp-time-toggle {
+    width: 34px;
+    height: 34px;
+  }
+  .dtp-month-nav {
+    width: 40px;
+    height: 40px;
+  }
+  .dtp-weekdays,
+  .dtp-days {
+    grid-template-columns: repeat(7, 40px);
+  }
+  .dtp-day {
+    width: 40px;
+    height: 40px;
+    font-size: calc(14px * var(--font-scale));
+  }
+  .dtp-times {
+    width: 140px;
+    max-height: 320px;
+  }
+  .dtp-time-option {
+    font-size: calc(15px * var(--font-scale));
   }
   .reminders-item {
     min-height: 44px;

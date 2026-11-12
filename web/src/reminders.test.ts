@@ -4,11 +4,9 @@ import {
   creatorLabel,
   formatDue,
   formatFiredDue,
-  localInputToIso,
   reminderSections,
   remindersOf,
   removeReminder,
-  toLocalInputValue,
   unacknowledgedCount,
 } from './reminders'
 import type { Reminder, Session, Team } from './types'
@@ -99,22 +97,6 @@ describe('formatDue', () => {
   it('Fired 줄은 오늘이면 시각만', () => {
     expect(formatFiredDue(new Date(local(2026, 11, 12, 9, 0)).toISOString(), now)).toBe('09:00')
     expect(formatFiredDue(new Date(local(2026, 11, 11, 9, 0)).toISOString(), now)).toBe('Yesterday 09:00')
-  })
-})
-
-describe('datetime-local 값', () => {
-  it('이 PC 시각을 분까지 값으로', () => {
-    expect(toLocalInputValue(local(2026, 1, 5, 7, 3) + 45_000)).toBe('2026-01-05T07:03')
-  })
-
-  it('값을 UTC ISO 로 (이 PC 시각으로 읽는다)', () => {
-    expect(localInputToIso('2026-11-12T15:30')).toBe(new Date(local(2026, 11, 12, 15, 30)).toISOString())
-  })
-
-  it('비었거나 틀리면 null', () => {
-    expect(localInputToIso('')).toBeNull()
-    expect(localInputToIso('2026-11-12')).toBeNull()
-    expect(localInputToIso('2026-13-45T99:99')).toBeNull()
   })
 })
 

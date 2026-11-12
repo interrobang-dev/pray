@@ -58,20 +58,6 @@ export function formatFiredDue(iso: string, now: number): string {
   return due.startsWith('Today ') ? due.slice('Today '.length) : due
 }
 
-/** 이 PC 시각의 Date → <input type="datetime-local"> 값 "2026-11-12T15:30" (min 에 쓴다) */
-export function toLocalInputValue(time: number): string {
-  const date = new Date(time)
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-/** datetime-local 값(오프셋 없는 이 PC 시각) → 서버에 보낼 UTC ISO. 다른 시간대 기기에서도 같은 절대 시각이 가게 Z 꼴만 보낸다. 비었거나 틀리면 null */
-export function localInputToIso(value: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return null
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? null : date.toISOString()
-}
-
 /**
  * 만든 이 글자. 사람 = "You", 리드 = "[Lead] 이름 · 팀 › 파트" (파트장은 "[Part lead]").
  * 리드 세션을 목록에서 못 찾으면(퇴근 기록 삭제 등) 이름 없이 "[Lead] 팀 › 파트", 팀도 없으면 "[Lead]"

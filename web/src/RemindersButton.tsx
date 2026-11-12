@@ -1,15 +1,15 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { DateField, TimeField } from './DateTimePicker'
+import { confirmText, dateOf, formatTime, isSameDate, parseTimeText, QUICK_CHOICES, quickChoice, toIso, type LocalDate, type QuickChoiceKind } from './dateTimePick'
 import { Modal } from './Modal'
 import {
   applyReminder,
   creatorLabel,
   formatDue,
   formatFiredDue,
-  localInputToIso,
   reminderSections,
   remindersOf,
   removeReminder,
-  toLocalInputValue,
   unacknowledgedCount,
 } from './reminders'
 import { formatDateTime, type Office, type Reminder, type Session } from './types'
@@ -70,17 +70,21 @@ interface ViewProps {
 
 /**
  * Reminders 창 (툴바 Reminders 줄이 연다).
- * 맨 위 등록 칸(글 + 날짜·시각 + Add), 그 아래 "Fired"(울렸고 확인 전: 체크 = 확인, × = 지우기), "Upcoming"(아직: × = 지우기). 확인한 것은 보이지 않는다
+ * 맨 위 등록 칸(글 + 빠른 칩 + 날짜·시각 + Add + 확인 한 줄), 그 아래 "Fired"(울렸고 확인 전: 체크 = 확인, × = 지우기), "Upcoming"(아직: × = 지우기). 확인한 것은 보이지 않는다
  */
 export function RemindersModal({ office, sessions, now, onClose, onChangeReminders }: ViewProps) {
   const [draft, setDraft] = useState('')
-  const [timeValue, setTimeValue] = useState('')
+  const [date, setDate] = useState<LocalDate>(() => dateOf(Date.now()))
+  const [timeText, setTimeText] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set())
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const timeRef = useRef<HTMLInputElement>(null)
+  const textRef = useRef<HTMLInputElement>(null)
   const { fired, upcoming } = reminderSections(remindersOf(office))
-  const canAdd = draft.trim() !== '' && timeValue !== '' && !isAdding
+  const minutes = parseTimeText(timeText)
+  const canAdd = draft.trim() !== '' && minutes !== null && !isAdding
+  const confirm = minutes === null ? null : confirmText(date, minutes, now)
 
   function setPending(reminderId: string, isPending: boolean) {
     setPendingIds((prev) => {
@@ -91,15 +95,21 @@ export function RemindersModal({ office, sessions, now, onClose, onChangeReminde
     })
   }
 
-  /** 등록: 글은 서버가 길이를 본다(넘으면 400 빨간 줄). 시각은 이 PC 시각을 UTC ISO 로 바꿔 보낸다. 기다리는 사이 바꾼 칸은 남긴다 */
+  /** 등록: 글은 서버가 길이를 본다(넘으면 400 빨간 줄). 시각은 이 PC 날짜·시각을 UTC ISO 로 바꿔 보낸다(지났으면 서버 400). 기다리는 사이 바꾼 칸은 남긴다 */
   async function add() {
     const text = draft.trim()
-    if (!text || isAdding) return
-    const at = localInputToIso(timeValue)
-    if (at === null) {
+    if (!text) {
+      textRef.current?.focus()
+      return
+    }
+    if (isAdding) return
+    const sentMinutes = parseTimeText(timeText)
+    if (sentMinutes === null) {
       timeRef.current?.focus()
       return
     }
+    const sentDate = date
+    const at = toIso(sentDate, sentMinutes)
     setErrorMessage(null)
     setIsAdding(true)
     const result = await requestReminder('/api/reminders', 'POST', { text, at })
@@ -111,7 +121,16 @@ export function RemindersModal({ office, sessions, now, onClose, onChangeReminde
     const added = result.reminder
     if (added) onChangeReminders((reminders) => applyReminder(reminders, added))
     setDraft((current) => (current === draft ? '' : current))
-    setTimeValue((current) => (current === timeValue ? '' : current))
+    // 시각 칸 Enter 는 "1530" → "15:30" 으로 고친 직후 부르므로 글자가 아니라 읽은 값으로 견준다
+    setTimeText((current) => (parseTimeText(current) === sentMinutes ? '' : current))
+    setDate((current) => (isSameDate(current, sentDate) ? dateOf(Date.now()) : current))
+  }
+
+  /** 빠른 칩: 누른 순간의 이 PC 시각으로 날짜·시각을 채운다 */
+  function applyQuickChoice(kind: QuickChoiceKind) {
+    const choice = quickChoice(kind, Date.now())
+    setDate(choice.date)
+    setTimeText(formatTime(choice.minutes))
   }
 
   function onTextKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
@@ -181,6 +200,7 @@ export function RemindersModal({ office, sessions, now, onClose, onChangeReminde
       <div className="reminders-form">
         {/* 글 길이(trim 뒤 1~500자)는 서버가 보고 넘으면 400 빨간 줄 (할 일 입력칸과 같은 이유로 maxLength 없음) */}
         <input
+          ref={textRef}
           className="reminders-input"
           value={draft}
           placeholder="Remind me about…"
@@ -189,20 +209,21 @@ export function RemindersModal({ office, sessions, now, onClose, onChangeReminde
           onKeyDown={onTextKeyDown}
           aria-label="Reminder text"
         />
+        <div className="reminders-chips" role="group" aria-label="Quick times">
+          {QUICK_CHOICES.map((choice) => (
+            <button key={choice.kind} type="button" className="reminders-chip" onClick={() => applyQuickChoice(choice.kind)}>
+              {choice.label}
+            </button>
+          ))}
+        </div>
         <div className="reminders-form-row">
-          <input
-            ref={timeRef}
-            className="reminders-input reminders-time"
-            type="datetime-local"
-            value={timeValue}
-            min={toLocalInputValue(now)}
-            onChange={(event) => setTimeValue(event.target.value)}
-            aria-label="Reminder time"
-          />
+          <DateField date={date} now={now} onChange={setDate} />
+          <TimeField text={timeText} date={date} now={now} inputRef={timeRef} onTextChange={setTimeText} onEnter={() => void add()} />
           <button className="reminders-add" onClick={() => void add()} disabled={!canAdd}>
             {isAdding ? 'Adding…' : 'Add'}
           </button>
         </div>
+        {confirm && <div className={confirm.isPast ? 'reminders-confirm is-past' : 'reminders-confirm'}>{confirm.text}</div>}
       </div>
       {fired.length === 0 && upcoming.length === 0 && <p className="side-view-empty">No reminders</p>}
       {fired.length > 0 && (
