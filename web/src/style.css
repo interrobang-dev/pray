@@ -670,14 +670,6 @@ header button.icon svg {
   justify-content: flex-end;
   margin-top: 4px;
 }
-.create select {
-  font: inherit;
-  color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 7px 9px;
-}
 /* 이름 모달의 도트 인물 고르기: 썸네일 격자 (아틀라스를 배경으로 잘라 보인다) */
 .character-picker {
   display: grid;
@@ -1740,7 +1732,8 @@ li.group.drop-after::after {
 .office-canvas.is-label-dragging canvas {
   cursor: grabbing !important;
 }
-/* 마우스를 올렸거나 고른 자리 옆 카드. 위치·보이기는 Office.tsx 의 ticker 가 transform·visibility 로 정한다 */
+/* 마우스를 올렸거나 고른 자리 옆 카드. 위치·보이기는 Office.tsx 의 ticker 가 transform·visibility 로 정한다.
+   메뉴·팝오버와 같은 떠 있는 면 (캔버스 바닥은 두 모드 모두 밝아 테두리 없이 면 색·그림자로 갈린다) */
 .office-card {
   position: absolute;
   left: 0;
@@ -1748,12 +1741,11 @@ li.group.drop-after::after {
   z-index: 1;
   width: max-content;
   max-width: 260px;
-  padding: 7px 10px 8px;
-  background: var(--panel);
+  padding: 8px 12px 9px;
+  background: var(--pop-bg);
   color: var(--text);
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
   font-size: 12px;
   line-height: 1.45;
   pointer-events: none;
@@ -5618,8 +5610,8 @@ li.group.drop-after::after {
   flex-direction: column;
   gap: 12px;
   background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-pop);
 }
 /* 로그인 제목은 크게: 마크 32px + 글자 26.5px, 줄 높이 = 마크 높이 */
 .login h1 {
@@ -6237,8 +6229,7 @@ li.group.drop-after::after {
   font-size: calc(12px * var(--font-scale));
   color: var(--error);
   background: var(--red-soft);
-  border: 1px solid var(--red-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 .switch-busy p {
   margin: 0;
@@ -6690,6 +6681,16 @@ li.group.drop-after::after {
 .layout.office-hidden.with-panel {
   grid-template-columns: 300px minmax(0, 1fr);
 }
+/* 사무실을 숨기면 패널이 목록(사이드바 --panel)과 바로 맞닿는다. Files 탭 바탕도 --panel 이라 라이트·다크 모두 경계가 사라져서,
+   패널 바탕을 머리와 같은 --bg 로 두고 Files 탭은 그 위의 둥근 면(양옆·아래 8px)으로 띄운다. 대화는 원래 --bg, 터미널은 검은 카드 그대로 */
+.layout.office-hidden .panel {
+  background: var(--bg);
+}
+.layout.office-hidden .ws {
+  margin: 0 8px 8px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
 /* 안 골랐을 때의 첫 화면 (HomePanel.tsx, Claude·Gemini 첫 화면 꼴): 가운데 640px 열을 위아래 가운데보다 조금 위에 둔다 */
 .home {
   min-height: 0;
@@ -6941,6 +6942,35 @@ li.group.drop-after::after {
     top: -14px;
     right: 6px;
   }
+  /* 말풍선 복사·마크 버튼은 터치 기기에서 늘 보이므로 글을 가리지 않게 말풍선 바깥에 둔다 (마우스 기기는 위 모서리에 걸친 그대로):
+     claude 답(Plain·Card)은 답 아래 왼쪽 줄(복사 · 마크) — 그만큼 아래 간격을 비운다. Plain 답은 좌우 여백이 없어 위 모서리에 두면 첫 줄 끝을 가렸다.
+     오른쪽에 두지 않는 것은 마지막 답 아래가 오른쪽 아래 원 버튼 묶음(.pane-buttons) 자리라서다. left 를 주면 위 Plain 규칙의 right 는 무시된다.
+     오른쪽에 붙은 내 말·지시 말풍선은 왼쪽 바깥 — 말풍선 최대 폭이 82% 라 남는 자리에 들어간다. 위에 걸치면 "진행" 같은 짧은 말을 가렸다 */
+  .msg.assistant:has(> .copy-button, > .mark-button) {
+    margin-bottom: 36px;
+  }
+  .msg.assistant > .copy-button,
+  .msg.assistant > .mark-button {
+    top: calc(100% + 4px);
+    left: 0;
+  }
+  .msg.assistant > .copy-button + .mark-button {
+    left: 38px;
+  }
+  .msg.user > .copy-button,
+  .msg.user > .mark-button {
+    top: 3px;
+    right: calc(100% + 6px);
+  }
+  /* Bar 모양 내 말은 왼쪽 정렬 전체 폭이라 왼쪽 바깥 자리가 없어 답처럼 아래 줄 */
+  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay):has(> .mark-button) {
+    margin-bottom: 36px;
+  }
+  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) > .mark-button {
+    top: calc(100% + 4px);
+    right: auto;
+    left: 0;
+  }
   .code-block > .copy-button {
     top: 4px;
     right: 4px;
@@ -6954,19 +6984,10 @@ li.group.drop-after::after {
     margin-top: -6px;
     margin-bottom: -6px;
   }
-  /* 말풍선 마크 버튼: 복사 버튼처럼 32px 로 키운다 (터치 기기는 늘 보인다) */
+  /* 말풍선 마크 버튼: 복사 버튼처럼 32px 로 키운다 (터치 기기는 늘 보인다. 자리는 위 복사 버튼 규칙) */
   .msg > .mark-button {
-    top: -14px;
-    right: 6px;
     width: 32px;
     height: 32px;
-  }
-  .msg > .copy-button:has(+ .mark-button) {
-    right: 44px;
-  }
-  /* Plain claude 답은 오른쪽 여백이 없어 버튼이 오른쪽 끝(0)에 붙는다 */
-  :root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .copy-button:has(+ .mark-button) {
-    right: 38px;
   }
   .msg > .mark-button svg {
     width: 18px;
@@ -7373,7 +7394,6 @@ li.group.drop-after::after {
     width: 100vw;
     height: 100dvh;
     padding: 12px;
-    border: 0;
     border-radius: 0;
   }
   .files-toolbar {
