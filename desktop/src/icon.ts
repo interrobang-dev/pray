@@ -382,12 +382,13 @@ export function appIconPng(size: number): Buffer {
   return encodePng(logoPixels(size), size)
 }
 
-/** 알림 왼쪽 그림의 상태 색 테두리. 웹 style.css 다크 값 (--success·--yellow·--red·--blue-dot). desktop 은 CSS 를 못 읽어 따로 둔다 */
+/** 알림 왼쪽 그림의 상태 색 테두리. 웹 style.css 다크 값 (--success·--yellow·--red·--blue-dot·--accent). desktop 은 CSS 를 못 읽어 따로 둔다 */
 export const NOTICE_RING_COLORS = {
   done: [0x3f, 0x9c, 0x4b, 255],
   'my-turn': [0xe3, 0xb3, 0x41, 255],
   'needs-approval': [0xef, 0x7b, 0x72, 255],
   'hand-over': [0x4c, 0x93, 0xe6, 255],
+  reminder: [0x3f, 0x9c, 0x4b, 255],
 } as const satisfies Record<string, readonly number[]>
 export type NoticeRingKind = keyof typeof NOTICE_RING_COLORS
 

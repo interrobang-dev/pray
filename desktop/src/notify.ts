@@ -187,7 +187,8 @@ function positionOf(session: NotifySession): string | null {
   return session.name ? splitLegacyName(session.name).position : null
 }
 
-function nameOf(session: NotifySession): string {
+/** 역할 없는 이름 (화면 nameOf 규칙): 이름 → 자동 제목 → ID 앞 8자리. 알림(Reminders) 제목도 쓴다 */
+export function nameOf(session: NotifySession): string {
   if (session.name) {
     if (cleanPosition(session.position)) return session.name
     const split = splitLegacyName(session.name)

@@ -8,7 +8,7 @@ import { Child } from './children'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
 import { dotLookOf } from './dotCharacter'
 import { isExternalUrl } from './externalLink'
-import { appIconIco, noticeIconPng, trayIconIco, trayIconPng } from './icon'
+import { appIconIco, noticeIconPng, trayIconIco, trayIconPng, type NoticeRingKind } from './icon'
 import { isPipeAlive, LEGACY_PIPE_PATH } from './legacyHost'
 import { isLaunchAtLogin, LOGIN_ITEM_NAME } from './loginItem'
 import {
@@ -30,11 +30,20 @@ import {
   placeOf,
   urgentKind,
   type NotifyKind,
-  type NotifyOffice,
   type NotifySession,
   type SessionNotice,
   type StatusBaseline,
 } from './notify'
+import {
+  newlyFiredReminders,
+  reminderBundleLine,
+  reminderBundleToast,
+  reminderSession,
+  reminderTarget,
+  reminderToast,
+  type NotifyReminder,
+  type ReminderOffice,
+} from './reminderNotice'
 import { toastXml, type ToastContent } from './toast'
 
 const SERVER_URL = 'http://127.0.0.1:4710'
@@ -56,6 +65,10 @@ const MAX_SEPARATE_NOTICES = 3
 /** 클릭 처리기가 GC 로 사라지지 않게 떠 있는 알림을 잡아 둔다 */
 const shownNotifications = new Set<Notification>()
 let settings = { isNotifying: true }
+/** 이 시각(트레이를 켠 때) 이후에 울린 알림(Reminders)만 Windows 알림으로 띄운다. 켜기 전에 울린 것은 화면 배지로 본다 */
+const REMINDER_NOTIFY_FROM = Date.now()
+/** 이미 알린(알림을 꺼 둬서 건너뛴 것 포함) 알림 ID. 폴링이 실패해도 그대로 둔다 */
+const notifiedReminderIds = new Set<string>()
 
 /** 트레이 전용 설정 (hq.json·config.json 과 따로) */
 function settingsPath(): string {
@@ -236,7 +249,7 @@ async function focusedSessionId(): Promise<string | null> {
  * face 가 없으면 Pray 마크 `notice-<종류>.png`, 있으면 그 인물 머리 `notice-<종류>-<인물>-<머리색>-<윗옷색>.png`. 못 쓰면 null (그림 없이)
  */
 const noticeIconUrls = new Map<string, string | null>()
-function noticeIconUrl(kind: NotifyKind, face: { key: string; pixels: Uint8Array; size: number } | null = null): string | null {
+function noticeIconUrl(kind: NoticeRingKind, face: { key: string; pixels: Uint8Array; size: number } | null = null): string | null {
   const name = face ? `notice-${kind}-${face.key}.png` : `notice-${kind}.png`
   if (noticeIconUrls.has(name)) return noticeIconUrls.get(name) ?? null
   const path = join(app.getPath('userData'), name)
@@ -302,9 +315,10 @@ async function sessionFace(session: NotifySession | undefined): Promise<{ key: s
 
 /**
  * toastXml 로 띄우고, XML 을 못 만들거나 failed 가 오면 평범한 title·body 알림으로 한 번 다시 띄운다.
- * 토스트(본문) 클릭은 click 이벤트다 (Electron 44 windows_toast_notification.cc)
+ * 토스트(본문) 클릭은 click 이벤트다 (Electron 44 windows_toast_notification.cc).
+ * 누르면 target 세션을 연다 — 함수면 누를 때 불러 정한다 (알림(Reminders)의 지금 리드). 없거나 null 이면 창만
  */
-function showNotification(content: ToastContent, sessionId?: string, isPlain = false): void {
+function showNotification(content: ToastContent, target?: string | (() => Promise<string | null>), isPlain = false): void {
   let xml: string | null = null
   if (!isPlain) {
     try {
@@ -320,23 +334,23 @@ function showNotification(content: ToastContent, sessionId?: string, isPlain = f
   const release = () => shownNotifications.delete(notification)
   notification.on('click', () => {
     release()
-    void showWindow(sessionId)
+    void (typeof target === 'function' ? target() : Promise.resolve(target ?? null)).then((sessionId) => showWindow(sessionId ?? undefined))
   })
   notification.on('close', release)
   notification.on('failed', (_event, error) => {
     release()
     if (!xml) return
     console.warn(`토스트 XML 알림이 실패해 평범한 알림으로 다시 띄운다: ${error}`)
-    showNotification(content, sessionId, true)
+    showNotification(content, target, true)
   })
   notification.show()
 }
 
 /** 알림에 팀·파트 이름을 붙이려고 알릴 것이 있을 때만 받는다. 못 받으면 null (이름 없이 알린다) */
-async function fetchOffice(): Promise<NotifyOffice | null> {
+async function fetchOffice(): Promise<ReminderOffice | null> {
   try {
     const response = await fetch(`${SERVER_URL}/api/office`)
-    return response.ok ? ((await response.json()) as NotifyOffice) : null
+    return response.ok ? ((await response.json()) as ReminderOffice) : null
   } catch {
     return null
   }
@@ -365,6 +379,40 @@ async function notify(notices: SessionNotice[], sessions: NotifySession[]): Prom
   }
 }
 
+/**
+ * 새로 울린 알림(Reminders)을 띄운다. 창이 앞에 있어도 띄운다 (화면에는 배지뿐이라). 많으면 한 장으로 묶고 누르면 창만 연다.
+ * 하나짜리를 누르면 그때 /api/office 를 다시 받아 그 지휘 단위의 지금 리드를 연다 (Hand over 로 바뀌었을 수 있다)
+ */
+async function notifyReminders(reminders: NotifyReminder[], sessions: NotifySession[]): Promise<void> {
+  if (!settings.isNotifying || reminders.length === 0 || !Notification.isSupported()) return
+  if (reminders.length > MAX_SEPARATE_NOTICES) {
+    const lines = reminders.map((reminder) => reminderBundleLine(reminder, sessions))
+    showNotification(reminderBundleToast(lines, noticeIconUrl('reminder')))
+    return
+  }
+  const office = await fetchOffice()
+  for (const reminder of reminders) {
+    const face = await sessionFace(reminderSession(reminder, sessions))
+    const target = async () => reminderTarget(reminder, await fetchOffice())
+    showNotification(reminderToast(reminder, sessions, office, noticeIconUrl('reminder', face)), target)
+  }
+}
+
+/** 알림 목록을 받아 새로 울린 것을 고른다. 고른 것은 바로 알린 것으로 적는다 (알림을 꺼 뒀으면 띄우지 않고 적기만 — 다시 켤 때 몰아서 안 뜨게) */
+async function pollReminders(sessions: NotifySession[]): Promise<void> {
+  let reminders: NotifyReminder[]
+  try {
+    const response = await fetch(`${SERVER_URL}/api/reminders`)
+    if (!response.ok) return
+    reminders = ((await response.json()) as { reminders?: NotifyReminder[] }).reminders ?? []
+  } catch {
+    return
+  }
+  const fired = newlyFiredReminders(notifiedReminderIds, REMINDER_NOTIFY_FROM, reminders)
+  for (const reminder of fired) notifiedReminderIds.add(reminder.id)
+  await notifyReminders(fired, sessions)
+}
+
 async function pollStatus(): Promise<void> {
   try {
     const response = await fetch(`${SERVER_URL}/api/sessions`)
@@ -378,6 +426,7 @@ async function pollStatus(): Promise<void> {
     const { next, notices } = diffSessions(baseline, data.sessions)
     baseline = next
     void notify(notices, data.sessions)
+    void pollReminders(data.sessions)
   } catch {
     status = { ...status, isServerUp: false }
     baseline = null
