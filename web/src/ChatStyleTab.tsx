@@ -59,7 +59,8 @@ export function ChatStyleTab() {
   }
 
   return (
-    <>
+    // 데스크톱: 왼쪽 미리보기(남는 폭·창 높이) · 오른쪽 옵션 2열. 폰은 한 열(미리보기 위)
+    <div className="chat-style-layout">
       <ChatPreview isWorkOpen={chat.workBundles === 'expanded'} />
       <div className="appearance-scroll">
       <section className="appearance-section">
@@ -95,7 +96,7 @@ export function ChatStyleTab() {
         </button>
       </div>
       </div>
-    </>
+    </div>
   )
 }
 

@@ -19,8 +19,9 @@ type Tab = 'app' | 'chat'
  */
 export function AppearanceModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('app')
+  // Chat 탭은 미리보기를 왼쪽에 다 보이게 창을 넓힌다 (.is-chat)
   return (
-    <Modal title="Appearance" onClose={onClose} className="appearance-modal" hasCloseButton>
+    <Modal title="Appearance" onClose={onClose} className={tab === 'chat' ? 'appearance-modal is-chat' : 'appearance-modal'} hasCloseButton>
       <div className="appearance-tabs" role="tablist" aria-label="Appearance">
         {(['app', 'chat'] as const).map((value) => (
           <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}>

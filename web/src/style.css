@@ -1926,6 +1926,26 @@ li.group.drop-after::after {
   max-height: calc(100vh - 96px);
   overflow: hidden;
 }
+/* Chat 탭: 창을 넓혀 왼쪽은 미리보기(창 높이를 다 쓰고 넘치면 그 안에서 스크롤), 오른쪽 400px 는 옵션(따로 스크롤). App 탭은 520px 그대로 */
+.modal.appearance-modal.is-chat {
+  width: min(1040px, calc(100vw - 48px));
+  max-width: none;
+  height: calc(100vh - 96px);
+}
+.chat-style-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 20px;
+}
+.chat-style-layout > .chat-preview {
+  max-height: none;
+  min-height: 0;
+}
+.chat-style-layout > .appearance-scroll {
+  min-height: 0;
+}
 .appearance-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -7339,6 +7359,19 @@ li.group.drop-after::after {
   .accent-custom input[type='color'] {
     width: 44px;
     height: 40px;
+  }
+  /* Chat 탭: 넓힌 창·2열을 풀어 한 열(미리보기 위, 옵션 아래)로 */
+  .modal.appearance-modal.is-chat {
+    width: calc(100vw - 32px);
+    height: auto;
+  }
+  .chat-style-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .chat-style-layout > .chat-preview {
+    max-height: 260px;
   }
   /* Chat 탭: 라벨을 위로, 미리보기는 붙이지 않는다 (화면 절반을 가려서) */
   /* 폰은 화면이 낮아 고정 미리보기가 옵션 칸을 너무 줄이지 않게 */
