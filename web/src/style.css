@@ -379,10 +379,7 @@ header button.icon svg {
 .toolbar button svg {
   flex-shrink: 0;
 }
-/* Needs you (NeedsYouButton.tsx): 아이콘 + 개수 배지. 0 이면 배지 없이 disabled 로 흐리다 */
-.needs-you {
-  display: flex;
-}
+/* Needs you (NeedsYouButton.tsx): 아이콘 + 개수 배지. 0 이고 보기가 닫혀 있으면 배지 없이 disabled 로 흐리다 */
 .toolbar .needs-you-toggle {
   gap: 4px;
   padding: 5px 8px;
@@ -394,7 +391,7 @@ header button.icon svg {
 .toolbar .needs-you-toggle:disabled:hover {
   border-color: var(--line);
 }
-.toolbar .needs-you-toggle[aria-expanded='true'] {
+.toolbar .needs-you-toggle[aria-pressed='true'] {
   background: var(--bg);
   border-color: var(--accent);
 }
@@ -424,32 +421,56 @@ header button.icon svg {
   color: var(--caution-text);
   box-shadow: inset 0 0 0 1px currentColor;
 }
-/* Needs you·All TODOs 창: 툴바 바로 아래, 툴바 안쪽 폭. 목록(.sessions) 위에 뜬다 */
-.needs-you-popover,
-.all-todos-popover {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 12px;
-  right: 12px;
-  z-index: 8;
-  box-sizing: border-box;
-  max-height: min(60vh, 480px);
+/* 사이드바 보기 Needs you·All TODOs (App.tsx sidebarView): 툴바 아래 세션 목록 자리를 다 쓰고 안에서 스크롤. 목록은 hidden 으로 숨겨 둔다 */
+.sessions[hidden] {
+  display: none;
+}
+.side-view {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 0 0 8px;
   font-size: calc(12px * var(--font-scale));
   color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
 }
-.needs-you-head {
-  padding: 2px 12px 6px;
-  font-size: calc(11px * var(--font-scale));
+/* 머리줄: ← (세션 목록으로) · 제목 · 개수. 스크롤해도 위에 남는다 */
+.side-view-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 6px 12px 6px 6px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.side-view-back {
+  padding: 2px 8px;
+  border-color: transparent;
+  background: transparent;
+  font-size: calc(14px * var(--font-scale));
+  color: var(--muted);
+}
+.side-view-back:hover {
+  color: var(--text);
+}
+.side-view-title {
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+}
+.side-view-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.side-view-empty {
+  margin: 0;
+  padding: 6px 12px;
   color: var(--muted);
 }
 /* 한 줄: 아바타(두 줄에 걸침) · 역할 칩 + 이름 · 지난 시각 / 팀 · 상태 */
-.toolbar .needs-you-row {
+.side-view .needs-you-row {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
@@ -463,7 +484,7 @@ header button.icon svg {
   background: transparent;
   text-align: left;
 }
-.toolbar .needs-you-row:hover {
+.side-view .needs-you-row:hover {
   background: var(--bg);
 }
 .needs-you-row .avatar {
@@ -489,9 +510,6 @@ header button.icon svg {
   font-variant-numeric: tabular-nums;
 }
 /* All TODOs (AllTodosButton.tsx): 체크리스트 아이콘 + 남은 합계 배지(Needs you 배지 모양). 0 이면 배지 없이 흐리지만 눌린다 */
-.all-todos {
-  display: flex;
-}
 .toolbar .all-todos-toggle {
   gap: 4px;
   padding: 5px 8px;
@@ -504,16 +522,12 @@ header button.icon svg {
   width: 14px;
   height: 14px;
 }
-.toolbar .all-todos-toggle:not(.has-todos):not([aria-expanded='true']) {
+.toolbar .all-todos-toggle:not(.has-todos):not([aria-pressed='true']) {
   opacity: 0.5;
 }
-.toolbar .all-todos-toggle[aria-expanded='true'] {
+.toolbar .all-todos-toggle[aria-pressed='true'] {
   background: var(--bg);
   border-color: var(--accent);
-}
-/* 할 일이 많을 수 있어 Needs you 창보다 길게 둔다 */
-.all-todos-popover {
-  max-height: min(70vh, 600px);
 }
 .all-todos-error {
   padding: 0 12px 6px;
@@ -534,7 +548,7 @@ header button.icon svg {
   border-top: 1px solid var(--line);
 }
 /* 팀 이름 머리줄: 누르면 그 팀의 TODO 모달 */
-.toolbar .all-todos-team-head {
+.side-view .all-todos-team-head {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -546,7 +560,7 @@ header button.icon svg {
   font-weight: 600;
   text-align: left;
 }
-.toolbar .all-todos-team-head:hover {
+.side-view .all-todos-team-head:hover {
   background: var(--bg);
 }
 .all-todos-team-name {
@@ -6816,15 +6830,14 @@ li.group.drop-after::after {
     padding: 0 10px;
     justify-content: center;
   }
-  /* Needs you·All TODOs 창: 사용량·Shells 창처럼 화면 폭에 맞춘다 (양옆 16px). 줄은 44px */
-  .needs-you-popover,
-  .all-todos-popover {
-    left: 16px;
-    right: 16px;
-  }
-  .toolbar .needs-you-row,
-  .toolbar .all-todos-team-head {
+  /* Needs you·All TODOs 보기: 줄·← 는 44px */
+  .side-view .needs-you-row,
+  .side-view .all-todos-team-head,
+  .side-view-back {
     min-height: 44px;
+  }
+  .side-view-back {
+    min-width: 44px;
   }
   /* All TODOs 할 일 줄: 44px, 체크박스 22px (TODO 모달과 같다) */
   .all-todos-item {

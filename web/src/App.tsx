@@ -60,8 +60,8 @@ import { AppearanceModal } from './AppearanceModal'
 import { contextSizeOf, turnCacheOf } from './contextSize'
 import { handOverUnit } from './handOver'
 import { HomePanel } from './HomePanel'
-import { NeedsYouButton } from './NeedsYouButton'
-import { AllTodosButton } from './AllTodosButton'
+import { NeedsYouButton, NeedsYouView } from './NeedsYouButton'
+import { AllTodosButton, AllTodosView } from './AllTodosButton'
 import { bannerOf, nextOutage, presentWebIds, type Outage, type RestartTarget } from './reconnect'
 
 interface Snapshot {
@@ -333,6 +333,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
   /** TODO 모달을 연 범위(팀·내 책상). 목록 팀 머리줄의 버튼·사무실 팀 명판 옆 버튼·All TODOs 창 머리줄이 같은 모달을 연다 */
   const [todoScope, setTodoScope] = useState<TodoScope | null>(null)
+  /** 사이드바 보기: 세션 목록 또는 툴바 버튼이 연 Needs you·All TODOs (목록 자리를 다 쓴다. 같은 버튼·← 로 목록으로) */
+  const [sidebarView, setSidebarView] = useState<'sessions' | 'needs-you' | 'todos'>('sessions')
+  const toggleSidebarView = (view: 'needs-you' | 'todos') => setSidebarView((current) => (current === view ? 'sessions' : view))
   /** 그 범위의 todos. 팀이 사라지면 null 이라 모달을 그리지 않아 닫힌다 */
   const todoScopeTodos = todoScope ? scopeTodos(office, todoScope) : null
   const todoScopeName =
@@ -1700,16 +1703,30 @@ export function App({ isLocal }: { isLocal: boolean }) {
               </button>
             )}
           </header>
-          {/* 한 줄: New Group(남는 폭) · 아이콘 버튼들. 아이콘 버튼의 창은 툴바 바로 아래에 붙는다 (.toolbar 기준 absolute) */}
+          {/* 한 줄: New Group(남는 폭) · 아이콘 버튼들. 아이콘 버튼은 아래 목록 자리를 그 보기로 바꾼다 */}
           <div className="toolbar">
             <button className="toolbar-new-group" onClick={() => setIsGroupForm(true)} title="Create a group">
               <NewGroupIcon />
               New Group
             </button>
-            <NeedsYouButton sessions={snapshot.sessions} teams={office.teams} now={now} renderAvatar={renderAvatar} onSelect={selectSession} />
-            <AllTodosButton office={office} icon={<TodoIcon />} onChangeTodos={changeTodos} onOpenTodos={setTodoScope} />
+            <NeedsYouButton sessions={snapshot.sessions} now={now} isActive={sidebarView === 'needs-you'} onToggle={() => toggleSidebarView('needs-you')} />
+            <AllTodosButton office={office} icon={<TodoIcon />} isActive={sidebarView === 'todos'} onToggle={() => toggleSidebarView('todos')} />
           </div>
-          <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'}>
+          {sidebarView === 'needs-you' && (
+            <NeedsYouView
+              sessions={snapshot.sessions}
+              teams={office.teams}
+              now={now}
+              renderAvatar={renderAvatar}
+              onSelect={selectSession}
+              onClose={() => setSidebarView('sessions')}
+            />
+          )}
+          {sidebarView === 'todos' && (
+            <AllTodosView office={office} onClose={() => setSidebarView('sessions')} onChangeTodos={changeTodos} onOpenTodos={setTodoScope} />
+          )}
+          {/* 다른 보기일 때도 지우지 않고 숨긴다: 돌아오면 스크롤 위치·끌기 상태가 그대로 */}
+          <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'} hidden={sidebarView !== 'sessions'}>
             {office.groups.map((group, groupIndex) => {
               const teams = office.teams.filter((t) => t.groupId === group.id)
               const isOpen = !collapsedGroupIds.includes(group.id)

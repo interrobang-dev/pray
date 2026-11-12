@@ -1,13 +1,32 @@
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
-import { useDismiss } from './Shells'
+import { useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { SideViewHead } from './NeedsYouButton'
 import { PriorityChip, requestTodo } from './TeamTodosModal'
 import { applyTodo, DESK_NAME, DESK_SCOPE, deskTodosOf, openTodoGroups, priorityOf, splitTodos, teamScope, todosUrl, totalRemaining, totalUrgentPriority, type TodoScope } from './teamTodos'
 import type { Office, TeamTodo } from './types'
 
-interface Props {
+/**
+ * 목록 툴바의 "All TODOs" 버튼 + 남은 개수 배지(미완료에 Critical·High 가 있으면 그 색). 누르면 사이드바가 All TODOs 보기로 바뀌고(App 의 sidebarView), 다시 누르면 세션 목록으로.
+ * 0 이면 배지 없이 흐리지만 눌린다
+ */
+export function AllTodosButton({ office, icon, isActive, onToggle }: { office: Office; icon: ReactNode; isActive: boolean; onToggle: () => void }) {
+  const total = totalRemaining(office)
+  const urgentPriority = totalUrgentPriority(office)
+  return (
+    <button className={total > 0 ? 'all-todos-toggle has-todos' : 'all-todos-toggle'} onClick={onToggle} aria-pressed={isActive} title="All TODOs" aria-label="All TODOs">
+      {icon}
+      {total > 0 && (
+        <span className="needs-you-count" data-priority={urgentPriority ?? undefined}>
+          {total}
+        </span>
+      )}
+    </button>
+  )
+}
+
+interface ViewProps {
   office: Office
-  /** 팀 머리줄 TODO 버튼과 같은 체크리스트 아이콘 (App.tsx TodoIcon) */
-  icon: ReactNode
+  /** 세션 목록으로 돌아간다 */
+  onClose: () => void
   /** TeamTodosModal 과 같다: 응답 항목을 App 의 office 에 먼저 넣는다 */
   onChangeTodos: (scope: TodoScope, update: (todos: TeamTodo[]) => TeamTodo[]) => void
   /** 그 범위(팀·내 책상)의 TeamTodosModal 을 연다 (글 고치기·순서 바꾸기·완료 목록은 거기서) */
@@ -15,25 +34,18 @@ interface Props {
 }
 
 /**
- * 목록 툴바의 "All TODOs" 버튼 + 남은 개수 배지와, 누르면 툴바 바로 아래에 붙는 창.
+ * 사이드바 All TODOs 보기. 세션 목록 자리를 다 쓴다.
  * 맨 위는 늘 "My desk"(팀과 무관한 내 할 일. 입력칸으로 바로 추가), 그 아래 미완료가 있는 팀을 목록 순서로 묶는다.
- * 다시 누르기·바깥 클릭·Esc 로 닫힌다. 체크하면 완료(PATCH), 묶음 머리줄을 누르면 이 창을 닫고 그 범위의 TODO 모달을 연다.
- * 우선순위는 칩만 보이고 바꾸기는 모달에서 한다.
- * 0 이면 배지 없이 흐리지만 눌린다
+ * 체크하면 완료(PATCH), 묶음 머리줄을 누르면 그 범위의 TODO 모달을 연다 (보기는 그대로). 우선순위는 칩만 보이고 바꾸기는 모달에서 한다
  */
-export function AllTodosButton({ office, icon, onChangeTodos, onOpenTodos }: Props) {
-  const [isOpen, setIsOpen] = useState(false)
+export function AllTodosView({ office, onClose, onChangeTodos, onOpenTodos }: ViewProps) {
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set())
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [isAdding, setIsAdding] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const toggleRef = useRef<HTMLButtonElement>(null)
-  useDismiss(isOpen, rootRef, toggleRef, setIsOpen)
   const total = totalRemaining(office)
-  const urgentPriority = totalUrgentPriority(office)
-  const deskOpen = isOpen ? splitTodos(deskTodosOf(office)).open : []
-  const groups = isOpen ? openTodoGroups(office) : []
+  const deskOpen = splitTodos(deskTodosOf(office)).open
+  const groups = openTodoGroups(office)
 
   function setPending(todoId: string, isPending: boolean) {
     setPendingIds((prev) => {
@@ -82,16 +94,11 @@ export function AllTodosButton({ office, icon, onChangeTodos, onOpenTodos }: Pro
     void addToDesk()
   }
 
-  function openTodos(scope: TodoScope) {
-    setIsOpen(false)
-    onOpenTodos(scope)
-  }
-
   /** 묶음 머리줄(이름 + 남은 수, 누르면 그 모달)과 미완료 줄들 */
   function renderSection(key: string, scope: TodoScope, name: string, open: TeamTodo[], extra?: ReactNode) {
     return (
       <section key={key} className="all-todos-team">
-        <button className="all-todos-team-head" onClick={() => openTodos(scope)} title={`Open TODO · ${name}`}>
+        <button className="all-todos-team-head" onClick={() => onOpenTodos(scope)} title={`Open TODO · ${name}`}>
           <span className="all-todos-team-name">{name}</span>
           <span className="all-todos-team-count">{open.length}</span>
         </button>
@@ -123,49 +130,26 @@ export function AllTodosButton({ office, icon, onChangeTodos, onOpenTodos }: Pro
   }
 
   return (
-    <div className="all-todos" ref={rootRef}>
-      <button
-        ref={toggleRef}
-        className={total > 0 ? 'all-todos-toggle has-todos' : 'all-todos-toggle'}
-        onClick={() => {
-          setErrorMessage(null)
-          setIsOpen((prev) => !prev)
-        }}
-        aria-expanded={isOpen}
-        aria-controls="all-todos-popover"
-        title="All TODOs"
-        aria-label="All TODOs"
-      >
-        {icon}
-        {total > 0 && (
-          <span className="needs-you-count" data-priority={urgentPriority ?? undefined}>
-            {total}
-          </span>
-        )}
-      </button>
-      {isOpen && (
-        <div id="all-todos-popover" className="all-todos-popover" role="dialog" aria-label="All TODOs">
-          <div className="needs-you-head">All TODOs</div>
-          {errorMessage && <div className="all-todos-error">{errorMessage}</div>}
-          {renderSection(
-            'desk',
-            DESK_SCOPE,
-            DESK_NAME,
-            deskOpen,
-            // 글 길이(trim 뒤 1~500자)는 서버가 보고 넘으면 400 빨간 줄 (TeamTodosModal 과 같은 이유로 maxLength 없음)
-            <input
-              className="all-todos-add"
-              value={draft}
-              placeholder="Add a task"
-              enterKeyHint="done"
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={onAddKeyDown}
-              aria-label={`Add a task to ${DESK_NAME}`}
-            />,
-          )}
-          {groups.map(({ team, open }) => renderSection(team.id, teamScope(team.id), team.name, open))}
-        </div>
+    <section className="side-view" aria-label="All TODOs">
+      <SideViewHead title="All TODOs" count={total} onClose={onClose} />
+      {errorMessage && <div className="all-todos-error">{errorMessage}</div>}
+      {renderSection(
+        'desk',
+        DESK_SCOPE,
+        DESK_NAME,
+        deskOpen,
+        // 글 길이(trim 뒤 1~500자)는 서버가 보고 넘으면 400 빨간 줄 (TeamTodosModal 과 같은 이유로 maxLength 없음)
+        <input
+          className="all-todos-add"
+          value={draft}
+          placeholder="Add a task"
+          enterKeyHint="done"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={onAddKeyDown}
+          aria-label={`Add a task to ${DESK_NAME}`}
+        />,
       )}
-    </div>
+      {groups.map(({ team, open }) => renderSection(team.id, teamScope(team.id), team.name, open))}
+    </section>
   )
 }
