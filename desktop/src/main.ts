@@ -168,6 +168,12 @@ function createWindow(): BrowserWindow {
     shell.openExternal(url).catch((error: unknown) => console.error(`Failed to open ${url}`, error))
     return { action: 'deny' }
   })
+  // F5 새로고침: Ctrl+R 은 숨긴 기본 메뉴(View → Reload)에 있지만 F5 는 없어 따로 받는다 (브라우저처럼 조합 키 없는 F5 만)
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || input.key !== 'F5' || input.control || input.shift || input.alt || input.meta) return
+    event.preventDefault()
+    win.webContents.reload()
+  })
   win.on('close', (event) => {
     if (isQuitting) return
     event.preventDefault()
