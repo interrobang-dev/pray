@@ -1798,12 +1798,14 @@ export function Chat({
     setInterruptNotice(null)
     let notice: string | null
     let isStopped = false
+    let isRestored = false
     let restoredText: string | null = null
     try {
       const response = await fetch(`/api/sessions/${sessionId}/interrupt`, { method: 'POST' })
       const body = (await response.json().catch(() => ({}))) as { outcome?: string; text?: unknown; message?: string }
       const outcome = body.outcome ?? ''
       isStopped = response.ok && (outcome === 'stopped' || outcome === 'restored')
+      isRestored = response.ok && outcome === 'restored'
       if (response.ok && typeof body.text === 'string' && body.text) restoredText = body.text
       // stopped 의 null(알리지 않음)이 ?? 로 unknown 문구가 되지 않게 키가 있는지로 본다
       notice = !response.ok
@@ -1818,7 +1820,14 @@ export function Chat({
     }
     // 세션을 바꿨으면 넣지 않는다 (입력칸은 세션마다가 아니라 한 벌이라 다른 세션으로 보내게 된다)
     if (sessionIdRef.current !== requestSessionId) return
-    if (restoredText !== null) restoreToComposer(restoredText)
+    if (restoredText !== null) {
+      // 응답 전 중지로 돌아온 글은 대화에서도 뺀다 (서버가 jsonl 줄을 빼고, 아직 확인 전인 임시 말풍선은 여기서. 15초 기다리지 않게)
+      if (isRestored) {
+        const restoredKey = messageKey(restoredText)
+        setPendings((current) => current.filter((pending) => pending.isFailed || messageKey(pending.text) !== restoredKey))
+      }
+      restoreToComposer(restoredText)
+    }
     // 멈췄으면 서버가 바꾼 상태가 와서 표시기가 사라질 때까지 "중지 중…" 그대로 (응답과 상태 갱신 사이에 [중지] 가 깜박이지 않게)
     if (!isStopped) setIsInterrupting(false)
     setInterruptNotice(notice)

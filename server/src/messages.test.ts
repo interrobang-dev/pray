@@ -5,6 +5,7 @@ import {
   parseInstructionLog,
   parseMessages,
   queuedPrompts,
+  restoredPromptId,
   withoutQueued,
   type ChatMessage,
   type InstructionRecord,
@@ -220,6 +221,63 @@ describe('parseMessages: prompts put back in the input box by a stop before any 
     ])
     const old = [line({ type: 'user', uuid: 'o1', timestamp: 'o1', message: { role: 'user', content: '옛 줄' } }), line({ type: 'user', uuid: 'o2', timestamp: 'o2', message: { role: 'user', content: '옛 줄 2' } })]
     expect(users(old.join('\n'))).toEqual(['옛 줄', '옛 줄 2'])
+  })
+})
+
+describe('restoredPromptId', () => {
+  const node = (type: string, uuid: string, parentUuid: string | null, extra: Record<string, unknown> = {}) =>
+    line({ type, uuid, parentUuid, timestamp: uuid, ...extra })
+  const prompt = (uuid: string, parentUuid: string | null, content: unknown) => node('user', uuid, parentUuid, { message: { role: 'user', content } })
+  const attachment = (uuid: string, parentUuid: string) => node('attachment', uuid, parentUuid, { attachment: { type: 'total_tokens_reminder' } })
+  const reply = (uuid: string, parentUuid: string, text: string) =>
+    node('assistant', uuid, parentUuid, { message: { id: `m-${uuid}`, model: 'claude-haiku-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text }] } })
+  const base = [prompt('u0', null, '처음'), reply('a0', 'u0', '응')]
+
+  it('finds the last prompt with no reply after it when its text is the one that came back', () => {
+    const jsonl = [...base, prompt('r1', 'a0', '되돌린 글'), attachment('t1', 'r1'), line({ type: 'file-history-snapshot' }), ''].join('\n')
+    expect(restoredPromptId(jsonl, '되돌린 글')).toBe('r1')
+  })
+
+  it('compares like instructionKey: paste tags and whitespace do not matter, other text does', () => {
+    const wrapped = '앞\n\n<pasted_content id="a1b2">\n긴 글\n</pasted_content id="a1b2">\n\n'
+    const jsonl = [...base, prompt('r1', 'a0', [{ type: 'text', text: wrapped }, { type: 'image', source: {} }])].join('\n')
+    expect(restoredPromptId(jsonl, '앞\n긴 글')).toBe('r1')
+    expect(restoredPromptId(jsonl, '앞 긴 글 더')).toBeNull()
+  })
+
+  it('is null when anything that is not a plain prompt comes last: a reply, an interrupt line, a tool result, a command, a queue record', () => {
+    expect(restoredPromptId(base.join('\n'), '응')).toBeNull()
+    expect(restoredPromptId([...base, prompt('r1', 'a0', '글'), reply('s1', 'r1', 'No response requested.')].join('\n'), '글')).toBeNull()
+    expect(restoredPromptId([...base, prompt('i1', 'a0', [{ type: 'text', text: '[Request interrupted by user]' }])].join('\n'), '[Request interrupted by user]')).toBeNull()
+    expect(restoredPromptId([...base, prompt('x1', 'a0', [{ type: 'tool_result', tool_use_id: 'tu', content: '글' }, { type: 'text', text: '글' }])].join('\n'), '글')).toBeNull()
+    expect(restoredPromptId([...base, prompt('c1', 'a0', '<command-name>/model</command-name>')].join('\n'), '<command-name>/model</command-name>')).toBeNull()
+    expect(restoredPromptId([...base, prompt('r1', 'a0', '글'), line({ type: 'queue-operation', operation: 'enqueue', content: '다음' })].join('\n'), '글')).toBeNull()
+  })
+
+  it('finds the put-back prompt in a real session cut right after the stop (Claude Code 2.1.312, trimmed copy)', () => {
+    const lines = readFileSync(new URL('./testdata/restored-prompts.jsonl', import.meta.url), 'utf8').split('\n')
+    const index = lines.findIndex((text) => text.includes('ALPHA7'))
+    const uuid = (JSON.parse(lines[index]) as { uuid: string }).uuid
+    const text = '코드 ALPHA7 을 기억하고 "둘" 이라고만 답해. 도구는 쓰지 마.'
+    // 되돌린 줄과 그 아래 첨부까지 (Esc 때는 아무것도 안 붙는다)
+    expect(restoredPromptId(lines.slice(0, index + 2).join('\n'), text)).toBe(uuid)
+    // 다음 글을 보낸 뒤에는 마지막 줄이 그 글이라 찾지 않는다 (그때는 restoredPromptLines 가 뺀다)
+    expect(restoredPromptId(lines.slice(0, index + 4).join('\n'), text)).toBeNull()
+  })
+
+  it('cannot tell a resent copy from the put-back line: with the same text resent, it picks the resent one', () => {
+    // 그래서 중지 라우트는 다시 보낸 것(working)이 보이면 찾기를 그만둔다
+    expect(restoredPromptId([...base, prompt('r1', 'a0', '같은 글'), prompt('u1', 'a0', '같은 글')].join('\n'), '같은 글')).toBe('u1')
+  })
+
+  it('looks only at the last prompt: an earlier prompt with the same text is not picked', () => {
+    expect(restoredPromptId([...base, prompt('r1', 'a0', '같은 글'), prompt('u1', 'a0', '다른 글')].join('\n'), '같은 글')).toBeNull()
+  })
+
+  it('skips sidechain and meta lines and is null for an empty transcript', () => {
+    const jsonl = [...base, prompt('r1', 'a0', '글'), line({ type: 'assistant', isSidechain: true, uuid: 's', message: { content: [{ type: 'text', text: 'x' }] } }), line({ type: 'user', isMeta: true, uuid: 'm', message: { content: 'meta' } })]
+    expect(restoredPromptId(jsonl.join('\n'), '글')).toBe('r1')
+    expect(restoredPromptId('', '글')).toBeNull()
   })
 })
 

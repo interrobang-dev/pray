@@ -300,6 +300,29 @@ function restoredPromptLines(lines: readonly (MessageLine | null)[]): Set<number
   return restored
 }
 
+/**
+ * 응답 전 중지로 Claude Code 입력칸에 돌아간 글(text)이 남긴 jsonl 줄의 uuid. 그 줄은 다음 글을 보내기 전까지 restoredPromptLines 가 못 가려서
+ * 중지 라우트가 이 uuid 를 기억해 대화에서 뺀다. jsonl 의 마지막 메시지 줄(첨부·메타 등 메시지를 안 만드는 줄은 건너뛴다)이 사람 글 줄이고
+ * 글이 text 와 같을 때만(instructionKey: 붙여넣기 태그·공백 무시). 그 뒤에 응답·다른 사람 줄·대기열 기록 등이 있으면 null.
+ * 큰 jsonl 을 다 해석하지 않게 끝에서부터 본다
+ */
+export function restoredPromptId(jsonl: string, text: string): string | null {
+  const lines = jsonl.split('\n')
+  const parser = new MessageLineParser()
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const line = parser.peek(lines[index])
+    if (!line) continue
+    if (line.type !== 'user' || line.uuid === undefined) return null
+    // 새 parser 는 앞 도구 호출을 몰라 toolResults 를 비우므로 원문에서 본다
+    const content = (JSON.parse(lines[index]) as { message?: { content?: unknown } }).message?.content
+    if (Array.isArray(content) && content.some((block: Block) => block.type === 'tool_result')) return null
+    const prompt = userTextMessage('', '', line.content)
+    if (prompt?.role !== 'user' || isInterruptText(prompt.text)) return null
+    return instructionKey(prompt.text) === instructionKey(text) ? line.uuid : null
+  }
+  return null
+}
+
 /** 사람 쪽 글 → 메시지. 문자열이 `<` 로 시작하면 system (명령 출력·알림 등. 붙여넣기를 풀기 전 글로 본다), 블록 배열이면 text 블록만 (없으면 null) */
 function userTextMessage(id: string, timestamp: string, content: unknown): ChatMessage | null {
   if (typeof content === 'string') {

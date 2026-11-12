@@ -197,6 +197,16 @@ describe('MessageVersions', () => {
     expect(versions.update('s', jsonsOf(base, withoutQueued), version).fromIndex).toBe(2)
   })
 
+  it('starts at the put-back prompt the server hides after a stop (filtered after the cache), even when it was the last message', () => {
+    const versions = new MessageVersions(4, 4)
+    const jsonl = user('u1', '안녕') + assistant('a1', 'm1', [{ type: 'text', text: '네' }]) + user('r1', '되돌린 글')
+    const { version } = versions.update('s', jsonsOf(jsonl), null)
+    const hidden = jsonsOf(jsonl, (messages) => messages.filter((m) => m.id !== 'r1'))
+    // 끝을 뺀 것: 처음 달라진 자리 = 짧은 쪽 길이, 보낼 메시지 없음 (화면은 fromIndex 앞만 남긴다)
+    expect(versions.update('s', hidden, version)).toEqual({ version: versionOf(hidden), fromIndex: 2 })
+    expect(hidden).toHaveLength(2)
+  })
+
   it('starts at an earlier user message when an instruction record gets matched later', () => {
     const versions = new MessageVersions(4, 4)
     const jsonl = user('u1', '지시문') + assistant('a1', 'm1', [{ type: 'text', text: '네' }])

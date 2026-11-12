@@ -109,7 +109,7 @@ import {
 } from './folderPicker.js'
 import { openFolderRejection, openInExplorer } from './openFolder.js'
 import { copyFileRejection, copyFileToClipboard } from './fileClipboard.js'
-import { attachInstructions, queuedPrompts, withoutQueued, type ChatMessage } from './messages.js'
+import { attachInstructions, queuedPrompts, restoredPromptId, withoutQueued, type ChatMessage } from './messages.js'
 import { InstructionLogCache, MessageVersions, messageJsons, TranscriptMessageCache } from './messageCache.js'
 import { TranscriptWatcher } from './transcriptWatcher.js'
 import { makeUsageCache } from './usage.js'
@@ -220,6 +220,12 @@ const unqueues = new Map<string, UnqueueProgress>()
  * 그동안 같은 세션의 중지·대기 메시지 취소를 막는다. 메모리에만
  */
 const interrupts = new Map<string, InterruptBox>()
+/**
+ * 응답 전 중지로 Claude Code 입력칸에 돌아가 화면 입력칸으로 넘긴 글의 jsonl 줄 uuid (세션 → uuid 들). 대화 API 가 뺀다.
+ * jsonl 에는 다음 글을 보내야 가릴 표식이 생겨(messages.ts restoredPromptLines) 그 전까지 말풍선이 남아서 둔다.
+ * 메모리에만 — 서버를 재시작하면 다음 글을 보낼 때까지 다시 보인다. exit·호스트 끊김 때 지운다 (resume 하면 그 글이 문맥에 들어간다)
+ */
+const restoredPrompts = new Map<string, Set<string>>()
 /** 곁가지 질문(btw) 문답 (btw.ts). 세션마다 최근 20개. 메모리에만 */
 const btw = new BtwStore()
 /** 답을 기다리는 btw 요청의 시간 초과 타이머 (요청 ID → 세션·타이머) */
@@ -663,6 +669,9 @@ async function chatMessagesOf(sessionId: string): Promise<ChatMessage[]> {
   const file = await findTranscriptFile(sessionId)
   let messages = file ? await transcriptMessages.read(file.path, file.size, file.mtimeMs) : null
   if (!messages) return []
+  // 응답 전 중지로 화면 입력칸에 넘긴 글 (다음 글을 보내기 전이라 jsonl 로는 못 가린다)
+  const hiddenIds = restoredPrompts.get(sessionId)
+  if (hiddenIds) messages = messages.filter((m) => !hiddenIds.has(m.id))
   // 대기 중 메시지가 있을 때만 근무를 판정한다 (pid 기록 읽기는 호스트 목록에 없을 때만)
   if (messages.some((m) => m.isQueued)) {
     const isPresent = host.sessions.some((s) => s.sessionId === sessionId) || (await isLiveSession(sessionId))
@@ -1627,12 +1636,41 @@ app.post('/api/sessions/:id/interrupt', async (req, res) => {
       if (next) hookStates.set(sessionId, next)
     }
     // 비운 것이 확인된 글만 준다 (비우지 못했으면 아직 Claude Code 입력칸에 있어 화면에 넣으면 두 곳에 있게 된다)
-    res.json(box.isCleared && box.restoredText !== null ? { outcome, text: box.restoredText } : { outcome })
+    const restoredText = box.isCleared ? box.restoredText : null
+    res.json(restoredText !== null ? { outcome, text: restoredText } : { outcome })
     void broadcast()
+    // 화면 입력칸으로 넘긴 글은 대화에서도 뺀다 (응답을 늦추지 않게 응답 뒤에). 중지 줄이 남은 것(stopped 등)은 claude 가 받은 글이라 둔다
+    if (restoredText !== null && outcome === 'restored') void hideRestoredPrompt(sessionId, restoredText)
   } finally {
     interrupts.delete(sessionId)
   }
 })
+
+/** 돌아온 글의 jsonl 줄을 기다리는 시간. 보통 보낼 때 이미 적혀 있지만 보낸 직후(0.1초 안) 중지하면 아직 없을 수 있다 */
+const RESTORED_PROMPT_TIMEOUT_MS = 1_000
+
+/**
+ * 응답 전 중지로 화면 입력칸에 넘긴 글(text)의 jsonl 줄을 찾아(restoredPromptId) 대화에서 빼고 화면이 대화를 다시 받게 알린다.
+ * 그 사이 다시 보냈으면(working) 그 줄이 다시 보낸 글일 수 있어 그만둔다. 요청 처리 밖이라 던지지 않는다
+ */
+async function hideRestoredPrompt(sessionId: string, text: string): Promise<void> {
+  try {
+    const deadline = Date.now() + RESTORED_PROMPT_TIMEOUT_MS
+    while (hookStates.get(sessionId)?.status !== 'working' && host.sessions.some((s) => s.sessionId === sessionId)) {
+      const uuid = restoredPromptId((await findTranscript(sessionId)) ?? '', text)
+      if (uuid) {
+        const ids = restoredPrompts.get(sessionId) ?? new Set<string>()
+        restoredPrompts.set(sessionId, ids.add(uuid))
+        for (const res of subscribers) sendSse(res, 'transcript', { sessionId })
+        return
+      }
+      if (Date.now() >= deadline) return
+      await sleep(INTERRUPT_POLL_MS)
+    }
+  } catch (error) {
+    console.error(`되돌린 글 가리기 실패 (${sessionId.slice(0, 8)}): ${error}`)
+  }
+}
 
 /** 중지할 수 없는 이유 (409 문구). 없으면 null. 진행 중인 중지(interrupts)는 부르는 쪽이 본다 (중지 도중의 재확인에는 자기 자신이 들어 있다) */
 function interruptConflict(sessionId: string): string | null {
@@ -3066,6 +3104,7 @@ host.on('reachable', (isReachable: boolean) => {
   if (!isReachable) {
     suggestions.clear()
     unqueues.clear()
+    restoredPrompts.clear()
     for (const { timer } of btwTimers.values()) clearTimeout(timer)
     btwTimers.clear()
     for (const sessionId of btw.clearAll()) broadcastBtw(sessionId)
@@ -3078,6 +3117,7 @@ host.on('message', (message: HostMessage) => {
     lastOutputAt.delete(message.sessionId)
     suggestions.delete(message.sessionId)
     unqueues.delete(message.sessionId)
+    restoredPrompts.delete(message.sessionId)
     if (clearBtw(message.sessionId)) broadcastBtw(message.sessionId)
     tasks.markExited(message.sessionId)
     releaseQuestion(message.sessionId)
