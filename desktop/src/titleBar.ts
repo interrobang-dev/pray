@@ -8,7 +8,7 @@ import type { BrowserWindow } from 'electron'
 export const TITLE_BAR_HEIGHT = 32
 
 /**
- * 오버레이 바탕은 투명이다 — 버튼 뒤로 웹 띠 색(그 아래 칸 색)이 그대로 비치고, hover 면은 그 위에 옅게 덮인다 (Electron 44 시험 앱으로 실측).
+ * 오버레이 바탕은 투명이다 — 버튼 뒤로 웹 띠 색(`--panel`)이 그대로 비치고, hover 면은 그 위에 옅게 덮인다 (Electron 44 시험 앱으로 실측).
  * 그래서 바탕색은 화면을 따라갈 필요가 없고 기호 색만 맞춘다
  */
 export const TITLE_BAR_COLOR = 'rgba(0, 0, 0, 0)'

@@ -28,8 +28,10 @@ function Root() {
   useEffect(() => {
     void load()
   }, [])
+  // 띠의 버튼 자리. App 이 사이드바 헤더 버튼을 여기에 portal 로 그린다
+  const [titleBarActions, setTitleBarActions] = useState<HTMLDivElement | null>(null)
   // 트레이 창의 띠는 서버 답을 기다리는 동안에도 그린다 (창을 끌 수 있게)
-  const titleBar = hasTitleBar ? <TitleBar /> : null
+  const titleBar = hasTitleBar ? <TitleBar actionsRef={setTitleBarActions} /> : null
   if (!me) return titleBar
   if (!me.isAuthenticated)
     return (
@@ -42,7 +44,7 @@ function Root() {
     <>
       {titleBar}
       <IsLocalPage.Provider value={me.isLocal}>
-        <App isLocal={me.isLocal} />
+        <App isLocal={me.isLocal} titleBarActions={titleBarActions} />
       </IsLocalPage.Provider>
       <DialogHost />
     </>

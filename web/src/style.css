@@ -278,7 +278,8 @@ textarea::placeholder {
 }
 /* 트레이 창(Electron)의 제목 띠 (TitleBar.tsx). <html data-titlebar> 는 Window Controls Overlay 가 보이는 창에만 걸린다 — 브라우저에는 띠도 변수도 없다.
    띠는 화면 맨 위에 fixed 로 두고 #root 를 그만큼 내린다. 화면 높이(100vh·100dvh)를 쓰는 곳은 var(--titlebar-height, 0px) 를 뺀다 (브라우저에서는 0).
-   바탕은 아래 칸 색이 위로 이어지게: 사이드바(300px) 위는 --panel, 그 오른쪽은 --bg. 오른쪽 − □ × 는 바탕이 투명한 오버레이라 띠 색이 비친다.
+   바탕은 띠 전체가 사이드바 색 --panel 한 색(로그인·로딩 화면도). 오른쪽 − □ × 는 바탕이 투명한 오버레이라 띠 색이 비친다.
+   트레이 창에서는 사이드바 헤더 줄이 없고 그 Appearance·사무실 버튼이 띠의 .titlebar-actions 에 온다 (App.tsx 가 portal 로 그린다).
    글자색 --muted 는 트레이가 읽어 − □ × 기호 색으로 쓴다 (desktop/src/titleBar.ts). 띠 전체가 창 끌기 자리다 */
 :root[data-titlebar] {
   --titlebar-height: env(titlebar-area-height, 32px);
@@ -294,13 +295,10 @@ textarea::placeholder {
   right: 0;
   z-index: 30;
   height: var(--titlebar-height);
-  background: var(--bg);
+  background: var(--panel);
   color: var(--muted);
   user-select: none;
   -webkit-app-region: drag;
-}
-#root:has(> .app) .titlebar {
-  background: linear-gradient(to right, var(--panel) 300px, var(--bg) 300px);
 }
 /* 로고·이름은 목록 헤더와 같은 x(왼쪽 12px). 오버레이 버튼 자리(titlebar-area 밖)는 침범하지 않는다 */
 .titlebar-title {
@@ -318,6 +316,26 @@ textarea::placeholder {
 }
 .titlebar-title .logo {
   -webkit-user-drag: none;
+}
+/* 띠의 Appearance·사무실 버튼: 사이드바 열(300px)의 오른쪽 끝, 브라우저의 목록 헤더 버튼과 같은 x (헤더처럼 오른쪽 안쪽 12px·간격 8px).
+   오버레이 버튼 자리(titlebar-area 밖)로는 넘어가지 않는다. 버튼만 끌기 자리에서 빼 눌리게 한다 */
+.titlebar-actions {
+  position: absolute;
+  top: 0;
+  left: env(titlebar-area-x, 0px);
+  box-sizing: border-box;
+  width: min(300px, env(titlebar-area-width, 100%));
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 12px;
+  pointer-events: none;
+}
+.titlebar-actions button {
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 /* 글자 로고 규칙(h1)대로 Fraunces·본문색이고 띠에 맞게 작게 */
 .titlebar-name {
@@ -436,7 +454,7 @@ header h1 {
 .dot.on {
   background: var(--success);
 }
-header button.icon {
+:is(header, .titlebar-actions) button.icon {
   padding: 0 5px;
   font-size: calc(13px * var(--font-scale));
   line-height: 18px;
@@ -444,12 +462,12 @@ header button.icon {
   background: transparent;
   border-color: transparent;
 }
-header button.icon:hover:not(:disabled) {
+:is(header, .titlebar-actions) button.icon:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--text);
 }
 /* 사무실 보이기/숨기기 아이콘 (App.tsx OfficeToggleIcon). 위아래 2px 로 높이 18px (header button.icon 의 line-height) */
-header button.icon svg {
+:is(header, .titlebar-actions) button.icon svg {
   display: block;
   margin: 2px 0;
 }
@@ -7598,12 +7616,9 @@ li.group.drop-after::after {
   .layout.with-panel aside {
     display: none;
   }
-  /* 트레이 창을 이 폭까지 줄였을 때의 제목 띠: 한 열이라 목록(--panel) 또는 패널(--bg) 한 색 */
-  #root:has(> .app) .titlebar {
-    background: var(--panel);
-  }
-  #root:has(.layout.with-panel) .titlebar {
-    background: var(--bg);
+  /* 트레이 창을 이 폭까지 줄이면 사이드바 열이 창 폭 전부라 띠 버튼도 오버레이 버튼 바로 왼쪽까지 (목록 헤더 버튼이 창 오른쪽 끝이던 것처럼) */
+  .titlebar-actions {
+    width: env(titlebar-area-width, 100%);
   }
   /* 아이폰은 16px 미만 입력칸에 포커스하면 화면을 확대한다 */
   input,

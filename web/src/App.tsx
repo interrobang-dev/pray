@@ -10,6 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { Terminal } from './Terminal'
 import { FilesTab } from './FilesTab'
 import { Chat, type Jump, type JumpTarget } from './Chat'
@@ -63,6 +64,7 @@ import { AppearanceModal } from './AppearanceModal'
 import { contextSizeOf, turnCacheOf } from './contextSize'
 import { handOverUnit } from './handOver'
 import { HomePanel } from './HomePanel'
+import { hasTitleBar } from './TitleBar'
 import { NeedsYouTab, NeedsYouView } from './NeedsYouButton'
 import { AllTodosTab, AllTodosView } from './AllTodosButton'
 import { RemindersButton, RemindersModal } from './RemindersButton'
@@ -207,7 +209,11 @@ function moveTo(ids: string[], id: string, dropIndex: number): string[] {
 }
 
 /** isLocal = 이 PC 에서 연 화면(`/api/auth/me`). 팀 폴더는 이 PC 에서만 탐색기로 열고 다른 PC 는 경로 복사 */
-export function App({ isLocal }: { isLocal: boolean }) {
+/**
+ * `titleBarActions`: 트레이 창 제목 띠의 버튼 자리(main.tsx·TitleBar.tsx). 트레이 창이면 사이드바 헤더 줄을 그리지 않고
+ * 그 Appearance·사무실 버튼을 이 자리에 portal 로 그린다 (자리가 아직 없으면 잠깐 안 보인다)
+ */
+export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; titleBarActions?: HTMLElement | null }) {
   const [snapshot, setSnapshot] = useState<Snapshot>({ isHostReachable: false, sessions: [] })
   const [office, setOffice] = useState<OfficeData>(EMPTY_OFFICE)
   const [isConnected, setIsConnected] = useState(false)
@@ -1667,6 +1673,25 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const approvalSessions = presentSessions.filter((s) => s.status === 'needs-approval')
   /** 오른쪽 패널(세션)이 열려 있는지 */
   const hasPanel = selected !== null
+  /** 사이드바 헤더 버튼: 브라우저는 헤더 줄, 트레이 창은 제목 띠에 그린다 */
+  const headerButtons = (
+    <>
+      <button className="icon" onClick={() => setIsAppearanceOpen(true)} title="Appearance" aria-label="Appearance">
+        <AppearanceIcon />
+      </button>
+      {/* 폰 폭에는 원래 사무실이 없다 */}
+      {!isNarrow && (
+        <button
+          className="icon"
+          onClick={toggleOffice}
+          title={isOfficeHidden ? 'Show office' : 'Hide office'}
+          aria-label={isOfficeHidden ? 'Show office' : 'Hide office'}
+        >
+          <OfficeToggleIcon isShown={!isOfficeHidden} />
+        </button>
+      )}
+    </>
+  )
 
   return (
     <div className="app">
@@ -1692,27 +1717,18 @@ export function App({ isLocal }: { isLocal: boolean }) {
         style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
       >
         <aside>
-          <header>
-            <h1>
-              {/* 배율 100% 는 손으로 맞춘 16px 판, 그보다 큰 배율은 벡터판 (16px 판을 늘이면 도트가 고르지 않게 커진다) */}
-              <img className="logo" src="/favicon.svg" srcSet="/favicon.svg 1x, /logo.svg 2x" width={16} height={16} alt="" />
-              Pray
-            </h1>
-            <button className="icon" onClick={() => setIsAppearanceOpen(true)} title="Appearance" aria-label="Appearance">
-              <AppearanceIcon />
-            </button>
-            {/* 폰 폭에는 원래 사무실이 없다 */}
-            {!isNarrow && (
-              <button
-                className="icon"
-                onClick={toggleOffice}
-                title={isOfficeHidden ? 'Show office' : 'Hide office'}
-                aria-label={isOfficeHidden ? 'Show office' : 'Hide office'}
-              >
-                <OfficeToggleIcon isShown={!isOfficeHidden} />
-              </button>
-            )}
-          </header>
+          {/* 트레이 창은 로고·이름이 제목 띠에 있고 버튼도 띠로 옮겨 헤더 줄이 없다 (사이드바가 툴바부터) */}
+          {!hasTitleBar && (
+            <header>
+              <h1>
+                {/* 배율 100% 는 손으로 맞춘 16px 판, 그보다 큰 배율은 벡터판 (16px 판을 늘이면 도트가 고르지 않게 커진다) */}
+                <img className="logo" src="/favicon.svg" srcSet="/favicon.svg 1x, /logo.svg 2x" width={16} height={16} alt="" />
+                Pray
+              </h1>
+              {headerButtons}
+            </header>
+          )}
+          {hasTitleBar && titleBarActions && createPortal(headerButtons, titleBarActions)}
           {/* 줄마다 하나: New Group · Reminders(창) · Lead models(창), 그 아래 탭 줄이 목록 자리의 보기를 바꾼다 */}
           <div className="toolbar">
             <button className="toolbar-row" onClick={() => setIsGroupForm(true)} title="Create a group">
