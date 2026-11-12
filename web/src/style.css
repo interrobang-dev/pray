@@ -2237,6 +2237,77 @@ li.group.drop-after::after {
 .model-error {
   color: var(--error);
 }
+/* Lead models (LeadModelsModal.tsx): 툴바 아이콘 버튼 + 팀장·파트장 줄마다 체크·모델·effort */
+.toolbar .lead-models-toggle {
+  padding: 5px 8px;
+}
+.modal.lead-models-modal {
+  width: min(640px, calc(100vw - 32px));
+}
+.lead-models-all,
+.lead-models-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 96px 96px;
+  align-items: center;
+  column-gap: 8px;
+}
+.lead-models-all {
+  padding: 0 10px 4px;
+}
+.lead-models-all-label {
+  grid-column: 1 / 3;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--muted);
+}
+.lead-models select {
+  padding: 5px 8px;
+  font-size: calc(12px * var(--font-scale));
+}
+.lead-models-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+}
+.lead-models-row {
+  flex-shrink: 0;
+  row-gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+.lead-models-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  cursor: pointer;
+}
+.lead-models-name,
+.lead-models-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lead-models-meta,
+.lead-models-status,
+.lead-models-empty {
+  font-size: calc(12px * var(--font-scale));
+  color: var(--muted);
+}
+.lead-models-status {
+  grid-column: 2 / -1;
+  overflow-wrap: anywhere;
+}
+.lead-models-status.is-error {
+  color: var(--error);
+}
+.lead-models-empty {
+  padding: 8px 10px;
+}
 /* 패널 머리의 아이콘 버튼(검색·이름 바꾸기·종료·닫기, 폰 ⋯): 채운 알약 대신 투명하고 올리면 면 */
 .panel-header :is(.rename, .search-toggle, .end-session, .close),
 .panel-header .panel-more .menu > button {
@@ -7047,10 +7118,47 @@ li.group.drop-after::after {
     padding: 0 14px;
   }
   .toolbar .needs-you-toggle,
-  .toolbar .all-todos-toggle {
+  .toolbar .all-todos-toggle,
+  .toolbar .lead-models-toggle {
     min-width: 40px;
     padding: 0 10px;
     justify-content: center;
+  }
+  /* Lead models: 이름이 한 줄을 다 쓰고 모델·effort 는 그 아래 줄 */
+  .lead-models-all,
+  .lead-models-row {
+    grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr);
+    row-gap: 6px;
+  }
+  .lead-models-all-label,
+  .lead-models-who,
+  .lead-models-status {
+    grid-column: 2 / -1;
+  }
+  .lead-models-row {
+    min-height: 44px;
+  }
+  .lead-models-row input[type='checkbox'] {
+    width: 22px;
+    height: 22px;
+  }
+  .lead-models select {
+    grid-row: 2;
+  }
+  .lead-models-row select:first-of-type {
+    grid-column: 2;
+  }
+  .lead-models-row select:last-of-type {
+    grid-column: 3;
+  }
+  .lead-models-all select:first-of-type {
+    grid-column: 2;
+  }
+  .lead-models-all select:last-of-type {
+    grid-column: 3;
+  }
+  .lead-models select {
+    min-height: 40px;
   }
   /* Needs you·All TODOs 보기: 줄·← 는 44px */
   .side-view .needs-you-row,

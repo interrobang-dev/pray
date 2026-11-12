@@ -32,7 +32,8 @@ import { Modal, Segmented } from './Modal'
 import { alertDialog, confirmDialog, promptDialog } from './Dialog'
 import { copyText } from './copyText'
 import { ModelSettingModal, useRestartingSessions } from './ModelSettingModal'
-import { nextLabel } from './modelSetting'
+import { modelLabel, nextLabel } from './modelSetting'
+import { LeadModelsButton, LeadModelsModal } from './LeadModelsModal'
 import { sessionMenuEntries } from './sessionMenu'
 import { LEAD_POSITION, MEMBER_POSITION, editableNameOf, modalName, modalPosition, nameOf, positionOf, renamePatch } from './sessionPosition'
 import { PositionChip } from './PositionChip'
@@ -140,20 +141,6 @@ function useMediaQuery(query: string): boolean {
 /** 화면에 쓰는 세션 이름: 사용자 지정 → 자동 제목 → ID 앞 8자리 */
 function displayName(session: Session): string {
   return nameOf(session)
-}
-
-/** 모델 ID → 짧은 이름. claude-<이름>-<주>-<부> 는 "Opus 5.5" 꼴로, 모르는 꼴은 ID 그대로 (날짜가 붙은 옛 ID 가 "Opus 4.20250514" 가 되지 않게 버전은 두 자리까지) */
-function modelName(model: string): string {
-  const match = model.match(/^claude-([a-z]+)-(\d{1,2})-(\d{1,2})$/)
-  if (!match) return model
-  const [, name, major, minor] = match
-  return `${name[0].toUpperCase()}${name.slice(1)} ${major}.${minor}`
-}
-
-/** 목록·패널의 "Opus 5.5 · xhigh". 모델을 모르면 null, effort 가 없으면 모델만 */
-function modelLabel(session: Session): string | null {
-  if (!session.model) return null
-  return session.effort ? `${modelName(session.model)} · ${session.effort}` : modelName(session.model)
 }
 
 /** 마지막 활동부터 지금까지를 "now"·"3m"·"2h"·"1d" 처럼 단위 하나로. 15분 미만은 recent, 2시간 초과는 stale */
@@ -342,6 +329,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
     todoScope?.kind === 'team' ? (office.teams.find((t) => t.id === todoScope.teamId)?.name ?? '') : DESK_NAME
   /** Tasks 창을 연 팀 (팀 ⋯ 메뉴 Tasks). 팀이 사라지면 그리지 않아 닫힌다 */
   const [tasksTeamId, setTasksTeamId] = useState<string | null>(null)
+  /** 툴바 Lead models 창 (근무 중인 팀장·파트장 모델·effort 한꺼번에 바꾸기) */
+  const [isLeadModelsOpen, setIsLeadModelsOpen] = useState(false)
   const tasksTeam = tasksTeamId ? office.teams.find((t) => t.id === tasksTeamId) : undefined
 
   useEffect(() => {
@@ -1711,6 +1700,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
             </button>
             <NeedsYouButton sessions={snapshot.sessions} now={now} isActive={sidebarView === 'needs-you'} onToggle={() => toggleSidebarView('needs-you')} />
             <AllTodosButton office={office} icon={<TodoIcon />} isActive={sidebarView === 'todos'} onToggle={() => toggleSidebarView('todos')} />
+            <LeadModelsButton sessions={snapshot.sessions} onOpen={() => setIsLeadModelsOpen(true)} />
           </div>
           {sidebarView === 'needs-you' && (
             <NeedsYouView
@@ -2091,6 +2081,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
           </section>
         )}
         {isAppearanceOpen && <AppearanceModal onClose={() => setIsAppearanceOpen(false)} />}
+        {isLeadModelsOpen && (
+          <LeadModelsModal sessions={snapshot.sessions} teams={office.teams} onClose={() => setIsLeadModelsOpen(false)} onRestarted={beginRestart} />
+        )}
         {modelModalSession && attendanceOf(modelModalSession) === 'present' && modelModalSession.kind === 'web' && (
           <ModelSettingModal
             session={modelModalSession}

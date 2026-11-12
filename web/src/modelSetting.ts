@@ -39,6 +39,20 @@ export function modelAlias(model: string | null | undefined): ModelAlias | null 
   return match && MODEL_VALUES.includes(match[1]) ? (match[1] as ModelAlias) : null
 }
 
+/** 모델 ID → 짧은 이름. claude-<이름>-<주>-<부> 는 "Opus 5.5" 꼴로, 모르는 꼴은 ID 그대로 (날짜가 붙은 옛 ID 가 "Opus 4.20250514" 가 되지 않게 버전은 두 자리까지) */
+export function modelName(model: string): string {
+  const match = model.match(/^claude-([a-z]+)-(\d{1,2})-(\d{1,2})$/)
+  if (!match) return model
+  const [, name, major, minor] = match
+  return `${name[0].toUpperCase()}${name.slice(1)} ${major}.${minor}`
+}
+
+/** 목록·패널의 "Opus 5.5 · xhigh". 모델을 모르면 null, effort 가 없으면 모델만 */
+export function modelLabel(session: Pick<Session, 'model' | 'effort'>): string | null {
+  if (!session.model) return null
+  return session.effort ? `${modelName(session.model)} · ${session.effort}` : modelName(session.model)
+}
+
 /** auto 가 아닌 effort 값만. 모르는 값·없으면 null */
 function effortChoice(effort: string | null | undefined): EffortChoice | null {
   return effort && effort !== 'auto' && EFFORT_VALUES.includes(effort) ? (effort as EffortChoice) : null
