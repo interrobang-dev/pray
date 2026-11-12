@@ -13,6 +13,7 @@ import { formatSize } from './Files'
 import { MarkdownDocument, type DocLinks } from './Markdown'
 import { docImageTarget, isMarkdownPath, resolveDocPath } from './markdownDoc'
 import { CommitDiffView, EMPTY_HISTORY, HistoryPanel, type HistoryState } from './HistoryPanel'
+import type { FilesOpenRequest } from './openPath'
 import {
   formatAgo,
   formatDateTime,
@@ -80,6 +81,9 @@ interface Props {
   addToChatBlockReason: string | null
   /** 이 PC 에서 연 화면 — Copy file(서버가 이 PC 클립보드에 파일을 넣는다)은 이때만 보인다 */
   isLocal: boolean
+  /** 대화 속 경로로 연 요청 (App). 파일은 열고(줄이 있으면 그 줄을 골라 스크롤), 폴더는 트리에서 펼쳐 보이게 한 뒤 onOpenRequestHandled 로 비운다 */
+  openRequest: (FilesOpenRequest & { id: number }) | null
+  onOpenRequestHandled: () => void
 }
 
 /**
@@ -87,7 +91,7 @@ interface Props {
  * 편집은 연필 버튼으로 들어가고 이 PC(127.0.0.1) 접속에서만 된다 (서버가 파일마다 editBlockReason 으로 알려 준다).
  * 폰은 트리 → 파일을 누르면 보기 → ← 로 트리. 세션마다 App 이 key 로 새로 만든다
  */
-export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, isLocal }: Props) {
+export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, isLocal, openRequest, onOpenRequestHandled }: Props) {
   const saved = sessionViews.get(sessionId)
   const [folders, setFolders] = useState<Record<string, FolderState>>(saved?.folders ?? {})
   const [expanded, setExpanded] = useState<Set<string>>(saved?.expanded ?? new Set())
@@ -518,6 +522,39 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
     if (path === selectedPath) open()
     else guardEdit(open)
   }
+  /**
+   * 대화 속 경로(App 의 openRequest): Files 쪽으로 바꾸고 조상 폴더(폴더면 그 폴더까지)를 펼쳐 트리에서 보이게 한다.
+   * 파일은 열고, 줄이 있으면 Search 결과 줄처럼 그 줄을 골라 스크롤한다. '' 은 cwd 자신이라 트리만 보인다. 편집 중이면 버릴지 먼저 묻는다
+   */
+  function openRequested(request: FilesOpenRequest) {
+    if (isEditing && request.path !== selectedPath) {
+      guardEdit(() => openRequested(request))
+      return
+    }
+    setSideMode('files')
+    if (request.path === '') {
+      setIsViewing(false)
+      return
+    }
+    const next = new Set(expanded)
+    for (const folder of request.isDirectory ? [...ancestorFolders(request.path), request.path] : ancestorFolders(request.path)) {
+      next.add(folder)
+      if (folders[folder]?.status !== 'ok') void loadFolder(folder)
+    }
+    setExpanded(next)
+    setRevealPath(request.path)
+    if (request.isDirectory) setIsViewing(false)
+    else if (request.line !== null) openMatch(request.path, request.line)
+    else openFile(request.path)
+  }
+  const openRequestedRef = useRef(openRequested)
+  openRequestedRef.current = openRequested
+  useEffect(() => {
+    if (!openRequest) return
+    onOpenRequestHandled()
+    openRequestedRef.current(openRequest)
+  }, [openRequest, onOpenRequestHandled])
+
   /** 위 막대 History: 고른 파일을 바꾼 커밋만 History 쪽에서 본다 (편집 중이면 버릴지 묻고 편집을 그만둔다 — 편집기가 사라진다) */
   function openFileHistory(path: string) {
     guardEdit(() => {

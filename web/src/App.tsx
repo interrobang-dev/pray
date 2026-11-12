@@ -23,6 +23,7 @@ import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
 import { memoryLabel, memoryLevel, memoryPercent, parseSystemMemory } from './systemMemory'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
+import type { FilesOpenRequest } from './openPath'
 import { KEY_STEP, clampPanelWidth, parsePanelWidth } from './panelWidth'
 import { NewTeamModal } from './NewTeamModal'
 import { TeamTodosModal } from './TeamTodosModal'
@@ -278,6 +279,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
   /** 상태 표시줄 Shells 창에서 고른 shell. 그 세션 대화의 ShellsButton 이 그 shell 을 고른 채 모달을 연 뒤 비운다 */
   const [shellRequest, setShellRequest] = useState<(ShellRequest & { sessionId: string }) | null>(null)
   const nextShellRequestIdRef = useRef(1)
+  /** 대화 속 경로로 연 Files 탭 요청. 그 세션 FilesTab 이 그 파일·폴더로 간 뒤 비운다 */
+  const [filesRequest, setFilesRequest] = useState<(FilesOpenRequest & { id: number; sessionId: string }) | null>(null)
+  const nextFilesRequestIdRef = useRef(1)
   /** 사무실 화면이 이동해 보여 줄 팀·세션. 목록 팀 이름 클릭·세션 선택(사무실 책상 클릭 제외) 때마다 새 id 로 넘긴다 */
   const [officeFocus, setOfficeFocus] = useState<OfficeFocus | null>(null)
   const nextFocusIdRef = useRef(1)
@@ -588,6 +592,16 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setTab('chat')
     setShellRequest({ id: nextShellRequestIdRef.current++, sessionId, shell })
   }
+
+  /** 대화 속 경로를 눌러 서버가 세션 cwd 안이라고 답함: 그 세션의 Files 탭으로 바꾸고 그 파일·폴더를 연다 (보고 있는 세션일 때만) */
+  function openInFilesTab(sessionId: string, request: FilesOpenRequest) {
+    if (sessionId !== selectedId) return
+    whenLeavingAllowed(() => {
+      setTab('files')
+      setFilesRequest({ ...request, id: nextFilesRequestIdRef.current++, sessionId })
+    })
+  }
+  const clearFilesRequest = useCallback(() => setFilesRequest(null), [])
 
   // 트레이 앱 알림을 누르면 `#session=<id>` 로 연다 (처음 열 때 주소에, 떠 있는 창은 hashchange). 읽으면 해시를 지워 같은 알림을 다시 눌러도 바뀌게 한다
   const selectSessionRef = useRef(selectSession)
@@ -2037,6 +2051,8 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 sessionId={selected.id}
                 cwd={selected.cwd}
                 isLocal={isLocal}
+                openRequest={filesRequest?.sessionId === selected.id ? filesRequest : null}
+                onOpenRequestHandled={clearFilesRequest}
                 onAddToChat={addToChat}
                 addToChatBlockReason={
                   isSelectedLiveWeb
@@ -2081,6 +2097,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
                 shells={selected.shells ?? []}
                 shellRequest={shellRequest?.sessionId === selected.id ? shellRequest : null}
                 onShellRequestHandled={() => setShellRequest(null)}
+                onOpenInFiles={openInFilesTab}
                 onQueuedChange={handleQueuedChange}
                 isSearchOpen={isChatSearchOpen}
                 searchFocusId={chatSearchFocusId}

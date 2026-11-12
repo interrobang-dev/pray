@@ -115,7 +115,8 @@ import {
   runGitInit,
   teamNameMap,
 } from './folderPicker.js'
-import { openFolderRejection, openInExplorer } from './openFolder.js'
+import { openFolderRejection, openInExplorer, selectInExplorer } from './openFolder.js'
+import { locateOpenPath, splitLineSuffix } from './openPath.js'
 import { copyFileRejection, copyFileToClipboard } from './fileClipboard.js'
 import { attachInstructions, queuedPrompts, restoredPromptId, withoutQueued, type ChatMessage } from './messages.js'
 import { InstructionLogCache, MessageVersions, messageJsons, TranscriptMessageCache } from './messageCache.js'
@@ -1008,6 +1009,37 @@ app.post('/api/sessions/:id/open-in-chrome', async (req, res) => {
   }
   openInChrome(chrome, args)
   res.json({})
+})
+
+/**
+ * 대화 속 경로 열기 (`{ path }` — 끝의 `:줄`·`:줄:열` 은 떼어 line). 꼴은 그림 API 와 같다 (드라이브 절대·cwd 상대. 틀리면 400).
+ * realpath 가 세션 cwd 안이면 Files 탭, scratchpad 안이면 작업 파일 창으로 열 자리를 돌려주고 (다른 PC 도 — 읽기 화면을 여는 것뿐),
+ * 그 밖은 이 PC 접속일 때만 탐색기를 띄운다 (폴더는 그 폴더, 파일은 고른 채). 규칙은 openPath.ts, Origin 검사는 전역 미들웨어
+ */
+app.post('/api/sessions/:id/open-path', async (req, res) => {
+  const input: unknown = req.body?.path
+  const { path, line } = typeof input === 'string' ? splitLineSuffix(input) : { path: '', line: null }
+  if (!isSessionId(req.params.id) || !chatImagePathKind(path)) {
+    res.status(400).json({ message: 'Invalid session ID or path' })
+    return
+  }
+  const [root, scratchpad] = await Promise.all([workspaceRootOf(req.params.id), findScratchpad(req.params.id)])
+  if (!root && !scratchpad) {
+    res.status(404).json({ message: 'Session not found' })
+    return
+  }
+  const decision = await locateOpenPath(path, line, { root, scratchpad, isLocal: isLoopback(req.socket.remoteAddress) })
+  if (decision.kind === 'rejected') {
+    res.status(decision.status).json({ message: decision.message })
+    return
+  }
+  if (decision.kind === 'open') {
+    res.json(decision.body)
+    return
+  }
+  if (decision.isDirectory) openInExplorer(decision.real)
+  else selectInExplorer(decision.real)
+  res.json({ target: 'explorer' })
 })
 
 const MAX_FIND_RESULTS = 100

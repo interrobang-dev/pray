@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { explorerArgument, openFolderRejection } from './openFolder.js'
+import { EventEmitter } from 'node:events'
+import type { spawn } from 'node:child_process'
+import { describe, expect, it, vi } from 'vitest'
+import { explorerArgument, explorerSelectArgument, openFolderRejection, selectInExplorer } from './openFolder.js'
 
 describe('openFolderRejection', () => {
   it('passes a local request for an existing team folder', () => {
@@ -26,5 +28,20 @@ describe('explorerArgument', () => {
     expect(explorerArgument('D:\\work\\app\\')).toBe('"D:\\work\\app"')
     expect(explorerArgument('D:/work/app//')).toBe('"D:\\work\\app"')
     expect(explorerArgument('D:/')).toBe('"D:\\"')
+  })
+})
+
+describe('selectInExplorer', () => {
+  it('quotes the file after /select, so commas and spaces stay in the path', () => {
+    expect(explorerSelectArgument('D:/a b/c,d.txt')).toBe('/select,"D:\\a b\\c,d.txt"')
+  })
+
+  it('spawns explorer without a shell, verbatim, detached, and listens for errors', () => {
+    const child = Object.assign(new EventEmitter(), { unref: vi.fn() })
+    const spawnProcess = vi.fn(() => child) as unknown as typeof spawn
+    selectInExplorer('C:\\x\\a.txt', spawnProcess)
+    expect(spawnProcess).toHaveBeenCalledWith('explorer.exe', ['/select,"C:\\x\\a.txt"'],{ detached: true, stdio: 'ignore', windowsVerbatimArguments: true })
+    expect(child.listenerCount('error')).toBe(1)
+    expect(child.unref).toHaveBeenCalled()
   })
 })

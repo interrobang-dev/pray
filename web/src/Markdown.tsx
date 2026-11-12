@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { ChatImage, MarkdownSource } from './ChatImage'
 import { ChatLink } from './ChatLink'
+import { ChatInlineCode, ChatPathSpan, IsPlainInlineCode } from './ChatPath'
 import { CopyButton } from './CopyButton'
 import { codeBlockText, type HastNode } from './codeText'
 import { docLinkKind, headingSlug } from './markdownDoc'
@@ -29,17 +30,30 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
 }
 
-// 대화에서만: img 는 ChatImage 가 이 PC 파일 경로를 서버 그림 API 로 바꾸고, a 는 ChatLink 가 이 PC 의 .html 링크를 Chrome 으로 연다 (작업 파일 미리보기는 그대로)
+// 대화에서만: img 는 ChatImage 가 이 PC 파일 경로를 서버 그림 API 로 바꾸고, a 는 ChatLink 가 이 PC 의 .html 링크를 Chrome 으로·그 밖의 이 PC 경로 링크를 경로 열기로 연다.
+// 경로 강조 span.path·전체가 경로·URL 인 인라인 코드는 ChatPath.tsx 가 눌리게 한다 (코드 블록·링크 안 인라인 코드는 그대로). 작업 파일 미리보기는 그대로
 const CHAT_MARKDOWN_COMPONENTS: Components = {
   ...MARKDOWN_COMPONENTS,
   img: ({ node, src, alt }) => (
     <ChatImage start={node?.position?.start.offset} end={node?.position?.end.offset} src={typeof src === 'string' ? src : undefined} alt={alt} />
   ),
   a: ({ node, href, title, children }) => (
-    <ChatLink start={node?.position?.start.offset} end={node?.position?.end.offset} href={href} title={title}>
-      {children}
-    </ChatLink>
+    <IsPlainInlineCode.Provider value={false}>
+      <ChatLink start={node?.position?.start.offset} end={node?.position?.end.offset} href={href} title={title}>
+        {children}
+      </ChatLink>
+    </IsPlainInlineCode.Provider>
   ),
+  pre: ({ node, children }) => (
+    <div className="code-block">
+      <CopyButton text={codeBlockText(node as HastNode | undefined)} label="Copy code" />
+      <IsPlainInlineCode.Provider value={false}>
+        <pre>{children}</pre>
+      </IsPlainInlineCode.Provider>
+    </div>
+  ),
+  code: ({ className, children }) => <ChatInlineCode className={className}>{children}</ChatInlineCode>,
+  span: ({ className, children }) => (className === 'path' ? <ChatPathSpan>{children}</ChatPathSpan> : <span className={className}>{children}</span>),
 }
 // 대화에서만: img src·a href 는 기본 변환이 `C:`·`file:` 을 모르는 프로토콜로 보고 지우므로 그대로 넘긴다 (ChatImage 는 http(s)·data:image·서버 그림 API 밖은 쓰지 않고,
 // ChatLink 는 이 PC .html 이 아니면 기본 변환을 해서 쓴다). 나머지는 기본 그대로

@@ -11,6 +11,8 @@ import { restoreToComposerDraft } from './composerDraft'
 import { handoverBandText, isSuggestionVisible } from './composerText'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
 import { ChatImageSession } from './ChatImage'
+import { OpenChatPath } from './ChatPath'
+import { openChatPath, type FilesOpenRequest, type WorkFilesOpenRequest } from './openPath'
 import { runningToolNames, shortToolName } from './runningTools'
 import { isTeamWaitSummary, teamToolOf } from './teamTools'
 import { FilesButton } from './Files'
@@ -89,6 +91,8 @@ interface Props {
   /** 상태 표시줄 Shells 창에서 고른 이 세션의 shell. ShellsButton 이 그 shell 을 고른 채 모달을 열고 onShellRequestHandled 로 비운다 */
   shellRequest: ShellRequest | null
   onShellRequestHandled: () => void
+  /** 대화 속 경로를 눌러 서버가 세션 cwd 안이라고 답함: 그 세션의 Files 탭을 열고 그 파일·폴더로 간다 (App) */
+  onOpenInFiles: (sessionId: string, request: FilesOpenRequest) => void
   /** 대화 맨 끝에 대기 중인 메시지가 있는지 알린다 (App 의 모델 변경 창이 Apply 를 막는 데 쓴다). 사라질 때 false */
   onQueuedChange?: (sessionId: string, hasQueuedMessage: boolean) => void
   /** 대화 안 검색 막대를 열었는지 (App 의 머리 돋보기 버튼·Ctrl+F). 열려 있는 동안 막대가 대화 위에 붙는다 */
@@ -1210,6 +1214,7 @@ export function Chat({
   shells,
   shellRequest,
   onShellRequestHandled,
+  onOpenInFiles,
   onQueuedChange,
   isSearchOpen,
   searchFocusId,
@@ -1457,6 +1462,28 @@ export function Chat({
       text: message.text,
     })
   }, [])
+
+  /** 대화 속 경로로 연 작업 파일 창 요청. 이 대화의 폴더 버튼(FilesButton)이 그 폴더·파일로 창을 열고 비운다 */
+  const [workFilesRequest, setWorkFilesRequest] = useState<(WorkFilesOpenRequest & { id: number }) | null>(null)
+  const nextWorkFilesRequestIdRef = useRef(1)
+  const onOpenInFilesRef = useRef(onOpenInFiles)
+  onOpenInFilesRef.current = onOpenInFiles
+  /**
+   * 대화 속 경로를 누름: 서버에 어디서 열지 묻는다 (openPath.ts). 세션은 지금 보이는 메시지의 세션 (그림과 같다 — 세션을 바꾼 직후 messages 는 앞 세션 것).
+   * 고정 함수라 context 를 받는 경로만 다시 그린다 (세션이 바뀔 때만 바뀐다)
+   */
+  const openPathInChat = useMemo(() => {
+    if (loadedSessionId === null) return null
+    const pathSessionId = loadedSessionId
+    return (path: string) =>
+      void openChatPath(pathSessionId, path, {
+        onFiles: (request) => onOpenInFilesRef.current(pathSessionId, request),
+        onWorkFiles: (request) => {
+          if (pathSessionId === sessionIdRef.current) setWorkFilesRequest({ ...request, id: nextWorkFilesRequestIdRef.current++ })
+        },
+      })
+  }, [loadedSessionId])
+  const clearWorkFilesRequest = useCallback(() => setWorkFilesRequest(null), [])
 
   /** 마지막으로 받은 대화와 그 서버 버전. 같은 세션을 다시 받을 때 바뀐 뒤쪽만 받는다 (chatDelta.ts). 세션을 열거나 바꾸면 전체를 받는다 */
   const heldRef = useRef<HeldMessages | null>(null)
@@ -1910,24 +1937,26 @@ export function Chat({
           )}
           {/* 대화 속 이 PC 파일 그림을 받을 세션: 지금 보이는 메시지의 세션 (세션을 바꾼 직후 messages 는 앞 세션 것이다) */}
           <ChatImageSession.Provider value={loadedSessionId}>
-            <MessageRows
-              rows={visibleRows}
-              memberOf={memberOf}
-              workToggles={workToggles}
-              workBundles={workBundles}
-              highlightKey={highlight?.key ?? null}
-              searchKey={searchCurrentKey}
-              lineNotice={lineNotice}
-              lastQueuedId={lastQueuedId}
-              canCancelQueued={canCancelQueued}
-              cancellingId={cancellingId}
-              markedKeys={markedKeys}
-              onToggleWork={toggleWork}
-              onOpenRelay={openRelay}
-              onCancelQueued={cancelQueued}
-              onSetMark={setMark}
-              onQuote={isWritable ? quoteMessage : null}
-            />
+            <OpenChatPath.Provider value={openPathInChat}>
+              <MessageRows
+                rows={visibleRows}
+                memberOf={memberOf}
+                workToggles={workToggles}
+                workBundles={workBundles}
+                highlightKey={highlight?.key ?? null}
+                searchKey={searchCurrentKey}
+                lineNotice={lineNotice}
+                lastQueuedId={lastQueuedId}
+                canCancelQueued={canCancelQueued}
+                cancellingId={cancellingId}
+                markedKeys={markedKeys}
+                onToggleWork={toggleWork}
+                onOpenRelay={openRelay}
+                onCancelQueued={cancelQueued}
+                onSetMark={setMark}
+                onQuote={isWritable ? quoteMessage : null}
+              />
+            </OpenChatPath.Provider>
           </ChatImageSession.Provider>
           {pendings.map((pending) => (
             <div key={`pending-${pending.id}`} className={`msg user pending${pending.isFailed ? ' failed' : ''}`}>
@@ -1985,7 +2014,7 @@ export function Chat({
         <div className="pane-buttons">
           <ShellsButton key={`shells:${sessionId}`} sessionId={sessionId} shells={shells} request={shellRequest} onRequestHandled={onShellRequestHandled} />
           <MarksButton key={`marks:${sessionId}`} marks={marks} messages={messages} onGo={goToMark} onSetMark={setMark} />
-          <FilesButton key={sessionId} sessionId={sessionId} version={version} />
+          <FilesButton key={sessionId} sessionId={sessionId} version={version} request={workFilesRequest} onRequestHandled={clearWorkFilesRequest} />
         </div>
       </div>
       {isWritable && question?.questions.length ? (

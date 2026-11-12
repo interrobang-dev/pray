@@ -23,13 +23,27 @@ export function explorerArgument(folder: string): string {
   return `"${trimmed}"`
 }
 
+/** 탐색기에서 파일 하나를 고른 채 그 폴더를 열 인자 (순수): `/select,"<파일>"`. 경로는 explorerArgument 와 같이 따옴표로 감싼다 (쉼표·공백) */
+export function explorerSelectArgument(file: string): string {
+  return `/select,${explorerArgument(file)}`
+}
+
 /**
  * 탐색기로 폴더를 연다. 셸 없이 띄우고 기다리지 않는다 (detached + unref).
  * explorer.exe 는 이미 떠 있는 셸 프로세스에 넘기고 바로 끝나며 성공해도 종료 코드가 1 이라 종료 코드는 보지 않는다
  */
 export function openInExplorer(folder: string, spawnProcess: typeof spawn = spawn): void {
-  const child = spawnProcess('explorer.exe', [explorerArgument(folder)], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true })
+  launchExplorer(explorerArgument(folder), folder, spawnProcess)
+}
+
+/** 탐색기로 파일이 든 폴더를 열고 그 파일을 고른다 (대화 속 경로 열기). 띄우는 방식은 openInExplorer 와 같다 */
+export function selectInExplorer(file: string, spawnProcess: typeof spawn = spawn): void {
+  launchExplorer(explorerSelectArgument(file), file, spawnProcess)
+}
+
+function launchExplorer(argument: string, path: string, spawnProcess: typeof spawn): void {
+  const child = spawnProcess('explorer.exe', [argument], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true })
   // 'error' 를 듣지 않으면 띄우기 실패(ENOENT 등)가 잡히지 않은 예외로 서버를 죽인다
-  child.on('error', (error) => console.error(`[open-folder] ${folder}: ${error.message}`))
+  child.on('error', (error) => console.error(`[open-folder] ${path}: ${error.message}`))
   child.unref()
 }

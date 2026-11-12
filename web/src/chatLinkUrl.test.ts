@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { localHtmlPath, rawLinkUrl } from './chatLinkUrl'
+import { localHtmlPath, localLinkPath, rawLinkUrl } from './chatLinkUrl'
 
 describe('rawLinkUrl', () => {
   it('takes the destination from the markdown source, keeping backslashes', () => {
@@ -47,6 +47,21 @@ describe('localHtmlPath', () => {
       '',
     ]) {
       expect(localHtmlPath(raw), raw).toBe(null)
+    }
+  })
+})
+
+describe('localLinkPath', () => {
+  it('accepts this-PC paths that are not .html, with a line suffix', () => {
+    expect(localLinkPath('C:\\Users\\me\\notes.md')).toBe('C:\\Users\\me\\notes.md')
+    expect(localLinkPath('file:///D:/work/a%20b/')).toBe('D:/work/a b/')
+    expect(localLinkPath('web/src/Chat.tsx:42')).toBe('web/src/Chat.tsx:42')
+    expect(localLinkPath('docs')).toBe('docs')
+  })
+
+  it('leaves .html (Chrome), web links, anchors and shapes the server refuses', () => {
+    for (const raw of ['C:\\r\\report.html', 'https://e.com/a.md', 'mailto:a@b.com', '#heading', 'a.md#x', 'a?b', '/api/sessions', '~/x.md', '\\\\server\\share\\a.txt', 'C:x', '']) {
+      expect(localLinkPath(raw), raw).toBe(null)
     }
   })
 })

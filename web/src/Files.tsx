@@ -3,6 +3,7 @@ import { IsLocalPage } from './ChatLink'
 import { alertDialog } from './Dialog'
 import { MarkdownText } from './Markdown'
 import { Modal, Segmented } from './Modal'
+import type { WorkFilesOpenRequest } from './openPath'
 import { formatDateTime, type ScratchpadFile, type ScratchpadListing } from './types'
 
 /** 글자 미리보기는 앞부분만 받는다 (Range). 이보다 큰 파일은 "앞부분만" 으로 표시 */
@@ -167,10 +168,23 @@ const compareName = (a: string, b: string) => a.localeCompare(b, 'ko', { numeric
  * 세션을 열 때와 대화가 갱신될 때 확인하고, 파일이 있는 것을 본 뒤로는 모달을 열 때·새로고침 때만 다시 받는다 (일하는 동안 갱신이 잦아서).
  * 세션이 바뀌면 Chat 이 key 로 새로 만든다
  */
-export function FilesButton({ sessionId, version }: { sessionId: string; version: number }) {
+export function FilesButton({
+  sessionId,
+  version,
+  request,
+  onRequestHandled,
+}: {
+  sessionId: string
+  version: number
+  /** 대화 속 경로로 연 요청 (Chat). 그 폴더(파일이면 든 폴더 + 미리보기)로 창을 열고 onRequestHandled 로 비운다. 파일이 있는 것을 아직 못 봤어도 연다 */
+  request: (WorkFilesOpenRequest & { id: number }) | null
+  onRequestHandled: () => void
+}) {
   const [listing, setListing] = useState<ScratchpadListing>(EMPTY_LISTING)
   const [isOpen, setIsOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  /** 창을 열 때의 폴더·고른 파일. id 가 바뀌면 창을 새로 만든다 (열려 있어도 그 자리로) */
+  const [opened, setOpened] = useState<{ id: number; folder: string; selectedPath: string | null }>({ id: 0, folder: '', selectedPath: null })
   const hasFiles = listing.files.length > 0
 
   useEffect(() => {
@@ -191,26 +205,51 @@ export function FilesButton({ sessionId, version }: { sessionId: string; version
   }
 
   function open() {
+    setOpened((previous) => ({ id: previous.id + 1, folder: '', selectedPath: null }))
     setIsOpen(true)
     void refresh()
   }
 
-  if (!hasFiles) return null
+  useEffect(() => {
+    if (!request) return
+    onRequestHandled()
+    const parent = request.path.includes('/') ? request.path.slice(0, request.path.lastIndexOf('/')) : ''
+    setOpened((previous) => ({
+      id: previous.id + 1,
+      folder: request.isDirectory ? request.path : parent,
+      selectedPath: request.isDirectory ? null : request.path,
+    }))
+    setIsOpen(true)
+    void refresh()
+  }, [request, onRequestHandled])
+
+  if (!hasFiles && !isOpen) return null
   return (
     <>
-      <button type="button" className="files-button" onClick={open} title="Work files" aria-label="Work files">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <path
-            d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.2h8.4A1.5 1.5 0 0 1 21 8.7v8.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
+      {hasFiles && (
+        <button type="button" className="files-button" onClick={open} title="Work files" aria-label="Work files">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path
+              d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.2h8.4A1.5 1.5 0 0 1 21 8.7v8.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
       {isOpen && (
-        <FilesModal sessionId={sessionId} listing={listing} isRefreshing={isRefreshing} onRefresh={() => void refresh()} onClose={() => setIsOpen(false)} />
+        <FilesModal
+          key={opened.id}
+          sessionId={sessionId}
+          listing={listing}
+          initialFolder={opened.folder}
+          initialSelectedPath={opened.selectedPath}
+          isRefreshing={isRefreshing}
+          onRefresh={() => void refresh()}
+          onClose={() => setIsOpen(false)}
+        />
       )}
     </>
   )
@@ -219,16 +258,19 @@ export function FilesButton({ sessionId, version }: { sessionId: string; version
 interface FilesModalProps {
   sessionId: string
   listing: ScratchpadListing
+  /** 처음 보일 폴더('' 은 scratchpad)와 고른 파일 (대화 속 경로로 열 때) */
+  initialFolder: string
+  initialSelectedPath: string | null
   isRefreshing: boolean
   onRefresh: () => void
   onClose: () => void
 }
 
 /** 폴더 탐색기 느낌의 모달: 왼쪽 목록(경로 표시줄·폴더·파일), 오른쪽 미리보기. 폰은 화면 전체를 쓰고 목록 → 미리보기 → ← 로 오간다 */
-function FilesModal({ sessionId, listing, isRefreshing, onRefresh, onClose }: FilesModalProps) {
-  const [folder, setFolder] = useState('')
+function FilesModal({ sessionId, listing, initialFolder, initialSelectedPath, isRefreshing, onRefresh, onClose }: FilesModalProps) {
+  const [folder, setFolder] = useState(initialFolder)
   const [sortOrder, setSortOrder] = useState<SortOrder>('recent')
-  const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  const [selectedPath, setSelectedPath] = useState<string | null>(initialSelectedPath)
   const selected = listing.files.find((file) => file.path === selectedPath) ?? null
   const isLocal = useContext(IsLocalPage)
 

@@ -1,4 +1,5 @@
 import { chatImageTarget, decodeSafely, imageDestinationOf } from './chatImageUrl'
+import { isOpenablePath } from './chatPathTarget'
 
 /**
  * 대화 마크다운 링크의 원문 주소 (ChatLink.tsx). 그림처럼 원문에서 그 링크 자리(start·end 오프셋)를 잘라 꺼낸다 —
@@ -21,4 +22,13 @@ export function rawLinkUrl(markdown: string | null, start: number | undefined, e
 export function localHtmlPath(raw: string): string | null {
   const path = chatImageTarget(raw, null).path
   return path !== null && !/^[#?]/.test(path) && /\.html?$/i.test(path) ? path : null
+}
+
+/**
+ * 원문 주소가 .html 이 아닌 이 PC 경로면 그 경로, 아니면 null (순수). 꼴은 localHtmlPath 와 같은 이 PC 경로(드라이브 절대·`file:///C:/…`·cwd 상대)이고
+ * 서버 경로 열기가 받는 꼴(isOpenablePath)일 때만. `#`·`?` 가 든 것(`#제목`·`a.md#x`)은 그대로 보통 링크. 누르면 대화 속 경로처럼 연다 (ChatPath.tsx)
+ */
+export function localLinkPath(raw: string): string | null {
+  const path = chatImageTarget(raw, null).path
+  return path !== null && !/[#?]/.test(path) && localHtmlPath(raw) === null && isOpenablePath(path) ? path : null
 }
