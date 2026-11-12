@@ -92,6 +92,9 @@
   --surface-1: #f3f4f7;
   --surface-2: #eceef3;
   --surface-3: #e2e4eb;
+  /* 떠 있는 면 (메뉴·팝오버·빠른 찾기 목록). 라이트는 패널과 같고, 다크는 옆 칸(패널)과 같은 색이면 그림자만으로는 묻혀 한 단 밝다.
+     그 위 줄 hover 는 color-mix(--text 8%, --pop-bg) (면 단계는 패널 기준이라 다크에서 차이가 작다) */
+  --pop-bg: #ffffff;
   /* 떠 있는 것에만 주는 그림자: 메뉴·팝오버·입력 상자 / 모달 */
   --shadow-pop: 0 1px 3px rgba(43, 47, 58, 0.06), 0 6px 20px rgba(43, 47, 58, 0.1);
   --shadow-modal: 0 2px 8px rgba(43, 47, 58, 0.08), 0 18px 48px rgba(43, 47, 58, 0.18);
@@ -178,6 +181,7 @@
   --surface-1: #262a31;
   --surface-2: #2c3039;
   --surface-3: #373c46;
+  --pop-bg: #262a31;
   --shadow-pop: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
   --shadow-modal: 0 2px 8px rgba(0, 0, 0, 0.35), 0 18px 48px rgba(0, 0, 0, 0.5);
 }
@@ -687,9 +691,11 @@ header button.icon svg {
   align-items: center;
   gap: 2px;
   padding: 4px 2px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
+}
+.character-picker button:not(.is-selected):hover {
+  background: var(--surface-2);
 }
 .character-picker button.is-selected {
   border-color: var(--accent);
@@ -709,15 +715,13 @@ header button.icon svg {
   align-items: center;
   gap: 6px;
   height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--accent-line);
-  border-radius: 6px;
+  padding: 0 14px;
   background: var(--accent-soft);
   color: var(--accent-text);
   font-weight: 600;
 }
 .create .character-auto-button:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: var(--accent-line);
 }
 .character-auto-row {
   display: flex;
@@ -730,8 +734,8 @@ header button.icon svg {
   position: absolute;
   top: 6px;
   right: 6px;
-  padding: 0 6px;
-  border-radius: 4px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--on-accent);
   font-size: calc(10px * var(--font-scale));
@@ -741,7 +745,7 @@ header button.icon svg {
 .character-pulse {
   position: absolute;
   inset: -1px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   pointer-events: none;
   animation: character-pulse 0.9s ease-out;
 }
@@ -825,8 +829,8 @@ header button.icon svg {
   flex-shrink: 0;
   image-rendering: pixelated;
   background: var(--avatar-bg);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
 }
 .character-swatches {
   display: flex;
@@ -860,6 +864,16 @@ header button.icon svg {
   color: var(--on-accent);
   border-color: var(--accent);
 }
+.create button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+/* 모달 맨 아래 버튼 줄: 본문 버튼보다 조금 크게 */
+.create .actions button,
+.dialog-actions button,
+.folder-actions button {
+  padding: 7px 16px;
+}
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -869,23 +883,29 @@ header button.icon svg {
   justify-content: center;
   z-index: 10;
 }
+/* 모달 창: 테두리 없이 둥근 떠 있는 면 + 모달 그림자. 머리·본문·버튼 줄은 선 없이 여백(gap)으로 가른다 */
 .modal {
   width: 360px;
   max-width: calc(100vw - 32px);
   background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-xl);
+  padding: 20px;
+  box-shadow: var(--shadow-modal);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 .modal-title {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
+/* 제목 글: 본문보다 한 단계 크게 (모달은 머리줄 아래 선이 없어 크기·굵기로 머리를 가른다) */
+.modal-title > b {
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 650;
+}
+
 .modal-title .cwd {
   color: var(--muted);
   font-size: calc(11px * var(--font-scale));
@@ -903,20 +923,24 @@ header button.icon svg {
   flex: 1;
   min-width: 0;
 }
+/* 닫기 ×: 투명 원 버튼, 올리면 면 */
 .modal-close {
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
   margin: -6px -8px 0 0;
-  padding: 0 8px;
+  padding: 0;
   font-size: calc(18px * var(--font-scale));
-  line-height: 28px;
+  line-height: 1;
   color: var(--muted);
   background: transparent;
-  border-color: transparent;
+  border-radius: 50%;
 }
 .modal-close:hover {
   color: var(--text);
-  background: var(--bg);
-  border-color: transparent;
+  background: var(--surface-2);
 }
 /* 앱 안 확인·알림·입력 창 (Dialog.tsx). 다른 모달(z-index 10) 위에 뜬다 */
 .dialog-overlay {
@@ -932,8 +956,9 @@ header button.icon svg {
 }
 .dialog-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   justify-content: flex-end;
+  margin-top: 2px;
 }
 .dialog-actions button:focus-visible {
   outline: 2px solid var(--accent);
@@ -1043,8 +1068,7 @@ header button.icon svg {
   padding: 4px;
   height: 300px;
   overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg);
 }
 .folder-list[aria-busy='true'] {
@@ -1056,12 +1080,12 @@ header button.icon svg {
   gap: 6px;
   min-width: 0;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: default;
   user-select: none;
 }
 .folder-list li:hover {
-  background: var(--chip-bg);
+  background: var(--surface-2);
 }
 .folder-list li.is-selected {
   background: var(--accent-soft);
@@ -1081,9 +1105,9 @@ header button.icon svg {
 }
 .folder-list .vcs-chip {
   flex-shrink: 0;
-  padding: 0 5px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
   color: var(--muted);
   font-size: calc(10px * var(--font-scale));
   line-height: 14px;
@@ -1120,6 +1144,11 @@ header button.icon svg {
   color: var(--on-accent);
   border-color: var(--accent);
 }
+.folder-picker button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
 /* 좌측 목록: 그룹 라벨 → 팀 카드 → 세션 줄. 로비는 라벨 아래 세션이 바로 온다 */
 .sessions {
   list-style: none;
@@ -1250,31 +1279,32 @@ header button.icon svg {
 .menu {
   position: relative;
 }
+/* 메뉴 (MoreMenu·Copy 메뉴): 테두리 없는 떠 있는 면(--radius-md + --shadow-pop), 줄은 안쪽 6px 에 --radius-sm (바깥 12 = 안 6 + 여백 6), hover 면 */
 .menu-list {
   position: absolute;
   right: 0;
-  top: calc(100% + 2px);
+  top: calc(100% + 4px);
   z-index: 5;
-  min-width: 110px;
-  padding: 4px;
+  min-width: 132px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  gap: 1px;
+  background: var(--pop-bg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
 }
 .menu-list button {
   text-align: left;
-  padding: 5px 8px;
+  padding: 6px 10px;
   font-size: calc(12px * var(--font-scale));
   color: var(--text);
   border: 0;
   background: transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .menu-list button:hover:not(:disabled) {
-  background: var(--bg);
+  background: color-mix(in srgb, var(--text) 8%, var(--pop-bg));
 }
 .menu-list button:disabled {
   color: var(--muted);
@@ -1283,10 +1313,11 @@ header button.icon svg {
 }
 .menu-list .menu-separator {
   height: 0;
-  margin: 3px 4px;
+  margin: 4px 6px;
   border: 0;
   border-top: 1px solid var(--line);
 }
+
 /* 끌 수 없는 팀(그룹이 지워진 팀)의 빈 ⠿ 칸: 자리만 차지해 "+"·"⋯"·⠿ 열이 그룹·팀 줄과 세로로 맞는다 */
 .head-actions .drag-spacer {
   visibility: hidden;
@@ -1932,8 +1963,8 @@ li.group.drop-after::after {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  /* 기본 버튼의 알약 둥글기가 여러 줄·카드 모양을 깨서 예전 6px 로 둔다 (디자인 개편 다음 단계에서 다시 본다) */
-  border-radius: var(--radius-sm);
+  /* 여러 줄 카드라 알약 대신 md (안쪽 견본은 sm: 바깥 12 = 안 6 + 여백 6) */
+  border-radius: var(--radius-md);
   padding: 6px;
   text-align: left;
 }
@@ -1947,7 +1978,7 @@ li.group.drop-after::after {
   display: block;
   height: 40px;
   border: 1px solid;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 .palette-swatch-panel {
@@ -2037,13 +2068,12 @@ li.group.drop-after::after {
   display: flex;
 }
 /* 설정 창 탭 (App · Chat) */
+/* 탭 줄 아래 선은 없다 — 지금 탭만 강조색 밑줄 */
 .appearance-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid var(--line);
 }
 .appearance-tabs button {
-  margin-bottom: -1px;
   padding: 6px 12px;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -2051,6 +2081,7 @@ li.group.drop-after::after {
   background: transparent;
   color: var(--muted);
 }
+
 .appearance-tabs button[aria-selected='true'] {
   border-bottom-color: var(--accent);
   color: var(--text);
@@ -2280,11 +2311,15 @@ li.group.drop-after::after {
   color: var(--text);
 }
 /* 터미널 탭은 테마와 관계없이 어두우므로 스크롤바 손잡이도 늘 다크 값 */
+/* 바깥 틀: 패널 바탕 위 둥근 검은 카드. 바탕은 xterm 기본 바탕(#000)과 같게 해 안쪽 여백이 테두리처럼 보이지 않게 한다 */
 .terminal {
   flex: 1;
   min-height: 0;
-  padding: 4px;
-  background: #1b1d23;
+  margin: 0 8px 8px;
+  padding: 8px 4px 8px 10px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: #000;
   --scrollbar-thumb: rgba(227, 229, 234, 0.2);
   --scrollbar-thumb-hover: rgba(227, 229, 234, 0.36);
 }
@@ -2764,25 +2799,25 @@ li.group.drop-after::after {
   width: min(360px, calc(100vw - 32px));
   max-height: min(60vh, 420px);
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 8px 6px;
   font-size: calc(12px * var(--font-scale));
   color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  background: var(--pop-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
 }
 .marks-head {
-  padding: 2px 12px 6px;
+  padding: 2px 8px 6px;
   font-size: calc(11px * var(--font-scale));
   color: var(--muted);
 }
 .marks-row {
   display: flex;
   align-items: stretch;
+  border-radius: var(--radius-sm);
 }
 .marks-row:hover {
-  background: var(--bg);
+  background: color-mix(in srgb, var(--text) 8%, var(--pop-bg));
 }
 .marks-go {
   display: grid;
@@ -2791,11 +2826,12 @@ li.group.drop-after::after {
   column-gap: 8px;
   flex: 1;
   min-width: 0;
-  padding: 6px 4px 6px 12px;
+  padding: 6px 4px 6px 8px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: inherit;
+
   font-size: inherit;
   text-align: left;
 }
@@ -2907,6 +2943,10 @@ li.group.drop-after::after {
   background: transparent;
   color: var(--muted);
 }
+.files-crumbs button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
 .files-crumbs button.on {
   color: var(--text);
   font-weight: 600;
@@ -2931,16 +2971,16 @@ li.group.drop-after::after {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
+  gap: 10px;
 }
+/* 목록 칸 = 옅은 면 (보기 칸과 선 없이 톤으로 가른다) */
 .files-list {
   overflow-y: auto;
-  border-right: 1px solid var(--line);
-  padding: 4px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
+  background: var(--surface-1);
+  border-radius: var(--radius-lg);
 }
 .files-item {
   display: grid;
@@ -2956,7 +2996,7 @@ li.group.drop-after::after {
   text-align: left;
 }
 .files-item:hover {
-  background: var(--bg);
+  background: var(--surface-2);
   border-color: transparent;
 }
 .files-item.selected {
@@ -2987,6 +3027,8 @@ li.group.drop-after::after {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 .files-preview > .hint {
   margin: auto;
@@ -2995,8 +3037,7 @@ li.group.drop-after::after {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--line);
+  padding: 6px 4px 8px 10px;
 }
 /* "←" 는 폰(목록·미리보기를 한 장씩 볼 때)에서만 */
 .files-back {
@@ -3015,24 +3056,30 @@ li.group.drop-after::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 미리보기 머리 버튼 (버튼·링크 둘 다): 기본 버튼과 같은 채운 알약 */
 .files-action {
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
   color: var(--text);
   font-size: calc(12px * var(--font-scale));
   text-decoration: none;
   white-space: nowrap;
 }
 .files-action:hover {
-  border-color: var(--accent);
+  background: var(--surface-3);
 }
 .files-action.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
 }
+.files-action.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
 .files-preview-body {
   flex: 1;
   min-height: 0;
@@ -3092,7 +3139,6 @@ li.group.drop-after::after {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--line);
 }
 .ws-back {
   display: none;
@@ -3117,11 +3163,10 @@ li.group.drop-after::after {
   width: min(520px, calc(100vw - 32px));
   max-height: 360px;
   overflow-y: auto;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  border-radius: var(--radius-md);
+  background: var(--pop-bg);
+  box-shadow: var(--shadow-pop);
 }
 .ws-find-item {
   display: flex;
@@ -3247,6 +3292,12 @@ li.group.drop-after::after {
   display: inline-flex;
   flex-shrink: 0;
 }
+/* 위 막대·커밋 막대의 복사 버튼: 옆 버튼들과 같은 알약 (공통 .copy-button 은 말풍선용 작은 사각) */
+.ws-toolbar > .copy-menu > .copy-button,
+.ws-commit-bar > .copy-button {
+  border-radius: var(--radius-pill);
+}
+
 .copy-menu > .menu-list {
   min-width: 150px;
 }
@@ -3277,7 +3328,6 @@ li.group.drop-after::after {
   flex-shrink: 0;
 }
 .ws-edit.on {
-  border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent-text);
 }
@@ -3326,14 +3376,19 @@ li.group.drop-after::after {
   flex: 1;
   min-height: 0;
   display: grid;
-  /* 왼쪽 칸은 190px(Files · Changes 배지 · 아이콘 둘이 들어가는 폭)부터, 넓으면 300px 까지. 360px 패널에서도 190px */
-  grid-template-columns: clamp(190px, 36%, 300px) minmax(0, 1fr);
+  /* 왼쪽 칸은 190px(Files · Changes 배지 · 아이콘 둘이 들어가는 폭)부터, 넓으면 300px 까지. 360px 패널에서도 190px.
+     칸 왼쪽 바깥 여백 8px(.ws-side margin)을 더한 폭이다 */
+  grid-template-columns: clamp(198px, calc(36% + 8px), 308px) minmax(0, 1fr);
 }
+/* 왼쪽 칸 = 옅은 면의 둥근 카드 (보기 칸과 선 없이 톤으로 가른다) */
 .ws-side {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--line);
+  margin: 0 0 8px 8px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  overflow: hidden;
 }
 /* 트리 줄은 칸 폭 안에서 말줄임 (전체 경로는 툴팁). 들여쓰기는 깊이(--depth) × 14px. position 은 찾기로 연 줄까지 스크롤할 때 offsetTop 기준 */
 .ws-tree {
@@ -3341,7 +3396,15 @@ li.group.drop-after::after {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: 4px;
+}
+/* 왼쪽 칸 줄(트리·찾기 결과·변경·커밋): 칸 안쪽 4px 에 들인 작은 둥근 줄, hover 면 · 고른 줄 옅은 강조 */
+.ws-row,
+.ws-search-file,
+.ws-search-match,
+.ws-change,
+.ws-commit {
+  border-radius: var(--radius-sm);
 }
 .ws-row {
   display: flex;
@@ -3349,16 +3412,15 @@ li.group.drop-after::after {
   gap: 2px;
   width: 100%;
   min-height: 24px;
-  padding: 1px 8px 1px calc(6px + var(--depth) * 14px);
+  padding: 1px 8px 1px calc(4px + var(--depth) * 14px);
   border: 0;
-  border-radius: 0;
   background: transparent;
   text-align: left;
   font-size: calc(13px * var(--font-scale));
   white-space: nowrap;
 }
 .ws-row:hover {
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .ws-row.selected {
   background: var(--accent-soft);
@@ -3375,7 +3437,7 @@ li.group.drop-after::after {
   text-overflow: ellipsis;
 }
 .ws-note {
-  padding: 2px 8px 2px calc(22px + var(--depth) * 14px);
+  padding: 2px 8px 2px calc(18px + var(--depth) * 14px);
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
 }
@@ -3539,7 +3601,8 @@ li.group.drop-after::after {
   width: calc(var(--gutter-digits) * 1ch);
   margin-right: 14px;
   padding: 0 10px 0 12px;
-  border-right: 1px solid var(--line);
+  /* 칸 선은 그리지 않는다 (자리 1px 은 남겨 번호 칸 클릭 판정 gutterWidth 가 그대로) */
+  border-right: 1px solid transparent;
   background: var(--panel);
   color: var(--muted);
   text-align: right;
@@ -3558,8 +3621,9 @@ li.group.drop-after::after {
 .ws-side-tabs {
   display: flex;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--line);
+  padding-top: 2px;
 }
+
 .ws-side-tabs button {
   flex: 1 1 auto;
   min-width: 0;
@@ -3575,6 +3639,9 @@ li.group.drop-after::after {
   background: transparent;
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
+}
+.ws-side-tabs button:not(.on):hover {
+  color: var(--text);
 }
 .ws-side-tabs button.on {
   border-bottom-color: var(--accent);
@@ -3592,7 +3659,7 @@ li.group.drop-after::after {
   flex-shrink: 0;
   min-width: 16px;
   padding: 0 5px;
-  border-radius: 8px;
+  border-radius: var(--radius-pill);
   background: var(--chip-bg);
   color: var(--text);
   font-size: calc(11px * var(--font-scale));
@@ -3623,9 +3690,20 @@ li.group.drop-after::after {
   color: var(--accent-text);
 }
 /* 코드 보기 찾기 막대 (CodeFindBar.tsx): 코드 바로 위 한 줄, 대화 검색 막대와 같은 모양 */
+/* 패널 면 위에 선 없이 (대화 검색 막대와 같은 꼴: 입력칸 채운 알약, 버튼 투명 아이콘 — 올리면 면) */
 .chat-search.code-find {
   flex-shrink: 0;
   padding: 5px 8px;
+  border-bottom: 0;
+}
+.chat-search.code-find button {
+  background: transparent;
+}
+.chat-search.code-find button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.chat-search.code-find button.find-toggle.on {
+  background: var(--accent-soft);
 }
 /* 코드 보기 찾기 칠하기 (codeViewDom.ts, CSS Custom Highlight API). 대화 검색과 같은 색 */
 ::highlight(code-find) {
@@ -3647,13 +3725,13 @@ li.group.drop-after::after {
   align-items: center;
   gap: 2px;
   margin: 6px 6px 2px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
+  padding: 2px 4px 2px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
 }
 .ws-search-box:focus-within {
-  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 .ws-search-box input {
   flex: 1;
@@ -3672,8 +3750,8 @@ li.group.drop-after::after {
   background: transparent;
   font-size: calc(11px * var(--font-scale));
 }
-.ws-search-box .find-toggle:hover {
-  border-color: var(--line-strong);
+.ws-search-box .find-toggle:not(.on):hover {
+  background: var(--surface-3);
 }
 .ws-search-summary,
 .ws-search-note {
@@ -3689,7 +3767,7 @@ li.group.drop-after::after {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 2px 0 6px;
+  padding: 2px 4px 6px;
 }
 /* 찾는 중에는 지난 결과를 흐리게 둔다 */
 .ws-search-results.is-stale {
@@ -3703,7 +3781,6 @@ li.group.drop-after::after {
   width: 100%;
   min-height: 24px;
   border: 0;
-  border-radius: 0;
   background: transparent;
   text-align: left;
   white-space: nowrap;
@@ -3715,9 +3792,11 @@ li.group.drop-after::after {
 .ws-search-file .ws-chevron {
   align-self: center;
 }
+/* 줄 hover 면(--surface-2)이 배지 바탕과 같아 한 단 짙게 */
 .ws-search-file .ws-count {
   margin-left: auto;
   flex-shrink: 0;
+  background: var(--surface-3);
 }
 .ws-search-name {
   flex-shrink: 0;
@@ -3740,7 +3819,7 @@ li.group.drop-after::after {
 }
 .ws-search-file:hover,
 .ws-search-match:hover {
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .ws-search-match.selected {
   background: var(--accent-soft);
@@ -3797,11 +3876,12 @@ li.group.drop-after::after {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 0 4px;
+  padding: 0 4px 4px;
 }
 .ws-change-list .ws-note {
-  padding: 4px 8px;
+  padding: 4px;
 }
+
 .ws-change {
   /* 이름 칸은 글 폭까지 먼저 받고(minmax(0, max-content)) 폴더 칸(1fr)은 남는 폭만. 모자라면 폴더가 0 이 된 뒤 이름이 줄어든다 */
   display: grid;
@@ -3810,16 +3890,15 @@ li.group.drop-after::after {
   gap: 6px;
   width: 100%;
   min-height: 24px;
-  padding: 2px 8px;
+  padding: 2px 8px 2px 4px;
   border: 0;
-  border-radius: 0;
   background: transparent;
   text-align: left;
   font-size: calc(13px * var(--font-scale));
   white-space: nowrap;
 }
 .ws-change:hover {
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .ws-change.selected {
   background: var(--accent-soft);
@@ -3867,9 +3946,8 @@ li.group.drop-after::after {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 0 0 7px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  padding: 0 0 0 8px;
+  border-radius: var(--radius-pill);
   background: var(--accent-soft);
   color: var(--accent-text);
 }
@@ -3885,10 +3963,13 @@ li.group.drop-after::after {
   height: 20px;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 50%;
   background: transparent;
   color: inherit;
   line-height: 1;
+}
+.ws-history-clear:hover {
+  background: var(--accent-line);
 }
 .ws-commit {
   display: flex;
@@ -3897,12 +3978,11 @@ li.group.drop-after::after {
   width: 100%;
   padding: 4px 8px;
   border: 0;
-  border-radius: 0;
   background: transparent;
   text-align: left;
 }
 .ws-commit:hover {
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .ws-commit-subject,
 .ws-commit-meta,
@@ -3936,15 +4016,15 @@ li.group.drop-after::after {
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: bottom;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--chip-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  /* 줄 hover 면(--surface-2) 위에서도 보이게 한 단 짙게 */
+  background: var(--surface-3);
   color: var(--muted);
   font-size: calc(11px * var(--font-scale));
   line-height: 16px;
 }
 .ws-ref.is-current {
-  border-color: var(--accent-line);
   background: var(--accent-soft);
   color: var(--accent-text);
 }
@@ -3970,7 +4050,6 @@ li.group.drop-after::after {
   align-items: center;
   gap: 4px;
   padding: 0 4px 4px;
-  border-bottom: 1px solid var(--line);
 }
 .ws-commit-back {
   flex-shrink: 0;
@@ -4001,11 +4080,15 @@ li.group.drop-after::after {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 0 4px;
+  padding: 0 4px 4px;
 }
+/* 커밋 메시지: 옅은 면 칸 안의 패널 면 카드 (아래 파일 줄과 선 없이 가른다) */
 .ws-commit-message {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
+  margin: 2px 0 6px;
+
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--panel);
   font-size: calc(12px * var(--font-scale));
   overflow-wrap: anywhere;
 }
@@ -4040,8 +4123,7 @@ li.group.drop-after::after {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 10px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--line);
+  padding: 4px 10px 6px;
   font-size: calc(12px * var(--font-scale));
 }
 .ws-diff-status {
@@ -4099,9 +4181,10 @@ li.group.drop-after::after {
   display: flex;
   flex-shrink: 0;
   background: var(--panel);
-  border-right: 1px solid var(--line);
+  border-right: 1px solid transparent;
   color: var(--muted);
   cursor: pointer;
+
   user-select: none;
 }
 .diff-num {
@@ -4434,7 +4517,7 @@ li.group.drop-after::after {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: repeating-conic-gradient(var(--code-bg) 0 25%, var(--panel) 0 50%) 0 0 / 16px 16px;
 }
 .image-viewer-body img {
@@ -5716,7 +5799,7 @@ li.group.drop-after::after {
 }
 .shells-status-toggle:hover:not(:disabled),
 .shells-status-toggle[aria-expanded='true'] {
-  background: var(--bg);
+  background: var(--surface-2);
 }
 .shells-status-toggle b {
   color: var(--text);
@@ -5731,17 +5814,16 @@ li.group.drop-after::after {
   width: 360px;
   max-height: min(60vh, 480px);
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 8px 6px;
   font-size: calc(12px * var(--font-scale));
   color: var(--text);
   white-space: normal;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  background: var(--pop-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
 }
 .shells-popover-head {
-  padding: 2px 12px 6px;
+  padding: 2px 8px 6px;
   font-size: calc(11px * var(--font-scale));
   color: var(--muted);
 }
@@ -5755,22 +5837,21 @@ li.group.drop-after::after {
   text-overflow: ellipsis;
 }
 .shells-popover-group {
-  padding: 6px 12px 2px;
+  padding: 6px 8px 2px;
   font-size: calc(11px * var(--font-scale));
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--muted);
 }
+/* 그룹 사이는 선 없이 여백으로 가른다 */
 .shells-popover-row + .shells-popover-group {
-  margin-top: 6px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
+  margin-top: 10px;
 }
 .shells-popover-team {
-  padding: 4px 12px 2px;
+  padding: 4px 8px 2px;
 }
 .shells-popover-part {
-  padding: 3px 12px 1px 24px;
+  padding: 3px 8px 1px 20px;
   font-size: calc(11px * var(--font-scale));
   color: var(--muted);
 }
@@ -5779,24 +5860,24 @@ li.group.drop-after::after {
   align-items: baseline;
   gap: 10px;
   width: 100%;
-  padding: 4px 12px;
+  padding: 4px 8px;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   text-align: left;
 }
 .shells-popover-row:hover {
-  background: var(--bg);
+  background: color-mix(in srgb, var(--text) 8%, var(--pop-bg));
 }
 .shells-popover-row .shell-command {
   flex: 1;
 }
 /* 줄은 자기 머리보다 한 단 들여쓴다: 로비 = 그룹 머리와 같은 줄, 팀 직속, 파트 */
 .shells-popover-row.team {
-  padding-left: 24px;
+  padding-left: 20px;
 }
 .shells-popover-row.part {
-  padding-left: 36px;
+  padding-left: 32px;
 }
 
 /* 계정 사용량 (상태 표시줄 왼쪽. 남은 비율만, 리셋 시각은 툴팁. 줄을 누르면 위에 상세 창) */
@@ -5844,7 +5925,7 @@ li.group.drop-after::after {
 }
 .usage-toggle:hover,
 .usage-toggle[aria-expanded='true'] {
-  background: var(--bg);
+  background: var(--surface-2);
   border-color: transparent;
 }
 /* 사용량 상세 창: 상태 표시줄 바로 위 왼쪽 (목록 열과 같은 폭).
@@ -5866,15 +5947,13 @@ li.group.drop-after::after {
   font-size: calc(12px * var(--font-scale));
   color: var(--text);
   white-space: normal;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  background: var(--pop-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
 }
-/* 머리: Claude 별 + "Claude", 그 아래 갱신 시각. 아래 옅은 구분선 */
+/* 머리: Claude 별 + "Claude", 그 아래 갱신 시각. 칸 사이는 선 없이 여백(창 gap)으로 가른다 */
 .usage-head {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+  padding-bottom: 2px;
 }
 .usage-title {
   display: flex;
@@ -5909,13 +5988,15 @@ li.group.drop-after::after {
 .usage-bar {
   margin: 7px 0 6px;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   background: var(--line);
+
   overflow: hidden;
 }
 .usage-bar span {
   display: block;
   height: 100%;
+  border-radius: var(--radius-pill);
   background: var(--muted);
 }
 /* 막대 아래 "39% left" ··· "Resets in 56m". 리셋 날짜·시각은 이 줄의 툴팁 */
@@ -5938,9 +6019,12 @@ li.group.drop-after::after {
   background: var(--red-dot);
 }
 /* 구분선 아래 계정 목록 (Accounts.tsx): "Claude accounts" / 줄마다 이메일 ··· 요금제, 지금 계정·재로그인까지 ··· 버튼 / [+ Add account] */
+/* 계정 칸: 바탕색(--bg) 카드로 사용량 막대와 가른다 (떠 있는 면이 다크에서 --surface-1 이라 면 단계로는 묻힌다. 안의 채운 버튼 --surface-2 가 보이게) */
 .accounts {
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  margin: 0 -6px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -6030,7 +6114,7 @@ li.group.drop-after::after {
 /* Remove·Log out: 올리면 빨강 (공통 button:hover 의 초록 대신) */
 .account-actions button.danger:hover:not(:disabled) {
   color: var(--red);
-  border-color: var(--red-border);
+  background: var(--red-soft);
 }
 .account-error {
   font-size: calc(11px * var(--font-scale));
@@ -6038,15 +6122,14 @@ li.group.drop-after::after {
   overflow-wrap: anywhere;
 }
 .account-add {
-  padding: 4px 8px;
+  padding: 5px 8px;
   font-size: calc(12px * var(--font-scale));
   color: var(--muted);
   background: transparent;
-  border-style: dashed;
-  border-color: var(--line-strong);
 }
 .account-add:hover:not(:disabled) {
   color: var(--text);
+  background: var(--surface-2);
 }
 /* 계정 추가 모달: 상태 표시줄(.usage) 안에 렌더돼 11px·nowrap·회색을 물려받으므로 되돌린다.
    클래스 하나라 폰(768px 이하)에서는 뒤에 오는 .modal 폭(화면 - 32px)이 이긴다 */
@@ -6078,13 +6161,13 @@ li.group.drop-after::after {
 /* 로그인 페이지 링크: 새 탭으로 연다. 버튼처럼 보이게 */
 .account-signin-link {
   align-self: flex-start;
-  padding: 5px 12px;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
   color: var(--accent-text);
   background: var(--accent-soft);
   text-decoration: none;
 }
+
 .account-signin-link:hover {
   background: var(--accent-line);
 }
@@ -6118,10 +6201,10 @@ li.group.drop-after::after {
   gap: 4px;
   font-size: calc(12px * var(--font-scale));
   background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 .switch-sessions li {
+
   display: flex;
   gap: 10px;
   min-width: 0;
@@ -6190,27 +6273,30 @@ li.group.drop-after::after {
   color: var(--muted);
   font-size: calc(13px * var(--font-scale));
 }
+/* task 줄: 여러 줄 카드라 알약 대신 md. 펼친 줄은 옅은 면, hover 는 면 한 단 */
 .task-row {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 .task-row.open {
-  background: var(--bg);
+  background: var(--surface-1);
 }
 .task-summary {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  /* 기본 버튼의 알약 둥글기가 여러 줄·카드 모양을 깨서 예전 6px 로 둔다 (디자인 개편 다음 단계에서 다시 본다) */
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   width: 100%;
-  padding: 6px 8px;
+  padding: 7px 10px;
   text-align: left;
   color: var(--text);
   background: transparent;
   border-color: transparent;
 }
 .task-summary:hover {
-  background: var(--bg);
+  background: var(--surface-1);
+}
+.task-row.open .task-summary:hover {
+  background: var(--surface-2);
 }
 .task-line,
 .task-event {
@@ -6268,7 +6354,7 @@ li.group.drop-after::after {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 2px 8px 10px;
+  padding: 2px 10px 10px;
 }
 .task-detail-label {
   margin-top: 4px;
@@ -6279,9 +6365,10 @@ li.group.drop-after::after {
 .task-text {
   max-height: 320px;
   overflow-y: auto;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--code-bg);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  /* 펼친 줄(--surface-1) 안의 글 칸: 라이트 --code-bg 는 그 면과 거의 같아 패널 면으로 */
+  background: var(--panel);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: calc(12px * var(--font-scale));
@@ -6303,7 +6390,7 @@ li.group.drop-after::after {
 }
 /* 팀원 들고 남: task 줄보다 작게, 줄을 누를 수 없다 */
 .task-event {
-  padding: 3px 8px;
+  padding: 3px 10px;
   color: var(--muted);
 }
 .task-event .task-member {
@@ -6357,11 +6444,11 @@ li.group.drop-after::after {
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  padding: 0 2px 0 6px;
-  border-radius: 6px;
+  padding: 0 2px 0 8px;
+  border-radius: var(--radius-md);
 }
 .todo-item:hover {
-  background: var(--bg);
+  background: var(--surface-1);
 }
 .todo-item input[type='checkbox'] {
   flex-shrink: 0;
@@ -6376,8 +6463,8 @@ li.group.drop-after::after {
 .todo-text {
   flex: 1;
   min-width: 0;
-  padding: 4px;
-  /* 기본 버튼의 알약 둥글기가 여러 줄·카드 모양을 깨서 예전 6px 로 둔다 (디자인 개편 다음 단계에서 다시 본다) */
+  padding: 4px 6px;
+  /* 여러 줄 글이라 알약 대신 sm */
   border-radius: var(--radius-sm);
   text-align: left;
   white-space: pre-wrap;
@@ -6387,8 +6474,9 @@ li.group.drop-after::after {
   border-color: transparent;
   cursor: text;
 }
+/* 누르면 고친다는 표시: 줄 hover 면(--surface-1) 위에 한 단 짙은 면 */
 .todo-text:hover {
-  border-color: var(--line);
+  background: var(--surface-2);
 }
 .todo-edit {
   flex: 1;
@@ -6431,7 +6519,7 @@ li.group.drop-after::after {
 .todo-delete,
 .todo-handle {
   flex-shrink: 0;
-  padding: 0 6px;
+  padding: 0 7px;
   font-size: calc(14px * var(--font-scale));
   line-height: 24px;
   color: var(--muted);
@@ -6460,7 +6548,7 @@ li.group.drop-after::after {
 }
 .todo-handle:hover {
   color: var(--text);
-  border-color: transparent;
+  background: var(--surface-2);
 }
 .todo-scroll.dragging-list .todo-handle {
   cursor: grabbing;
@@ -6539,30 +6627,34 @@ li.group.drop-after::after {
   position: fixed;
   z-index: 15;
   visibility: hidden;
-  min-width: 128px;
-  padding: 4px;
+  min-width: 132px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  gap: 1px;
+  background: var(--pop-bg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
 }
 .todo-priority-menu button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 6px 10px;
   text-align: left;
   font-size: calc(12px * var(--font-scale));
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
 }
 .todo-priority-menu button:hover,
 .todo-priority-menu button:focus-visible {
-  background: var(--bg);
+  background: color-mix(in srgb, var(--text) 8%, var(--pop-bg));
 }
+.todo-priority-menu button:focus-visible {
+  outline: none;
+}
+
 .todo-priority-name {
   flex: 1;
 }
@@ -7005,8 +7097,8 @@ li.group.drop-after::after {
     padding: 10px 14px;
   }
   .modal-close {
-    min-width: 40px;
-    min-height: 36px;
+    width: 40px;
+    height: 40px;
   }
   .dialog-actions button {
     min-height: 40px;
@@ -7295,11 +7387,9 @@ li.group.drop-after::after {
   }
   .files-body {
     grid-template-columns: minmax(0, 1fr);
-    border: 0;
   }
   .files-list {
-    border-right: 0;
-    padding: 0;
+    padding: 4px;
   }
   .files-modal.has-preview .files-toolbar,
   .files-modal.has-preview .files-list,
@@ -7401,8 +7491,9 @@ li.group.drop-after::after {
     grid-template-columns: minmax(0, 1fr);
   }
   .ws-side {
-    border-right: 0;
+    margin: 0 8px 8px;
   }
+
   .ws.is-viewing .ws-side,
   .ws:not(.is-viewing) .ws-view {
     display: none;

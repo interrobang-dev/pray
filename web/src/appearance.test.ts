@@ -179,7 +179,7 @@ describe('팔레트', () => {
     for (const palette of PALETTES) {
       for (const mode of MODES) {
         const vars = paletteVars(palette.id, mode)
-        for (const surface of ['surface-1', 'surface-2', 'surface-3'] as const) {
+        for (const surface of ['surface-1', 'surface-2', 'surface-3', 'pop-bg'] as const) {
           const ratio = contrast(vars.text, vars[surface])
           if (ratio < 4.5) result.push(`${palette.id}/${mode} --text on --${surface} = ${ratio.toFixed(2)}`)
         }

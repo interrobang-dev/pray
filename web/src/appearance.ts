@@ -434,6 +434,7 @@ export function expandPalette(core: PaletteCore, mode: Mode): Vars {
   const byContrast = (colors: string[]) => colors.reduce((best, color) => (contrast(color, searchCurrentBg) > contrast(best, searchCurrentBg) ? color : best))
   const paletteInk = byContrast([text, bg])
   const searchCurrentText = contrast(paletteInk, searchCurrentBg) >= 4.5 ? paletteInk : byContrast(['#000000', '#ffffff'])
+  const surfaces = surfaceVars(panel, text, isDark)
   return {
     ...DEFAULT_VARS[mode],
     bg,
@@ -492,7 +493,9 @@ export function expandPalette(core: PaletteCore, mode: Mode): Vars {
     // 노랑은 글자로 쓰기엔 옅어 바탕 대비 4.5 까지 어둡게(다크는 밝게) 한다
     'vcs-modified': ensureContrast(core.yellow, [panel, bg], 4.5, isDark ? 'lighter' : 'darker'),
     'caution-text': ensureContrast(core.yellow, [panel, bg], 4.5, isDark ? 'lighter' : 'darker'),
-    ...surfaceVars(panel, text, isDark),
+    ...surfaces,
+    // 떠 있는 면(메뉴·팝오버): 라이트는 패널, 다크는 옆 칸과 같은 패널색이면 묻혀서 한 단 밝은 --surface-1 (Default 와 같은 규칙)
+    'pop-bg': isDark ? surfaces['surface-1'] : panel,
     // 떠 있는 것 그림자: 라이트는 팔레트 글자색 기운, 다크는 검정 (Default 다크와 같다)
     'shadow-pop': isDark ? DEFAULT_VARS.dark['shadow-pop'] : `0 1px 3px ${rgba(text, 0.06)}, 0 6px 20px ${rgba(text, 0.1)}`,
     'shadow-modal': isDark ? DEFAULT_VARS.dark['shadow-modal'] : `0 2px 8px ${rgba(text, 0.08)}, 0 18px 48px ${rgba(text, 0.18)}`,

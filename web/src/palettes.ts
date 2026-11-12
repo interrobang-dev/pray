@@ -72,6 +72,7 @@ const DEFAULT_LIGHT = {
   'surface-1': '#f3f4f7',
   'surface-2': '#eceef3',
   'surface-3': '#e2e4eb',
+  'pop-bg': '#ffffff',
   'shadow-pop': '0 1px 3px rgba(43, 47, 58, 0.06), 0 6px 20px rgba(43, 47, 58, 0.1)',
   'shadow-modal': '0 2px 8px rgba(43, 47, 58, 0.08), 0 18px 48px rgba(43, 47, 58, 0.18)',
 }
@@ -142,6 +143,7 @@ export const DEFAULT_VARS: Record<'light' | 'dark', Vars> = {
     'surface-1': '#262a31',
     'surface-2': '#2c3039',
     'surface-3': '#373c46',
+    'pop-bg': '#262a31',
     'shadow-pop': '0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35)',
     'shadow-modal': '0 2px 8px rgba(0, 0, 0, 0.35), 0 18px 48px rgba(0, 0, 0, 0.5)',
   },
