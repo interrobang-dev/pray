@@ -658,6 +658,121 @@ header button.icon svg {
   overflow-wrap: anywhere;
   font-size: calc(13px * var(--font-scale));
 }
+/* Reminders (RemindersButton.tsx): 알람시계 아이콘 + 울렸고 확인 전인 개수 빨간 배지. 아무것도 없으면 흐리지만 눌린다 (All TODOs 와 같다) */
+.toolbar .reminders-toggle {
+  gap: 4px;
+  padding: 5px 8px;
+}
+.toolbar .reminders-toggle:not(.has-reminders):not([aria-pressed='true']) {
+  opacity: 0.5;
+}
+.toolbar .reminders-toggle[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+/* 등록 칸: 글 한 줄 + [날짜·시각 (남는 폭)] [Add] */
+.reminders-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 12px 10px;
+}
+.reminders-form-row {
+  display: flex;
+  gap: 6px;
+}
+.reminders-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: calc(13px * var(--font-scale));
+}
+.reminders-time {
+  flex: 1;
+}
+.reminders-add {
+  flex-shrink: 0;
+  padding: 4px 12px;
+}
+.reminders-section + .reminders-section {
+  margin-top: 12px;
+}
+.reminders-section-head {
+  padding: 4px 12px;
+  font-weight: 600;
+}
+.reminders-section-count {
+  margin-left: 4px;
+  color: var(--muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.reminders-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* 한 줄: [체크(Fired 만)] · 글(두 줄까지) / 시각 · Late · 만든 이 · × */
+.reminders-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 4px;
+  padding: 4px 4px 4px 10px;
+  border-radius: var(--radius-md);
+}
+.reminders-item:hover {
+  background: var(--surface-1);
+}
+.reminders-item input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.reminders-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.reminders-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: calc(13px * var(--font-scale));
+}
+.reminders-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.reminders-late {
+  color: var(--caution-text);
+}
+/* ×: 줄 오른쪽 끝, 늘 보인다 (울린 알림은 지우기가 주된 동작 중 하나라 hover 에 숨기지 않는다) */
+.reminders-remove {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: calc(14px * var(--font-scale));
+  line-height: 20px;
+}
+.reminders-remove:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
 /* 모달 안의 폼 */
 .create {
   display: flex;
@@ -7246,6 +7361,7 @@ li.group.drop-after::after {
   }
   .toolbar .needs-you-toggle,
   .toolbar .all-todos-toggle,
+  .toolbar .reminders-toggle,
   .toolbar .lead-models-toggle {
     min-width: 40px;
     padding: 0 10px;
@@ -7311,6 +7427,28 @@ li.group.drop-after::after {
   .all-todos-add {
     min-height: 44px;
     font-size: 16px;
+  }
+  /* Reminders: 줄·입력칸·Add 44px, 입력 글자 16px (아이폰 포커스 확대 방지 — 데스크톱 13px 클래스가 폰 input 16px 를 이겨서 다시 준다), 체크박스 22px, × 44px */
+  .reminders-input,
+  .reminders-add {
+    min-height: 44px;
+  }
+  .reminders-input {
+    font-size: 16px;
+  }
+  .reminders-item {
+    min-height: 44px;
+    align-items: center;
+    box-sizing: border-box;
+  }
+  .reminders-item input[type='checkbox'] {
+    width: 22px;
+    height: 22px;
+    margin: 0;
+  }
+  .reminders-remove {
+    min-width: 44px;
+    min-height: 44px;
   }
   /* 목록 라벨의 접기 단추도 40px (버튼이 없는 Focus Zone·Off Duty 라벨도 같은 높이) */
   .group-toggle {

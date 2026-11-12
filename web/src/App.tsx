@@ -52,6 +52,7 @@ import {
   type TeamTodo,
   type OffDutyLabel,
   type Part,
+  type Reminder,
   type Session,
   type Shell,
   type SystemMemory,
@@ -63,6 +64,7 @@ import { handOverUnit } from './handOver'
 import { HomePanel } from './HomePanel'
 import { NeedsYouButton, NeedsYouView } from './NeedsYouButton'
 import { AllTodosButton, AllTodosView } from './AllTodosButton'
+import { RemindersButton, RemindersView } from './RemindersButton'
 import { bannerOf, nextOutage, presentWebIds, type Outage, type RestartTarget } from './reconnect'
 
 interface Snapshot {
@@ -320,9 +322,9 @@ export function App({ isLocal }: { isLocal: boolean }) {
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
   /** TODO 모달을 연 범위(팀·내 책상). 목록 팀 머리줄의 버튼·사무실 팀 명판 옆 버튼·All TODOs 창 머리줄이 같은 모달을 연다 */
   const [todoScope, setTodoScope] = useState<TodoScope | null>(null)
-  /** 사이드바 보기: 세션 목록 또는 툴바 버튼이 연 Needs you·All TODOs (목록 자리를 다 쓴다. 같은 버튼·← 로 목록으로) */
-  const [sidebarView, setSidebarView] = useState<'sessions' | 'needs-you' | 'todos'>('sessions')
-  const toggleSidebarView = (view: 'needs-you' | 'todos') => setSidebarView((current) => (current === view ? 'sessions' : view))
+  /** 사이드바 보기: 세션 목록 또는 툴바 버튼이 연 Needs you·All TODOs·Reminders (목록 자리를 다 쓴다. 같은 버튼·← 로 목록으로) */
+  const [sidebarView, setSidebarView] = useState<'sessions' | 'needs-you' | 'todos' | 'reminders'>('sessions')
+  const toggleSidebarView = (view: 'needs-you' | 'todos' | 'reminders') => setSidebarView((current) => (current === view ? 'sessions' : view))
   /** 그 범위의 todos. 팀이 사라지면 null 이라 모달을 그리지 않아 닫힌다 */
   const todoScopeTodos = todoScope ? scopeTodos(office, todoScope) : null
   const todoScopeName =
@@ -1099,6 +1101,11 @@ export function App({ isLocal }: { isLocal: boolean }) {
     setOffice((prev) => updateScopeTodos(prev, scope, update))
   }
 
+  /** Reminders 보기가 서버 응답으로 화면 목록을 먼저 바꾼다. 사무실 SSE 가 오면 서버 것으로 바뀐다 */
+  function changeReminders(update: (reminders: Reminder[]) => Reminder[]) {
+    setOffice((prev) => ({ ...prev, reminders: update(prev.reminders ?? []) }))
+  }
+
   function openTeamTodos(teamId: string) {
     setTodoScope(teamScope(teamId))
   }
@@ -1700,6 +1707,7 @@ export function App({ isLocal }: { isLocal: boolean }) {
             </button>
             <NeedsYouButton sessions={snapshot.sessions} now={now} isActive={sidebarView === 'needs-you'} onToggle={() => toggleSidebarView('needs-you')} />
             <AllTodosButton office={office} icon={<TodoIcon />} isActive={sidebarView === 'todos'} onToggle={() => toggleSidebarView('todos')} />
+            <RemindersButton office={office} isActive={sidebarView === 'reminders'} onToggle={() => toggleSidebarView('reminders')} />
             <LeadModelsButton sessions={snapshot.sessions} onOpen={() => setIsLeadModelsOpen(true)} />
           </div>
           {sidebarView === 'needs-you' && (
@@ -1714,6 +1722,15 @@ export function App({ isLocal }: { isLocal: boolean }) {
           )}
           {sidebarView === 'todos' && (
             <AllTodosView office={office} onClose={() => setSidebarView('sessions')} onChangeTodos={changeTodos} onOpenTodos={setTodoScope} />
+          )}
+          {sidebarView === 'reminders' && (
+            <RemindersView
+              office={office}
+              sessions={snapshot.sessions}
+              now={now}
+              onClose={() => setSidebarView('sessions')}
+              onChangeReminders={changeReminders}
+            />
           )}
           {/* 다른 보기일 때도 지우지 않고 숨긴다: 돌아오면 스크롤 위치·끌기 상태가 그대로 */}
           <ul ref={listRef} className={reorderDrag ? 'sessions reordering' : 'sessions'} hidden={sidebarView !== 'sessions'}>

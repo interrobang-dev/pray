@@ -26,7 +26,7 @@
 | `toolbar.md` | 목록 툴바 아이콘 버튼: Needs you·All TODOs 사이드바 보기, 팀장·파트장 모델 한꺼번에 바꾸기(Lead models 창) |
 | `office.md` | 사무실 캔버스(Office.tsx 전문), 배치·섬 밀기·그룹 크기, 고정 꾸미기, 라운지·라운지 휴식, 퇴근 거리 |
 | `office-art.md` | 목록 아바타·인물 고르기·색 바꾸기, 스프라이트 파이프라인·아틀라스 |
-| `reminders.md` | 알림(Reminders): 정한 시각에 사람에게 한 번 울리기 — hq.json `reminders` 저장·`/api/reminders`·30초 울리기 |
+| `reminders.md` | 알림(Reminders): 정한 시각에 사람에게 한 번 울리기 — hq.json `reminders` 저장·`/api/reminders`·30초 울리기·목록 툴바 Reminders 보기 |
 | `theme.md` | 화면 테마(모드·팔레트·강조색·글자 크기)·설정 창 App 탭·대비 규칙·스크롤바·로고·대화 모양(설정 창 Chat 탭) |
 
 저절로 읽히는 경로는 각 파일 머리의 `paths:` 를 본다.
@@ -101,6 +101,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 
 알림 → `reminders.md`
 - `host/src/reminder.ts` — 알림 꼴·시각 검증·울리기 판정 (순수, `@pray/host/reminder`). 저장은 `hq.ts` 의 `reminders`, API·시작 때와 30초마다 울리기는 `server/src/index.ts`
+- `web/src/RemindersButton.tsx`·`reminders.ts` — 목록 툴바 Reminders 버튼·사이드바 보기(등록·울린 것 확인·지우기)와 그 순수 함수
 
 웹 → `web-app.md` · `toolbar.md` · `chat.md` · `workspace.md` · `office.md` · `office-art.md` · `accounts.md`
 - `web/src/main.tsx` — 로그인 또는 App (`legacyStorage.ts`·`copyLegacyStorage.ts` — 옛 localStorage 키 한 번 옮기기) · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `reconnect.ts` — 서버·호스트가 끊겼다 붙을 때까지 위쪽 띠 단계 · `HomePanel.tsx`·`home.ts` — 사무실을 숨기고 세션을 안 골랐을 때의 첫 화면(새 세션·최근 세션) · `NeedsYouButton.tsx`·`needsYou.ts` — 목록 툴바 Needs you 사이드바 보기(근무 중인 승인 대기·내 차례·끝남 모아 보기) · `AllTodosButton.tsx` — 목록 툴바 All TODOs 사이드바 보기(맨 위 My desk 내 할 일 추가·완료 + 모든 팀의 남은 할 일을 팀마다 묶어 보기·완료) · `LeadModelsModal.tsx`·`leadModels.ts` — 목록 툴바 Lead models 창(근무 중인 팀장·파트장 모델·effort 를 줄마다 골라 한꺼번에 바꾸기) (툴바 셋 → `toolbar.md`) · `sessionLink.ts` — 트레이 알림이 여는 `#session=<id>` 읽기 · `listCollapse.ts` — 목록 그룹 접기 저장 값·접힌 라벨 상태 요약 · `panelWidth.ts` — 사무실이 보일 때 끌어 바꾸는 패널 폭 · `types.ts` — 응답 타입·공통 문구 함수 · `contextSize.ts` — 입력 상자 아래 문맥 크기 글자("143k")·주의/경고 단계 · `handOver.ts` — 문맥 경고 단계 팀장·파트장의 입력 상자 아래 문맥 크기 Hand over(새 지시자 창 열기) 판정

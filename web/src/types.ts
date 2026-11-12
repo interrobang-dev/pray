@@ -160,6 +160,27 @@ export interface Office {
   teams: Team[]
   /** 팀과 무관한 내 할 일 (All TODOs 의 My desk). 순서 규칙은 Team.todos 와 같다. 옛 서버 응답은 없다 (teamTodos.ts deskTodosOf) */
   todos?: TeamTodo[]
+  /** 알림 (툴바 Reminders). 서버 순서 = 넣은 순서, 정렬은 화면이 한다(reminders.ts). 옛 서버 응답은 없다 */
+  reminders?: Reminder[]
+}
+
+/** 알림을 등록한 쪽 (host/src/reminder.ts 와 같은 꼴). 리드의 sessionId 는 등록 때 그 지휘 단위의 지시자 */
+export type ReminderCreator = { kind: 'user' } | { kind: 'lead'; teamId: string; partId: string | null; sessionId: string | null }
+
+/** 정한 시각에 사람에게 한 번 울리는 알림 (host/src/reminder.ts 와 같은 꼴) */
+export interface Reminder {
+  id: string
+  text: string
+  /** 울릴 시각. UTC ISO */
+  at: string
+  createdAt: string
+  createdBy: ReminderCreator
+  /** 서버가 울린 시각. 아직이면 null */
+  firedAt: string | null
+  /** 울린 시각이 at 보다 90초 넘게 늦었다 (서버가 꺼져 있던 사이 지남). 울리기 전에는 없다 */
+  isLate?: boolean
+  /** 사람이 확인한 시각. 확인 전이면 null */
+  acknowledgedAt: string | null
 }
 
 export interface ToolUse {
