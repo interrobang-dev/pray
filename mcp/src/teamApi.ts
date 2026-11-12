@@ -63,6 +63,11 @@ export class TeamApi {
   dismiss(sessionId: string): Promise<unknown> {
     return this.call(`/api/team/${this.teamId}/members/${sessionId}${this.unitQuery('?')}`, { method: 'DELETE' })
   }
+
+  /** 사람에게 알림 등록. at 은 서버가 검증한다 (오프셋 없으면 서버 PC 시각). 결과 { reminder } */
+  remind(text: string, at: string): Promise<unknown> {
+    return this.call(`/api/team/${this.teamId}/reminders${this.unitQuery('?')}`, { method: 'POST', body: JSON.stringify({ text, at }) })
+  }
 }
 
 /** 응답 본문 해석. 앞뒤 공백(wait 가 기다리는 동안 흘린 것)은 무시하고, 비면 {}, JSON 이 아니면 null */

@@ -97,6 +97,16 @@ describe('TeamApi', () => {
     await expect(halfApi.wait([], 60)).rejects.toThrow('해석하지 못함')
   })
 
+  it('posts a reminder to the team (with partId for a part lead)', async () => {
+    const { calls, fetchImpl } = fakeFetch(200, { reminder: { id: 'r1' } })
+    await new TeamApi('http://x', 'T1', null, fetchImpl).remind('배포 확인', '2026-11-12T15:30')
+    await new TeamApi('http://x', 'T1', 'P1', fetchImpl).remind('배포 확인', '2026-11-12T06:30:00.000Z')
+    expect(calls.map((c) => [c.url, c.init?.method, JSON.parse(c.init?.body as string)])).toEqual([
+      ['http://x/api/team/T1/reminders', 'POST', { text: '배포 확인', at: '2026-11-12T15:30' }],
+      ['http://x/api/team/T1/reminders?partId=P1', 'POST', { text: '배포 확인', at: '2026-11-12T06:30:00.000Z' }],
+    ])
+  })
+
   it('throws the server message on error status', async () => {
     const { fetchImpl } = fakeFetch(409, { message: '진행 중인 task 가 있음' })
     const api = new TeamApi('http://x', 'T1', null, fetchImpl)

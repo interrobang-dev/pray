@@ -2983,20 +2983,42 @@ app.get('/api/reminders', (_req, res) => {
   res.json({ reminders: listReminders() })
 })
 
-/** 사람이 화면에서 등록. at 은 UTC ISO 로 바꿔 저장한다. 지난 시각(1분 넘게)·1년 넘게 먼 시각은 400 */
-app.post('/api/reminders', (req, res) => {
-  const body = (req.body ?? {}) as { text?: unknown; at?: unknown }
-  const text = parseTodoText(body.text)
+/** 등록 요청 본문 { text, at } 검증 (사람·리드 공용). 틀리면 400 을 보내고 null. at 은 UTC ISO 로 바꾼다 */
+function parseReminderBody(body: unknown, res: Response): { text: string; at: string } | null {
+  const { text: rawText, at: rawAt } = (body ?? {}) as { text?: unknown; at?: unknown }
+  const text = parseTodoText(rawText)
   if (text === null) {
     res.status(400).json({ message: TODO_TEXT_MESSAGE })
-    return
+    return null
   }
-  const parsed = parseReminderAt(body.at, new Date())
+  const parsed = parseReminderAt(rawAt, new Date())
   if ('error' in parsed) {
     res.status(400).json({ message: REMINDER_AT_MESSAGES[parsed.error] })
-    return
+    return null
   }
-  res.json({ reminder: addReminder(text, parsed.at, { kind: 'user' }) })
+  return { text, at: parsed.at }
+}
+
+/** 사람이 화면에서 등록. 지난 시각(1분 넘게)·1년 넘게 먼 시각은 400 */
+app.post('/api/reminders', (req, res) => {
+  const input = parseReminderBody(req.body, res)
+  if (!input) return
+  res.json({ reminder: addReminder(input.text, input.at, { kind: 'user' }) })
+  broadcastOffice()
+})
+
+/**
+ * 팀장·파트장 MCP team_remind 가 등록 (?partId= 면 파트장). 팀·파트가 없으면 404. 만든 이는 그 지휘 단위의 지금 지시자
+ * (MCP 는 자기 세션 ID 를 몰라 leadSessionId 로 채운다. 지시자가 없으면 null). 글·시각 검증은 사람 등록과 같다
+ */
+app.post('/api/team/:teamId/reminders', (req, res) => {
+  const unit = findUnit(req.params.teamId, req.query.partId, res)
+  if (!unit) return
+  const input = parseReminderBody(req.body, res)
+  if (!input) return
+  const { team, part } = unit
+  const sessionId = (part ? part.leadSessionId : team.leadSessionId) ?? null
+  res.json({ reminder: addReminder(input.text, input.at, { kind: 'lead', teamId: team.id, partId: part?.id ?? null, sessionId }) })
   broadcastOffice()
 })
 

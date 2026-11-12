@@ -9,10 +9,25 @@ export interface ToolNames {
   wait: string
   status: string
   dismiss: string
+  remind: string
 }
 
-const TEAM_TOOL_NAMES: ToolNames = { spawn: 'team_spawn_member', assign: 'team_assign', wait: 'team_wait', status: 'team_status', dismiss: 'team_dismiss' }
-const LEGACY_TOOL_NAMES: ToolNames = { spawn: 'jk_spawn_member', assign: 'jk_assign', wait: 'jk_wait', status: 'jk_status', dismiss: 'jk_dismiss' }
+const TEAM_TOOL_NAMES: ToolNames = {
+  spawn: 'team_spawn_member',
+  assign: 'team_assign',
+  wait: 'team_wait',
+  status: 'team_status',
+  dismiss: 'team_dismiss',
+  remind: 'team_remind',
+}
+const LEGACY_TOOL_NAMES: ToolNames = {
+  spawn: 'jk_spawn_member',
+  assign: 'jk_assign',
+  wait: 'jk_wait',
+  status: 'jk_status',
+  dismiss: 'jk_dismiss',
+  remind: 'jk_remind',
+}
 
 export interface McpMode {
   /** MCP serverInfo 이름. 도구 전체 이름(mcp__<키>__<도구>)의 키는 --mcp-config 쪽이 정하고 새 리드는 pray, 옛 리드는 jk-corp 다 */
@@ -53,7 +68,7 @@ function failure(error: unknown) {
  */
 const WAIT_PROGRESS_MS = 60_000
 
-/** 도구 5개를 모드의 이름으로 등록한 MCP 서버. 설명 안의 도구 이름도 모드를 따른다 */
+/** 도구 6개를 모드의 이름으로 등록한 MCP 서버. 설명 안의 도구 이름도 모드를 따른다 */
 export function createTeamServer(mode: McpMode, api: TeamApi): McpServer {
   const names = mode.tools
   const server = new McpServer({ name: mode.serverName, version: '0.1.0' })
@@ -179,5 +194,52 @@ export function createTeamServer(mode: McpMode, api: TeamApi): McpServer {
     },
   )
 
+  server.registerTool(
+    names.remind,
+    {
+      description:
+        '사람(사용자)에게 정한 시각에 한 번 울리는 알림을 Pray 화면(Reminders)에 등록한다. 사용자가 "30분 뒤 배포 확인하라고 알려줘"·"15시에 회의 알려줘" 처럼 자기에게 알려 달라고 하면 ScheduleWakeup·CronCreate 같은 내장 예약 도구가 아니라 이 도구를 쓴다 — 그것들은 너를 깨울 뿐 사람에게 알리지 않고 세션이 끝나면 사라진다. "30분 뒤"처럼 지금부터의 시간이면 inMinutes, "15시"처럼 시각이면 at 을 준다 (둘 중 정확히 하나). 시각을 계산하려고 지금 시각이 필요하면 셸에서 date 로 본다. 알림은 사람에게만 가고 너를 깨우지 않는다 — 그 시각에 네가 할 일이 있으면 이 도구로는 안 된다. 취소·목록 보기는 사람이 화면에서 한다. 결과의 firesAt(이 PC 시각)으로 사용자에게 언제 울리는지 확인해 줘라.',
+      inputSchema: {
+        text: z.string().describe('알림 글 (1~500자, 줄바꿈은 공백이 된다). 사람이 읽고 바로 알 수 있게 쓴다'),
+        at: z
+          .string()
+          .optional()
+          .describe('울릴 시각. 2026-11-12T15:30 꼴 — 오프셋을 안 붙이면 이 PC 시각, Z·+09:00 을 붙이면 그 기준. 날짜만은 안 된다. 1분 넘게 지난 시각·1년 넘게 먼 시각은 거절된다'),
+        inMinutes: z.number().positive().optional().describe('지금부터 몇 분 뒤에 울릴지 (예: 30)'),
+      },
+    },
+    async ({ text: reminderText, at, inMinutes }) => {
+      const now = new Date()
+      const resolved = reminderAtOf(at, inMinutes, now)
+      if ('error' in resolved) return failure(resolved.error)
+      try {
+        const result = (await api.remind(reminderText, resolved.at)) as { reminder?: { at?: string } }
+        const firesAt = result.reminder?.at ? localTimeText(new Date(result.reminder.at)) : null
+        return text({ ...result, firesAt, now: localTimeText(now) })
+      } catch (error) {
+        return failure(error)
+      }
+    },
+  )
+
   return server
+}
+
+/** team_remind 의 at·inMinutes 중 정확히 하나를 서버에 보낼 at 으로. inMinutes 는 이 PC 시계로 UTC ISO 로 바꾼다 (서버와 같은 PC). at 검증은 서버가 한다 */
+export function reminderAtOf(at: string | undefined, inMinutes: number | undefined, now: Date): { at: string } | { error: string } {
+  const hasAt = at !== undefined && at.trim() !== ''
+  const hasMinutes = inMinutes !== undefined
+  if (hasAt === hasMinutes) return { error: 'at 과 inMinutes 중 정확히 하나를 줘라 ("30분 뒤" 는 inMinutes, "15시" 는 at)' }
+  if (hasAt) return { at: at!.trim() }
+  if (!Number.isFinite(inMinutes) || inMinutes! <= 0) return { error: 'inMinutes 는 0 보다 큰 수여야 한다' }
+  return { at: new Date(now.getTime() + inMinutes! * 60_000).toISOString() }
+}
+
+/** 이 PC 시각 글자 "2026-11-12 15:30 (UTC+09:00)". 리드가 사용자에게 울릴 시각을 확인해 줄 때 쓴다 */
+export function localTimeText(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const offsetMinutes = -date.getTimezoneOffset()
+  const sign = offsetMinutes >= 0 ? '+' : '-'
+  const offset = `${pad(Math.floor(Math.abs(offsetMinutes) / 60))}:${pad(Math.abs(offsetMinutes) % 60)}`
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())} (UTC${sign}${offset})`
 }
