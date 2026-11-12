@@ -472,7 +472,24 @@ export function expandPalette(core: PaletteCore, mode: Mode): Vars {
     // 노랑은 글자로 쓰기엔 옅어 바탕 대비 4.5 까지 어둡게(다크는 밝게) 한다
     'vcs-modified': ensureContrast(core.yellow, [panel, bg], 4.5, isDark ? 'lighter' : 'darker'),
     'caution-text': ensureContrast(core.yellow, [panel, bg], 4.5, isDark ? 'lighter' : 'darker'),
+    ...surfaceVars(panel, text, isDark),
+    // 떠 있는 것 그림자: 라이트는 팔레트 글자색 기운, 다크는 검정 (Default 다크와 같다)
+    'shadow-pop': isDark ? DEFAULT_VARS.dark['shadow-pop'] : `0 1px 3px ${rgba(text, 0.06)}, 0 6px 20px ${rgba(text, 0.1)}`,
+    'shadow-modal': isDark ? DEFAULT_VARS.dark['shadow-modal'] : `0 2px 8px ${rgba(text, 0.08)}, 0 18px 48px ${rgba(text, 0.18)}`,
   }
+}
+
+/**
+ * 면 단계 (채운 입력칸·tonal 버튼·칩·hover): 글자색을 패널에 조금씩 섞는다.
+ * 글자·패널 대비에 여유가 없어(Solarized 다크) 가장 짙은 면에서 글자가 4.5 아래가 되면, 셋 다 반대쪽(라이트는 흰색·다크는 검정)으로 섞는다
+ */
+function surfaceVars(panel: string, text: string, isDark: boolean): Pick<Vars, 'surface-1' | 'surface-2' | 'surface-3'> {
+  const weights = isDark ? [0.05, 0.09, 0.15] : [0.04, 0.07, 0.12]
+  const isTowardText = contrast(text, mix(text, panel, weights[2])) >= 4.5
+  const toward = isTowardText ? text : isDark ? '#000000' : '#ffffff'
+  // 반대쪽은 같은 비율로는 차이가 덜 보여 두 배로 섞는다
+  const [surface1, surface2, surface3] = weights.map((weight) => mix(toward, panel, isTowardText ? weight : weight * 2))
+  return { 'surface-1': surface1, 'surface-2': surface2, 'surface-3': surface3 }
 }
 
 /** 강조색 파생의 기준 색 (팔레트의 패널·글자, 채운 버튼의 어두운 글자) */

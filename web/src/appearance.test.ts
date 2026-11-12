@@ -78,8 +78,10 @@ describe('Default 팔레트', () => {
   it('palettes.ts 의 DEFAULT_VARS 가 style.css 맨 위 변수와 같다', () => {
     const light = cssVars(':root')
     const dark = { ...light, ...cssVars(":root[data-theme='dark']") }
-    const { 'font-scale': _scale, ...lightColors } = light
-    const { 'font-scale': _darkScale, ...darkColors } = dark
+    // 색이 아닌 토큰(글자 배율·둥글기)은 팔레트와 무관해 DEFAULT_VARS 에 없다
+    const colorsOnly = (vars: Record<string, string>) => Object.fromEntries(Object.entries(vars).filter(([name]) => name !== 'font-scale' && !name.startsWith('radius-')))
+    const lightColors = colorsOnly(light)
+    const darkColors = colorsOnly(dark)
     expect(DEFAULT_VARS.light).toEqual(lightColors)
     expect(DEFAULT_VARS.dark).toEqual(darkColors)
   })
@@ -169,6 +171,23 @@ describe('팔레트', () => {
         expect(contrast(vars['on-accent'], vars.accent), label).toBeGreaterThanOrEqual(3)
       }
     }
+  })
+
+  it('면 단계(채운 버튼·입력칸·칩·hover) 위 보통 글자는 모든 팔레트·모드에서 4.5 이상이고, 면은 패널에서 1 → 3 으로 갈수록 짙어진다', () => {
+    const result: string[] = []
+    for (const palette of PALETTES) {
+      for (const mode of MODES) {
+        const vars = paletteVars(palette.id, mode)
+        for (const surface of ['surface-1', 'surface-2', 'surface-3'] as const) {
+          const ratio = contrast(vars.text, vars[surface])
+          if (ratio < 4.5) result.push(`${palette.id}/${mode} --text on --${surface} = ${ratio.toFixed(2)}`)
+        }
+        const label = `${palette.id}/${mode}`
+        expect(contrast(vars['surface-1'], vars.panel), label).toBeLessThan(contrast(vars['surface-2'], vars.panel))
+        expect(contrast(vars['surface-2'], vars.panel), label).toBeLessThan(contrast(vars['surface-3'], vars.panel))
+      }
+    }
+    expect(result).toEqual([])
   })
 })
 

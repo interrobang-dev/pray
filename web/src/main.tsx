@@ -7,6 +7,8 @@ import { IsLocalPage } from './ChatLink'
 import { DialogHost } from './Dialog'
 import { Login } from './Login'
 import './theme'
+// 본문 글꼴 Pretendard (npm pretendard, OFL-1.1). 동적 서브셋이라 화면에 쓰인 글자 범위의 woff2 만 받는다 — Vite 가 파일을 번들해 외부 망 요청이 없다
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './fonts.css'
 import './style.css'
 
