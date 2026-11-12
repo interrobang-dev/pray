@@ -131,7 +131,7 @@ describe('formatHandoff', () => {
 
 describe('handoffMessage', () => {
   it('names the previous lead or part lead', () => {
-    expect(handoffMessage('lead', 'Pray', 'BODY')).toBe("아래는 이전 팀장(Pray) 세션의 요약이다. 숙지하고 '인계받음' 한 줄로만 답하라\n\nBODY")
+    expect(handoffMessage('lead', 'Pray', 'BODY')).toBe("아래는 이전 팀장(Pray) 세션의 요약이다. 숙지하고, 이어받았다는 것을 존댓말 한 문장으로 짧게 답하라 (예: \"Pray 팀장 작업을 이어받았습니다. 다음 지시 주세요.\")\n\nBODY")
     expect(handoffMessage('part-lead', 'Mina', 'B').startsWith('아래는 이전 파트장(Mina)')).toBe(true)
   })
 })

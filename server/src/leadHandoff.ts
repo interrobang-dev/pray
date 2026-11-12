@@ -72,7 +72,7 @@ export class HandoffCollector {
   private items: HandoffItem[] = []
   /** 직전 압축 경계가 남긴 메시지 uuid (다음 요약 줄에서 쓴다) */
   private preserved = new Set<string>()
-  /** 지금 차례가 앞선 인계 메시지의 차례면 그 답("인계받음")은 뺀다 */
+  /** 지금 차례가 앞선 인계 메시지의 차례면 그 답은 뺀다 */
   private isHandoffTurn = false
 
   push(line: string): void {
@@ -197,7 +197,7 @@ export function formatHandoff(source: HandoffSource, limit: number): string | nu
 /** 새 지시자의 첫 메시지 */
 export function handoffMessage(kind: LeadKind, previousName: string, body: string): string {
   const title = LEAD_TITLE[kind]
-  return `아래는 이전 ${title}(${previousName}) 세션의 요약이다. 숙지하고 '인계받음' 한 줄로만 답하라\n\n${body}`
+  return `아래는 이전 ${title}(${previousName}) 세션의 요약이다. 숙지하고, 이어받았다는 것을 존댓말 한 문장으로 짧게 답하라 (예: "${previousName} ${title} 작업을 이어받았습니다. 다음 지시 주세요.")\n\n${body}`
 }
 
 /** Claude Code 의 프로젝트 폴더 이름: cwd 의 영문·숫자 밖 글자를 `-` 로 (예 `D:\workspace\@private\jk-corp` → `D--workspace--private-jk-corp`) */
