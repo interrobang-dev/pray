@@ -400,7 +400,7 @@ header button.icon svg {
   display: block;
   margin: 2px 0;
 }
-/* 툴바: 줄마다 하나 — New Group(채운 알약) · Reminders · Lead models(창을 여는 줄, 마우스를 올렸을 때만 면) */
+/* 툴바: 줄마다 하나 — New Group · Reminders · Lead models. 셋 다 투명 줄이고 마우스를 올렸을 때만 면 */
 .toolbar {
   display: flex;
   flex-direction: column;
@@ -414,14 +414,12 @@ header button.icon svg {
   width: 100%;
   white-space: nowrap;
   text-align: left;
+  background: transparent;
 }
 .toolbar .toolbar-row svg {
   flex-shrink: 0;
 }
-.toolbar .toolbar-row + .toolbar-row {
-  background: transparent;
-}
-.toolbar .toolbar-row + .toolbar-row:not(:disabled):hover {
+.toolbar .toolbar-row:not(:disabled):hover {
   background: var(--surface-2);
 }
 /* 줄 오른쪽 끝의 개수 배지 (Reminders) */
