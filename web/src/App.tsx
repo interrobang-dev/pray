@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -26,6 +27,7 @@ import { memoryLabel, memoryLevel, memoryPercent, parseSystemMemory } from './sy
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import type { FilesOpenRequest } from './openPath'
 import { KEY_STEP, clampPanelWidth, parsePanelWidth } from './panelWidth'
+import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, clampSidebarWidth, parseSidebarWidth } from './sidebarWidth'
 import { NewTeamModal } from './NewTeamModal'
 import { TeamTodosModal } from './TeamTodosModal'
 import { TeamTasksModal } from './TeamTasksModal'
@@ -97,6 +99,8 @@ function readIsOfficeHidden(): boolean {
 
 /** 사무실이 보일 때 오른쪽 패널 폭(px)을 남기는 localStorage 키 (이 브라우저만) */
 const PANEL_WIDTH_KEY = 'pray.panelWidth'
+/** 왼쪽 사이드바(목록) 폭(px)을 남기는 localStorage 키 (이 브라우저만) */
+const SIDEBAR_WIDTH_KEY = 'pray.sidebarWidth'
 
 /** 목록 접기를 남기는 localStorage 키 (이 브라우저만): 접힌 그룹 ID 배열(JSON)·Focus Zone 접힘·Off Duty 펼침 */
 const COLLAPSED_GROUPS_KEY = 'pray.collapsedGroups'
@@ -328,6 +332,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   /** 사무실이 보일 때 오른쪽 패널 폭. 패널 왼쪽 가장자리를 끌어 바꾼다 (CSS 가 창 폭에 맞춰 다시 줄인다) */
   const [panelWidth, setPanelWidth] = useState(() => parsePanelWidth(readStored(PANEL_WIDTH_KEY)))
   const [isPanelResizing, setIsPanelResizing] = useState(false)
+  /** 왼쪽 사이드바 폭(사용자가 고른 값). 창 폭으로 줄인 값을 <html> 의 --sidebar-width 로 건다 (아래 layout effect) */
+  const [sidebarWidth, setSidebarWidth] = useState(() => parseSidebarWidth(readStored(SIDEBAR_WIDTH_KEY)))
+  const [isSidebarResizing, setIsSidebarResizing] = useState(false)
   const layoutRef = useRef<HTMLElement>(null)
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
   /** TODO 모달을 연 범위(팀·내 책상). 목록 팀 머리줄의 버튼·사무실 팀 명판 옆 버튼·All TODOs 창 머리줄이 같은 모달을 연다 */
@@ -780,10 +787,70 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     }
   }
 
+  /** 지금 layout 폭 (그리기 전이면 창 폭) */
+  function layoutWidthNow() {
+    return layoutRef.current?.getBoundingClientRect().width ?? window.innerWidth
+  }
+
+  // 사이드바 폭은 <html> 에 건다: 트레이 창 제목 띠(main.tsx 가 App 밖에 그린다)의 버튼 자리도 같은 값을 따라가게.
+  // 창이 좁으면 사무실·패널(사무실 숨김이면 패널) 최소 폭을 남기고 줄인 값이다 (창 크기가 바뀔 때마다 다시 건다)
+  useLayoutEffect(() => {
+    const apply = () => {
+      const width = clampSidebarWidth(sidebarWidth, layoutWidthNow(), isOfficeHiddenLayout)
+      document.documentElement.style.setProperty('--sidebar-width', `${width}px`)
+    }
+    apply()
+    window.addEventListener('resize', apply)
+    return () => window.removeEventListener('resize', apply)
+  }, [sidebarWidth, isOfficeHiddenLayout])
+
+  /** 사이드바 폭을 바꾸고(남기기는 isSaved 일 때) 사무실·패널 칸이 남도록 지금 화면 폭으로 줄인 값을 돌려준다 */
+  function changeSidebarWidth(width: number, isSaved: boolean) {
+    const next = clampSidebarWidth(width, layoutWidthNow(), isOfficeHiddenLayout)
+    setSidebarWidth(next)
+    if (isSaved) writeStored(SIDEBAR_WIDTH_KEY, String(next))
+    return next
+  }
+
+  function startSidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return
+    const layout = layoutRef.current
+    if (!layout) return
+    event.preventDefault()
+    const handle = event.currentTarget
+    handle.setPointerCapture(event.pointerId)
+    setIsSidebarResizing(true)
+    let last = clampSidebarWidth(sidebarWidth, layoutWidthNow(), isOfficeHiddenLayout)
+    const onMove = (move: PointerEvent) => {
+      last = changeSidebarWidth(move.clientX - layout.getBoundingClientRect().left, false)
+    }
+    const onEnd = () => {
+      handle.removeEventListener('pointermove', onMove)
+      handle.removeEventListener('pointerup', onEnd)
+      handle.removeEventListener('pointercancel', onEnd)
+      setIsSidebarResizing(false)
+      writeStored(SIDEBAR_WIDTH_KEY, String(last))
+    }
+    handle.addEventListener('pointermove', onMove)
+    handle.addEventListener('pointerup', onEnd)
+    handle.addEventListener('pointercancel', onEnd)
+  }
+
+  function resizeSidebarByKey(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    // 화면에 보이는 폭(창이 좁아 줄인 폭일 수 있다)에서 시작한다. 손잡이 바로 앞 형제가 사이드바
+    const aside = event.currentTarget.previousElementSibling
+    const current = aside instanceof HTMLElement ? aside.getBoundingClientRect().width : sidebarWidth
+    changeSidebarWidth(current + (event.key === 'ArrowRight' ? KEY_STEP : -KEY_STEP), true)
+  }
+
   /** 패널 폭을 바꾸고 남긴다. 목록·사무실 칸이 남도록 지금 화면 폭으로 줄인다 */
   function changePanelWidth(width: number, isSaved: boolean) {
     const layout = layoutRef.current
-    const next = layout ? clampPanelWidth(width, layout.getBoundingClientRect().width) : width
+    const layoutWidth = layout ? layout.getBoundingClientRect().width : 0
+    // 패널 끌기는 사무실이 보일 때만이라 사이드바도 그 화면의 줄인 폭
+    const next = layout ? clampPanelWidth(width, layoutWidth, clampSidebarWidth(sidebarWidth, layoutWidth, false)) : width
     setPanelWidth(next)
     if (isSaved) writeStored(PANEL_WIDTH_KEY, String(next))
     return next
@@ -1713,7 +1780,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
       )}
       <main
         ref={layoutRef}
-        className={`layout${hasPanel ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}${isPanelResizing ? ' panel-resizing' : ''}`}
+        className={`layout${hasPanel ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}${isPanelResizing ? ' panel-resizing' : ''}${isSidebarResizing ? ' sidebar-resizing' : ''}`}
         style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
       >
         <aside>
@@ -1826,6 +1893,23 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
             )}
           </ul>
         </aside>
+        {/* 사이드바 오른쪽 가장자리 끌기 (폰은 사이드바가 전체 폭이라 없다). 사이드바 바로 뒤 형제라 키보드 폭 계산이 사이드바를 잰다. 더블클릭은 기본 폭 */}
+        {!isNarrow && (
+          <div
+            className="sidebar-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            aria-valuenow={sidebarWidth}
+            aria-valuemin={MIN_SIDEBAR_WIDTH}
+            aria-valuemax={MAX_SIDEBAR_WIDTH}
+            title="Drag to resize"
+            tabIndex={0}
+            onPointerDown={startSidebarResize}
+            onKeyDown={resizeSidebarByKey}
+            onDoubleClick={() => changeSidebarWidth(DEFAULT_SIDEBAR_WIDTH, true)}
+          />
+        )}
         {isGroupForm && (
           <Modal title="New group" onClose={() => setIsGroupForm(false)}>
             <form className="create" onSubmit={createGroup}>

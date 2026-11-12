@@ -7,14 +7,14 @@
 export const DEFAULT_PANEL_WIDTH = 520
 /** 패널 최소 폭 */
 export const MIN_PANEL_WIDTH = 360
-/** 패널 말고 남겨 둘 폭: 목록 300px + 사무실 최소 320px. style.css 의 `calc(100% - 620px)` 와 같은 값 */
-export const RESERVED_WIDTH = 620
+/** 사무실 최소 폭. 패널은 목록(사이드바) 폭 + 이만큼을 남긴다 — style.css `--panel-track` 의 `calc(100% - var(--sidebar-width) - 320px)` 와 같은 값 */
+export const MIN_OFFICE_WIDTH = 320
 /** 키보드 ←→ 한 번에 바뀌는 폭 */
 export const KEY_STEP = 16
 
-/** layoutWidth(목록·사무실·패널 전체 폭) 안에서 쓸 수 있는 폭으로 줄인다. 너무 좁으면 최소 폭이 이긴다 */
-export function clampPanelWidth(width: number, layoutWidth: number): number {
-  const max = Math.max(MIN_PANEL_WIDTH, layoutWidth - RESERVED_WIDTH)
+/** layoutWidth(목록·사무실·패널 전체 폭) 안에서 목록(sidebarWidth)·사무실 칸을 남기고 쓸 수 있는 폭으로 줄인다. 너무 좁으면 최소 폭이 이긴다 */
+export function clampPanelWidth(width: number, layoutWidth: number, sidebarWidth: number): number {
+  const max = Math.max(MIN_PANEL_WIDTH, layoutWidth - sidebarWidth - MIN_OFFICE_WIDTH)
   return Math.round(Math.min(max, Math.max(MIN_PANEL_WIDTH, width)))
 }
 

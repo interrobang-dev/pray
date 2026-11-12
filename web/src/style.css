@@ -317,14 +317,14 @@ textarea::placeholder {
 .titlebar-title .logo {
   -webkit-user-drag: none;
 }
-/* 띠의 Appearance·사무실 버튼: 사이드바 열(300px)의 오른쪽 끝, 브라우저의 목록 헤더 버튼과 같은 x (헤더처럼 오른쪽 안쪽 12px·간격 8px).
+/* 띠의 Appearance·사무실 버튼: 사이드바 열(--sidebar-width, App.tsx 가 <html> 에 건다. 끌기로 바뀌면 따라간다)의 오른쪽 끝, 브라우저의 목록 헤더 버튼과 같은 x (헤더처럼 오른쪽 안쪽 12px·간격 8px).
    오버레이 버튼 자리(titlebar-area 밖)로는 넘어가지 않는다. 버튼만 끌기 자리에서 빼 눌리게 한다 */
 .titlebar-actions {
   position: absolute;
   top: 0;
   left: env(titlebar-area-x, 0px);
   box-sizing: border-box;
-  width: min(300px, env(titlebar-area-width, 100%));
+  width: min(var(--sidebar-width, 300px), env(titlebar-area-width, 100%));
   height: 100%;
   display: flex;
   align-items: center;
@@ -356,15 +356,16 @@ textarea::placeholder {
 .layout {
   position: relative;
   display: grid;
-  grid-template-columns: 300px 1fr;
+  /* 왼쪽 사이드바 폭 --sidebar-width: App.tsx 가 끈 폭을 창 폭으로 줄여 <html> 에 건다 (sidebarWidth.ts, 260~480px. 트레이 창 제목 띠 버튼도 같은 값) */
+  grid-template-columns: var(--sidebar-width, 300px) 1fr;
   flex: 1;
   min-height: 0;
-  /* 오른쪽 패널 폭: 사용자가 끈 폭(--panel-width, App.tsx)을 목록 300px + 사무실 최소 320px 이 남도록 줄이고 최소 360px.
+  /* 오른쪽 패널 폭: 사용자가 끈 폭(--panel-width, App.tsx)을 목록(사이드바) + 사무실 최소 320px 이 남도록 줄이고 최소 360px.
      값은 panelWidth.ts 와 같다. % 는 쓰는 곳(grid 칸·끌기 손잡이 right)에서 둘 다 .layout 폭으로 풀린다 */
-  --panel-track: max(360px, min(var(--panel-width, 520px), calc(100% - 620px)));
+  --panel-track: max(360px, min(var(--panel-width, 520px), calc(100% - var(--sidebar-width, 300px) - 320px)));
 }
 .layout.with-panel {
-  grid-template-columns: 300px minmax(0, 1fr) var(--panel-track);
+  grid-template-columns: var(--sidebar-width, 300px) minmax(0, 1fr) var(--panel-track);
 }
 /* 패널 왼쪽 가장자리 끌기 손잡이 (사무실이 보일 때만 그린다). grid 칸을 차지하지 않게 absolute */
 .panel-resizer {
@@ -378,7 +379,19 @@ textarea::placeholder {
   cursor: col-resize;
   touch-action: none;
 }
-.panel-resizer::after {
+/* 사이드바 오른쪽 가장자리 끌기 손잡이 (폰 폭에는 그리지 않는다). 모양·동작은 패널 손잡이와 같다 */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--sidebar-width, 300px);
+  width: 7px;
+  margin-left: -4px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+:is(.panel-resizer, .sidebar-resizer)::after {
   content: '';
   position: absolute;
   top: 0;
@@ -388,20 +401,22 @@ textarea::placeholder {
   background: transparent;
   transition: background 0.12s;
 }
-.panel-resizer:hover::after,
-.panel-resizer:focus-visible::after,
-.layout.panel-resizing .panel-resizer::after {
+:is(.panel-resizer, .sidebar-resizer):hover::after,
+:is(.panel-resizer, .sidebar-resizer):focus-visible::after,
+.layout.panel-resizing .panel-resizer::after,
+.layout.sidebar-resizing .sidebar-resizer::after {
   background: var(--accent);
 }
-.panel-resizer:focus-visible {
+:is(.panel-resizer, .sidebar-resizer):focus-visible {
   outline: none;
 }
 /* 끄는 동안: 글자 선택·캔버스·iframe 이 포인터를 먹지 않게 */
-.layout.panel-resizing {
+.layout:is(.panel-resizing, .sidebar-resizing) {
   cursor: col-resize;
   user-select: none;
 }
-.layout.panel-resizing > :not(.panel-resizer) {
+.layout.panel-resizing > :not(.panel-resizer),
+.layout.sidebar-resizing > :not(.sidebar-resizer) {
   pointer-events: none;
 }
 /* 사이드바 = --panel 면. 옆 칸과의 경계는 선 없이 면 톤 차이로 한다 (사무실 = 캔버스 바닥, 세션 패널·첫 화면 = --bg) */
@@ -6494,7 +6509,7 @@ li.group.drop-after::after {
   background: var(--surface-2);
   border-color: transparent;
 }
-/* 사용량 상세 창: 상태 표시줄 바로 위 왼쪽 (목록 열과 같은 폭).
+/* 사용량 상세 창: 상태 표시줄 바로 위 왼쪽 (목록 열 기본 폭과 같은 300px. 사이드바를 끌어도 창 폭은 그대로).
    상태 표시줄이 overflow: hidden 이라 fixed 로 띄운다 (조상에 transform 이 없어 화면 기준). 모달(z-index 10)보다는 아래 */
 .usage-popover {
   position: fixed;
@@ -7253,7 +7268,7 @@ li.group.drop-after::after {
 /* 데스크톱에서 사무실을 숨긴 화면 (App.tsx isOfficeHiddenLayout. 폰 폭에는 이 클래스가 붙지 않는다).
    세션을 골랐으면 패널이 목록 오른쪽 폭을 다 쓰고, 안 골랐으면 그 자리에 첫 화면 (.home) */
 .layout.office-hidden.with-panel {
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 300px) minmax(0, 1fr);
 }
 /* 사무실을 숨기면 패널이 목록(사이드바 --panel)과 바로 맞닿는다. Files 탭 바탕도 --panel 이라 라이트·다크 모두 경계가 사라져서,
    패널 바탕을 머리와 같은 --bg 로 두고 Files 탭은 그 위의 둥근 면(양옆·아래 8px)으로 띄운다. 대화는 원래 --bg, 터미널은 검은 카드 그대로 */
