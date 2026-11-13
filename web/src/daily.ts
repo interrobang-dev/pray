@@ -1,6 +1,6 @@
 /** Today 창(오늘 한 일)의 응답 타입과 순수 함수. 서버 `server/src/dailyReport.ts`·`dayCommits.ts` 와 손으로 맞춘다 */
 import { contextSizeText } from './contextSize'
-import { usageDetailText, usageMetaText, type TaskStatus, type TaskUsage } from './teamTasks'
+import { usageMetaText, type TaskStatus, type TaskUsage } from './teamTasks'
 import { teamsInListOrder } from './teamTodos'
 import type { Office, TodoPriority } from './types'
 
@@ -81,7 +81,9 @@ export interface DailyReport {
   /** 고를 수 있는 가장 앞 날짜 */
   oldestDate: string
   date: string
+  /** 그날 서버 PC 로컬 자정 ISO */
   from: string
+  /** 다음 날 자정 ISO */
   to: string
   myDesk: { todosDone: DailyTodo[] }
   teams: TeamDaily[]
@@ -103,11 +105,6 @@ export function dayTitle(date: string, today: string): string {
   if (date === today) return `Today · ${dayLabel(date)}`
   if (date === shiftDate(today, -1)) return `Yesterday · ${dayLabel(date)}`
   return dayLabel(date)
-}
-
-/** 줄 앞 시각 "09:05" (보는 PC 의 시각) */
-export function clockText(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
 /** 그날 한 일이 있는 팀인지 (커밋·커밋 오류·task·토큰·끝낸 할 일·팀원 들고 남) */
@@ -151,64 +148,166 @@ export function teamTokenTotal(team: TeamDaily): TaskUsage | null {
   return addUsage(addUsage(addUsage(null, team.tokens.lead), team.tokens.members), team.tokens.other)
 }
 
+const outputOf = (team: TeamDaily) => teamTokenTotal(team)?.outputTokens ?? 0
+
 /** 끝난 task (진행 중 빼고) */
 const finishedCount = (team: TeamDaily) => team.tasks.filter((task) => task.status !== 'running').length
 
-/** 창 맨 위 합계 "14 commits · 23 tasks · 1.3M out · 381M in · 97% cached". 한 일이 하나도 없으면 null */
-export function reportTotalText(report: DailyReport): string | null {
-  const commits = report.teams.reduce((sum, team) => sum + team.commits.items.length, 0)
-  const tasks = report.teams.reduce((sum, team) => sum + finishedCount(team), 0)
-  const tokens = report.teams.reduce<TaskUsage | null>((sum, team) => addUsage(sum, teamTokenTotal(team)), null)
-  const parts = [...(commits > 0 ? [plural(commits, 'commit')] : []), ...(tasks > 0 ? [plural(tasks, 'task')] : [])]
-  const usage = usageMetaText(tokens, null)
-  if (usage) parts.push(usage)
-  return parts.length > 0 ? parts.join(' · ') : null
+export interface DailyStats {
+  commits: number
+  /** 끝난 task 수 */
+  tasks: number
+  /** 모든 팀 토큰 합 (null = 토큰 없음) */
+  usage: TaskUsage | null
+  /** 한 일이 있는 팀 수 */
+  teams: number
 }
 
-/** 팀 머리줄 회색 "3 commits · 5 tasks · 120k out" */
-export function teamSummaryText(team: TeamDaily): string {
-  const total = teamTokenTotal(team)
+/** 맨 위 숫자 칸 넷 */
+export function dailyStats(report: DailyReport): DailyStats {
+  return {
+    commits: report.teams.reduce((sum, team) => sum + team.commits.items.length, 0),
+    tasks: report.teams.reduce((sum, team) => sum + finishedCount(team), 0),
+    usage: report.teams.reduce<TaskUsage | null>((sum, team) => addUsage(sum, teamTokenTotal(team)), null),
+    teams: report.teams.filter(hasActivity).length,
+  }
+}
+
+/** Teams 칸 순서: 출력 토큰 많은 순, 같으면 받은 순서(목록 순서) 그대로 */
+export function teamsByOutput(teams: readonly TeamDaily[]): TeamDaily[] {
+  return teams
+    .map((team, index) => ({ team, index, output: outputOf(team) }))
+    .sort((a, b) => b.output - a.output || a.index - b.index)
+    .map(({ team }) => team)
+}
+
+/** 팀 줄 회색 "9 commits · 15 tasks · 2 TODOs done" (없는 것은 뺀다) */
+export function teamCountsText(team: TeamDaily): string {
   return [
     ...(team.commits.items.length > 0 ? [plural(team.commits.items.length, 'commit')] : []),
     ...(finishedCount(team) > 0 ? [plural(finishedCount(team), 'task')] : []),
-    ...(total ? [`${contextSizeText(total.outputTokens)} out`] : []),
+    ...(team.todosDone.length > 0 ? [`${plural(team.todosDone.length, 'TODO')} done`] : []),
   ].join(' · ')
 }
 
-/** 커밋 칸이 비었을 때의 회색 한 줄. 커밋이 있으면 null */
+/** 커밋 칸 대신 보일 회색 한 줄. SVN 만 ("SVN commits aren't shown") */
 export function commitsNote(commits: DayCommits): string | null {
-  if (commits.items.length > 0) return null
-  if (commits.kind === 'svn') return "SVN commits aren't shown"
-  if (commits.kind === 'none') return null
-  if (commits.error) return null
-  return 'No commits'
+  return commits.items.length === 0 && commits.kind === 'svn' ? "SVN commits aren't shown" : null
 }
 
-export const TOKEN_LABELS: Record<TokenKind, string> = { lead: 'Lead', member: 'Members', other: 'Other' }
+const TOKEN_LABELS: Record<TokenKind, string> = { lead: 'Lead', member: 'Members', other: 'Other' }
 
-/** Tokens 칸 줄: 합이 있는 갈래만 Lead → Members → Other. title 은 네 값 + 세션별 줄 */
-export function tokenRows(tokens: DailyTokens): { kind: TokenKind; label: string; text: string; title: string }[] {
+/** 토큰 막대 title: 합 한 줄 + 합이 있는 갈래만 Lead → Members → Other ("Members (2): 2k out · 100 in · 90% cached") */
+export function tokenTitle(team: TeamDaily): string {
+  const total = teamTokenTotal(team)
+  if (!total) return 'No tokens'
   const rows: { kind: TokenKind; usage: TaskUsage | null }[] = [
-    { kind: 'lead', usage: tokens.lead },
-    { kind: 'member', usage: tokens.members },
-    { kind: 'other', usage: tokens.other },
+    { kind: 'lead', usage: team.tokens.lead },
+    { kind: 'member', usage: team.tokens.members },
+    { kind: 'other', usage: team.tokens.other },
   ]
-  return rows.flatMap(({ kind, usage }) => {
+  const lines = rows.flatMap(({ kind, usage }) => {
     if (!usage) return []
-    const sessions = tokens.sessions.filter((session) => session.kind === kind)
-    const lines = sessions.map((session) => `${sessionLabel(session)}: ${usageMetaText(session.usage, session.model)}`)
-    return [{ kind, label: `${TOKEN_LABELS[kind]}${sessions.length > 1 ? ` (${sessions.length})` : ''}`, text: usageMetaText(usage, null) ?? '', title: [usageDetailText(usage), ...lines].join('\n') }]
+    const count = team.tokens.sessions.filter((session) => session.kind === kind).length
+    return [`${TOKEN_LABELS[kind]}${count > 1 ? ` (${count})` : ''}: ${usageMetaText(usage, null)}`]
   })
+  return [`Total: ${usageMetaText(total, null)}`, ...lines].join('\n')
 }
 
-/** 세션 이름 (역할이 있으면 "[FE] Jisoo"), 목록에서 빠진 세션은 ID 앞 8자리 */
-export function sessionLabel(session: Pick<DailySessionTokens, 'name' | 'position' | 'sessionId'>): string {
-  const name = session.name ?? session.sessionId.slice(0, 8)
-  return session.position ? `[${session.position}] ${name}` : name
+/** 팀 줄 오른쪽 출력 토큰 "820k" (없으면 null) */
+export function outputText(team: TeamDaily): string | null {
+  const output = outputOf(team)
+  return output > 0 ? contextSizeText(output) : null
 }
 
-/** 팀원 들고 남 "Joined 2 · Released 1". 둘 다 0 이면 null */
-export function eventsText(events: TeamDaily['events']): string | null {
-  const parts = [...(events.joined > 0 ? [`Joined ${events.joined}`] : []), ...(events.released > 0 ? [`Released ${events.released}`] : [])]
-  return parts.length > 0 ? parts.join(' · ') : null
+/** 막대 길이 0~1 (그날 가장 많이 쓴 팀 = 1) */
+export function outputShare(team: TeamDaily, teams: readonly TeamDaily[]): number {
+  const max = Math.max(0, ...teams.map(outputOf))
+  return max > 0 ? outputOf(team) / max : 0
+}
+
+export const COMMIT_PREVIEW = 3
+
+/** 팀 줄 아래 커밋 제목: 접혀 있으면 앞 3개와 숨은 수 */
+export function visibleCommits(items: readonly DayCommit[], isExpanded: boolean): { shown: DayCommit[]; hiddenCount: number } {
+  if (isExpanded || items.length <= COMMIT_PREVIEW) return { shown: [...items], hiddenCount: 0 }
+  return { shown: items.slice(0, COMMIT_PREVIEW), hiddenCount: items.length - COMMIT_PREVIEW }
+}
+
+const HOUR_MS = 3_600_000
+
+export interface HourBucket {
+  /** 그 시간에 한 번이라도 돌던 task 수 */
+  tasks: number
+  commits: number
+}
+
+export interface TeamTimeline {
+  hours: HourBucket[]
+  /** 커밋 시각의 하루 안 자리 0~1 */
+  commitMarks: number[]
+}
+
+/** 하루의 시간 칸 수 (보통 24. 서머타임이 있는 시간대면 23·25) */
+export function hourCountOf(report: Pick<DailyReport, 'from' | 'to'>): number {
+  return Math.max(1, Math.round((Date.parse(report.to) - Date.parse(report.from)) / HOUR_MS))
+}
+
+/**
+ * 팀 한 줄의 시간대별 묶음. task 는 지시 시각 ~ 끝난 시각(진행 중이면 지금, 하루 끝을 넘지 않게)과 겹치는 시간마다 1,
+ * 커밋은 그 시각의 시간 칸에 1. 하루 밖은 하루 끝에 맞춘다
+ */
+export function teamTimeline(team: TeamDaily, report: Pick<DailyReport, 'from' | 'to'>, now: number): TeamTimeline {
+  const from = Date.parse(report.from)
+  const to = Date.parse(report.to)
+  const hourCount = hourCountOf(report)
+  const hours: HourBucket[] = Array.from({ length: hourCount }, () => ({ tasks: 0, commits: 0 }))
+  const hourOf = (time: number) => Math.min(hourCount - 1, Math.max(0, Math.floor((time - from) / HOUR_MS)))
+  for (const task of team.tasks) {
+    const start = Math.max(from, Date.parse(task.createdAt))
+    const end = Math.min(to, task.finishedAt ? Date.parse(task.finishedAt) : Math.min(now, to))
+    if (Number.isNaN(start) || Number.isNaN(end) || start >= to || end < from) continue
+    const first = hourOf(start)
+    // 끝이 칸 경계에 딱 맞으면 그 다음 칸은 넣지 않는다
+    const last = Math.max(first, Math.min(hourCount - 1, Math.ceil((end - from) / HOUR_MS) - 1))
+    for (let hour = first; hour <= last; hour++) hours[hour].tasks++
+  }
+  const commitMarks: number[] = []
+  for (const commit of team.commits.items) {
+    const at = Date.parse(commit.at)
+    if (Number.isNaN(at) || at < from || at >= to) continue
+    hours[hourOf(at)].commits++
+    commitMarks.push((at - from) / (to - from))
+  }
+  return { hours, commitMarks }
+}
+
+/** 타임라인에 줄이 있는 팀 (task·커밋처럼 시각이 있는 것이 있을 때만) */
+export function hasTimedActivity(team: TeamDaily): boolean {
+  return team.tasks.length > 0 || team.commits.items.length > 0
+}
+
+/** 칸 진하기 단계 0~4 (돌던 task 0·1·2·3·4+) */
+export function heatLevel(taskCount: number): number {
+  return Math.min(4, Math.max(0, taskCount))
+}
+
+const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
+
+/** 칸 title "14:00–15:00 · 3 tasks · 2 commits" (시각은 그날 자정부터 센 서버 PC 시각) */
+export function hourTitle(hour: number, bucket: HourBucket): string {
+  return [
+    `${hourLabel(hour)}–${hourLabel(hour + 1)}`,
+    ...(bucket.tasks > 0 ? [plural(bucket.tasks, 'task')] : []),
+    ...(bucket.commits > 0 ? [plural(bucket.commits, 'commit')] : []),
+  ].join(' · ')
+}
+
+/** 지금 시각 선 자리 0~1. 오늘이 아니거나 하루 밖이면 null */
+export function nowShare(report: Pick<DailyReport, 'date' | 'today' | 'from' | 'to'>, now: number): number | null {
+  if (report.date !== report.today) return null
+  const from = Date.parse(report.from)
+  const to = Date.parse(report.to)
+  if (!(now >= from && now < to)) return null
+  return (now - from) / (to - from)
 }

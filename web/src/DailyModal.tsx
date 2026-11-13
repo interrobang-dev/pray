@@ -1,23 +1,28 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import {
-  clockText,
   commitsNote,
+  dailyStats,
   dayTitle,
-  eventsText,
-  reportTotalText,
+  hasTimedActivity,
+  heatLevel,
+  hourCountOf,
+  hourTitle,
+  nowShare,
+  outputShare,
+  outputText,
   shiftDate,
   splitTeams,
-  teamSummaryText,
-  tokenRows,
+  teamCountsText,
+  teamsByOutput,
+  teamTimeline,
+  tokenTitle,
+  visibleCommits,
   type DailyReport,
-  type DailyTask,
-  type DailyTodo,
   type TeamDaily,
 } from './daily'
+import { contextSizeText } from './contextSize'
 import { Modal } from './Modal'
-import { PositionChip } from './PositionChip'
-import { PriorityChip } from './TeamTodosModal'
-import { memberNameOf, taskDuration, taskStatusLabel, usageDetailText, usageMetaText, type TaskDetail } from './teamTasks'
+import { usageMetaText } from './teamTasks'
 import { formatDateTime, type Office } from './types'
 
 /** 툴바 Today 아이콘: 달력 + 체크 */
@@ -59,9 +64,11 @@ async function getJson<T>(url: string): Promise<{ data: T | null; failure: strin
   }
 }
 
+const AXIS_HOURS = [0, 6, 12, 18, 24]
+
 /**
- * Today 창: 그날(서버 PC 의 자정 기준) 팀마다 커밋·끝난 task·토큰·끝낸 할 일·팀원 들고 남. ‹ › 로 하루씩 (오늘부터 7일 전까지).
- * 폴링하지 않는다 — 열 때·날짜를 바꿀 때·↻ 때만 받는다 (첫 요청이 jsonl 을 읽어 무겁다)
+ * Today 창: 그날(서버 PC 의 자정 기준) 한 일을 숫자 칸 넷 · 팀별 시간대 타임라인 · 팀별 출력 토큰 막대와 커밋 제목으로.
+ * ‹ › 로 하루씩 (오늘부터 7일 전까지). 폴링하지 않는다 — 열 때·날짜를 바꿀 때·↻ 때만 받는다 (첫 요청이 jsonl 을 읽어 무겁다)
  */
 export function DailyModal({ office, focusTeamId, onClose }: Props) {
   // null = 오늘 (서버가 정한다)
@@ -70,8 +77,7 @@ export function DailyModal({ office, focusTeamId, onClose }: Props) {
   const [report, setReport] = useState<DailyReport | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [openTask, setOpenTask] = useState<{ teamId: string; taskId: string } | null>(null)
-  const [details, setDetails] = useState<Record<string, TaskDetail | { failure: string }>>({})
+  const [expandedTeamIds, setExpandedTeamIds] = useState<ReadonlySet<string>>(new Set())
   const scrollRef = useRef<HTMLDivElement>(null)
   const hasScrolledRef = useRef(false)
 
@@ -100,180 +106,157 @@ export function DailyModal({ office, focusTeamId, onClose }: Props) {
     if (container && target) container.scrollTo({ top: target.offsetTop - container.offsetTop })
   }, [report, focusTeamId])
 
-  const openKey = openTask ? `${openTask.teamId}/${openTask.taskId}` : null
-  useEffect(() => {
-    if (!openTask) return
-    const key = `${openTask.teamId}/${openTask.taskId}`
-    let isCurrent = true
-    void getJson<{ task: TaskDetail }>(`/api/team/${encodeURIComponent(openTask.teamId)}/tasks/${encodeURIComponent(openTask.taskId)}`).then(({ data, failure: detailFailure }) => {
-      if (!isCurrent) return
-      setDetails((current) => ({ ...current, [key]: data ? data.task : { failure: detailFailure ?? 'Not found' } }))
-    })
-    return () => {
-      isCurrent = false
-    }
-  }, [openTask, reloadKey])
-
   const shownDate = report?.date ?? null
   const today = report?.today ?? null
   const canGoBack = Boolean(report && shownDate && shownDate > report.oldestDate)
   const canGoForward = Boolean(report && shownDate && today && shownDate < today)
   const title = shownDate && today ? dayTitle(shownDate, today) : 'Today'
   const { active, quiet } = report ? splitTeams(report, office) : { active: [], quiet: [] }
-  const totalText = report ? reportTotalText(report) : null
+  const ranked = teamsByOutput(active)
+  const timed = ranked.filter(hasTimedActivity)
   const desk = report?.myDesk.todosDone ?? []
   const now = Date.now()
+  const nowAt = report ? nowShare(report, now) : null
 
-  const go = (days: number) => {
-    if (!shownDate) return
-    setOpenTask(null)
-    setDate(shiftDate(shownDate, days))
+  const changeDate = (next: string | null) => {
+    setExpandedTeamIds(new Set())
+    scrollRef.current?.scrollTo({ top: 0 })
+    setDate(next)
   }
+  const toggleExpanded = (teamId: string) =>
+    setExpandedTeamIds((current) => {
+      const next = new Set(current)
+      if (next.has(teamId)) next.delete(teamId)
+      else next.add(teamId)
+      return next
+    })
   const partName = (teamId: string, partId: string | null) =>
     partId ? (office.teams.find((team) => team.id === teamId)?.parts.find((part) => part.id === partId)?.name ?? 'Removed part') : null
 
-  function renderTask(team: TeamDaily, task: DailyTask) {
-    const key = `${team.teamId}/${task.id}`
-    const isOpen = openKey === key
-    const detail = details[key]
-    const usageText = usageMetaText(task.usage, task.model)
-    const part = partName(team.teamId, task.partId)
-    const at = task.finishedAt ?? task.createdAt
+  function renderStats(currentReport: DailyReport) {
+    const stats = dailyStats(currentReport)
+    const tiles: { label: string; value: string; title?: string }[] = [
+      { label: stats.commits === 1 ? 'commit' : 'commits', value: String(stats.commits) },
+      { label: stats.tasks === 1 ? 'task done' : 'tasks done', value: String(stats.tasks) },
+      { label: 'tokens out', value: contextSizeText(stats.usage?.outputTokens ?? 0), title: usageMetaText(stats.usage, null) ?? undefined },
+      { label: stats.teams === 1 ? 'team' : 'teams', value: String(stats.teams) },
+    ]
     return (
-      <li key={task.id} className={isOpen ? 'task-row open' : 'task-row'}>
-        <button type="button" className="task-summary" aria-expanded={isOpen} onClick={() => setOpenTask(isOpen ? null : { teamId: team.teamId, taskId: task.id })}>
-          <span className="task-line">
-            <span className={`task-status ${task.status}`}>{taskStatusLabel(task)}</span>
-            <span className="task-member">
-              <PositionChip position={task.memberPosition} />
-              {memberNameOf(task.memberName, task.memberSessionId)}
-            </span>
-            <span className="task-time" title={formatDateTime(at)}>
-              {clockText(at)}
-            </span>
-          </span>
-          {task.instructionHead && <span className="task-instruction">{task.instructionHead}</span>}
-          {task.resultHead && <span className="task-instruction daily-result">{task.resultHead}</span>}
-          <span className="task-meta">
-            <span title={`Assigned ${formatDateTime(task.createdAt)}`}>
-              {task.status === 'running' ? 'For ' : 'Took '}
-              {taskDuration(task, now)}
-            </span>
-            {usageText && task.usage && <span title={usageDetailText(task.usage)}>{usageText}</span>}
-            {part && <span>Part {part}</span>}
-          </span>
-        </button>
-        {isOpen && (
-          <div className="task-detail">
-            {!detail ? (
-              <div className="task-empty">Loading…</div>
-            ) : 'failure' in detail ? (
-              <div className="todo-error">{detail.failure}</div>
-            ) : (
-              <>
-                <div className="task-detail-label">Instruction</div>
-                <div className="task-text">{detail.instruction}</div>
-                {detail.error && (
-                  <>
-                    <div className="task-detail-label">Error</div>
-                    <div className="task-text task-error">{detail.error}</div>
-                  </>
-                )}
-                <div className="task-detail-label">Result</div>
-                {detail.result ? (
-                  <div className="task-text">{detail.result}</div>
-                ) : (
-                  <div className="task-empty">{detail.status === 'running' ? 'Not finished yet' : 'No result'}</div>
-                )}
-              </>
-            )}
+      <div className="daily-stats">
+        {tiles.map((tile) => (
+          <div key={tile.label} className="daily-stat" title={tile.title}>
+            <b>{tile.value}</b>
+            <span>{tile.label}</span>
           </div>
-        )}
-      </li>
+        ))}
+      </div>
     )
   }
 
-  function renderTodos(todos: DailyTodo[]) {
+  function renderLane(currentReport: DailyReport, team: TeamDaily) {
+    const line = teamTimeline(team, currentReport, now)
     return (
-      <ul className="daily-list">
-        {todos.map((todo) => (
-          <li key={todo.id} className="daily-row">
-            <span className="daily-time" title={formatDateTime(todo.doneAt)}>
-              {clockText(todo.doneAt)}
-            </span>
-            <span className="daily-text">
-              <PriorityChip priority={todo.priority} />
-              {todo.text}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <div key={team.teamId} className="daily-lane">
+        <span className="daily-lane-name">{team.name}</span>
+        <div className="daily-track">
+          <div className="daily-hours" style={{ '--hour-count': line.hours.length } as CSSProperties}>
+            {line.hours.map((bucket, hour) => (
+              <div key={hour} className="daily-hour" data-level={heatLevel(bucket.tasks)} title={`${team.name}\n${hourTitle(hour, bucket)}`} />
+            ))}
+          </div>
+          {line.commitMarks.map((share, index) => (
+            <span key={index} className="daily-commit-tick" style={{ left: `${share * 100}%` }} />
+          ))}
+          {nowAt !== null && <span className="daily-now" style={{ left: `${nowAt * 100}%` }} />}
+        </div>
+      </div>
+    )
+  }
+
+  function renderTimeline(currentReport: DailyReport) {
+    const hourCount = hourCountOf(currentReport)
+    return (
+      <section className="daily-section">
+        <div className="daily-section-head">
+          <b>Activity</b>
+          <span className="daily-legend" aria-hidden="true">
+            <span>Tasks running 1</span>
+            {[1, 2, 3, 4].map((level) => (
+              <span key={level} className="daily-legend-cell" data-level={level} />
+            ))}
+            <span>4+</span>
+            <span className="daily-legend-tick" />
+            <span>Commit</span>
+            {nowAt !== null && (
+              <>
+                <span className="daily-legend-now" />
+                <span>Now</span>
+              </>
+            )}
+          </span>
+        </div>
+        <div className="daily-timeline">
+          {timed.map((team) => renderLane(currentReport, team))}
+          <div className="daily-lane daily-axis-row" aria-hidden="true">
+            <span className="daily-lane-name" />
+            <div className="daily-axis">
+              {AXIS_HOURS.filter((hour) => hour <= hourCount).map((hour) => (
+                <span key={hour} style={{ left: `${(hour / hourCount) * 100}%` }}>
+                  {String(hour).padStart(2, '0')}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
     )
   }
 
   function renderTeam(team: TeamDaily) {
+    const counts = teamCountsText(team)
+    const output = outputText(team)
     const note = commitsNote(team.commits)
-    const tokens = tokenRows(team.tokens)
-    const events = eventsText(team.events)
-    const summary = teamSummaryText(team)
+    const isExpanded = expandedTeamIds.has(team.teamId)
+    const { shown, hiddenCount } = visibleCommits(team.commits.items, isExpanded)
     const teamCwd = office.teams.find((item) => item.id === team.teamId)?.cwd
     return (
-      <section key={team.teamId} className="daily-team" data-daily-team={team.teamId}>
-        <div className="daily-team-head" title={teamCwd}>
-          <b>{team.name}</b>
-          {summary && <span className="daily-team-summary">{summary}</span>}
+      <li key={team.teamId} className="daily-team" data-daily-team={team.teamId}>
+        <div className="daily-team-head">
+          <b title={teamCwd}>{team.name}</b>
+          {counts && <span className="daily-team-counts">{counts}</span>}
+          <span className="daily-team-output">{output ? `${output} out` : ''}</span>
         </div>
-        <div className="daily-label">Commits</div>
+        <div className="daily-bar" title={tokenTitle(team)}>
+          <span className="daily-bar-fill" style={{ width: `${outputShare(team, ranked) * 100}%` }} />
+        </div>
         {team.commits.error && <div className="todo-error">{team.commits.error}</div>}
         {note && <div className="daily-note">{note}</div>}
-        {team.commits.items.length > 0 && (
-          <ul className="daily-list">
-            {team.commits.items.map((commit) => {
+        {shown.length > 0 && (
+          <ul className="daily-commits">
+            {shown.map((commit) => {
               const part = partName(team.teamId, commit.partId)
               return (
-                <li key={commit.hash} className="daily-row" title={`${commit.hash}\n${commit.authorName} · ${formatDateTime(commit.at)}`}>
-                  <span className="daily-time">{clockText(commit.at)}</span>
-                  <span className="daily-hash">{commit.shortHash}</span>
-                  <span className="daily-text">{commit.subject}</span>
-                  {part && <span className="daily-part">Part {part}</span>}
+                <li key={commit.hash} title={[commit.hash, `${commit.authorName} · ${formatDateTime(commit.at)}`, ...(part ? [`Part ${part}`] : [])].join('\n')}>
+                  {commit.subject}
                 </li>
               )
             })}
           </ul>
         )}
-        {team.commits.isTruncated && <div className="daily-note">Showing the first commits only</div>}
-        {team.tasks.length > 0 && (
+        {hiddenCount > 0 && (
+          <button type="button" className="daily-more" onClick={() => toggleExpanded(team.teamId)}>
+            +{hiddenCount} more
+          </button>
+        )}
+        {isExpanded && (
           <>
-            <div className="daily-label">Tasks</div>
-            <ul className="tasks-list">{team.tasks.map((task) => renderTask(team, task))}</ul>
+            {team.commits.isTruncated && <div className="daily-note">Showing the first commits only</div>}
+            <button type="button" className="daily-more" onClick={() => toggleExpanded(team.teamId)}>
+              Show less
+            </button>
           </>
         )}
-        {tokens.length > 0 && (
-          <>
-            <div className="daily-label">Tokens</div>
-            <ul className="daily-list">
-              {tokens.map((row) => (
-                <li key={row.kind} className="daily-row" title={row.title}>
-                  <span className="daily-token-kind">{row.label}</span>
-                  <span className="daily-text daily-numbers">{row.text}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-        {team.todosDone.length > 0 && (
-          <>
-            <div className="daily-label">Done TODOs</div>
-            {renderTodos(team.todosDone)}
-          </>
-        )}
-        {events && (
-          <>
-            <div className="daily-label">Members</div>
-            <div className="daily-note">{events}</div>
-          </>
-        )}
-      </section>
+      </li>
     )
   }
 
@@ -282,24 +265,16 @@ export function DailyModal({ office, focusTeamId, onClose }: Props) {
   return (
     <Modal title={title} subtitle="Up to 7 days back, by this PC's clock" onClose={onClose} className="daily-modal" hasCloseButton>
       <div className="daily-nav">
-        <button type="button" onClick={() => go(-1)} disabled={!canGoBack || isLoading} title="Previous day" aria-label="Previous day">
+        <button type="button" onClick={() => shownDate && changeDate(shiftDate(shownDate, -1))} disabled={!canGoBack || isLoading} title="Previous day" aria-label="Previous day">
           ‹
         </button>
-        <button type="button" onClick={() => go(1)} disabled={!canGoForward || isLoading} title="Next day" aria-label="Next day">
+        <button type="button" onClick={() => shownDate && changeDate(shiftDate(shownDate, 1))} disabled={!canGoForward || isLoading} title="Next day" aria-label="Next day">
           ›
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setOpenTask(null)
-            setDate(null)
-          }}
-          disabled={!canGoForward || isLoading}
-        >
+        <button type="button" onClick={() => changeDate(null)} disabled={!canGoForward || isLoading}>
           Today
         </button>
         <span className="daily-nav-gap" />
-        {totalText && <span className="daily-total">{totalText}</span>}
         <button type="button" onClick={() => setReloadKey((key) => key + 1)} disabled={isLoading} title="Refresh" aria-label="Refresh">
           ↻
         </button>
@@ -310,18 +285,23 @@ export function DailyModal({ office, focusTeamId, onClose }: Props) {
           !failure && <div className="task-empty">Loading…</div>
         ) : (
           <>
-            {desk.length > 0 && (
-              <section className="daily-team">
-                <div className="daily-team-head">
-                  <b>My desk</b>
+            {renderStats(report)}
+            {isEmpty && <div className="task-empty">Nothing recorded for this day</div>}
+            {timed.length > 0 && renderTimeline(report)}
+            {ranked.length > 0 && (
+              <section className="daily-section">
+                <div className="daily-section-head">
+                  <b>Teams</b>
                 </div>
-                <div className="daily-label">Done TODOs</div>
-                {renderTodos(desk)}
+                <ul className="daily-teams">{ranked.map(renderTeam)}</ul>
               </section>
             )}
-            {active.map(renderTeam)}
-            {isEmpty && <div className="task-empty">Nothing recorded for this day</div>}
-            {quiet.length > 0 && <div className="daily-quiet">No activity: {quiet.map((team) => team.name).join(', ')}</div>}
+            {(desk.length > 0 || quiet.length > 0) && (
+              <div className="daily-quiet">
+                {desk.length > 0 && <div>My desk: {desk.length === 1 ? '1 TODO' : `${desk.length} TODOs`} done</div>}
+                {quiet.length > 0 && <div>No activity: {quiet.map((team) => team.name).join(', ')}</div>}
+              </div>
+            )}
           </>
         )}
       </div>
