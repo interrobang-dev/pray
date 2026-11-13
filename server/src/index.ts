@@ -63,6 +63,15 @@ import {
   removeReminder,
   ReminderNotFiredError,
   ReminderNotFoundError,
+  acknowledgeScheduledMessage,
+  addScheduledMessage,
+  listScheduledMessages,
+  removeScheduledMessage,
+  ScheduledMessageNotFailedError,
+  ScheduledMessageNotFoundError,
+  ScheduledMessageSendingError,
+  tidyScheduledMessages,
+  updateScheduledMessage,
   type Group,
   type Part,
   type PartPatch,
@@ -73,6 +82,8 @@ import {
 } from '@pray/host/hq'
 import { normalizeCwd } from '@pray/host/team'
 import { parseReminderAt } from '@pray/host/reminder'
+import { parseScheduledText } from '@pray/host/scheduledMessage'
+import { ScheduledSender, type SessionActivity, type SubmitOutcome } from './scheduledSend.js'
 import { setupFileLog } from '@pray/host/runtime'
 import { dataDir } from '@pray/host/dataDir'
 import { readConfig } from './config.js'
@@ -244,6 +255,10 @@ const btw = new BtwStore()
 const btwTimers = new Map<string, { sessionId: string; timer: ReturnType<typeof setTimeout> }>()
 /** `/pray-btw <ID>` 를 쓰고 Enter 를 보내기 전인 세션. 그 사이 중지의 Esc·대기 취소의 ↑ 가 입력칸의 명령 글과 섞이지 않게 막는다 */
 const btwTyping = new Set<string>()
+/** 세션별 마지막 /input 시각 (ms). 예약 보내기가 사람이 치는 중(2초 안)이면 미룬다. 메모리에만 */
+const lastInputAt = new Map<string, number>()
+/** 예약 보내기가 글을 쓰고 Enter 를 보내기 전인 세션의 /input(대화 입력 상자)·중지·대기 취소·곁가지 질문·승인 답하기 409 문구 */
+const SCHEDULED_TYPING_MESSAGE = 'Sending a scheduled message'
 
 const config = readConfig()
 const auth = new AuthStore(config.loginEmails, join(dataDir(), 'auth-tokens.json'))
@@ -1550,6 +1565,12 @@ app.post('/api/sessions/:id/input', (req, res) => {
     res.status(409).json({ message: 'Cancelling a queued message' })
     return
   }
+  // 예약 보내기가 글을 쓰고 Enter 를 기다리는 동안 대화 입력 상자의 글이 끼면 한 글로 합쳐진다. 터미널 탭 키는 통과 (인계 중과 같은 탈출구)
+  if (isTerminal !== true && scheduledSender.isTyping(req.params.id)) {
+    res.status(409).json({ message: SCHEDULED_TYPING_MESSAGE })
+    return
+  }
+  lastInputAt.set(req.params.id, Date.now())
   host.send({ type: 'input', sessionId: req.params.id, data })
   res.json({})
 })
@@ -1600,6 +1621,10 @@ app.post('/api/sessions/:id/queue/cancel-last', async (req, res) => {
   // 입력칸에 명령 글이 있으면 ↑ 가 대기열을 꺼내지 않는다
   if (btwTyping.has(sessionId)) {
     res.status(409).json({ message: 'Sending a side question' })
+    return
+  }
+  if (scheduledSender.isTyping(sessionId)) {
+    res.status(409).json({ message: SCHEDULED_TYPING_MESSAGE })
     return
   }
   const queued = queuedPrompts(jsonl)
@@ -1745,6 +1770,7 @@ function interruptConflict(sessionId: string): string | null {
   if (status !== 'working') return 'Can only stop while claude is working'
   if (unqueues.has(sessionId)) return 'Cancelling a queued message'
   if (btwTyping.has(sessionId)) return 'Sending a side question'
+  if (scheduledSender.isTyping(sessionId)) return SCHEDULED_TYPING_MESSAGE
   return null
 }
 
@@ -1777,6 +1803,7 @@ function btwConflict(sessionId: string): string | null {
   if (unqueues.has(sessionId)) return "Can't ask while cancelling a queued message"
   if (interrupts.has(sessionId)) return "Can't ask while stopping"
   if (btwTyping.has(sessionId) || btw.hasPending(sessionId)) return 'Still answering the last side question'
+  if (scheduledSender.isTyping(sessionId)) return "Can't ask while sending a scheduled message"
   return null
 }
 
@@ -1893,6 +1920,7 @@ function modelChangeConflict(sessionId: string, jsonl: string | null): string | 
   if (status === 'needs-approval') return "Can't change the model while claude needs approval"
   if (unqueues.has(sessionId)) return "Can't change the model while cancelling a queued message"
   if (interrupts.has(sessionId)) return "Can't change the model while stopping"
+  if (scheduledSender.isTyping(sessionId)) return "Can't change the model while sending a scheduled message"
   // 대화가 한 번도 없으면 jsonl 이 없어 resume 할 수 없다 (끄면 호스트가 기록을 지운다)
   if (!jsonl) return "Can't change the model before the first message"
   if (queuedPrompts(jsonl).length) return "Can't change the model while messages are queued"
@@ -2026,6 +2054,7 @@ function approvalConflict(sessionId: string): string | null {
   if (unqueues.has(sessionId)) return 'Cancelling a queued message'
   if (interrupts.has(sessionId)) return 'Stopping'
   if (btwTyping.has(sessionId)) return 'Sending a side question'
+  if (scheduledSender.isTyping(sessionId)) return SCHEDULED_TYPING_MESSAGE
   return null
 }
 
@@ -2228,6 +2257,29 @@ function submitInstruction(sessionId: string, instruction: string): boolean {
     host.send({ type: 'input', sessionId, data: '\r' })
   }, SUBMIT_POLL_MS)
   return true
+}
+
+/**
+ * submitInstruction 과 같은 방식(글 → 출력이 700ms 조용하거나 8초 → Enter)의 Promise 판 (예약 보내기).
+ * Enter 직전에 shouldBlockEnter 를 다시 불러 이유가 있으면 Enter 를 보내지 않는다 (그 사이 승인 창·질문이 뜨면 Enter 가 그 창의 답이 된다)
+ */
+function submitText(sessionId: string, text: string, shouldBlockEnter: () => string | null): Promise<SubmitOutcome> {
+  if (!host.send({ type: 'input', sessionId, data: text })) return Promise.resolve({ kind: 'not-written' })
+  const sentAt = Date.now()
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      const now = Date.now()
+      const quietSince = Math.max(lastOutputAt.get(sessionId) ?? 0, sentAt)
+      if (now - quietSince < SUBMIT_QUIET_MS && now - sentAt < SUBMIT_MAX_WAIT_MS) return
+      clearInterval(timer)
+      const reason = shouldBlockEnter()
+      if (reason) {
+        resolve({ kind: 'blocked', reason })
+        return
+      }
+      resolve(host.send({ type: 'input', sessionId, data: '\r' }) ? { kind: 'entered' } : { kind: 'blocked', reason: 'host-unreachable' })
+    }, SUBMIT_POLL_MS)
+  })
 }
 
 /** 팀원에게 보낸 지시를 instructions.jsonl 에 남긴다. 요청 처리 안에서 부르고, 실패해도 로그만 남겨 지시는 그대로 진행한다 */
@@ -3316,6 +3368,146 @@ function fireReminders(): void {
   }
 }
 
+// ---------- 예약 보내기 (hq.json 최상위 scheduledMessages. 정한 시각에 웹 세션 입력으로 글을 한 번 보낸다 — 꼴은 @pray/host/scheduledMessage, 판정은 scheduledSend.ts) ----------
+
+const SCHEDULED_TEXT_MESSAGES = {
+  length: 'Text must be 1 to 10,000 characters',
+  slash: "Text can't start with / (slash commands aren't sent)",
+  backslash: "Text can't end with \\",
+} as const
+
+/** 예약 보내기 회차 간격 (알림과 같은 30초) */
+const SCHEDULED_TICK_MS = 30_000
+
+/** 세션에서 진행 중인 서버 일 (그동안 pty 에 글을 쓰면 섞인다) */
+function sessionActivity(sessionId: string): SessionActivity | null {
+  if (activeHandover(sessionId)) return 'handover'
+  if (unqueues.has(sessionId)) return 'unqueue'
+  if (interrupts.has(sessionId)) return 'interrupt'
+  if (btwTyping.has(sessionId)) return 'btw'
+  if (approvals.has(sessionId)) return 'approval'
+  return null
+}
+
+const scheduledSender = new ScheduledSender({
+  now: () => new Date(),
+  sleep,
+  tidy: (now, isStartup) => tidyScheduledMessages(now, isStartup),
+  update: updateScheduledMessage,
+  contextOf: (sessionId) => {
+    const isOnHost = host.sessions.some((s) => s.sessionId === sessionId)
+    const attendance = isOnHost
+      ? 'present'
+      : listWebSessions().some((s) => s.sessionId === sessionId)
+        ? 'break'
+        : listOffDuty().some((s) => s.sessionId === sessionId)
+          ? 'off'
+          : 'missing'
+    return {
+      isHostReachable: host.isReachable,
+      attendance,
+      hookStatus: hookStates.get(sessionId)?.status ?? null,
+      hasHeldQuestion: heldQuestions.has(sessionId),
+      activity: sessionActivity(sessionId),
+      lastInputAt: lastInputAt.get(sessionId) ?? null,
+    }
+  },
+  submit: submitText,
+  enterContextOf: (sessionId) => ({
+    isHostReachable: host.isReachable,
+    isOnHost: host.sessions.some((s) => s.sessionId === sessionId),
+    hookStatus: hookStates.get(sessionId)?.status ?? null,
+    hasHeldQuestion: heldQuestions.has(sessionId),
+  }),
+  lastPromptAt: (sessionId) => hookStates.get(sessionId)?.lastPromptAt ?? null,
+  onChange: () => {
+    try {
+      broadcastOffice()
+    } catch (error) {
+      console.error(`예약 보내기 화면 갱신 실패: ${error}`)
+    }
+  },
+  log: (line) => console.log(line),
+  logError: (line) => console.error(line),
+})
+
+/** 목록 (넣은 순서). 화면은 office SSE 로도 받는다 */
+app.get('/api/scheduled-messages', (_req, res) => {
+  res.json({ scheduledMessages: listScheduledMessages() })
+})
+
+/** 사람이 등록 { sessionId, text, at }. 웹 세션(근무·휴식·퇴근 기록)만 — 외부 세션은 409, 어디에도 없으면 404 */
+app.post('/api/scheduled-messages', async (req, res) => {
+  const { sessionId, text: rawText, at: rawAt } = (req.body ?? {}) as { sessionId?: unknown; text?: unknown; at?: unknown }
+  if (typeof sessionId !== 'string' || !isSessionId(sessionId)) {
+    res.status(400).json({ message: 'Invalid session ID' })
+    return
+  }
+  const text = parseScheduledText(rawText)
+  if ('error' in text) {
+    res.status(400).json({ message: SCHEDULED_TEXT_MESSAGES[text.error] })
+    return
+  }
+  const at = parseReminderAt(rawAt, new Date())
+  if ('error' in at) {
+    res.status(400).json({ message: REMINDER_AT_MESSAGES[at.error] })
+    return
+  }
+  const isWeb =
+    host.sessions.some((s) => s.sessionId === sessionId) ||
+    listWebSessions().some((s) => s.sessionId === sessionId) ||
+    listOffDuty().some((s) => s.sessionId === sessionId)
+  if (!isWeb) {
+    if (await isLiveSession(sessionId)) res.status(409).json({ message: 'Only web sessions can get scheduled messages' })
+    else res.status(404).json({ message: 'Session not found' })
+    return
+  }
+  res.json({ scheduledMessage: addScheduledMessage(sessionId, text.text, at.at) })
+  broadcastOffice()
+})
+
+/** 실패 확인·확인 취소. 실패가 아니면 409 */
+app.patch('/api/scheduled-messages/:messageId', (req, res) => {
+  const { isAcknowledged } = (req.body ?? {}) as { isAcknowledged?: unknown }
+  if (typeof isAcknowledged !== 'boolean') {
+    res.status(400).json({ message: 'isAcknowledged must be true or false' })
+    return
+  }
+  try {
+    res.json({ scheduledMessage: acknowledgeScheduledMessage(req.params.messageId, isAcknowledged) })
+  } catch (error) {
+    if (error instanceof ScheduledMessageNotFoundError) {
+      res.status(404).json({ message: 'Scheduled message not found' })
+      return
+    }
+    if (error instanceof ScheduledMessageNotFailedError) {
+      res.status(409).json({ message: 'Only failed messages can be acknowledged' })
+      return
+    }
+    throw error
+  }
+  broadcastOffice()
+})
+
+/** 보내기 전·보낸 뒤·실패 어느 것이든 지운다. 보내는 중이면 409 */
+app.delete('/api/scheduled-messages/:messageId', (req, res) => {
+  try {
+    removeScheduledMessage(req.params.messageId)
+  } catch (error) {
+    if (error instanceof ScheduledMessageNotFoundError) {
+      res.status(404).json({ message: 'Scheduled message not found' })
+      return
+    }
+    if (error instanceof ScheduledMessageSendingError) {
+      res.status(409).json({ message: 'This message is being sent' })
+      return
+    }
+    throw error
+  }
+  res.json({})
+  broadcastOffice()
+})
+
 app.post('/api/hook', (req, res) => {
   const payload = req.body as HookPayload
   if (!payload?.session_id || !payload.hook_event_name) {
@@ -3544,6 +3736,9 @@ try {
 // 꺼져 있던 사이 시각이 지난 알림은 지금 늦음으로 한 번 울린다. 그 뒤 30초마다
 fireReminders()
 setInterval(fireReminders, REMINDER_TICK_MS)
+// 보내는 중에 꺼졌던 것은 interrupted 실패로, 꺼져 있던 사이 지난 것은 60분 안이면 늦게 보낸다 (호스트가 아직 안 붙었으면 다음 회차). 그 뒤 30초마다
+void scheduledSender.tick(true)
+setInterval(() => void scheduledSender.tick(), SCHEDULED_TICK_MS)
 
 // 빌드된 웹이 있으면 서버 하나로 화면까지 제공한다 (개발 중에는 Vite 4711 을 쓴다)
 const webDist = join(import.meta.dirname, '..', '..', 'web', 'dist')

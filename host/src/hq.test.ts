@@ -60,8 +60,18 @@ import {
   removeReminder,
   ReminderNotFiredError,
   ReminderNotFoundError,
+  acknowledgeScheduledMessage,
+  addScheduledMessage,
+  listScheduledMessages,
+  removeScheduledMessage,
+  ScheduledMessageNotFailedError,
+  ScheduledMessageNotFoundError,
+  ScheduledMessageSendingError,
+  tidyScheduledMessages,
+  updateScheduledMessage,
 } from './hq.js'
 import { REMINDER_RETENTION_MS } from './reminder.js'
+import { markFailed, markSending, markSent, SCHEDULED_RETENTION_MS } from './scheduledMessage.js'
 
 // hq.ts 는 homedir() 아래 설정 폴더(dataDir)를 쓴다. 실제 ~/.claude/pray/hq.json 대신 임시 폴더를 쓴다
 vi.mock('node:os', async (importOriginal) => {
@@ -993,5 +1003,77 @@ describe('position name migration', () => {
     writeFileSync(hqPath, broken)
     expect(() => migratePositionNames()).toThrow(/읽을 수 없어/)
     expect(readFileSync(hqPath, 'utf8')).toBe(broken)
+  })
+})
+
+describe('scheduled messages', () => {
+  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
+  afterAll(() => rmSync(homedir(), { recursive: true, force: true }))
+
+  const now = new Date('2026-11-13T05:00:00.000Z')
+  const later = (ms: number) => new Date(now.getTime() + ms)
+
+  it('starts empty without a file and for an old record without the key', () => {
+    expect(listScheduledMessages()).toEqual([])
+    mkdirSync(hqDir, { recursive: true })
+    writeFileSync(hqPath, JSON.stringify({ groups: [], teams: [], reminders: [] }))
+    expect(readOffice().scheduledMessages).toEqual([])
+  })
+
+  it('adds pending at the end, acknowledges only failed ones and refuses to remove one being sent', () => {
+    const a = addScheduledMessage('s1', '가', later(60_000).toISOString(), now)
+    const b = addScheduledMessage('s2', '나', later(60_000).toISOString(), now)
+    expect(a).toMatchObject({ sessionId: 's1', text: '가', status: 'pending', createdBy: { kind: 'user' }, sendingAt: null, failure: null })
+    expect(a.id).toMatch(/^[0-9a-f]{8}$/)
+    expect(readOffice().scheduledMessages.map((m) => m.id)).toEqual([a.id, b.id])
+
+    expect(() => acknowledgeScheduledMessage(a.id, true, now)).toThrow(ScheduledMessageNotFailedError)
+    expect(() => acknowledgeScheduledMessage('nope', true, now)).toThrow(ScheduledMessageNotFoundError)
+
+    expect(updateScheduledMessage(a.id, (m) => markSending(m, now))?.status).toBe('sending')
+    expect(() => removeScheduledMessage(a.id)).toThrow(ScheduledMessageSendingError)
+    expect(updateScheduledMessage(a.id, (m) => markFailed(m, { code: 'unconfirmed' }, later(1000)))?.status).toBe('failed')
+    expect(acknowledgeScheduledMessage(a.id, true, later(2000)).acknowledgedAt).toBe(later(2000).toISOString())
+    expect(acknowledgeScheduledMessage(a.id, true, later(3000)).acknowledgedAt).toBe(later(2000).toISOString())
+    expect(acknowledgeScheduledMessage(a.id, false, later(4000)).acknowledgedAt).toBeNull()
+
+    expect(updateScheduledMessage('nope', (m) => m)).toBeNull()
+    expect(updateScheduledMessage(b.id, () => null)).toBeNull()
+    removeScheduledMessage(b.id)
+    expect(() => removeScheduledMessage(b.id)).toThrow(ScheduledMessageNotFoundError)
+    expect(listScheduledMessages().map((m) => m.id)).toEqual([a.id])
+  })
+
+  it('tidies: prunes expired ones and on startup fails the ones left sending, writing only when changed', () => {
+    const sent = addScheduledMessage('s1', '보냄', now.toISOString(), now)
+    updateScheduledMessage(sent.id, (m) => markSent(markSending(m, now), now))
+    const left = addScheduledMessage('s2', '보내던 것', now.toISOString(), now)
+    updateScheduledMessage(left.id, (m) => markSending(m, now))
+    const pending = addScheduledMessage('s3', '기다림', later(60_000).toISOString(), now)
+
+    const before = readFileSync(hqPath, 'utf8')
+    expect(tidyScheduledMessages(later(1000))).toMatchObject({ prunedCount: 0, interrupted: [] })
+    expect(readFileSync(hqPath, 'utf8')).toBe(before)
+
+    const result = tidyScheduledMessages(later(SCHEDULED_RETENTION_MS + 1), true)
+    expect(result.prunedCount).toBe(1)
+    expect(result.interrupted.map((m) => [m.id, m.failure])).toEqual([[left.id, { code: 'interrupted' }]])
+    expect(listScheduledMessages().map((m) => [m.id, m.status])).toEqual([
+      [left.id, 'failed'],
+      [pending.id, 'pending'],
+    ])
+  })
+
+  it('keeps keys it does not know, including reminders', () => {
+    mkdirSync(hqDir, { recursive: true })
+    writeFileSync(hqPath, JSON.stringify({ webSessions: [{ sessionId: 's', cwd: 'D:/x', createdAt: '' }], futureKey: { a: 1 } }))
+    addReminder('알림', now.toISOString(), { kind: 'user' }, now)
+    addScheduledMessage('s', '가', now.toISOString(), now)
+    tidyScheduledMessages(later(1000), true)
+    const saved = JSON.parse(readFileSync(hqPath, 'utf8'))
+    expect(saved.futureKey).toEqual({ a: 1 })
+    expect(saved.webSessions).toHaveLength(1)
+    expect(saved.reminders.map((r: { text: string }) => r.text)).toEqual(['알림'])
+    expect(saved.scheduledMessages.map((m: { text: string }) => m.text)).toEqual(['가'])
   })
 })

@@ -6,11 +6,13 @@ paths:
   - "web/src/DateTimePicker.tsx"
   - "web/src/dateTimePick*.ts"
   - "desktop/src/reminderNotice*.ts"
+  - "host/src/scheduledMessage*.ts"
+  - "server/src/scheduledSend*.ts"
 ---
 
-# 알림 (Reminders)
+# 알림 (Reminders)·예약 보내기
 
-정한 시각에 **사람에게 한 번** 울리는 알림. 반복은 없고, 팀장·파트장 세션에 메시지를 보내지 않는다 (사람에게만). 등록 경로는 화면 Reminders 창(사람)과 팀장·파트장 MCP 도구 `team_remind` 둘이다. 저장·API·울리기(서버)·화면(목록 툴바 Reminders 줄·창)·MCP 도구·트레이 Windows 알림이 있다. 이 영역을 고치면 이 파일의 그 줄을 고쳐 쓴다.
+정한 시각에 **사람에게 한 번** 울리는 알림. 반복은 없고, 팀장·파트장 세션에 메시지를 보내지 않는다 (사람에게만). 등록 경로는 화면 Reminders 창(사람)과 팀장·파트장 MCP 도구 `team_remind` 둘이다. 저장·API·울리기(서버)·화면(목록 툴바 Reminders 줄·창)·MCP 도구·트레이 Windows 알림이 있다. 같은 30초 회차·시각 검증을 쓰는 **예약 보내기**(정한 시각에 웹 세션에 글을 보낸다)는 아래 "예약 보내기" 절이다. 이 영역을 고치면 이 파일의 그 줄을 고쳐 쓴다.
 
 ## 구조
 
@@ -43,3 +45,30 @@ paths:
 - 화면(Reminders 보기)은 Vite dev + 시험 서버(임시 홈·가짜 pipe) headless 로만 봤다: 데스크톱 다크 — 배지·구역·Late·[Part lead] 만든 이·등록 → 1~2분 뒤 SSE 로 Fired 로 옮겨 배지 2→3 → 체크 → 2·× 삭제, 과거 시각 400 빨간 줄, 다 지우면 흐린 버튼(disabled 아님) / 데스크톱 라이트 / 폰 390 다크 — 44px·16px·체크박스 22px·가로 넘침 없음. 실제 서버(트레이)·한글 조합 중 Enter 는 보지 못했다
 - 날짜·시각 고르기(`DateTimePicker.tsx`)는 Vite dev + 실제 서버(GET 만, 쓰기는 shot 이 막음) headless 데스크톱 다크·라이트·폰 390 다크·라이트로 봤다: 빠른 칩 → 칸·확인 줄 채움, 달력(지난 날 흐림·오늘·고른 날, 화살표로 커서 이동), 달력 Esc 는 창을 닫지 않음, 시각 목록(지금 근처로 스크롤·지난 칸 흐림), 마우스로 시각 칸을 누르면 목록이 열리고 계속 칠 수 있음, "215"→"02:15"·"9"→"09:00" 과 지난 시각 줄, "25" Enter → 빨간 테두리·링. 실제 등록(POST)·등록 뒤 칸 비우기, 폰 실기기 터치·가상 키보드, 한 해 뒤 달로 넘기기, 다른 팔레트에서의 달력 색은 보지 못했다
 - 저장·API·울리기는 단위 테스트(`reminder.test.ts`·`hq.test.ts`)와 시험 서버(임시 홈·가짜 pipe·포트 4793)로만 확인했다: 시작 때 과거 at 한 건이 늦음(`isLate: true`)으로 울리고 확인한 지 8일 된 건은 지워지고 6일 된 건은 남음, 모르는 키 보존, office 응답에 `reminders`, 400(글 없음·공백·501자·at 없음·날짜만·2월 31일·낱말·2분 전·367일 뒤), 오프셋 없는 `2026-12-01T15:30` → `06:30Z`(이 PC KST), 안 울린 것 확인 409·boolean 아님 400·없음 404, 확인·확인 취소·삭제 200, 다른 Origin POST 403, at = 지금+40초가 53초 뒤 office SSE 로 `firedAt`·`isLate: false`. 실행 중인 서버(트레이)에서 실제 hq.json 에 쓰는 것과, 그 순간 호스트가 같은 파일을 쓰는 경쟁은 보지 못했다 (실제 서버를 재시작해야 해서 사용자가 반영한다)
+
+## 예약 보내기 (Scheduled messages)
+
+정한 시각에 **웹 세션 입력으로 글을 한 번** 보낸다 (사람이 대화 입력 상자에 치고 Enter 한 것과 같다). 반복·"Send now"·성공 알림은 없고, 등록은 사람(API)만 — 리드 MCP(`team_remind`)는 바꾸지 않았다. 알림과 같은 30초 회차·같은 시각 검증을 쓰지만 hq.json 키를 따로 둔다 (아래). 화면(3단계)·트레이(4단계)는 아직 없다.
+
+### 구조 (예약 보내기)
+
+- `host/src/scheduledMessage.ts` — 꼴·정리 순수 함수 (`@pray/host/scheduledMessage`, 테스트 `scheduledMessage.test.ts`). `ScheduledMessage { id, sessionId, text, at, createdAt, createdBy: { kind: 'user' }, status: pending·sending·sent·failed, sendingAt, sentAt, isLate?, failedAt, failure: { code, detail? } | null, acknowledgedAt }`, 글 `parseScheduledText`(→ `{ text }` 또는 `{ error: length·slash·backslash }`), 회차에 볼 것 `dueMessages`, 보관 정리 `pruneScheduled`, 시작 때 `failLeftSending`, 상태 바꾸기 `markSending`·`markBackToPending`·`markSent`·`markFailed`, 한도 `sendDeadline`
+- `host/src/hq.ts` 의 최상위 **`scheduledMessages`** (넣은 순서) — `listScheduledMessages`·`addScheduledMessage(sessionId, text, at)`·`acknowledgeScheduledMessage(id, isAcknowledged)`(실패만. 없음 `ScheduledMessageNotFoundError`, 실패 아님 `ScheduledMessageNotFailedError`, 값이 그대로면 안 쓴다)·`removeScheduledMessage(id)`(sending 이면 `ScheduledMessageSendingError`)·`updateScheduledMessage(id, change)`(change 가 null 이면 안 쓴다)·`tidyScheduledMessages(now, isStartup)`(바뀐 게 없으면 안 쓴다). 옛 파일에 키가 없으면 [] 로 읽고 `readOffice` 결과(office 응답·SSE)에 싣는다. **알림 `reminders` 를 넓히지 않은 이유**: 옛 트레이·서버가 이 항목을 알림으로 울리지 않게 — 모르는 키는 `readHq` 가 보존한다. 서버만 쓴다
+- `server/src/scheduledSend.ts` — 판정 `sendDecision`·Enter 직전 다시 보기 `enterBlocker`(순수)와 회차·보내기 `ScheduledSender`(시계·저장·pty 쓰기 주입. 테스트 `scheduledSend.test.ts` — 판정표와 메모리 hq·가짜 시계로 돈 회차)
+- `server/src/index.ts` — API·`submitText`·잠금·회차 시작 (아래)
+
+### 핵심 개념 (예약 보내기)
+
+- **꼴.** `id` = `randomUUID` 앞 8자리. `text` = 줄바꿈을 살리고(`\r\n`·`\r` → `\n`. pty 에 `\r` 이 가면 그 자리에서 제출된다) 앞뒤 trim, 1~10,000자, `/` 로 시작(자동완성이 Enter 를 먹는다)·`\` 로 끝남(`\`+Enter 는 줄바꿈 → queue-interrupt.md "보내기의 함정") 거절. `at` = 알림과 같은 `parseReminderAt`(1분 넘게 과거·366일 넘게 뒤 거절, 화면은 Z 꼴 ISO 만 보낼 것). `sendingAt` = 글을 쓰기 직전, `sentAt` = Enter 를 보낸 시각, `isLate` = `sentAt − at > 90초`(보낼 때 정함). 실패 `failure.code`: off-duty · not-found · blocked(detail = 마지막 막힌 이유) · blocked-mid-send(detail = needs-approval·question·session-ended·host-unreachable) · unconfirmed · missed · interrupted. 보관: sent 는 `sentAt` 뒤 7일, failed 는 확인(`acknowledgedAt`) 뒤 7일, pending·확인 전 실패는 지우지 않는다 (경계 시각은 남긴다)
+- **회차.** 서버가 시작할 때(알림 울리기 뒤) 한 번 `tick(true)`, 그 뒤 30초마다. 먼저 `tidyScheduledMessages`(보관 정리, 시작 때는 **sending 으로 남은 것을 interrupted 실패로 — 다시 보내지 않는다**). 그다음 시각이 된 pending 을 **세션마다 하나씩**(at → createdAt → 넣은 순서. 그 세션에 sending 이 있거나 서버가 보내는 중이면 건너뛴다) 판정한다. 요청 처리 밖이라 던지지 않는다 — hq 를 못 읽으면 그 회차를 건너뛰고 로그는 실패·복구로 바뀔 때만. 서버 로그: 보냄 "예약 메시지 <id> 보냄 → <세션 앞 8자리> (늦음)"·실패마다 한 줄. `instructions.jsonl` 에는 쓰지 않는다 (사람이 보낸 글로 보인다)
+- **판정 `sendDecision` (훅 상태 기준).** 퇴근 기록 → 실패 off-duty(다시 출근시키지 않는다), 호스트 목록·webSessions·offDuty 어디에도 없음 → not-found. at + 60분(`SCHEDULED_SEND_WINDOW_MS`)을 넘었으면 앞 회차에 미룬 적이 있으면 blocked(지금 이유, 없으면 앞 회차 이유), 없으면 missed(서버가 꺼져 있었다 — 서버 메모리라 미루던 중 서버를 재시작해도 missed). 그 안이면 **미룸**: 호스트 연결 없음 · 휴식(호스트 목록에 없음) · 붙잡은 질문 · 훅 needs-approval · 인계 중 · 대기 메시지 취소·중지·곁가지 질문 글 쓰는 300ms(`btwTyping`)·승인 거절 진행 중 · 그 세션 `/input` 이 2초(`RECENT_INPUT_MS`) 안에 옴(`lastInputAt`, 터미널 탭 키 포함). 그 밖(idle·my-turn·unknown·훅 없음·근무 중 ended)은 보내고 **working 도 보낸다** (Claude Code 대기열로 들어간다). 표시 상태 waiting·done 은 훅으로는 my-turn 이라 보낸다. 대상은 고른 세션 그대로다 — Hand over 로 리드가 바뀌어도 옛 리드에 보내고, 옛 리드가 퇴근이면 off-duty
+- **보내기 (`ScheduledSender.send`).** hq 에 sending·`sendingAt` 을 먼저 쓰고(그 사이 지워졌으면 안 보낸다) → `submitText`: 글 전체를 한 번에 pty 에 쓰고 출력이 700ms 조용하거나 8초가 되면(팀장 지시 `submitInstruction` 과 같은 방식의 Promise 판 — 그 함수는 그대로 둔다) **Enter 직전에 다시 본다**(`enterBlocker`: 승인 대기·붙잡은 질문·세션이 호스트 목록에서 빠짐·호스트 끊김이면 Enter 를 안 보내고 blocked-mid-send — 승인 창에서 Enter 는 승인이다. 쓴 글은 Claude Code 입력칸에 남는다) → `\r`. 글을 못 쓰면(호스트 끊김) 아무것도 안 들어갔으니 pending 으로 되돌려 다음 회차. **확정**: Enter 뒤 15초(`SEND_CONFIRM_MS`) 안에 그 세션 훅 `lastPromptAt` 이 글을 쓴 시각 이후가 되면 sent, 아니면 unconfirmed (훅이 설치되지 않은 PC 에서는 늘 unconfirmed). 작업 중에 보낸 글도 대기열에 들어갈 때 UserPromptSubmit 이 온다(실측 → 루트 CLAUDE.md "상태")
+- **잠금.** 글을 쓰고 Enter 를 보낼 때까지 그 세션은 `scheduledSender.isTyping`: 대화 입력 상자 `/input` 409 "Sending a scheduled message"(터미널 탭 키 `isTerminal: true` 는 통과 — 인계 중과 같은 탈출구), 대기 메시지 취소·중지·승인 막대 409 같은 문구, 곁가지 질문 409 "Can't ask while sending a scheduled message", 모델 바꾸기 409 "Can't change the model while sending a scheduled message". Enter 뒤 확정을 기다리는 동안은 잠그지 않는다
+- **API** (인증·Origin 은 다른 `/api` 와 같다. 오류는 `{ message }` 영어): `GET /api/scheduled-messages` → `{ scheduledMessages }` · `POST /api/scheduled-messages` `{ sessionId, text, at }` → `{ scheduledMessage }`(세션 ID 꼴 400 "Invalid session ID", 글 400 "Text must be 1 to 10,000 characters"·"Text can't start with / (slash commands aren't sent)"·"Text can't end with \", 시각 400 은 알림과 같은 문구, 웹 세션(호스트 목록·webSessions·offDuty — 퇴근 세션도 받는다. 그 시각에도 퇴근이면 off-duty 실패)이 아니고 pid 기록이 살아 있으면 409 "Only web sessions can get scheduled messages", 어디에도 없으면 404 "Session not found") · `PATCH /api/scheduled-messages/:id` `{ isAcknowledged }` → `{ scheduledMessage }`(boolean 아님 400, 없음 404 "Scheduled message not found", 실패 아님 409 "Only failed messages can be acknowledged") · `DELETE /api/scheduled-messages/:id` → `{}`(없음 404, sending 409 "This message is being sent"). 바뀌면(등록·확인·삭제·sending·끝) `office` SSE, office 응답의 최상위 `scheduledMessages`
+- **함정.** 터미널(Claude Code) 입력칸에 사람이 쓰다 만 글이 있으면 예약 글이 그 뒤에 붙어 같이 제출된다 — 서버는 입력칸 글을 모른다 (2초 안 `/input` 만 미룬다). 800자를 넘으면 붙여넣기로 처리되고 그림 확장자 경로가 `[Image #N]` 이 된다 (→ queue-interrupt.md "보내기의 함정"). 시간대는 at 을 Z 꼴 ISO 로만 보낼 것 (오프셋 없는 글은 서버 PC 시각)
+
+### 확인하지 못한 것 (예약 보내기)
+
+- 단위 테스트(`scheduledMessage.test.ts`·`hq.test.ts`·`scheduledSend.test.ts`)와 시험 서버(임시 홈·가짜 호스트 pipe(받은 input 을 시각과 함께 기록, 몇 세션은 `\r` 0.5초 뒤 UserPromptSubmit 훅을 보냄)·포트 4781)로만 확인했다: 시작 때 sending → interrupted·61분 지난 것 → missed·30분 지난 것 → 호스트가 붙은 다음 회차에 sent·`isLate: true`, 400(세션 ID·빈 글·10,001자·`/`·`\`·날짜만·과거·1년 넘음)·404(없는 세션)·409(살아 있는 pid 기록의 외부 세션)·다른 Origin 403, at = 지금+40초 → 다음 회차에 글(`\n` 그대로) → 약 750ms 뒤 `\r`, 훅이 오면 sent·안 오면 15초 뒤 unconfirmed, 승인 대기 세션은 미룸 → PostToolUse(working) 뒤 다음 회차에 sent, 퇴근 세션 off-duty·휴식 세션 pending 그대로, 보내는 중 대화 `/input` 409·곁가지 질문 409·DELETE 409, pending 확인 409·실패 확인 200·지우기 200, office 응답에 실림, 모르는 키 보존. 실행 중인 서버(트레이)·실제 claude 에 보내는 것은 보지 못했다 (실제 세션에 글을 보내야 하고 서버 재시작이 필요해 사용자가 반영한다)
+- working 중 글 쓰기와 Enter 사이(최대 8초)에 승인 창이 뜨면 Enter 직전 다시 보기로 막지만, 다시 본 직후 `\r` 이 pty 에 닿기 전 짧은 틈에 뜬 승인 창은 막지 못한다 (그 Enter 가 승인이 된다). 실제로 일어나는지 재지 못했다. blocked-mid-send 로 입력칸에 남은 글이 실제 claude 화면에서 어떻게 보이는지도 보지 못했다
+- 2초 안 `/input` 미룸·Enter 직전 막힘·글을 못 써 pending 으로 되돌림은 단위 테스트로만 봤다

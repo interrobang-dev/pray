@@ -4,10 +4,12 @@ import { randomUUID } from 'node:crypto'
 import { dataDir } from './dataDir.js'
 import { normalizeCwd, TODO_PRIORITIES, type Part, type Team, type Todo, type TodoPriority } from './team.js'
 import { fireDue, type Reminder, type ReminderCreator } from './reminder.js'
+import { failLeftSending, pruneScheduled, type ScheduledMessage } from './scheduledMessage.js'
 
 export type { Part, Team, Todo, TodoPriority } from './team.js'
 export { TODO_PRIORITIES } from './team.js'
 export type { Reminder, ReminderCreator } from './reminder.js'
+export type { ScheduledMessage } from './scheduledMessage.js'
 
 export interface WebSessionRecord {
   sessionId: string
@@ -57,6 +59,8 @@ export interface Office {
   todos: Todo[]
   /** 알림 (넣은 순서. 화면이 정렬한다). 서버만 쓴다 — 규칙은 reminder.ts */
   reminders: Reminder[]
+  /** 예약 보내기 (넣은 순서). 서버만 쓴다. 알림과 키를 나눈 것은 옛 트레이·서버가 알림으로 울리지 않게 — 규칙은 scheduledMessage.ts */
+  scheduledMessages: ScheduledMessage[]
 }
 
 /**
@@ -130,6 +134,7 @@ function readHq(): HqFile {
     chatMarks: rest.chatMarks ?? {},
     todos: rest.todos ?? [],
     reminders: rest.reminders ?? [],
+    scheduledMessages: rest.scheduledMessages ?? [],
   }
 }
 
@@ -400,8 +405,8 @@ export function migratePositionNames(): number {
 
 /** 화면용. 팀이 없어 못 옮긴 그룹의 옛 todos 는 싣지 않는다 */
 export function readOffice(): Office {
-  const { groups, teams, todos, reminders } = readHq()
-  return { groups: groups.map(({ todos: _legacyTodos, ...group }: LegacyGroup) => group), teams, todos, reminders }
+  const { groups, teams, todos, reminders, scheduledMessages } = readHq()
+  return { groups: groups.map(({ todos: _legacyTodos, ...group }: LegacyGroup) => group), teams, todos, reminders, scheduledMessages }
 }
 
 export class OrderMismatchError extends Error {
@@ -690,6 +695,107 @@ export function fireDueReminders(now = new Date()): { fired: Reminder[]; prunedC
   hq.reminders = reminders
   writeHq(hq)
   return { fired, prunedCount }
+}
+
+export class ScheduledMessageNotFoundError extends Error {
+  constructor() {
+    super('예약 메시지를 찾을 수 없음')
+  }
+}
+
+/** 실패한 예약 메시지만 확인할 수 있다 */
+export class ScheduledMessageNotFailedError extends Error {
+  constructor() {
+    super('실패하지 않은 예약 메시지')
+  }
+}
+
+/** 보내는 중(sending)인 예약 메시지는 지울 수 없다 (글이 이미 입력칸에 들어가는 중) */
+export class ScheduledMessageSendingError extends Error {
+  constructor() {
+    super('보내는 중인 예약 메시지')
+  }
+}
+
+export function listScheduledMessages(): ScheduledMessage[] {
+  return readHq().scheduledMessages
+}
+
+/** 끝에 넣는다. 글은 부른 쪽이 parseScheduledText, 시각은 parseReminderAt(UTC ISO)으로 거른다 */
+export function addScheduledMessage(sessionId: string, text: string, at: string, now = new Date()): ScheduledMessage {
+  const hq = readHq()
+  const message: ScheduledMessage = {
+    id: randomUUID().slice(0, 8),
+    sessionId,
+    text,
+    at,
+    createdAt: now.toISOString(),
+    createdBy: { kind: 'user' },
+    status: 'pending',
+    sendingAt: null,
+    sentAt: null,
+    failedAt: null,
+    failure: null,
+    acknowledgedAt: null,
+  }
+  hq.scheduledMessages = [...hq.scheduledMessages, message]
+  writeHq(hq)
+  return message
+}
+
+/** 실패 확인(acknowledgedAt = now) 또는 확인 취소(null). 값이 그대로면 쓰지 않는다. 없으면 ScheduledMessageNotFoundError, 실패가 아니면 ScheduledMessageNotFailedError */
+export function acknowledgeScheduledMessage(messageId: string, isAcknowledged: boolean, now = new Date()): ScheduledMessage {
+  const hq = readHq()
+  const message = hq.scheduledMessages.find((m) => m.id === messageId)
+  if (!message) throw new ScheduledMessageNotFoundError()
+  if (message.status !== 'failed') throw new ScheduledMessageNotFailedError()
+  if (isAcknowledged === (message.acknowledgedAt !== null)) return message
+  message.acknowledgedAt = isAcknowledged ? now.toISOString() : null
+  writeHq(hq)
+  return message
+}
+
+/** 보내기 전·보낸 뒤·실패 어느 것이든 지운다 (sending 이면 ScheduledMessageSendingError). 없으면 ScheduledMessageNotFoundError */
+export function removeScheduledMessage(messageId: string): void {
+  const hq = readHq()
+  const message = hq.scheduledMessages.find((m) => m.id === messageId)
+  if (!message) throw new ScheduledMessageNotFoundError()
+  if (message.status === 'sending') throw new ScheduledMessageSendingError()
+  hq.scheduledMessages = hq.scheduledMessages.filter((m) => m.id !== messageId)
+  writeHq(hq)
+}
+
+/**
+ * 예약 메시지 하나를 바꾼다 (서버의 보내기 단계). update 가 null 을 주면 바꾸지 않고 null (없음도 null — 그 사이 사람이 지웠다).
+ * 바꾼 것을 쓰고 돌려준다
+ */
+export function updateScheduledMessage(messageId: string, update: (message: ScheduledMessage) => ScheduledMessage | null): ScheduledMessage | null {
+  const hq = readHq()
+  const index = hq.scheduledMessages.findIndex((m) => m.id === messageId)
+  if (index < 0) return null
+  const next = update(hq.scheduledMessages[index])
+  if (!next) return null
+  hq.scheduledMessages = hq.scheduledMessages.map((m, i) => (i === index ? next : m))
+  writeHq(hq)
+  return next
+}
+
+/**
+ * 회차 앞 정리 (서버가 시작할 때와 30초마다): 보관 기간이 지난 것을 지우고, 시작 때(isStartup)는 sending 으로 남은 것을 interrupted 실패로 (scheduledMessage.ts).
+ * 바뀐 것이 없으면 쓰지 않는다. 정리한 뒤 목록과 지운 개수·실패로 바꾼 것
+ */
+export function tidyScheduledMessages(
+  now = new Date(),
+  isStartup = false,
+): { messages: ScheduledMessage[]; prunedCount: number; interrupted: ScheduledMessage[] } {
+  const hq = readHq()
+  const pruned = pruneScheduled(hq.scheduledMessages, now)
+  const left = isStartup ? failLeftSending(pruned.messages, now) : { messages: pruned.messages, failed: [] }
+  if (pruned.prunedCount > 0 || left.failed.length > 0) {
+    hq.scheduledMessages = left.messages
+    writeHq(hq)
+  }
+  return { messages: left.messages, prunedCount: pruned.prunedCount, interrupted: left.failed }
 }
 
 /**

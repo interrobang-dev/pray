@@ -9,7 +9,8 @@
     "./dataDir": "./src/dataDir.ts",
     "./team": "./src/team.ts",
     "./dotCharacter": "./src/dotCharacter.ts",
-    "./reminder": "./src/reminder.ts"
+    "./reminder": "./src/reminder.ts",
+    "./scheduledMessage": "./src/scheduledMessage.ts"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

@@ -18,6 +18,7 @@ paths:
 - mod → queue-interrupt.md
 - 호스트 쪽 모델·effort 바꾸기(`restart-session`)의 서버 규칙 → server-api.md
 - `hq.ts` 의 알림(최상위 `reminders`) 저장 규칙 → reminders.md
+- `hq.ts` 의 예약 보내기(최상위 `scheduledMessages`) 저장 규칙 → reminders.md
 - 알림(Reminders)이 울릴 때의 트레이 Windows 알림(`desktop/src/reminderNotice.ts`, main.ts 의 `pollReminders`·`notifyReminders`) → reminders.md
 
 ## 구조
