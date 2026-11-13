@@ -279,7 +279,7 @@ textarea::placeholder {
 /* 트레이 창(Electron)의 제목 띠 (TitleBar.tsx). <html data-titlebar> 는 Window Controls Overlay 가 보이는 창에만 걸린다 — 브라우저에는 띠도 변수도 없다.
    띠는 화면 맨 위에 fixed 로 두고 #root 를 그만큼 내린다. 화면 높이(100vh·100dvh)를 쓰는 곳은 var(--titlebar-height, 0px) 를 뺀다 (브라우저에서는 0).
    바탕은 띠 전체가 사이드바 색 --panel 한 색(로그인·로딩 화면도). 오른쪽 − □ × 는 바탕이 투명한 오버레이라 띠 색이 비친다.
-   트레이 창에서는 사이드바 헤더 줄이 없고 그 Appearance·사무실 버튼이 띠의 .titlebar-actions 에 온다 (App.tsx 가 portal 로 그린다).
+   트레이 창에서는 사이드바 헤더 줄이 없고 그 Appearance·Search·사무실 버튼이 띠의 .titlebar-actions 에 온다 (App.tsx 가 portal 로 그린다).
    글자색 --muted 는 트레이가 읽어 − □ × 기호 색으로 쓴다 (desktop/src/titleBar.ts). 띠 전체가 창 끌기 자리다 */
 :root[data-titlebar] {
   --titlebar-height: env(titlebar-area-height, 32px);
@@ -317,7 +317,7 @@ textarea::placeholder {
 .titlebar-title .logo {
   -webkit-user-drag: none;
 }
-/* 띠의 Appearance·사무실 버튼: 사이드바 열(--sidebar-width, App.tsx 가 <html> 에 건다. 끌기로 바뀌면 따라간다)의 오른쪽 끝, 브라우저의 목록 헤더 버튼과 같은 x (헤더처럼 오른쪽 안쪽 12px·간격 8px).
+/* 띠의 Appearance·Search·사무실 버튼: 사이드바 열(--sidebar-width, App.tsx 가 <html> 에 건다. 끌기로 바뀌면 따라간다)의 오른쪽 끝, 브라우저의 목록 헤더 버튼과 같은 x (헤더처럼 오른쪽 안쪽 12px·간격 8px).
    오버레이 버튼 자리(titlebar-area 밖)로는 넘어가지 않는다. 버튼만 끌기 자리에서 빼 눌리게 한다 */
 .titlebar-actions {
   position: absolute;
@@ -1990,16 +1990,16 @@ li.group.drop-after::after {
 }
 /* 목록 세션 줄의 상태 테두리: 아바타 둘레 2px 바깥에 두른 ::after 고리라 칩 크기·줄 높이가 그대로고 머리 그림을 덮지 않으며, 숨쉬기도 테두리만 흐려진다 (그림은 그대로).
    working 파랑 실선(숨쉬기)·waiting 파랑 점선(움직임 없음)·needs-approval 빨강·my-turn 주황(--yellow)·done 초록·break 회색 점선. 그 밖(idle·unknown·ended·off)은 테두리 없음 */
-:is(.session, .home-row, .needs-you-row) .avatar {
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar {
   position: relative;
 }
-:is(.session, .home-row, .needs-you-row) .avatar.working::after,
-:is(.session, .home-row, .needs-you-row) .avatar.waiting::after,
-:is(.session, .home-row, .needs-you-row) .avatar.needs-approval::after,
-:is(.session, .home-row, .needs-you-row) .avatar.my-turn::after,
-:is(.session, .home-row, .needs-you-row) .avatar.done::after,
-:is(.session, .home-row, .needs-you-row) .avatar.lounge::after,
-:is(.session, .home-row, .needs-you-row) .avatar.break::after {
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.working::after,
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.waiting::after,
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.needs-approval::after,
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.my-turn::after,
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.done::after,
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.lounge::after,
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.break::after {
   content: '';
   position: absolute;
   inset: -2px;
@@ -2007,32 +2007,32 @@ li.group.drop-after::after {
   border-radius: 8px;
   pointer-events: none;
 }
-:is(.session, .home-row, .needs-you-row) .avatar.working::after {
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.working::after {
   border-color: var(--blue-dot);
   animation: dot-breathe 1.6s ease-in-out infinite;
 }
-:is(.session, .home-row, .needs-you-row) .avatar.needs-approval::after {
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.needs-approval::after {
   border-color: var(--red-dot);
 }
-:is(.session, .home-row, .needs-you-row) .avatar.waiting::after {
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.waiting::after {
   border-style: dashed;
   border-color: var(--blue-dot);
 }
-:is(.session, .home-row, .needs-you-row) .avatar.my-turn::after {
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.my-turn::after {
   border-color: var(--yellow);
 }
-:is(.session, .home-row, .needs-you-row) .avatar.done::after {
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.done::after {
   border-color: var(--success);
 }
-:is(.session, .home-row, .needs-you-row) .avatar.lounge::after {
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.lounge::after {
   border-color: var(--line-strong);
 }
-:is(.session, .home-row, .needs-you-row) .avatar.break::after {
+:is(.session, .home-row, .needs-you-row, .search-row) .avatar.break::after {
   border-style: dashed;
   border-color: var(--line-strong);
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.session, .home-row, .needs-you-row) .avatar.working::after {
+  :is(.session, .home-row, .needs-you-row, .search-row) .avatar.working::after {
     animation: none;
   }
 }
@@ -7447,6 +7447,118 @@ li.group.drop-after::after {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* Ctrl+K 글로벌 검색 창 (GlobalSearch.tsx): 화면 가운데 위(15vh) 떠 있는 면. 오버레이는 .modal-overlay(띠 아래부터 덮기) 그대로이고 위로 붙인다 */
+.modal-overlay.search-overlay {
+  align-items: flex-start;
+  padding-top: 15vh;
+}
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - var(--titlebar-height, 0px) - 15vh - 48px);
+  overflow: hidden;
+  background: var(--pop-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+}
+.search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.search-input-icon {
+  flex-shrink: 0;
+}
+/* 창 전체가 이 입력칸의 자리라 칸 면·링 없이 글자만 (공통 입력칸 규칙을 덮는다) */
+.search-panel .search-input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: calc(15px * var(--font-scale));
+  outline: none;
+}
+/* 결과 목록만 스크롤한다. 메뉴처럼 안쪽 6px, 줄은 --radius-sm */
+.search-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 6px 6px;
+}
+.search-empty {
+  margin: 0;
+  padding: 10px 10px 12px;
+  color: var(--muted);
+  font-size: calc(13px * var(--font-scale));
+}
+.search-group-title {
+  padding: 10px 10px 4px;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+}
+/* 한 줄: [아바타·우선순위 칩] · 이름(굵게) · 회색 보조 글(남는 폭, 말줄임) · 오른쪽 끝 회색 글. 고른 줄 = --accent-soft (마우스를 올려도 고른다) */
+.search-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: calc(13px * var(--font-scale));
+  cursor: pointer;
+}
+.search-row[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+.search-row.disabled {
+  cursor: default;
+  color: var(--muted);
+  opacity: 0.6;
+}
+.search-row.dead > *,
+.search-row.muted > * {
+  opacity: 0.55;
+}
+.search-row .avatar {
+  flex-shrink: 0;
+}
+.search-row-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.search-row-meta,
+.search-row-text {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-row-meta {
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.search-row-end {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
 /* 넓어진 대화 탭: 말풍선 열·버튼 묶음·입력칸 자리(승인 막대·질문 카드·입력 상자·퇴근 막대·안내)를 가운데 960px 열로 모은다 (줄이 너무 길어지지 않게).
    대화 스크롤바는 패널 폭 그대로 두려고 max-width 대신 양옆 여백으로 좁힌다. 좁으면 원래 여백 16px.
    변수 안의 % 는 쓰는 곳에서 풀린다: 여백은 부모(.chat·.messages-pane) 폭, 버튼 묶음 left·right 는 .messages-pane 폭 — 모두 대화 폭이다.
@@ -8383,6 +8495,21 @@ li.group.drop-after::after {
   .marks-remove {
     width: 44px;
   }
+  /* 글로벌 검색 창: 화면 폭 전체로 맨 위에 붙이고 줄 44px, 입력칸 16px (아이폰 확대 방지) */
+  .modal-overlay.search-overlay {
+    padding-top: 0;
+  }
+  .search-panel {
+    width: 100%;
+    max-height: calc(100dvh - var(--titlebar-height, 0px));
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  }
+  .search-panel .search-input {
+    font-size: 16px;
+  }
+  .search-row {
+    min-height: 44px;
+  }
 }
 
 /* 이름 앞 역할 칩 (목록 줄·패널 머리·자리 카드·지시/보고 한 줄). 제목 말줄임·줄 높이를 안 깨도록 인라인이고 줄 높이를 글자 높이 안에 둔다 */
@@ -8397,7 +8524,7 @@ li.group.drop-after::after {
   font-weight: 600;
 }
 /* 목록·첫 화면·Needs you 줄의 칩은 한 단계 짙은 면: 줄 hover 면(--surface-2)이 --chip-bg 와 같은 값이라 그대로면 hover 때 칩이 묻힌다 */
-:is(.session, .home-row, .needs-you-row) :is(.position-chip, .badge:not(.needs-approval)) {
+:is(.session, .home-row, .needs-you-row, .search-row) :is(.position-chip, .badge:not(.needs-approval)) {
   background: var(--surface-3);
 }
 .relay-line .position-chip {

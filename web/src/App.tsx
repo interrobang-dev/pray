@@ -70,6 +70,8 @@ import { hasTitleBar } from './TitleBar'
 import { NeedsYouTab, NeedsYouView } from './NeedsYouButton'
 import { AllTodosTab, AllTodosView } from './AllTodosButton'
 import { RemindersButton, RemindersModal } from './RemindersButton'
+import { GlobalSearch } from './GlobalSearch'
+import { isGlobalSearchShortcut, type CommandId, type SearchItem } from './globalSearchItems'
 import { bannerOf, nextOutage, presentWebIds, type Outage, type RestartTarget } from './reconnect'
 
 interface Snapshot {
@@ -215,7 +217,7 @@ function moveTo(ids: string[], id: string, dropIndex: number): string[] {
 /** isLocal = 이 PC 에서 연 화면(`/api/auth/me`). 팀 폴더는 이 PC 에서만 탐색기로 열고 다른 PC 는 경로 복사 */
 /**
  * `titleBarActions`: 트레이 창 제목 띠의 버튼 자리(main.tsx·TitleBar.tsx). 트레이 창이면 사이드바 헤더 줄을 그리지 않고
- * 그 Appearance·사무실 버튼을 이 자리에 portal 로 그린다 (자리가 아직 없으면 잠깐 안 보인다)
+ * 그 헤더 버튼(Appearance·Search·사무실)을 이 자리에 portal 로 그린다 (자리가 아직 없으면 잠깐 안 보인다)
  */
 export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; titleBarActions?: HTMLElement | null }) {
   const [snapshot, setSnapshot] = useState<Snapshot>({ isHostReachable: false, sessions: [] })
@@ -350,6 +352,11 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   /** 툴바 Lead models 창 (근무 중인 팀장·파트장 모델·effort 한꺼번에 바꾸기) */
   const [isLeadModelsOpen, setIsLeadModelsOpen] = useState(false)
   const [isRemindersOpen, setIsRemindersOpen] = useState(false)
+  /** Ctrl+K 글로벌 검색 창 (헤더 돋보기 버튼도 연다) */
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  /** 검색 창에서 고른 팀·그룹. 바뀌면 세션 목록을 그 팀 카드(접힌 그룹이면 그룹 라벨)·그룹 라벨까지 스크롤한다 (목록이 보이게 그려진 다음에) */
+  const [listScrollRequest, setListScrollRequest] = useState<{ id: number; kind: 'team' | 'group'; targetId: string } | null>(null)
+  const nextListScrollIdRef = useRef(1)
   const tasksTeam = tasksTeamId ? office.teams.find((t) => t.id === tasksTeamId) : undefined
 
   useEffect(() => {
@@ -395,6 +402,20 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     const top = list.scrollTop + section.getBoundingClientRect().top - list.getBoundingClientRect().top
     list.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }, [offDutyScrollRequest])
+
+  // 검색 창에서 고른 팀·그룹까지 목록만 스크롤한다 (Off Duty 와 같은 방식)
+  useEffect(() => {
+    const list = listRef.current
+    if (!listScrollRequest || !list) return
+    const selector =
+      listScrollRequest.kind === 'team'
+        ? `[data-list-team="${CSS.escape(listScrollRequest.targetId)}"]`
+        : `li[data-group-id="${CSS.escape(listScrollRequest.targetId)}"]`
+    const target = list.querySelector(selector)
+    if (!target) return
+    const top = list.scrollTop + target.getBoundingClientRect().top - list.getBoundingClientRect().top
+    list.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  }, [listScrollRequest])
 
   useEffect(() => {
     fetch('/api/office')
@@ -537,6 +558,20 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isSelectedLiveWeb, shownTab])
 
+  // Ctrl+K (맥 Meta+K): 글로벌 검색 창을 여닫는다. 터미널 탭(xterm) 안에서는 Claude Code 의 줄 지우기 키라 가로채지 않고,
+  // 검색 창이 아닌 모달(Dialog 포함)이 떠 있으면 건드리지 않는다
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isGlobalSearchShortcut(event)) return
+      if (event.target instanceof Element && event.target.closest('.xterm')) return
+      if (document.querySelector('.modal-overlay:not(.search-overlay)')) return
+      event.preventDefault()
+      setIsSearchOpen((isOpen) => !isOpen)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   /** Files 탭 Add to chat: 대화 입력칸(언마운트돼 있다)의 커서 자리에 넣고 대화 탭으로 간다. 입력칸이 그려질 때 포커스한다 */
   function addToChat(snippet: string) {
     whenLeavingAllowed(() => {
@@ -579,6 +614,79 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   function focusTeam(teamId: string) {
     if (isNarrow || isOfficeHidden) return
     setOfficeFocus({ id: nextFocusIdRef.current++, kind: 'team', teamId })
+  }
+
+  /** 사이드바 보기를 바꾼다. 폰은 패널이 열려 있으면 목록이 안 보여 패널을 닫는다 (저장 안 한 편집은 먼저 묻는다) */
+  function showSidebarView(view: 'sessions' | 'needs-you' | 'todos') {
+    setSidebarView(view)
+    if (isNarrow && selectedId !== null) whenLeavingAllowed(() => setSelectedId(null))
+  }
+
+  /** 검색 창 명령. 위험한 명령(End·Restart·Delete)은 없다 */
+  function runCommand(command: CommandId) {
+    switch (command) {
+      case 'new-session':
+        openSessionForm(null)
+        return
+      case 'new-group':
+        setIsGroupForm(true)
+        return
+      case 'toggle-office':
+        toggleOffice()
+        return
+      case 'appearance':
+        setIsAppearanceOpen(true)
+        return
+      case 'reminders':
+        setIsRemindersOpen(true)
+        return
+      case 'lead-models':
+        setIsLeadModelsOpen(true)
+        return
+      case 'view-sessions':
+        showSidebarView('sessions')
+        return
+      case 'view-needs-you':
+        showSidebarView('needs-you')
+        return
+      case 'view-todos':
+        showSidebarView('todos')
+        return
+    }
+  }
+
+  /** 검색 창에서 고른 줄을 연다 */
+  function pickSearchItem(item: SearchItem) {
+    switch (item.kind) {
+      case 'session':
+        selectSession(item.session.id)
+        return
+      case 'team': {
+        // 그 팀의 그룹이 접혀 있으면 펴지 않고 그룹 라벨까지
+        const isGroupCollapsed = collapsedGroupIds.includes(item.team.groupId) && office.groups.some((g) => g.id === item.team.groupId)
+        showSidebarView('sessions')
+        setListScrollRequest({
+          id: nextListScrollIdRef.current++,
+          kind: isGroupCollapsed ? 'group' : 'team',
+          targetId: isGroupCollapsed ? item.team.groupId : item.team.id,
+        })
+        focusTeam(item.team.id)
+        return
+      }
+      case 'group':
+        showSidebarView('sessions')
+        setListScrollRequest({ id: nextListScrollIdRef.current++, kind: 'group', targetId: item.group.id })
+        return
+      case 'todo':
+        setTodoScope(item.scope)
+        return
+      case 'reminder':
+        setIsRemindersOpen(true)
+        return
+      case 'command':
+        runCommand(item.command)
+        return
+    }
   }
 
   /** 세션의 대화 탭을 열고 target 으로 간다 (점프·돌아가기) */
@@ -1500,6 +1608,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
         className={['team', position ? reorderClass(scope, team.id, position.index, position.count) : ''].join(' ')}
         title={vcsName ? `${team.cwd} · ${vcsName}` : team.cwd}
         data-team-id={position ? team.id : undefined}
+        data-list-team={team.id}
       >
         <div className="team-head">
           <span className="name" onClick={() => focusTeam(team.id)}>
@@ -1745,6 +1854,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     <>
       <button className="icon" onClick={() => setIsAppearanceOpen(true)} title="Appearance" aria-label="Appearance">
         <AppearanceIcon />
+      </button>
+      <button className="icon" onClick={() => setIsSearchOpen(true)} title="Search (Ctrl+K)" aria-label="Search">
+        <GlobalSearchIcon />
       </button>
       {/* 폰 폭에는 원래 사무실이 없다 */}
       {!isNarrow && (
@@ -2208,6 +2320,20 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           </section>
         )}
         {isAppearanceOpen && <AppearanceModal onClose={() => setIsAppearanceOpen(false)} />}
+        {isSearchOpen && (
+          <GlobalSearch
+            sessions={snapshot.sessions}
+            office={office}
+            now={now}
+            isHostReachable={snapshot.isHostReachable}
+            isNarrow={isNarrow}
+            isOfficeHidden={isOfficeHidden}
+            renderAvatar={renderAvatar}
+            stateLabelOf={sessionStateLabel}
+            onClose={() => setIsSearchOpen(false)}
+            onPick={pickSearchItem}
+          />
+        )}
         {isRemindersOpen && (
           <RemindersModal
             office={office}
@@ -2438,6 +2564,16 @@ function AppearanceIcon() {
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round">
       <path d="M6.8 1.5h2.4l.35 1.75 1.2.7 1.7-.57 1.2 2.08-1.35 1.18v1.4l1.35 1.18-1.2 2.08-1.7-.57-1.2.7-.35 1.75H6.8l-.35-1.75-1.2-.7-1.7.57-1.2-2.08 1.35-1.18v-1.4L2.35 5.46l1.2-2.08 1.7.57 1.2-.7z" />
       <circle cx="8" cy="8" r="2" />
+    </svg>
+  )
+}
+
+/** 헤더의 글로벌 검색(Ctrl+K) 버튼 아이콘: 돋보기 (톱니와 같은 14px) */
+function GlobalSearchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M10.3 10.3l4 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   )
 }
