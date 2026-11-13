@@ -6266,6 +6266,55 @@ li.group.drop-after::after {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* 빠른 답 칩 (Composer.tsx, quickReplies.ts): 입력 상자 카드 바로 위 한 줄 둥근 칩. 양옆은 입력 상자와 같은 대화 열 여백 */
+.quick-replies {
+  display: flex;
+  gap: 6px;
+  margin: 0 var(--chat-gutter, 16px) 8px;
+  overflow-x: auto;
+}
+.quick-reply {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-color: var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: calc(13px * var(--font-scale));
+  white-space: nowrap;
+}
+.quick-reply:hover {
+  border-color: var(--accent);
+}
+/* 설정 창 Chat 탭 "Quick replies" 절 (QuickRepliesSettings.tsx) */
+.quick-replies-settings .appearance-hint {
+  grid-column: auto;
+}
+.quick-reply-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.quick-reply-row input {
+  flex: 1;
+  min-width: 0;
+}
+.quick-reply-remove {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.quick-reply-remove:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.quick-reply-actions {
+  display: flex;
+  gap: 6px;
+}
 .login {
   max-width: 360px;
   margin: 20vh auto;
@@ -8672,6 +8721,19 @@ li.group.drop-after::after {
   .composer .suggestion-tab {
     min-width: 40px;
     font-size: calc(12px * var(--font-scale));
+  }
+  /* 빠른 답 칩: 손가락 높이 40px, 넘치면 한 줄 그대로 가로 스크롤 */
+  .quick-reply {
+    min-height: 40px;
+    padding: 0 16px;
+  }
+  .quick-reply-remove {
+    width: 40px;
+    height: 40px;
+  }
+  .quick-reply-row input,
+  .quick-reply-actions button {
+    min-height: 40px;
   }
   /* 퇴근 막대: 이유는 한 줄을 다 쓰고 아래에 버튼 둘을 반씩, 손가락으로 누르기 쉽게 40px */
   .off-duty .off-duty-reason {

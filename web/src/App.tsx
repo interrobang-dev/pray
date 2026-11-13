@@ -2307,6 +2307,8 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
                 approvalRequestedAt={selected.approvalRequestedAt ?? null}
                 question={selected.question ?? null}
                 suggestion={selected.suggestion ?? null}
+                isMyTurn={isSelectedPresent && selected.status === 'my-turn'}
+                isMember={selected.role === 'member'}
                 handoverFrom={selected.handover?.fromName ?? null}
                 version={transcriptVersions[selected.id] ?? 0}
                 btwVersion={btwVersions[selected.id] ?? 0}

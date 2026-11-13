@@ -10,6 +10,7 @@ import type { SearchTarget } from './chatSearch'
 import { Composer, QuoteIcon, type ComposerHandle } from './Composer'
 import { restoreToComposerDraft } from './composerDraft'
 import { handoverBandText, isSuggestionVisible } from './composerText'
+import { endsWithClaudeText, isQuickRepliesVisible, quickReplies, subscribeQuickReplies } from './quickReplies'
 import { approvalKeyAction, type ApprovalKeyFocus } from './approvalKeys'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
 import { ChatImageSession } from './ChatImage'
@@ -75,6 +76,10 @@ interface Props {
   question: { questions: AskQuestion[] } | null
   /** 입력칸에 그려진 Claude Code 다음 입력 제안. 있으면 입력 상자의 빈 입력칸에 흐린 글 + Tab 칩 */
   suggestion: string | null
+  /** 근무 중이고 표시 상태가 my-turn (서버 turnEnd.ts 판정). 빠른 답 칩 조건 */
+  isMyTurn: boolean
+  /** 팀원(role member) 세션이면 빠른 답 칩을 띄우지 않는다 */
+  isMember: boolean
   /** 인계 중이면 직전 지시자 이름 (Hand over 로 띄운 새 지시자가 인계 글에 답하기 전). 입력 상자·곁가지 질문을 막고 상자 위에 띠를 띄운다 */
   handoverFrom: string | null
   /** 전역 SSE 의 transcript 이벤트로 올라가는 카운터. 바뀌면 다시 읽는다 */
@@ -1264,6 +1269,8 @@ export function Chat({
   approvalRequestedAt,
   question,
   suggestion,
+  isMyTurn,
+  isMember,
   handoverFrom,
   version,
   btwVersion,
@@ -1311,6 +1318,22 @@ export function Chat({
     isAsking,
     isHandingOver,
     isDraftEmpty,
+    hasUnconfirmedPending: pendings.some((pending) => !pending.isFailed),
+  })
+  /** 빠른 답 칩 목록 (설정 창 Chat 탭에서 고친다. 비우면 꺼짐) */
+  const quickReplyList = useSyncExternalStore(subscribeQuickReplies, quickReplies)
+  /** 불러온 대화가 이 세션 것이고 마지막(대기 중 제외)이 글 있는 claude 메시지인지 */
+  const isEndingWithClaudeText = useMemo(() => loadedSessionId === sessionId && endsWithClaudeText(messages), [loadedSessionId, sessionId, messages])
+  /** 입력 상자 위 빠른 답 칩 (조건은 quickReplies.ts isQuickRepliesVisible. 입력칸이 비었는지는 Composer 가 본다) */
+  const isQuickRepliesShown = isQuickRepliesVisible({
+    isWritable,
+    isMember,
+    isMyTurn,
+    endsWithClaudeText: isEndingWithClaudeText,
+    isWorking,
+    isApprovalNeeded,
+    isAsking,
+    isHandingOver,
     hasUnconfirmedPending: pendings.some((pending) => !pending.isFailed),
   })
   /** [취소] 를 누른 대기 메시지 ID. 서버가 결과를 줄 때까지 버튼이 "취소 중…" */
@@ -2241,6 +2264,7 @@ export function Chat({
         isAsking={isAsking}
         isHandingOver={isHandingOver}
         suggestion={isSuggestionShown ? suggestion : null}
+        quickReplies={isQuickRepliesShown ? quickReplyList : null}
         onEmptyChange={setIsDraftEmpty}
         onSend={send}
         onBtw={sendBtw}

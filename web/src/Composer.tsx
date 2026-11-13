@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { composerDraft } from './composerDraft'
 import { composerPlaceholder, composerRows, parseBtwCommand, quotePreview, withAttachmentPaths, withQuote, type ComposerQuote } from './composerText'
 import { formatSize } from './Files'
+import { fillTextOf, isFillReply, quickReplyLabel } from './quickReplies'
 
 /** 터치 기기(마우스 없음). style.css 의 터치 기기 스타일과 같은 기준. 이 기기에서는 세션을 열 때 입력칸에 포커스하지 않는다 (가상 키보드가 바로 떠 대화를 가린다) */
 const TOUCH_QUERY = '(hover: none)'
@@ -72,6 +73,8 @@ interface Props {
   isHandingOver: boolean
   /** 보이는 제안 (빈 입력칸에 흐리게 보이고 Tab 또는 Tab 칩으로 채운다). 안 보일 때는 null */
   suggestion: string | null
+  /** 빠른 답 칩 (quickReplies.ts isQuickRepliesVisible 이 참일 때만, 아니면 null). 입력칸 글·첨부·인용 칩이 모두 비었을 때만 상자 위 한 줄로 그린다 */
+  quickReplies: readonly string[] | null
   /** 입력칸이 비었는지 바뀔 때 (제안 표시 조건). 글자마다 부르지 않는다 */
   onEmptyChange: (isEmpty: boolean) => void
   /** 보낼 글 (첨부 경로를 붙인 것). 입력칸·보낸 칩은 이미 비웠다 */
@@ -100,7 +103,7 @@ export function QuoteIcon({ size = 14 }: { size?: number }) {
  * 대화 입력 상자: 여러 줄 입력칸·첨부 칩·보내기. 글자 state 를 여기 두어 칠 때마다 대화(Chat)가 다시 그려지지 않는다.
  * 세션을 바꿔도 쓰던 글은 남고 첨부 칩은 비운다. 글·커서는 composerDraft 에도 적어 Files·터미널 탭을 다녀와도(언마운트) 되살린다
  */
-export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw, onGoQuote, onEmptyEnter }: Props) {
+export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, suggestion, quickReplies, onEmptyChange, onSend, onBtw, onOpenBtw, onGoQuote, onEmptyEnter }: Props) {
   /** 입력칸·첨부·보내기를 막는다 (질문 중·인계 중. 회색 상자) */
   const isLocked = isAsking || isHandingOver
   const [draft, setDraft] = useState(() => composerDraft.text)
@@ -284,8 +287,35 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
     if (!isNothingToSend) submit()
   }
 
+  /**
+   * 빠른 답 칩: 보내기 칩은 그 글을 바로 보내고(입력칸은 이미 비었다), `:` 로 끝나는 칩은 입력칸에 채운다.
+   * 터치 기기에서 보내기 칩은 입력칸에 포커스하지 않는다 (가상 키보드가 뜬다). 채우기 칩은 이어서 쓰니 포커스한다(fill)
+   */
+  function pickQuickReply(reply: string) {
+    if (isFillReply(reply)) {
+      fill(fillTextOf(reply))
+      return
+    }
+    onSend(reply)
+    if (!window.matchMedia(TOUCH_QUERY).matches) composerRef.current?.focus()
+  }
+  const shownQuickReplies = quickReplies && quickReplies.length > 0 && draft === '' && attachments.length === 0 && !quote ? quickReplies : null
+
   if (!isWritable) return null
   return (
+    <>
+    {shownQuickReplies && (
+      <div className="quick-replies" role="group" aria-label="Quick replies">
+        {shownQuickReplies.map((reply) => {
+          const title = isFillReply(reply) ? `Fill the input with “${fillTextOf(reply)}”` : `Send “${reply}”`
+          return (
+            <button key={reply} type="button" className="quick-reply" onClick={() => pickQuickReply(reply)} title={title} aria-label={title}>
+              {quickReplyLabel(reply)}
+            </button>
+          )
+        })}
+      </div>
+    )}
     <form className="composer" onSubmit={submit}>
       {quote && (
         <div className="composer-quote">
@@ -389,5 +419,6 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
         </svg>
       </button>
     </form>
+    </>
   )
 }

@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from 'react'
 import { Segmented } from './Modal'
 import { MarkdownText } from './Markdown'
+import { QuickRepliesSettings } from './QuickRepliesSettings'
 import {
   CHAT_COLOR_OPTIONS,
   CHAT_SEGMENT_KEYS,
@@ -90,6 +91,7 @@ export function ChatStyleTab() {
           />
         ))}
       </section>
+      <QuickRepliesSettings />
       <div className="appearance-actions">
         <button type="button" onClick={reset}>
           Reset chat style
