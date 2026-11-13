@@ -79,7 +79,7 @@ import { readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
 import { isAllowedHost, isSameOriginRequest } from './requestGuard.js'
 import { makeSendCode } from './mail.js'
-import { applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
+import { applyApprovalAnswered, applyApprovalDenied, applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { answerInterruptBox, decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptBox, type InterruptJudgement } from './interrupt.js'
 import { findLiveSession, findTranscript, findTranscriptAnalysis, findTranscriptFile, findTranscriptSummary, isLiveSession, listSessions, projectsDir, sessionStatus } from './sessions.js'
 import {
@@ -1931,6 +1931,100 @@ app.post('/api/sessions/:id/answer', (req, res) => {
   res.json({})
   void broadcast()
 })
+
+/** 승인 화면 키. Enter = 기본 선택 "1. Yes", Esc = 거절 (도구 실행 중 중지와 같은 결말 — 실측) */
+const APPROVE_KEY = '\r'
+/** 거절(Esc)이 jsonl 에 적히기를 기다리는 중인 세션. 그동안 같은 세션의 다른 승인·거절은 409 */
+const approvals = new Set<string>()
+
+/**
+ * 대화 탭 승인 막대 `{ decision: 'approve' | 'deny' }`. 근무 중인 웹 세션이 승인 대기일 때만 pty 에 Enter·Esc 를 보내고 상태를 바로 고친다
+ * (승인한 도구가 끝나야 PostToolUse 가 오고, 거절에는 훅이 하나도 오지 않아 — 실측 — 막대가 오래 남았다).
+ * approve → working 으로 돌리고 `{}`. deny → 작업 중지처럼 jsonl 을 최대 3초 지켜봐(judgeInterrupt) `{ outcome }`:
+ * stopped(중지 줄) → my-turn, continued(대기 메시지로 바로 이어 일함) → working, unknown(기록 없음) → 그대로
+ */
+app.post('/api/sessions/:id/approval', async (req, res) => {
+  const sessionId = req.params.id
+  const { decision } = (req.body ?? {}) as { decision?: unknown }
+  if (!isSessionId(sessionId) || (decision !== 'approve' && decision !== 'deny')) {
+    res.status(400).json({ message: "Decision must be 'approve' or 'deny'" })
+    return
+  }
+  if (!host.sessions.some((s) => s.sessionId === sessionId)) {
+    res.status(404).json({ message: 'Not a web session' })
+    return
+  }
+  const conflict = approvals.has(sessionId) ? 'Already answering' : approvalConflict(sessionId)
+  if (conflict) {
+    res.status(409).json({ message: conflict })
+    return
+  }
+  // 이 승인 요청을 받은 시각. 그 사이 다른 훅·새 승인 요청이 오면 상태를 고치지 않는다
+  const requestedAt = hookStates.get(sessionId)!.updatedAt
+  if (decision === 'approve') {
+    if (!host.send({ type: 'input', sessionId, data: APPROVE_KEY })) {
+      res.status(503).json({ message: 'Not connected to session host' })
+      return
+    }
+    const next = applyApprovalAnswered(hookStates.get(sessionId), requestedAt)
+    if (next) hookStates.set(sessionId, next)
+    res.json({})
+    void broadcast()
+    return
+  }
+  approvals.add(sessionId)
+  try {
+    const jsonl = (await findTranscript(sessionId)) ?? ''
+    // 위 await 사이에 터미널에서 답했거나 새 승인 요청이 왔을 수 있어 다시 본다
+    const lateConflict = approvalConflict(sessionId) ?? (hookStates.get(sessionId)?.updatedAt !== requestedAt ? 'The approval request changed' : null)
+    if (lateConflict) {
+      res.status(409).json({ message: lateConflict })
+      return
+    }
+    // 마지막 조각이 쓰다 만 줄이면 그 줄부터 본다
+    const fromLine = jsonl.split('\n').length - 1
+    if (!host.send({ type: 'input', sessionId, data: ESC_KEY })) {
+      res.status(503).json({ message: 'Not connected to session host' })
+      return
+    }
+    let judgement: InterruptJudgement = 'unknown'
+    const deadline = Date.now() + INTERRUPT_RECORD_TIMEOUT_MS
+    while (true) {
+      judgement = judgeInterrupt((await findTranscript(sessionId)) ?? '', fromLine)
+      if (judgement !== 'unknown' || Date.now() >= deadline) break
+      await sleep(INTERRUPT_POLL_MS)
+    }
+    approvals.delete(sessionId)
+    // 거절로 차례가 멈췄다 (Stop 이 안 와 팀원 task 가 running 으로 남는다). 대기 메시지로 이어 일해도 지시받은 일은 멈췄다
+    if (judgement !== 'unknown') tasks.markInterrupted(sessionId)
+    const next =
+      judgement === 'stopped'
+        ? applyApprovalDenied(hookStates.get(sessionId), requestedAt)
+        : judgement === 'continued'
+          ? applyApprovalAnswered(hookStates.get(sessionId), requestedAt)
+          : undefined
+    if (next) hookStates.set(sessionId, next)
+    res.json({ outcome: judgement })
+    void broadcast()
+  } finally {
+    approvals.delete(sessionId)
+  }
+})
+
+/** 승인 막대로 답할 수 없는 이유 (409 문구). 없으면 null. 진행 중인 거절(approvals)은 부르는 쪽이 본다 */
+function approvalConflict(sessionId: string): string | null {
+  // /input 과 같다: 인계 중에는 터미널 탭 키만 통과
+  if (activeHandover(sessionId)) return HANDOVER_BLOCK_MESSAGE
+  if (heldQuestions.has(sessionId)) return 'Answer the question in the question card'
+  const hook = hookStates.get(sessionId)
+  if (hook?.status !== 'needs-approval') return 'Not waiting for approval'
+  // 질문 화면에서 Enter 는 1번 선택지로 답하고 Esc 는 질문을 거절한다
+  if (hook.pendingTool === 'AskUserQuestion') return 'Answer the question in the Terminal tab'
+  if (unqueues.has(sessionId)) return 'Cancelling a queued message'
+  if (interrupts.has(sessionId)) return 'Stopping'
+  if (btwTyping.has(sessionId)) return 'Sending a side question'
+  return null
+}
 
 app.post('/api/sessions/:id/resize', (req, res) => {
   const { cols, rows } = req.body as { cols?: number; rows?: number }

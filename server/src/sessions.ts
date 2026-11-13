@@ -424,6 +424,7 @@ export async function listSessions(
         contextTokens: transcript?.contextTokens ?? null,
         turnUsage: transcript?.turnUsage ?? null,
         pendingTool: hook?.pendingTool ?? null,
+        approvalRequestedAt: hook?.status === 'needs-approval' ? hook.updatedAt : null,
         workingSince: hook?.workingSince ?? null,
         teamId: team?.id ?? null,
         partId: part?.id ?? null,

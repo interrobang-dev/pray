@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyHook, applyInterrupted, applyQuestionDenied } from './hookState.js'
+import { applyApprovalAnswered, applyApprovalDenied, applyHook, applyInterrupted, applyQuestionDenied } from './hookState.js'
 
 const base = { session_id: 's1', cwd: 'D:/x' }
 const now = new Date('2026-10-20T00:00:00Z')
@@ -113,6 +113,65 @@ describe('applyQuestionDenied', () => {
     const stopped = applyHook(undefined, { ...base, hook_event_name: 'Stop' }, now)
     expect(applyQuestionDenied(stopped, now)).toBe(stopped)
     expect(applyQuestionDenied(undefined, now)).toBeUndefined()
+  })
+})
+
+describe('applyApprovalAnswered and applyApprovalDenied', () => {
+  const at = (iso: string) => new Date(iso)
+  /** 앞 차례가 끝나고 새 차례에서 Bash 승인을 기다리는 상태 */
+  const waiting = () => {
+    const stopped = applyHook(undefined, { ...base, hook_event_name: 'Stop', last_assistant_message: '앞 차례' }, now)
+    const started = applyHook(stopped, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:00Z'))
+    return applyHook(started, { ...base, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }, at('2026-10-21T00:00:10Z'))
+  }
+  const requestedAt = '2026-10-21T00:00:10.000Z'
+
+  it('turns an approved request into working in the same turn', () => {
+    expect(applyApprovalAnswered(waiting(), requestedAt, at('2026-10-21T00:00:20Z'))).toEqual({
+      status: 'working',
+      cwd: 'D:/x',
+      lastAssistantText: '앞 차례',
+      pendingTool: null,
+      updatedAt: '2026-10-21T00:00:20.000Z',
+      workingSince: '2026-10-21T00:00:00.000Z',
+      statusBeforeEnd: null,
+      lastPromptAt: '2026-10-21T00:00:00.000Z',
+      isInterrupted: false,
+    })
+  })
+
+  it('turns a denied request into an interrupted my-turn, keeping the last words of the previous turn', () => {
+    expect(applyApprovalDenied(waiting(), requestedAt, at('2026-10-21T00:00:20Z'))).toEqual({
+      status: 'my-turn',
+      cwd: 'D:/x',
+      lastAssistantText: '앞 차례',
+      pendingTool: null,
+      updatedAt: '2026-10-21T00:00:20.000Z',
+      workingSince: null,
+      statusBeforeEnd: null,
+      lastPromptAt: '2026-10-21T00:00:00.000Z',
+      isInterrupted: true,
+    })
+  })
+
+  it('lets the next hook change it as usual', () => {
+    const approved = applyApprovalAnswered(waiting(), requestedAt, at('2026-10-21T00:00:20Z'))
+    const used = applyHook(approved, { ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, at('2026-10-21T00:00:30Z'))
+    expect(used).toMatchObject({ status: 'working', workingSince: '2026-10-21T00:00:00.000Z' })
+    const denied = applyApprovalDenied(waiting(), requestedAt, at('2026-10-21T00:00:20Z'))
+    const next = applyHook(denied, { ...base, hook_event_name: 'UserPromptSubmit' }, at('2026-10-21T00:00:30Z'))
+    expect(next).toMatchObject({ status: 'working', isInterrupted: false })
+  })
+
+  it('leaves other states, other requests and unknown sessions alone', () => {
+    const used = applyHook(waiting(), { ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, at('2026-10-21T00:00:15Z'))
+    expect(applyApprovalAnswered(used, requestedAt, now)).toBe(used)
+    expect(applyApprovalDenied(used, requestedAt, now)).toBe(used)
+    const nextRequest = applyHook(used, { ...base, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }, at('2026-10-21T00:00:16Z'))
+    expect(applyApprovalAnswered(nextRequest, requestedAt, now)).toBe(nextRequest)
+    expect(applyApprovalDenied(nextRequest, requestedAt, now)).toBe(nextRequest)
+    expect(applyApprovalAnswered(undefined, requestedAt, now)).toBeUndefined()
+    expect(applyApprovalDenied(undefined, requestedAt, now)).toBeUndefined()
   })
 })
 

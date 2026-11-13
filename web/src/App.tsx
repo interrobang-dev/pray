@@ -2295,6 +2295,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
                 isWorking={isSelectedPresent && selected.status === 'working'}
                 workingSince={selected.workingSince ?? null}
                 pendingTool={selected.pendingTool}
+                approvalRequestedAt={selected.approvalRequestedAt ?? null}
                 question={selected.question ?? null}
                 suggestion={selected.suggestion ?? null}
                 handoverFrom={selected.handover?.fromName ?? null}

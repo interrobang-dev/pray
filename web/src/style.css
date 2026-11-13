@@ -5543,6 +5543,16 @@ li.group.drop-after::after {
   color: var(--on-red);
   border: 0;
 }
+/* 승인·거절 실패 문구 (Chat.tsx answerApproval). 버튼을 누르지 않게 막대 아래 한 줄로 내린다 */
+.approval:has(.approval-error) {
+  flex-wrap: wrap;
+}
+.approval .approval-error {
+  flex: 1 1 100%;
+  min-width: 0;
+  font-size: calc(13px * var(--font-scale));
+  overflow-wrap: anywhere;
+}
 /* claude 의 AskUserQuestion 에 답하는 카드 (Chat.tsx). 승인 막대 자리에 뜬다. 길면 가운데(질문·선택지)만 스크롤하고 탭·버튼은 남는다 */
 .question-card {
   display: flex;

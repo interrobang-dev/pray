@@ -61,6 +61,8 @@ export interface Session {
   /** 마지막 차례(마지막 사람 입력 뒤) 주 대화 응답들의 입력 쪽 usage 합 — 화면 캐시율. 그 차례에 응답이 없으면 null (transcript.ts) */
   turnUsage: TurnUsage | null
   pendingTool: string | null
+  /** 승인 대기면 그 승인 요청(PermissionRequest 훅)을 받은 시각, 아니면 null. 화면 승인 막대가 요청마다 키로 쓴다 */
+  approvalRequestedAt: string | null
   /** 이번 차례를 시작한 시각 (훅 상태). 모르면 null */
   workingSince: string | null
   /** 팀에 속하면 자기 지휘 단위의 지시자(팀장·파트장)/팀원. 아니면 null */

@@ -68,6 +68,8 @@ interface Props {
   isWorking: boolean
   workingSince: string | null
   pendingTool: string | null
+  /** 승인 대기면 그 승인 요청을 받은 시각 (Session.approvalRequestedAt). 승인 막대를 누른 요청을 가리는 키. 옛 서버면 null */
+  approvalRequestedAt: string | null
   /** 서버가 붙잡고 있는 AskUserQuestion. 있으면 승인 막대 대신 질문 카드 */
   question: { questions: AskQuestion[] } | null
   /** 입력칸에 그려진 Claude Code 다음 입력 제안. 있으면 입력 상자의 빈 입력칸에 흐린 글 + Tab 칩 */
@@ -1258,6 +1260,7 @@ export function Chat({
   isWorking,
   workingSince,
   pendingTool,
+  approvalRequestedAt,
   question,
   suggestion,
   handoverFrom,
@@ -1332,6 +1335,12 @@ export function Chat({
   const [isInterrupting, setIsInterrupting] = useState(false)
   /** 중지 결과·실패 한 줄. INTERRUPT_NOTICE_MS 뒤 사라진다 */
   const [interruptNotice, setInterruptNotice] = useState<string | null>(null)
+  /** 지금 승인 요청의 키. 새 승인 요청이 오면 바뀐다 (옛 서버는 요청 시각이 없어 차례 시작 시각으로 가린다) */
+  const approvalKey = `${sessionId}|${pendingTool ?? ''}|${approvalRequestedAt ?? workingSince ?? ''}`
+  /** 승인 막대에서 답한 요청의 키. 이 요청 동안 막대를 숨긴다 (서버가 상태를 바꾸기 전·옛 서버면 다음 훅까지) */
+  const [answeredApprovalKey, setAnsweredApprovalKey] = useState<string | null>(null)
+  /** 승인·거절이 실패한 요청과 그 문구. 같은 요청의 막대 안에 보인다 */
+  const [approvalError, setApprovalError] = useState<{ key: string; message: string } | null>(null)
   const nextPendingIdRef = useRef(1)
   const sendQueueRef = useRef<Promise<void>>(Promise.resolve())
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -1774,6 +1783,39 @@ export function Chat({
       body: JSON.stringify({ data }),
     })
 
+  /**
+   * 승인 막대의 Approve·Deny. 누르는 즉시 이 요청의 막대를 숨기고 서버가 키(Enter·Esc)를 보내고 상태를 고친다.
+   * 실패하면 막대를 다시 보이고 서버 문구를 막대 안에. 서버를 재시작하기 전(이 API 가 없는 옛 서버, JSON 아닌 404)이면 예전처럼 키를 직접 보낸다
+   */
+  async function answerApproval(decision: 'approve' | 'deny') {
+    const key = approvalKey
+    setAnsweredApprovalKey(key)
+    setApprovalError(null)
+    let message: string | null = null
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/approval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      })
+      const isJson = response.headers.get('Content-Type')?.includes('application/json') ?? false
+      if (response.status === 404 && !isJson) {
+        const fallback = await sendKeys(decision === 'approve' ? '\r' : '\x1b')
+        if (!fallback.ok) message = `Couldn't send the key (HTTP ${fallback.status})`
+      } else {
+        const body = (await response.json().catch(() => ({}))) as { outcome?: string; message?: string }
+        if (!response.ok) message = body.message ?? `HTTP ${response.status}`
+        else if (decision === 'deny' && body.outcome === 'unknown') message = "Couldn't confirm the denial. Check the Terminal tab"
+      }
+    } catch {
+      message = 'Network error'
+    }
+    if (message === null) return
+    // 그 사이 새 요청으로 바뀌었으면 그 요청의 막대는 이미 보인다 (문구는 키가 맞을 때만 보인다)
+    setAnsweredApprovalKey((current) => (current === key ? null : current))
+    setApprovalError({ key, message })
+  }
+
   /** 입력 상자가 보낸 글 (입력칸·보낸 첨부 칩은 입력 상자가 이미 비웠다) */
   function send(text: string) {
     // jsonl 에 남기까지(transcript 갱신 → 대화 전체 다시 받기) 기다리지 않고 내 말풍선을 바로 띄운다
@@ -2099,17 +2141,24 @@ export function Chat({
         (pendingTool === ASK_TOOL ? (
           <div className="approval">Open the Terminal tab to answer the question</div>
         ) : (
-          <div className="approval">
-            <span>
-              Needs approval: <code>{pendingTool ?? '?'}</code>
-            </span>
-            <button className="yes" onClick={() => void sendKeys('\r')}>
-              Approve (Enter)
-            </button>
-            <button className="no" onClick={() => void sendKeys('\x1b')}>
-              Deny (Esc)
-            </button>
-          </div>
+          answeredApprovalKey !== approvalKey && (
+            <div className="approval">
+              <span>
+                Needs approval: <code>{pendingTool ?? '?'}</code>
+              </span>
+              <button className="yes" onClick={() => void answerApproval('approve')}>
+                Approve (Enter)
+              </button>
+              <button className="no" onClick={() => void answerApproval('deny')}>
+                Deny (Esc)
+              </button>
+              {approvalError?.key === approvalKey && (
+                <span className="approval-error" role="alert">
+                  {approvalError.message}
+                </span>
+              )}
+            </div>
+          )
         ))
       )}
       {isWritable && (

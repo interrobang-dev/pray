@@ -44,6 +44,25 @@ export function applyQuestionDenied(previous: HookState | undefined, now: Date =
 }
 
 /**
+ * 웹 승인 막대에서 승인(Enter)한 직후의 상태. PostToolUse 는 승인한 도구가 끝난 뒤에야 오므로 서버가 바로 working 으로 돌린다.
+ * 같은 차례라 workingSince 는 잇는다. 승인 요청을 받은 시각(requestedAt = 그때의 updatedAt)의 승인 대기일 때만 —
+ * 그 사이 다른 훅으로 바뀌었거나 새 승인 요청이 왔으면 그대로 둔다. 거절 뒤 대기 메시지로 바로 이어 일할 때(continued)도 쓴다
+ */
+export function applyApprovalAnswered(previous: HookState | undefined, requestedAt: string, now: Date = new Date()): HookState | undefined {
+  if (previous?.status !== 'needs-approval' || previous.updatedAt !== requestedAt) return previous
+  return { ...previous, status: 'working', pendingTool: null, updatedAt: now.toISOString() }
+}
+
+/**
+ * 웹 승인 막대에서 거절(Esc)하고 jsonl 로 멈춘 것을 확인한 뒤의 상태. 거절은 도구 실행 중 중지와 같아 훅이 하나도 오지 않으므로(실측)
+ * 서버가 my-turn 으로 돌린다 (applyInterrupted 와 같은 꼴 — 마지막 말 대신 중지로 끝난 차례라 isInterrupted). 조건은 applyApprovalAnswered 와 같다
+ */
+export function applyApprovalDenied(previous: HookState | undefined, requestedAt: string, now: Date = new Date()): HookState | undefined {
+  if (previous?.status !== 'needs-approval' || previous.updatedAt !== requestedAt) return previous
+  return { ...previous, status: 'my-turn', pendingTool: null, updatedAt: now.toISOString(), workingSince: null, isInterrupted: true }
+}
+
+/**
  * 웹에서 중지(Esc)하고 jsonl 로 멈춘 것을 확인한 뒤의 상태. Claude Code 는 중지에 Stop 훅을 보내지 않아(실측) working 으로 남으므로
  * 서버가 my-turn 으로 돌린다. Esc 를 보낸 그 차례(turnStartedAt = 그때의 workingSince)가 아직 working 일 때만 —
  * 그 사이 다른 훅으로 바뀌었으면 그대로 둔다. lastAssistantText 는 손대지 않는다 (중지에는 마지막 말이 없다)

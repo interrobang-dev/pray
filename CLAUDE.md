@@ -18,7 +18,7 @@
 | `team.md` | 팀·파트 판정, 팀장·파트장 지침·MCP 도구, task 상태, 팀원 이름·모델·effort, worktree 파트 |
 | `security.md` | 인증(`auth.ts`)·DNS rebinding 을 막는 Host 검사·CSRF 를 막는 Origin 검사(`requestGuard.ts`)·훅 경로와 파일 클립보드 복사(`fileClipboard.ts`)·팀 폴더 열기(`openFolder.ts`)·대화 .html 을 Chrome 으로 열기(`openInChrome.ts`)·대화 속 경로 열기(`openPath.ts`)·폴더 고르기·git init(`folderPicker.ts`) 이 PC 전용·`index.ts` 미들웨어 순서 |
 | `server-api.md` | 서버 API 경로 전부(`index.ts` 전문), 세션 목록·jsonl 요약·훅 상태·표시 상태 계산, shell·작업 파일·첨부·세션 cwd 파일 읽기(`workspaceFiles.ts`)·저장(`workspaceSave.ts`), AskUserQuestion, 세션 이름·역할·인물, 폴더 신뢰, 모델·effort 바꾸기 |
-| `queue-interrupt.md` | mod(입력 제안·입력칸 알림·곁가지 질문), 보내기의 함정, 대기열·대기 메시지 취소, 작업 중지, 곁가지 질문 흐름(`btw.ts`) |
+| `queue-interrupt.md` | mod(입력 제안·입력칸 알림·곁가지 질문), 보내기의 함정, 대기열·대기 메시지 취소, 작업 중지, 승인 막대 답하기(`/approval`), 곁가지 질문 흐름(`btw.ts`) |
 | `accounts.md` | 사용량 조회·사용량 창, Claude 계정 보관·전환·로그인·로그아웃 (서버·화면) |
 | `chat.md` | 대화 메시지(`messages.ts`)와 대화 탭 전체, 마크다운, 작업 파일, Shells, 터미널 탭 |
 | `chat-time.md` | 대화 탭 말풍선의 보낸 시각·날짜 구분선(`chatTime.ts`) — 붙이는 곳·연속 메시지 규칙·구분선을 줄 앞에 붙여 그리기·터치 자리·숨기기 |

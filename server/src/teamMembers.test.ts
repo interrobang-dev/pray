@@ -24,6 +24,7 @@ const session = (fields: Partial<Session>): Session => ({
   contextTokens: 123456,
   turnUsage: null,
   pendingTool: null,
+  approvalRequestedAt: null,
   workingSince: null,
   role: 'member',
   teamId: 't1',
