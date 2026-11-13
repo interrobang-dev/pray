@@ -7447,16 +7447,19 @@ li.group.drop-after::after {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-/* Ctrl+K 글로벌 검색 창 (GlobalSearch.tsx): 화면 가운데 위(15vh) 떠 있는 면. 오버레이는 .modal-overlay(띠 아래부터 덮기) 그대로이고 위로 붙인다 */
+/* Ctrl+K 글로벌 검색 창 (GlobalSearch.tsx): 떠 있는 면. 오버레이는 .modal-overlay(띠 아래부터 덮기) 그대로이고 위로 붙인다.
+   위쪽 자리는 최대 높이(560px, 작은 화면은 띠 아래 높이 − 96px)의 창이 띠 아래 정가운데에 오게 고정한다 —
+   결과가 줄면 아래만 줄어 입력칸이 칠 때마다 움직이지 않는다 */
 .modal-overlay.search-overlay {
+  --search-panel-max: min(560px, calc(100vh - var(--titlebar-height, 0px) - 96px));
   align-items: flex-start;
-  padding-top: 15vh;
+  padding-top: calc((100vh - var(--titlebar-height, 0px) - var(--search-panel-max)) / 2);
 }
 .search-panel {
   display: flex;
   flex-direction: column;
   width: min(640px, calc(100vw - 32px));
-  max-height: calc(100vh - var(--titlebar-height, 0px) - 15vh - 48px);
+  max-height: var(--search-panel-max);
   overflow: hidden;
   background: var(--pop-bg);
   border-radius: var(--radius-lg);
