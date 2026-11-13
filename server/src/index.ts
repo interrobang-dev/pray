@@ -128,10 +128,13 @@ import { TaskConflictError, TaskStore, type RestoredMember } from './teamState.j
 import { idleSinceOf, teamStatusMembers, teamStatusTasks } from './teamMembers.js'
 import { readTaskEnd } from './taskUsage.js'
 import { type MemberLookup, taskDetailOf, taskHistoryOf } from './teamTaskHistory.js'
+import { dailyEventsOf, dailyTasksOf, dailyTodosOf, dailyTokensOf, leadIdsOf, localDateKey, oldestDateOf, parseDayParam } from './dailyReport.js'
+import { makeDayCommitsCache, teamDayCommits } from './dayCommits.js'
+import { dayUsageOfDirs, makeDayUsageReader } from './dayUsage.js'
 import { TeamTaskLog } from './teamTaskFile.js'
 import { parseWaitRequest, respondJsonAfter } from './taskWait.js'
 import { leadExtraArgs } from './lead.js'
-import { formatHandoff, HANDOFF_LIMIT, handoffMessage, leadTranscriptPath, readHandoffSource, type LeadKind } from './leadHandoff.js'
+import { formatHandoff, HANDOFF_LIMIT, handoffMessage, leadTranscriptPath, projectSlug, readHandoffSource, type LeadKind } from './leadHandoff.js'
 import { applyHandoverHook, HANDOVER_BLOCK_MESSAGE, isHandoverActive, markHandoverSent, startHandover, type HandoverState } from './handoffState.js'
 import { waitForLeadEnd } from './leadReplace.js'
 import {
@@ -2703,6 +2706,87 @@ app.get('/api/team/:teamId/tasks/:taskId', async (req, res) => {
   }
   res.set('Cache-Control', 'no-store')
   res.json({ task })
+})
+
+/** 오늘 한 일 창의 폴더별 커밋 캐시 (60초)·jsonl 사용량 읽기 (파일별, 늘어난 바이트만) → dayCommits.ts·dayUsage.ts */
+const dayCommitsOf = makeDayCommitsCache()
+const readDayUsage = makeDayUsageReader()
+
+/**
+ * 화면 Today 창: 그날(이 PC 의 로컬 자정 기준, `?date=YYYY-MM-DD`, 빼면 오늘, 오늘부터 7일 전까지) 팀마다 커밋·task·토큰·끝낸 할 일·팀원 들고 남
+ * + 내 책상 끝낸 할 일 → DailyReport. 날짜 꼴·범위 400. 규칙 → .claude/rules/daily.md
+ */
+app.get('/api/daily', async (req, res) => {
+  const now = new Date()
+  const range = parseDayParam(req.query.date, now)
+  if (!range) {
+    res.status(400).json({ message: 'Invalid date' })
+    return
+  }
+  let office: ReturnType<typeof readOffice>
+  let records: { sessionId: string; cwd: string; extraArgs?: string[] }[]
+  let sessions: Awaited<ReturnType<typeof snapshotPayload>>['sessions']
+  try {
+    office = readOffice()
+    records = [...listWebSessions(), ...listOffDuty()]
+    sessions = (await snapshotPayload()).sessions
+  } catch (error) {
+    console.error(`오늘 한 일 읽기 실패: ${error}`)
+    res.status(500).json({ message: "Couldn't read teams or sessions" })
+    return
+  }
+  const names = new Map(sessions.map((s) => [s.id, { name: s.name ?? s.title ?? s.id.slice(0, 8), position: s.position }]))
+  const lookup: MemberLookup = (sessionId) => names.get(sessionId) ?? null
+  const allTasks = tasks.list()
+  const events = taskLog.listEvents()
+  const from = range.from.getTime()
+  const to = range.to.getTime()
+  try {
+    const teams = await Promise.all(
+      office.teams.map(async (team) => {
+        const folders = [team.cwd, ...team.parts.flatMap((part) => (part.worktree ? [part.worktree.cwd] : []))]
+        const folderKeys = new Set(folders.map(normalizeCwd))
+        const teamTasks = allTasks.filter((task) => task.teamId === team.id)
+        const memberIds = new Set([
+          ...sessions.filter((s) => s.teamId === team.id && s.role === 'member').map((s) => s.id),
+          ...teamTasks.map((task) => task.memberSessionId),
+          ...events.filter((event) => event.teamId === team.id).map((event) => event.sessionId),
+        ])
+        const leadIds = leadIdsOf(team, records, (cwd) => folderKeys.has(normalizeCwd(cwd)))
+        const [commits, usage] = await Promise.all([
+          teamDayCommits(team, range.from, range.to, dayCommitsOf),
+          dayUsageOfDirs(
+            folders.map((cwd) => join(projectsDir, projectSlug(cwd))),
+            from,
+            to,
+            readDayUsage,
+          ),
+        ])
+        return {
+          teamId: team.id,
+          name: team.name,
+          commits,
+          tasks: dailyTasksOf(team.id, teamTasks, range, lookup),
+          tokens: dailyTokensOf(usage, { leadIds, memberIds }, lookup),
+          todosDone: dailyTodosOf(team.todos, range),
+          events: dailyEventsOf(team.id, events, range),
+        }
+      }),
+    )
+    res.set('Cache-Control', 'no-store')
+    res.json({
+      today: localDateKey(now),
+      oldestDate: oldestDateOf(now),
+      date: range.date,
+      from: range.from.toISOString(),
+      to: range.to.toISOString(),
+      myDesk: { todosDone: dailyTodosOf(office.todos, range) },
+      teams,
+    })
+  } catch (error) {
+    console.error(`오늘 한 일 만들기 실패: ${error}`)
+    res.status(500).json({ message: "Couldn't build the daily report" })
+  }
 })
 
 /**
