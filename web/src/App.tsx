@@ -38,6 +38,7 @@ import { copyText } from './copyText'
 import { ModelSettingModal, useRestartingSessions } from './ModelSettingModal'
 import { modelLabel, nextLabel } from './modelSetting'
 import { LeadModelsButton, LeadModelsModal } from './LeadModelsModal'
+import { DailyButton, DailyModal } from './DailyModal'
 import { sessionMenuEntries } from './sessionMenu'
 import { LEAD_POSITION, MEMBER_POSITION, editableNameOf, modalName, modalPosition, nameOf, positionOf, renamePatch } from './sessionPosition'
 import { PositionChip } from './PositionChip'
@@ -351,6 +352,8 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   const [tasksTeamId, setTasksTeamId] = useState<string | null>(null)
   /** 툴바 Lead models 창 (근무 중인 팀장·파트장 모델·effort 한꺼번에 바꾸기) */
   const [isLeadModelsOpen, setIsLeadModelsOpen] = useState(false)
+  /** Today 창 (그날 한 일). focusTeamId = 팀 ⋯ 메뉴로 열면 그 팀 칸까지 스크롤 */
+  const [dailyOpen, setDailyOpen] = useState<{ focusTeamId: string | null } | null>(null)
   const [isRemindersOpen, setIsRemindersOpen] = useState(false)
   /** Ctrl+K 글로벌 검색 창 (헤더 돋보기 버튼도 연다) */
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -642,6 +645,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
         return
       case 'lead-models':
         setIsLeadModelsOpen(true)
+        return
+      case 'daily':
+        setDailyOpen({ focusTeamId: null })
         return
       case 'view-sessions':
         showSidebarView('sessions')
@@ -1597,6 +1603,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
         : { label: 'Copy folder path', onClick: () => void copyTeamFolder(team) },
       { label: 'Rename', onClick: () => void editTeam(team) },
       { label: 'Tasks', onClick: () => setTasksTeamId(team.id) },
+      { label: 'Today', onClick: () => setDailyOpen({ focusTeamId: team.id }) },
       { label: 'Add part', onClick: () => openPartForm(team.id) },
       ...(team.leadSessionId ? [{ label: 'Remove lead', onClick: () => void releaseLead(team) }] : []),
       'separator',
@@ -1908,7 +1915,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
             </header>
           )}
           {hasTitleBar && titleBarActions && createPortal(headerButtons, titleBarActions)}
-          {/* 줄마다 하나: New Group · Reminders(창) · Lead models(창), 그 아래 탭 줄이 목록 자리의 보기를 바꾼다 */}
+          {/* 줄마다 하나: New Group · Reminders(창) · Lead models(창) · Today(창), 그 아래 탭 줄이 목록 자리의 보기를 바꾼다 */}
           <div className="toolbar">
             <button className="toolbar-row" onClick={() => setIsGroupForm(true)} title="Create a group">
               <NewGroupIcon />
@@ -1916,6 +1923,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
             </button>
             <RemindersButton office={office} onOpen={() => setIsRemindersOpen(true)} />
             <LeadModelsButton sessions={snapshot.sessions} onOpen={() => setIsLeadModelsOpen(true)} />
+            <DailyButton onOpen={() => setDailyOpen({ focusTeamId: null })} />
           </div>
           <div className="side-tabs" role="tablist" aria-label="Sidebar view">
             <button className="side-tab" role="tab" aria-selected={sidebarView === 'sessions'} onClick={() => setSidebarView('sessions')}>
@@ -2057,6 +2065,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           />
         )}
         {tasksTeam && <TeamTasksModal key={tasksTeam.id} team={tasksTeam} onClose={() => setTasksTeamId(null)} />}
+        {dailyOpen && <DailyModal office={office} focusTeamId={dailyOpen.focusTeamId} onClose={() => setDailyOpen(null)} />}
         {partForm && (
           <Modal
             title={`New part — Team "${office.teams.find((t) => t.id === partForm.teamId)?.name ?? ''}"`}

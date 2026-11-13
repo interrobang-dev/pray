@@ -18,6 +18,7 @@ export type CommandId =
   | 'appearance'
   | 'reminders'
   | 'lead-models'
+  | 'daily'
   | 'view-sessions'
   | 'view-needs-you'
   | 'view-todos'
@@ -123,6 +124,7 @@ export function commandItems(input: SearchInput): Extract<SearchItem, { kind: 'c
     { command: 'appearance', label: 'Appearance' },
     { command: 'reminders', label: 'Reminders' },
     { command: 'lead-models', label: 'Lead models', disabledReason: leadSessions(input.sessions).length > 0 ? null : 'No leads on duty' },
+    { command: 'daily', label: "Today's work" },
     { command: 'view-sessions', label: 'Show sessions' },
     { command: 'view-needs-you', label: 'Show Needs you' },
     { command: 'view-todos', label: 'Show All TODOs' },

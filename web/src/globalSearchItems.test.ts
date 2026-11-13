@@ -201,6 +201,10 @@ describe('commandItems', () => {
     expect(withLead.find((item) => item.command === 'lead-models')?.disabledReason).toBeNull()
   })
 
+  it("has Today's work", () => {
+    expect(commandItems(input()).find((item) => item.command === 'daily')).toMatchObject({ label: "Today's work", disabledReason: null })
+  })
+
   it('has no dangerous commands', () => {
     const labels = commandItems(input()).map((item) => item.label).join(' ')
     expect(labels).not.toMatch(/End|Restart|Delete/)

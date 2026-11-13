@@ -7061,6 +7061,137 @@ li.group.drop-after::after {
   font-size: calc(11px * var(--font-scale));
 }
 
+/* Today 창 (DailyModal.tsx): ‹ › Today … 합계 ↻ 줄, 그 아래 팀 칸마다 Commits·Tasks(Tasks 창 줄 재사용)·Tokens·Done TODOs·Members */
+.modal.daily-modal {
+  width: 760px;
+  max-height: calc(100vh - var(--titlebar-height, 0px) - 64px);
+}
+.daily-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.daily-nav button {
+  min-width: 30px;
+  padding: 3px 8px;
+}
+.daily-nav-gap {
+  flex: 1;
+}
+.daily-total {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+.daily-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -6px;
+  padding: 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.daily-team {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.daily-team-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 2px;
+}
+.daily-team-head b {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.daily-team-summary {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+.daily-label {
+  margin-top: 6px;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+}
+.daily-note {
+  padding: 2px 10px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.daily-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.daily-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 10px;
+  font-size: calc(13px * var(--font-scale));
+}
+.daily-time,
+.daily-token-kind {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+.daily-token-kind {
+  min-width: 84px;
+}
+.daily-hash {
+  flex-shrink: 0;
+  color: var(--accent-text);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: calc(12px * var(--font-scale));
+}
+.daily-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.daily-text .todo-priority {
+  margin-right: 6px;
+}
+.daily-numbers {
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+.daily-part {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+}
+/* task 줄 결과 첫 줄: 지시 첫 줄 아래, 글자색으로 */
+.task-instruction.daily-result {
+  color: var(--text);
+}
+.daily-quiet {
+  padding: 4px 2px 8px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
 /* 팀 TODO 모달 (TeamTodosModal.tsx): 입력칸 · 오류 줄 · 할 일 목록 · 완료 "Done (N)". 목록이 길면 모달 안에서 스크롤한다 */
 .todo-modal {
   width: 440px;
@@ -8180,6 +8311,27 @@ li.group.drop-after::after {
   }
   .task-text {
     max-height: 50dvh;
+  }
+  /* Today 창: 화면 폭(.modal 폰 폭을 다시 덮는다 — 760px 가 더 구체적이라), 날짜 버튼 40px, 합계는 다음 줄로 */
+  .modal.daily-modal {
+    width: calc(100vw - 32px);
+    max-height: calc(100dvh - var(--titlebar-height, 0px) - 32px);
+  }
+  .daily-nav {
+    flex-wrap: wrap;
+  }
+  .daily-nav button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .daily-total {
+    order: 10;
+    flex-basis: 100%;
+    white-space: normal;
+  }
+  .daily-row {
+    min-height: 32px;
+    align-items: center;
   }
   /* TODO 모달: 주소창이 보여도 화면 안. 줄·체크박스를 손가락으로 누르기 쉽게 */
   .todo-modal {
