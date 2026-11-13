@@ -5463,6 +5463,69 @@ li.group.drop-after::after {
     opacity: 1;
   }
 }
+/* 말풍선 보낸 시각 "14:05" (Chat.tsx MessageTime, 연속 메시지는 마지막 것에만 → chatTime.ts). 말풍선 바깥에 붙어 글을 가리지 않는다.
+   글자 끌어 고르기에 끼지 않게 user-select: none (대화 검색 칠하기는 data-search-skip). 터치 기기 자리는 아래 hover: none 블록 */
+.msg-time {
+  position: absolute;
+  bottom: 1px;
+  font-size: calc(11px * var(--font-scale));
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1.2;
+  color: var(--muted);
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* 오른쪽에 붙은 내 말(Bubble·Plain)·지시 말풍선: 말풍선 왼쪽 아래 바깥 (메신저 꼴. 말풍선 최대 폭 82% 라 남는 자리에 들어간다) */
+.msg.user > .msg-time {
+  right: calc(100% + 6px);
+}
+/* claude 답 Card: 카드 오른쪽 아래 바깥 */
+.msg.assistant > .msg-time {
+  left: calc(100% + 6px);
+}
+/* claude 답 Plain: 열 폭 전부라 옆 바깥 자리가 없어 답 아래 왼쪽 */
+:root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .msg-time {
+  top: calc(100% + 2px);
+  bottom: auto;
+  left: 0;
+}
+/* Bar 내 말: 왼쪽 정렬 전체 폭이라 아래 오른쪽 */
+:root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) > .msg-time {
+  top: calc(100% + 2px);
+  bottom: auto;
+  right: 0;
+}
+/* 아래에 붙는 시각만큼 아래 간격을 비운다 (터치 기기는 버튼 줄 간격이 이미 있어 아래 hover: none 블록이 정한다) */
+@media (hover: hover) {
+  :root:not([data-chat-reply='card']):not([data-chat-timestamps='hide']) .chat-scope .msg.assistant:has(> .msg-time),
+  :root[data-chat-user='bar']:not([data-chat-timestamps='hide']) .chat-scope .msg.user:not(.relay):has(> .msg-time) {
+    margin-bottom: 16px;
+  }
+}
+/* 날짜가 바뀌는 줄 앞의 가운데 회색 줄 "Today"·"Yesterday"·"Nov 12, 2026" (Chat.tsx DateDivider). 줄 수에 들지 않게 그 줄 앞에 붙여 그린다 */
+.date-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  font-size: calc(11px * var(--font-scale));
+  color: var(--muted);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.date-divider::before,
+.date-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+/* 대화 모양 Timestamps Hide: 시각·구분선을 CSS 로만 숨긴다 (대화 줄을 다시 그리지 않는다) */
+:root[data-chat-timestamps='hide'] .chat-scope :is(.msg-time, .date-divider) {
+  display: none;
+}
 .approval {
   display: flex;
   align-items: center;
@@ -7721,6 +7784,35 @@ li.group.drop-after::after {
   .msg > .mark-button svg {
     width: 18px;
     height: 18px;
+  }
+  /* 보낸 시각: 늘 보이는 터치 버튼과 겹치지 않게. claude 답(Plain·Card)은 답 아래 왼쪽 버튼 줄(복사 · 마크 · 인용) 바로 오른쪽,
+     내 말·지시 말풍선은 왼쪽 바깥이 버튼 자리라 말풍선 아래 오른쪽(그만큼 아래 간격), Bar 내 말은 아래 버튼 줄(마크 · 인용) 바로 오른쪽 */
+  :root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .msg-time,
+  :root[data-chat-reply='card'] .chat-scope .msg.assistant > .msg-time {
+    top: calc(100% + 4px);
+    bottom: auto;
+    left: 76px;
+    line-height: 32px;
+  }
+  :root .chat-scope .msg.assistant:has(> .quote-button) > .msg-time {
+    left: 114px;
+  }
+  .msg.user > .msg-time {
+    top: calc(100% + 3px);
+    bottom: auto;
+    right: 2px;
+  }
+  :root:not([data-chat-timestamps='hide']) .chat-scope .msg.user:has(> .msg-time) {
+    margin-bottom: 16px;
+  }
+  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) > .msg-time {
+    top: calc(100% + 4px);
+    right: auto;
+    left: 38px;
+    line-height: 32px;
+  }
+  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay):has(> .quote-button) > .msg-time {
+    left: 76px;
   }
 }
 

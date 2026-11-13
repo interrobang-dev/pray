@@ -4,6 +4,7 @@ import { buildChatRows, hidingWorkKey, rowIndexOfJumpKey, rowKeyOf, type ChatRow
 import { reuseMessages, reuseRows } from './chatReuse'
 import { loadMessages, type HeldMessages } from './chatDelta'
 import { expandedStartIndex, resolveStartIndex, startIndexRevealing, windowStartAt, type WindowStart } from './chatWindow'
+import { rowTimes, type RowStamp, type RowTime } from './chatTime'
 import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
 import { Composer, QuoteIcon, type ComposerHandle } from './Composer'
@@ -23,7 +24,7 @@ import { MarkdownText } from './Markdown'
 import { PositionChip } from './PositionChip'
 import { memberOf as memberDisplay } from './sessionPosition'
 import { formatElapsed, ShellsButton, type ShellRequest } from './Shells'
-import type { AskQuestion, ChatMessage, Shell, ToolUse } from './types'
+import { formatDateTime, type AskQuestion, type ChatMessage, type Shell, type ToolUse } from './types'
 import { isWorkOpen, type ChatStyle } from './appearance'
 import { appearance, subscribeTheme } from './theme'
 
@@ -929,6 +930,8 @@ interface ChatRowViewProps {
   canCancelQueued: boolean
   /** [Cancel] 을 누른 대기 메시지 ID (대기 메시지 줄만) */
   cancellingId: string | null
+  /** 이 줄의 claude 답·내 말·지시 말풍선에 붙일 보낸 시각 "14:05" (연속 메시지는 마지막 것에만. chatTime.ts). 없으면 null */
+  time: string | null
   /** 이 줄의 claude 답·내 말 말풍선을 마크했는지 */
   isMarked: boolean
   /** 묶음 키와 지금 펼쳐졌는지 (누르면 그 반대로 정한다) */
@@ -960,6 +963,27 @@ function QuoteButton({ message, onQuote }: { message: ChatMessage; onQuote: (mes
   )
 }
 
+/**
+ * 말풍선의 보낸 시각 "14:05" (title = 전체 날짜·시각). 말풍선 바깥에 붙는 자리는 style.css 가 정한다.
+ * 대화 안 검색 칠하기(data-search-skip)·글자 끌어 고르기(user-select: none)에 끼지 않는다
+ */
+function MessageTime({ time, at }: { time: string; at: string }) {
+  return (
+    <span className="msg-time" title={formatDateTime(at)} data-search-skip="">
+      {time}
+    </span>
+  )
+}
+
+/** 날짜가 바뀌는 줄 앞의 가운데 회색 줄 "Today"·"Yesterday"·"Nov 12, 2026". 줄 수(최근 줄만 그리기)에 들지 않게 그 줄 앞에 붙여 그린다 */
+function DateDivider({ label }: { label: string }) {
+  return (
+    <div className="date-divider" role="separator" aria-label={label}>
+      <span>{label}</span>
+    </div>
+  )
+}
+
 /** 대화 줄 하나. memo 라 대화를 다시 받아도 줄 객체(chatReuse 가 바뀌지 않은 줄은 이전 객체를 쓴다)와 넘긴 값이 그대로면 다시 그리지 않는다 */
 const ChatRowView = memo(function ChatRowView({
   row,
@@ -970,6 +994,7 @@ const ChatRowView = memo(function ChatRowView({
   memberOf,
   canCancelQueued,
   cancellingId,
+  time,
   isMarked,
   onToggleWork,
   onOpenRelay,
@@ -1008,6 +1033,7 @@ const ChatRowView = memo(function ChatRowView({
         <CopyButton text={row.message.text} />
         <MarkButton messageKey={row.message.id} isMarked={isMarked} onSetMark={onSetMark} />
         <MarkdownText text={row.message.text} isChat />
+        {time && <MessageTime time={time} at={row.message.timestamp} />}
       </div>
     )
   }
@@ -1024,6 +1050,7 @@ const ChatRowView = memo(function ChatRowView({
         <CopyButton text={message.text} />
         <div className="relay-label">Instruction from {message.from.name}</div>
         <MarkdownText text={message.text} isChat />
+        {time && <MessageTime time={time} at={message.timestamp} />}
       </div>
     )
   }
@@ -1093,6 +1120,7 @@ const ChatRowView = memo(function ChatRowView({
           )}
         </div>
       )}
+      {time && <MessageTime time={time} at={message.timestamp} />}
     </div>
   )
 })
@@ -1103,6 +1131,7 @@ const ChatRowView = memo(function ChatRowView({
  */
 const MessageRows = memo(function MessageRows({
   rows,
+  times,
   memberOf,
   workToggles,
   workBundles,
@@ -1120,6 +1149,8 @@ const MessageRows = memo(function MessageRows({
   onQuote,
 }: {
   rows: ChatRow<Special>[]
+  /** 줄마다 보낸 시각·앞 날짜 구분선 (rows 와 같은 자리) */
+  times: RowTime[]
   memberOf: MemberOf
   /** 사람이(또는 검색·점프가) 펼치거나 접은 작업 묶음 키 → 펼쳤는지. 없는 묶음은 workBundles 설정을 따른다 (isWorkOpen) */
   workToggles: ReadonlyMap<string, boolean>
@@ -1146,27 +1177,53 @@ const MessageRows = memo(function MessageRows({
   const noticeRow = lineNotice === null ? -1 : rowIndexOfJumpKey(rows, lineNotice.rowKey)
   return rows.map((row, index) => {
     const isQueuedRow = row.kind === 'message' && Boolean(row.message.isQueued)
+    const rowTime = times[index]
     return (
-      <ChatRowView
-        key={rowKeyOf(row)}
-        row={row}
-        isOpen={row.kind === 'work' && isWorkOpen(row.work.isInProgress, workToggles.get(row.work.key), workBundles)}
-        highlightKey={index === highlightRow ? highlightKey : null}
-        searchKey={index === searchRow ? searchKey : null}
-        lineNotice={index === noticeRow ? lineNotice : null}
-        memberOf={row.kind === 'message' ? memberOf : null}
-        canCancelQueued={isQueuedRow && row.kind === 'message' && row.message.id === lastQueuedId && canCancelQueued}
-        cancellingId={isQueuedRow ? cancellingId : null}
-        isMarked={(row.kind === 'text' || row.kind === 'message') && markedKeys.has(row.message.id)}
-        onToggleWork={onToggleWork}
-        onOpenRelay={onOpenRelay}
-        onCancelQueued={onCancelQueued}
-        onSetMark={onSetMark}
-        onQuote={onQuote}
-      />
+      <Fragment key={rowKeyOf(row)}>
+        {rowTime?.dateLabel && <DateDivider label={rowTime.dateLabel} />}
+        <ChatRowView
+          row={row}
+          isOpen={row.kind === 'work' && isWorkOpen(row.work.isInProgress, workToggles.get(row.work.key), workBundles)}
+          highlightKey={index === highlightRow ? highlightKey : null}
+          searchKey={index === searchRow ? searchKey : null}
+          lineNotice={index === noticeRow ? lineNotice : null}
+          memberOf={row.kind === 'message' ? memberOf : null}
+          canCancelQueued={isQueuedRow && row.kind === 'message' && row.message.id === lastQueuedId && canCancelQueued}
+          cancellingId={isQueuedRow ? cancellingId : null}
+          time={rowTime?.time ?? null}
+          isMarked={(row.kind === 'text' || row.kind === 'message') && markedKeys.has(row.message.id)}
+          onToggleWork={onToggleWork}
+          onOpenRelay={onOpenRelay}
+          onCancelQueued={onCancelQueued}
+          onSetMark={onSetMark}
+          onQuote={onQuote}
+        />
+      </Fragment>
     )
   })
 })
+
+/**
+ * 줄의 보낸 쪽·날짜 볼 시각 (chatTime.ts 의 rowTimes 입력). 시각은 claude 답·내 말·지시 말풍선에만 붙이고
+ * 작업 묶음·relay 한 줄·질문 기록·알림·system 글·대기 중 말은 붙이지 않는다 (날짜는 본다. 묶음은 첫 메시지 시각).
+ * toolTimes = 도구 호출 ID → 그 호출이 든 메시지 시각 (relay 한 줄·질문 기록 줄은 메시지를 들고 있지 않다)
+ */
+function rowStamp(row: ChatRow<Special>, toolTimes: ReadonlyMap<string, string>): RowStamp {
+  switch (row.kind) {
+    case 'text':
+      return { at: row.message.timestamp, sender: 'claude' }
+    case 'work':
+      return { at: row.work.parts[0]?.message.timestamp ?? null, sender: null }
+    case 'special':
+      return { at: toolTimes.get(row.toolUse.id) ?? null, sender: null }
+    case 'message': {
+      const { message } = row
+      if (message.from) return { at: message.timestamp, sender: `relay:${message.from.name}` }
+      const isMine = message.role === 'user' && !message.isQueued && !message.isCompactSummary && !message.isInterrupt
+      return { at: message.timestamp, sender: isMine ? 'me' : null }
+    }
+  }
+}
 
 /** 끌고 있는 것이 파일인지 (대화 속 글자·그림을 끌 때는 반응하지 않는다) */
 function isFileDrag(dataTransfer: DataTransfer): boolean {
@@ -1350,6 +1407,21 @@ export function Chat({
   const startIndexRef = useRef(startIndex)
   startIndexRef.current = startIndex
   const visibleRows = useMemo(() => rows.slice(startIndex), [rows, startIndex])
+  /**
+   * 줄마다 보낸 시각·앞 날짜 구분선. 전체 줄로 정해 그리는 범위를 넓혀도 그려 둔 줄의 구분선이 바뀌지 않는다 (위로 더 그리기 위치 보정의 기준 요소가 그대로).
+   * "Today" 는 줄이 바뀔 때 다시 정한다 (자정이 지나면 다음 갱신 때 바뀐다). 숨기기(Timestamps Hide)는 CSS 가 해서 여기와 무관하다
+   */
+  const allRowTimes = useMemo(() => {
+    const toolTimes = new Map<string, string>()
+    for (const message of messages) {
+      for (const toolUse of message.toolUses) toolTimes.set(toolUse.id, message.timestamp)
+    }
+    return rowTimes(
+      rows.map((row) => rowStamp(row, toolTimes)),
+      new Date(),
+    )
+  }, [rows, messages])
+  const visibleTimes = useMemo(() => allRowTimes.slice(startIndex), [allRowTimes, startIndex])
   /** 위로 더 그리기 직전 첫 줄 요소와 그 화면 위치. 그린 뒤 같은 자리에 오게 scrollTop 을 보정한다 */
   const expandAnchorRef = useRef<{ element: Element; top: number } | null>(null)
   const earlierRef = useRef<HTMLDivElement>(null)
@@ -1940,6 +2012,7 @@ export function Chat({
             <OpenChatPath.Provider value={openPathInChat}>
               <MessageRows
                 rows={visibleRows}
+                times={visibleTimes}
                 memberOf={memberOf}
                 workToggles={workToggles}
                 workBundles={workBundles}

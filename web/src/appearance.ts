@@ -49,6 +49,8 @@ export interface ChatStyle {
   headings: 'default' | 'underline'
   /** 끝난 작업 묶음을 처음에 접을지 펼칠지 (사용자가 직접 접거나 펼친 묶음은 그대로 — isWorkOpen) */
   workBundles: 'collapsed' | 'expanded'
+  /** 메시지마다 보낸 시각·날짜 구분선 (숨기면 CSS 가 숨긴다 — 대화 줄을 다시 그리지 않는다) */
+  timestamps: 'show' | 'hide'
   /** 숫자·파일 경로 강조 켜기/끄기 (끄면 CSS 가 색만 끈다 — 글을 다시 파싱하지 않는다). 색은 colors.number·colors.path */
   numbers: 'on' | 'off'
   paths: 'on' | 'off'
@@ -145,6 +147,14 @@ export const CHAT_OPTIONS: { [K in ChatChoiceKey]: { attribute: string; label: s
       { value: 'expanded', label: 'Expanded' },
     ],
   },
+  timestamps: {
+    attribute: 'timestamps',
+    label: 'Timestamps',
+    options: [
+      { value: 'show', label: 'Show' },
+      { value: 'hide', label: 'Hide' },
+    ],
+  },
   numbers: { attribute: 'numbers', label: 'Numbers', options: ON_OFF },
   paths: { attribute: 'paths', label: 'Paths', options: ON_OFF },
   codeColor: { attribute: 'code-color', label: 'Inline code', options: ON_OFF },
@@ -175,6 +185,7 @@ export const DEFAULT_CHAT_STYLE: ChatStyle = {
   tables: 'box',
   headings: 'default',
   workBundles: 'collapsed',
+  timestamps: 'show',
   numbers: 'on',
   paths: 'on',
   codeColor: 'on',

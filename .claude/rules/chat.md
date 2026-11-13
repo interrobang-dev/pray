@@ -38,6 +38,7 @@ jsonl → 대화 메시지(서버 `messages.ts`)와 화면의 대화 탭(말풍�
 - 점프·돌아가기·Shells 요청의 App 쪽 → web-app.md
 - 대화 모양(설정 창 Chat 탭·`ChatStyleTab.tsx`·`.chat-scope`·Work bundles) → theme.md
 - 대화 속 그림·.html 링크·경로 열기(`ChatImage`·`ChatLink`·`ChatPath`) → chat-links.md
+- 말풍선 보낸 시각·날짜 구분선(`chatTime.ts`, `MessageRows` 가 줄 앞에 붙이는 구분선) → chat-time.md
 
 ## 구조
 

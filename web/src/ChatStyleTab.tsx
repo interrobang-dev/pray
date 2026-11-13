@@ -163,12 +163,16 @@ function ChatColorRow({
   )
 }
 
-/** 대화 미리보기: 내 말 · 작업 묶음 한 줄(Expanded 면 펼친 안쪽) · 답. 대화 탭과 같은 클래스라 같은 규칙이 걸린다 */
+/** 대화 미리보기: 날짜 구분선 · 내 말 · 작업 묶음 한 줄(Expanded 면 펼친 안쪽) · 답, 보낸 시각. 대화 탭과 같은 클래스라 같은 규칙이 걸린다 (Timestamps Hide 도) */
 function ChatPreview({ isWorkOpen }: { isWorkOpen: boolean }) {
   return (
     <div className="chat-preview chat-scope" aria-hidden="true">
+      <div className="date-divider">
+        <span>Today</span>
+      </div>
       <div className="msg user">
         <div className="text">Can you check the release before we ship?</div>
+        <span className="msg-time">14:05</span>
       </div>
       <div className="work">
         <button type="button" className="work-summary" aria-expanded={isWorkOpen} tabIndex={-1}>
@@ -184,6 +188,7 @@ function ChatPreview({ isWorkOpen }: { isWorkOpen: boolean }) {
       </div>
       <div className="msg assistant">
         <MarkdownText text={PREVIEW_REPLY} isChat />
+        <span className="msg-time">14:06</span>
       </div>
     </div>
   )

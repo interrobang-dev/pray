@@ -271,6 +271,10 @@ describe('대화 모양', () => {
     expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, numbers: 'off' })).toEqual({ numbers: 'off' })
     expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, paths: 'off' })).toEqual({ paths: 'off' })
     expect(parseAppearance(JSON.stringify({ chat: { numbers: 'off', paths: 'nope' } })).chat).toMatchObject({ numbers: 'off', paths: 'on' })
+    // 보낸 시각·날짜 구분선은 기본이 Show 라 Hide 일 때만 속성이 걸린다
+    expect(chatAttributes({ ...DEFAULT_CHAT_STYLE, timestamps: 'hide' })).toEqual({ timestamps: 'hide' })
+    expect(parseAppearance(JSON.stringify({ chat: { timestamps: 'hide' } })).chat.timestamps).toBe('hide')
+    expect(parseAppearance(JSON.stringify({ chat: { timestamps: 'nope' } })).chat.timestamps).toBe('show')
     expect(new Set(CHAT_ATTRIBUTE_NAMES).size).toBe(CHAT_ATTRIBUTE_NAMES.length)
   })
 
@@ -392,7 +396,7 @@ describe('index.html 첫 화면 스크립트', () => {
   const APPEARANCES: Appearance[] = [
     DEFAULT_APPEARANCE,
     { palette: 'nord', accent: 'palette', fontSize: 'small', chat: DEFAULT_CHAT_STYLE },
-    { palette: 'default', accent: 'blue', fontSize: 'large', chat: { ...DEFAULT_CHAT_STYLE, user: 'bar', tables: 'minimal' } },
+    { palette: 'default', accent: 'blue', fontSize: 'large', chat: { ...DEFAULT_CHAT_STYLE, user: 'bar', tables: 'minimal', timestamps: 'hide' } },
     { palette: 'catppuccin', accent: '#e05a00', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, fontSize: 'large', colors: { ...DEFAULT_CHAT_STYLE.colors, heading: '#ff0088' } } },
     { palette: 'default', accent: 'palette', fontSize: 'normal', chat: { ...DEFAULT_CHAT_STYLE, reply: 'card', width: 'full', workBundles: 'expanded', colors: { code: '#123456', heading: '#abcdef', number: '#aa5500', path: '#007766' } } },
     { palette: 'solarized', accent: 'slate', fontSize: 'large', chat: DEFAULT_CHAT_STYLE },
