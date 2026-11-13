@@ -82,6 +82,8 @@ interface Props {
   onOpenBtw: () => void
   /** 인용 칩을 누르면 그 말풍선으로 간다 (마크 창 줄과 같은 이동) */
   onGoQuote: (key: string) => void
+  /** 보낼 것이 없는(글·첨부·인용 칩이 모두 빈) 입력칸에서 Enter (승인 막대가 보이면 승인. approvalKeys.ts). 이 Enter 는 늘 기본 동작을 막는다 */
+  onEmptyEnter: (event: globalThis.KeyboardEvent) => void
 }
 
 /** 인용 아이콘: 왼쪽으로 꺾인 답장 화살표 (말풍선 인용 버튼·입력 상자 인용 칩) */
@@ -98,7 +100,7 @@ export function QuoteIcon({ size = 14 }: { size?: number }) {
  * 대화 입력 상자: 여러 줄 입력칸·첨부 칩·보내기. 글자 state 를 여기 두어 칠 때마다 대화(Chat)가 다시 그려지지 않는다.
  * 세션을 바꿔도 쓰던 글은 남고 첨부 칩은 비운다. 글·커서는 composerDraft 에도 적어 Files·터미널 탭을 다녀와도(언마운트) 되살린다
  */
-export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw, onGoQuote }: Props) {
+export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw, onGoQuote, onEmptyEnter }: Props) {
   /** 입력칸·첨부·보내기를 막는다 (질문 중·인계 중. 회색 상자) */
   const isLocked = isAsking || isHandingOver
   const [draft, setDraft] = useState(() => composerDraft.text)
@@ -275,8 +277,11 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
       return
     }
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+    // 보낼 것이 없으면 Chat 에 넘긴다 (승인 막대 Enter). 막기 전에 불러 Chat 이 defaultPrevented 로 넘기지 않게 한다
+    const isNothingToSend = !draft.trim() && attachments.length === 0 && !quote
+    if (isNothingToSend) onEmptyEnter(event.nativeEvent)
     event.preventDefault()
-    submit()
+    if (!isNothingToSend) submit()
   }
 
   if (!isWritable) return null

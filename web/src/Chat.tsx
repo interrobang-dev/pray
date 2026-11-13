@@ -10,6 +10,7 @@ import type { SearchTarget } from './chatSearch'
 import { Composer, QuoteIcon, type ComposerHandle } from './Composer'
 import { restoreToComposerDraft } from './composerDraft'
 import { handoverBandText, isSuggestionVisible } from './composerText'
+import { approvalKeyAction, type ApprovalKeyFocus } from './approvalKeys'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
 import { ChatImageSession } from './ChatImage'
 import { OpenChatPath } from './ChatPath'
@@ -1341,6 +1342,12 @@ export function Chat({
   const [answeredApprovalKey, setAnsweredApprovalKey] = useState<string | null>(null)
   /** 승인·거절이 실패한 요청과 그 문구. 같은 요청의 막대 안에 보인다 */
   const [approvalError, setApprovalError] = useState<{ key: string; message: string } | null>(null)
+  /** 승인 막대(Approve·Deny)가 보이는지. 아래 렌더 조건과 같다 (질문 카드·질문 안내 줄일 때는 없다) */
+  const isApprovalBarShown =
+    isWritable && !question?.questions.length && isApprovalNeeded && pendingTool !== ASK_TOOL && answeredApprovalKey !== approvalKey
+  const approvalBarRef = useRef<HTMLDivElement>(null)
+  /** 승인 막대가 보이기 시작한 요청 키와 그 시각. 막 뜬 막대의 키는 APPROVAL_KEY_GUARD_MS 동안 무시한다 */
+  const approvalShownRef = useRef<{ key: string; at: number } | null>(null)
   const nextPendingIdRef = useRef(1)
   const sendQueueRef = useRef<Promise<void>>(Promise.resolve())
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -1923,6 +1930,45 @@ export function Chat({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [canInterrupt, isInterrupting])
 
+  // 승인 막대가 보이기 시작한 시각 (요청마다, 실패해 다시 보일 때도 새로)
+  useEffect(() => {
+    if (isApprovalBarShown) approvalShownRef.current = { key: approvalKey, at: performance.now() }
+  }, [isApprovalBarShown, approvalKey])
+
+  /**
+   * 승인 막대 키: Enter = Approve, Esc = Deny (approvalKeys.ts). 막대가 실제로 그려져 있을 때만.
+   * 입력칸의 Enter 는 보낼 것이 없을 때 Composer 가 부르고, 그 밖(body 포커스 Enter·Esc)은 아래 window keydown 이 부른다
+   */
+  function answerApprovalByKey(event: KeyboardEvent, focus: ApprovalKeyFocus) {
+    if (!isApprovalBarShown || !approvalBarRef.current?.getClientRects().length) return
+    const shown = approvalShownRef.current
+    const shownForMs = shown?.key === approvalKey ? performance.now() - shown.at : 0
+    const action = approvalKeyAction(event, { focus, isModalOpen: document.querySelector('[aria-modal="true"]') !== null, shownForMs })
+    if (!action) return
+    event.preventDefault()
+    void answerApproval(action)
+  }
+  /** window 리스너가 부를 최신 answerApprovalByKey (리스너를 렌더마다 다시 달지 않게) */
+  const answerApprovalByKeyRef = useRef(answerApprovalByKey)
+  answerApprovalByKeyRef.current = answerApprovalByKey
+
+  // 승인 막대가 보이는 동안만. 입력칸의 Enter 는 Composer 가 이미 막아(defaultPrevented) 여기서는 넘어간다
+  useEffect(() => {
+    if (!isApprovalBarShown) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      const active = document.activeElement
+      const focus: ApprovalKeyFocus =
+        active instanceof HTMLTextAreaElement && active.closest('form.composer') !== null
+          ? 'composer'
+          : active === document.body || active === null
+            ? 'none'
+            : 'other'
+      answerApprovalByKeyRef.current(event, focus)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isApprovalBarShown])
+
   /** 되돌아온 글(응답 전 중지·취소한 대기 메시지)을 웹 입력칸 맨 앞에 넣는다. 대화 탭을 떠나 Composer 가 없으면 저장소에만 넣고 다시 그려질 때 보인다 */
   function restoreToComposer(text: string) {
     restoreToComposerDraft(text)
@@ -2142,7 +2188,7 @@ export function Chat({
           <div className="approval">Open the Terminal tab to answer the question</div>
         ) : (
           answeredApprovalKey !== approvalKey && (
-            <div className="approval">
+            <div className="approval" ref={approvalBarRef}>
               <span>
                 Needs approval: <code>{pendingTool ?? '?'}</code>
               </span>
@@ -2200,6 +2246,7 @@ export function Chat({
         onBtw={sendBtw}
         onOpenBtw={openBtwForInput}
         onGoQuote={goToMark}
+        onEmptyEnter={(event) => answerApprovalByKey(event, 'composer')}
       />
       {isWritable && (contextSize || turnCache || modelText || isModelRestarting || onChangeModel) && (
         <div className="composer-meta">
