@@ -1,4 +1,4 @@
-/** Ctrl+K 글로벌 검색 창(GlobalSearch.tsx)의 순수 함수: 화면이 이미 가진 세션·팀·그룹·할 일·알림·명령에서 찾고 묶음을 만든다. 이름이 globalSearch.ts 가 아닌 것은 Windows 가 대소문자를 가리지 않아 ./GlobalSearch 와 겹쳐서다 */
+/** Ctrl+K 커맨드 팔레트(CommandPalette.tsx)의 순수 함수: 화면이 이미 가진 세션·팀·그룹·할 일·알림·명령에서 찾고 묶음을 만든다. 이름이 commandPalette.ts 가 아닌 것은 Windows 가 대소문자를 가리지 않아 ./CommandPalette 와 겹쳐서다 */
 import { recentSessions } from './home'
 import { leadSessions } from './leadModels'
 import { needsYouSessions } from './needsYou'
@@ -48,10 +48,10 @@ export interface SearchInput {
 }
 
 /**
- * 검색 창을 여닫는 키: Ctrl+K (맥 Meta+K), Shift·Alt 없이. 한글 자판은 key 가 'ㅏ' 라 code 'KeyK' 로도 본다.
+ * 커맨드 팔레트를 여닫는 키: Ctrl+K (맥 Meta+K), Shift·Alt 없이. 한글 자판은 key 가 'ㅏ' 라 code 'KeyK' 로도 본다.
  * 터미널 탭·다른 모달에서 가로채지 않는 판정은 App 이 한다
  */
-export function isGlobalSearchShortcut(event: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey'>): boolean {
+export function isCommandPaletteShortcut(event: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey'>): boolean {
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return false
   return event.code === 'KeyK' || event.key.toLowerCase() === 'k'
 }

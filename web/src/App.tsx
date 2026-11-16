@@ -72,8 +72,8 @@ import { hasTitleBar } from './TitleBar'
 import { NeedsYouTab, NeedsYouView } from './NeedsYouButton'
 import { AllTodosTab, AllTodosView } from './AllTodosButton'
 import { RemindersButton, RemindersModal } from './RemindersButton'
-import { GlobalSearch } from './GlobalSearch'
-import { isGlobalSearchShortcut, type CommandId, type SearchItem } from './globalSearchItems'
+import { CommandPalette } from './CommandPalette'
+import { isCommandPaletteShortcut, type CommandId, type SearchItem } from './commandPaletteItems'
 import { bannerOf, nextOutage, presentWebIds, type Outage, type RestartTarget } from './reconnect'
 
 interface Snapshot {
@@ -358,9 +358,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   /** Today 창 (그날 한 일). focusTeamId = 팀 ⋯ 메뉴로 열면 그 팀 칸까지 스크롤 */
   const [dailyOpen, setDailyOpen] = useState<{ focusTeamId: string | null } | null>(null)
   const [isRemindersOpen, setIsRemindersOpen] = useState(false)
-  /** Ctrl+K 글로벌 검색 창 (헤더 돋보기 버튼도 연다) */
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  /** 검색 창에서 고른 팀·그룹. 바뀌면 세션 목록을 그 팀 카드(접힌 그룹이면 그룹 라벨)·그룹 라벨까지 스크롤한다 (목록이 보이게 그려진 다음에) */
+  /** Ctrl+K 커맨드 팔레트 (헤더 돋보기 버튼도 연다) */
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  /** 커맨드 팔레트에서 고른 팀·그룹. 바뀌면 세션 목록을 그 팀 카드(접힌 그룹이면 그룹 라벨)·그룹 라벨까지 스크롤한다 (목록이 보이게 그려진 다음에) */
   const [listScrollRequest, setListScrollRequest] = useState<{ id: number; kind: 'team' | 'group'; targetId: string } | null>(null)
   const nextListScrollIdRef = useRef(1)
   const tasksTeam = tasksTeamId ? office.teams.find((t) => t.id === tasksTeamId) : undefined
@@ -409,7 +409,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     list.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }, [offDutyScrollRequest])
 
-  // 검색 창에서 고른 팀·그룹까지 목록만 스크롤한다 (Off Duty 와 같은 방식)
+  // 커맨드 팔레트에서 고른 팀·그룹까지 목록만 스크롤한다 (Off Duty 와 같은 방식)
   useEffect(() => {
     const list = listRef.current
     if (!listScrollRequest || !list) return
@@ -564,15 +564,15 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isSelectedLiveWeb, shownTab])
 
-  // Ctrl+K (맥 Meta+K): 글로벌 검색 창을 여닫는다. 터미널 탭(xterm) 안에서는 Claude Code 의 줄 지우기 키라 가로채지 않고,
-  // 검색 창이 아닌 모달(Dialog 포함)이 떠 있으면 건드리지 않는다
+  // Ctrl+K (맥 Meta+K): 커맨드 팔레트를 여닫는다. 터미널 탭(xterm) 안에서는 Claude Code 의 줄 지우기 키라 가로채지 않고,
+  // 커맨드 팔레트가 아닌 모달(Dialog 포함)이 떠 있으면 건드리지 않는다
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!isGlobalSearchShortcut(event)) return
+      if (!isCommandPaletteShortcut(event)) return
       if (event.target instanceof Element && event.target.closest('.xterm')) return
       if (document.querySelector('.modal-overlay:not(.search-overlay)')) return
       event.preventDefault()
-      setIsSearchOpen((isOpen) => !isOpen)
+      setIsCommandPaletteOpen((isOpen) => !isOpen)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -628,7 +628,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     if (isNarrow && selectedId !== null) whenLeavingAllowed(() => setSelectedId(null))
   }
 
-  /** 검색 창 명령. 위험한 명령(End·Restart·Delete)은 없다 */
+  /** 커맨드 팔레트 명령. 위험한 명령(End·Restart·Delete)은 없다 */
   function runCommand(command: CommandId) {
     switch (command) {
       case 'new-session':
@@ -664,7 +664,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     }
   }
 
-  /** 검색 창에서 고른 줄을 연다 */
+  /** 커맨드 팔레트에서 고른 줄을 연다 */
   function pickSearchItem(item: SearchItem) {
     switch (item.kind) {
       case 'session':
@@ -1869,8 +1869,8 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
       <button className="icon" onClick={() => setIsAppearanceOpen(true)} title="Appearance" aria-label="Appearance">
         <AppearanceIcon />
       </button>
-      <button className="icon" onClick={() => setIsSearchOpen(true)} title="Search (Ctrl+K)" aria-label="Search">
-        <GlobalSearchIcon />
+      <button className="icon" onClick={() => setIsCommandPaletteOpen(true)} title="Search (Ctrl+K)" aria-label="Search">
+        <CommandPaletteIcon />
       </button>
       {/* 폰 폭에는 원래 사무실이 없다 */}
       {!isNarrow && (
@@ -2340,8 +2340,8 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           </section>
         )}
         {isAppearanceOpen && <AppearanceModal onClose={() => setIsAppearanceOpen(false)} />}
-        {isSearchOpen && (
-          <GlobalSearch
+        {isCommandPaletteOpen && (
+          <CommandPalette
             sessions={snapshot.sessions}
             office={office}
             now={now}
@@ -2350,7 +2350,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
             isOfficeHidden={isOfficeHidden}
             renderAvatar={renderAvatar}
             stateLabelOf={sessionStateLabel}
-            onClose={() => setIsSearchOpen(false)}
+            onClose={() => setIsCommandPaletteOpen(false)}
             onPick={pickSearchItem}
           />
         )}
@@ -2589,8 +2589,8 @@ function AppearanceIcon() {
   )
 }
 
-/** 헤더의 글로벌 검색(Ctrl+K) 버튼 아이콘: 돋보기 (톱니와 같은 14px) */
-function GlobalSearchIcon() {
+/** 헤더의 커맨드 팔레트(Ctrl+K) 버튼 아이콘: 돋보기 (톱니와 같은 14px) */
+function CommandPaletteIcon() {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
       <circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.4" />

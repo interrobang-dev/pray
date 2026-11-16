@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   commandItems,
   firstSelectable,
-  isGlobalSearchShortcut,
+  isCommandPaletteShortcut,
   matchRank,
   moveSelection,
   openTodoItems,
@@ -11,7 +11,7 @@ import {
   sessionSearchText,
   type SearchInput,
   type SearchItem,
-} from './globalSearchItems'
+} from './commandPaletteItems'
 import type { Group, Office, Reminder, Session, Team, TeamTodo } from './types'
 
 const NOW = Date.parse('2026-11-13T12:00:00Z')
@@ -57,19 +57,19 @@ function input(overrides: Partial<SearchInput> = {}): SearchInput {
 
 const keys = (items: SearchItem[]) => items.map((item) => item.key)
 
-describe('isGlobalSearchShortcut', () => {
+describe('isCommandPaletteShortcut', () => {
   const key = (overrides: Partial<KeyboardEvent>) => ({ key: 'k', code: 'KeyK', ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...overrides })
   it('takes Ctrl+K and Meta+K, also by code on a Korean layout', () => {
-    expect(isGlobalSearchShortcut(key({ ctrlKey: true }))).toBe(true)
-    expect(isGlobalSearchShortcut(key({ metaKey: true }))).toBe(true)
-    expect(isGlobalSearchShortcut(key({ ctrlKey: true, key: 'ㅏ' }))).toBe(true)
-    expect(isGlobalSearchShortcut(key({ ctrlKey: true, key: 'K', code: 'KeyK' }))).toBe(true)
+    expect(isCommandPaletteShortcut(key({ ctrlKey: true }))).toBe(true)
+    expect(isCommandPaletteShortcut(key({ metaKey: true }))).toBe(true)
+    expect(isCommandPaletteShortcut(key({ ctrlKey: true, key: 'ㅏ' }))).toBe(true)
+    expect(isCommandPaletteShortcut(key({ ctrlKey: true, key: 'K', code: 'KeyK' }))).toBe(true)
   })
   it('ignores plain K and Shift or Alt combinations', () => {
-    expect(isGlobalSearchShortcut(key({}))).toBe(false)
-    expect(isGlobalSearchShortcut(key({ ctrlKey: true, shiftKey: true }))).toBe(false)
-    expect(isGlobalSearchShortcut(key({ ctrlKey: true, altKey: true }))).toBe(false)
-    expect(isGlobalSearchShortcut(key({ ctrlKey: true, key: 'j', code: 'KeyJ' }))).toBe(false)
+    expect(isCommandPaletteShortcut(key({}))).toBe(false)
+    expect(isCommandPaletteShortcut(key({ ctrlKey: true, shiftKey: true }))).toBe(false)
+    expect(isCommandPaletteShortcut(key({ ctrlKey: true, altKey: true }))).toBe(false)
+    expect(isCommandPaletteShortcut(key({ ctrlKey: true, key: 'j', code: 'KeyJ' }))).toBe(false)
   })
 })
 

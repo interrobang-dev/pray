@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
-import { firstSelectable, isSelectable, moveSelection, searchGroups, type SearchItem } from './globalSearchItems'
+import { firstSelectable, isSelectable, moveSelection, searchGroups, type SearchItem } from './commandPaletteItems'
 import { lastActivityOf } from './home'
 import { PositionChip } from './PositionChip'
 import { formatDue } from './reminders'
@@ -24,14 +24,14 @@ interface Props {
   onPick: (item: SearchItem) => void
 }
 
-const LIST_ID = 'global-search-list'
+const LIST_ID = 'command-palette-list'
 
 /**
- * Ctrl+K 글로벌 검색 창 (명령 팔레트): 화면 가운데 위 입력칸 + 묶음별 결과 (규칙 globalSearchItems.ts).
+ * Ctrl+K 커맨드 팔레트: 화면 가운데 위 입력칸 + 묶음별 결과 (규칙 commandPaletteItems.ts).
  * ↑↓(끝에서 돈다)·마우스 올리기로 고르고 Enter·클릭으로 연 뒤 닫는다. Esc·바깥 클릭으로 닫는다 (Esc 는 window 캡처에서 전파를 멈춘다).
  * 닫으면 열 때 포커스 요소로 돌린다 — 고른 줄을 열기 전에 돌려, 그 동작이 여는 창(TODO·Reminders 등)의 입력칸 포커스를 빼앗지 않는다
  */
-export function GlobalSearch({ sessions, office, now, isHostReachable, isNarrow, isOfficeHidden, renderAvatar, stateLabelOf, onClose, onPick }: Props) {
+export function CommandPalette({ sessions, office, now, isHostReachable, isNarrow, isOfficeHidden, renderAvatar, stateLabelOf, onClose, onPick }: Props) {
   const [query, setQuery] = useState('')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const previousFocusRef = useRef<Element | null>(document.activeElement)
