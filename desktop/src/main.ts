@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Child } from './children'
+import { confirmDialog } from './confirmDialog'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
 import { dotLookOf } from './dotCharacter'
 import { isExternalUrl } from './externalLink'
@@ -496,34 +497,13 @@ function refreshTray(): void {
     : 'Server not responding'
   tray.setToolTip(`Pray · ${summary}`)
   const { host, server } = children
+  // 평소에는 자주 쓰는 것만 보이고 재시작·로그는 Troubleshoot 안에 둔다. 호스트·서버가 꺼져 있으면 맨 위 한 줄로 알린다 (하위 메뉴에 숨지 않게)
+  const stopped = [host.isRunning ? null : 'Host stopped', server.isRunning ? null : 'Server stopped'].filter((text) => text !== null)
   tray.setContextMenu(
     Menu.buildFromTemplate([
+      ...(stopped.length > 0 ? [{ label: `⚠ ${stopped.join(' · ')}`, enabled: false }] : []),
       { label: 'Open', click: () => void showWindow() },
-      { label: summary, enabled: false },
       { type: 'separator' },
-      { label: `Host: ${host.isRunning ? 'Running' : 'Stopped'}`, enabled: false },
-      { label: `Server: ${server.isRunning ? 'Running' : 'Stopped'}`, enabled: false },
-      { label: 'Restart server', click: () => void server.restart() },
-      {
-        label: 'Restart host (disconnects web sessions)',
-        click: async () => {
-          const { response } = await dialog.showMessageBox({
-            type: 'warning',
-            buttons: ['Restart', 'Cancel'],
-            defaultId: 1,
-            message: 'Restarting the host disconnects all web sessions. They come back with --resume when it starts again.',
-          })
-          if (response === 0) void host.restart()
-        },
-      },
-      { label: 'Open log folder', click: () => void shell.openPath(logDir) },
-      { type: 'separator' },
-      {
-        label: 'Launch at login',
-        type: 'checkbox',
-        checked: isLaunchAtLogin(app.getLoginItemSettings(loginItemOptions()).launchItems, loginItemOptions().args ?? []),
-        click: (item) => app.setLoginItemSettings({ ...loginItemOptions(), name: LOGIN_ITEM_NAME, openAtLogin: item.checked }),
-      },
       {
         label: 'Notifications',
         type: 'checkbox',
@@ -533,17 +513,62 @@ function refreshTray(): void {
           saveSettings()
         },
       },
+      {
+        label: 'Launch at login',
+        type: 'checkbox',
+        checked: isLaunchAtLogin(app.getLoginItemSettings(loginItemOptions()).launchItems, loginItemOptions().args ?? []),
+        click: (item) => app.setLoginItemSettings({ ...loginItemOptions(), name: LOGIN_ITEM_NAME, openAtLogin: item.checked }),
+      },
+      {
+        label: 'Troubleshoot',
+        submenu: [
+          { label: `Host ${host.isRunning ? 'running' : 'stopped'} · Server ${server.isRunning ? 'running' : 'stopped'}`, enabled: false },
+          { type: 'separator' },
+          { label: 'Restart server', click: () => void server.restart() },
+          {
+            label: 'Restart host…',
+            click: async () => {
+              const isYes = await confirmDialog(
+                {
+                  title: 'Restart the host?',
+                  message: 'All web sessions disconnect. They come back with --resume when the host starts again.',
+                  confirmLabel: 'Restart',
+                },
+                window,
+              )
+              if (isYes) void host.restart()
+            },
+          },
+          {
+            label: 'Restart Pray…',
+            click: async () => {
+              const isYes = await confirmDialog(
+                {
+                  title: 'Restart Pray?',
+                  message: 'The tray, host and server restart. Web sessions disconnect and come back with --resume.',
+                  confirmLabel: 'Restart',
+                },
+                window,
+              )
+              if (isYes) void restartApp()
+            },
+          },
+          { label: 'Open log folder', click: () => void shell.openPath(logDir) },
+        ],
+      },
       { type: 'separator' },
       {
         label: 'Quit',
         click: async () => {
-          const { response } = await dialog.showMessageBox({
-            type: 'warning',
-            buttons: ['Quit', 'Cancel'],
-            defaultId: 1,
-            message: 'Quitting stops the host and server and disconnects all web sessions. They come back with --resume on next launch.',
-          })
-          if (response === 0) quit()
+          const isYes = await confirmDialog(
+            {
+              title: 'Quit Pray?',
+              message: 'The host and server stop and all web sessions disconnect. They come back with --resume on next launch.',
+              confirmLabel: 'Quit',
+            },
+            window,
+          )
+          if (isYes) void quit()
         },
       },
     ]),
@@ -583,6 +608,12 @@ async function quit(): Promise<void> {
   isQuitting = true
   if (children) await Promise.all([children.server.stop(), children.host.stop()])
   app.quit()
+}
+
+/** Quit 과 같이 끄고 같은 실행 파일·인자로 다시 띄운다 (빌드는 하지 않는다 — desktop/dist 를 그대로 실행). 새 프로세스는 이 프로세스가 끝난 뒤 떠서 잠금과 안 부딪힌다 */
+async function restartApp(): Promise<void> {
+  app.relaunch()
+  await quit()
 }
 
 // 앱 데이터 폴더는 패키지 이름을 따라 %APPDATA%\@pray\desktop 이다. 옛 @jk-corp\desktop(창 설정·tray-settings.json)을 잠금 전에 옮긴다.
