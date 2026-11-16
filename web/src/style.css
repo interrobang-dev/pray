@@ -5857,6 +5857,9 @@ li.group.drop-after::after {
   padding: 8px;
   background: var(--panel);
   transition: box-shadow 0.12s;
+  /* 위 .messages-pane 이 position: relative 라 그냥 두면 대화 카드가 상자 바깥 포커스 링·그림자 위쪽을 덮는다 */
+  position: relative;
+  z-index: 1;
 }
 /* 입력 상자 오른쪽 아래 "143k · Opus 5.5" (Chat.tsx). 상자의 아래 간격 12px 안으로 끌어올려 상자에 붙인다 */
 .composer-meta {
