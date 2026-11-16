@@ -1,6 +1,6 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { buildChatRows, hidingWorkKey, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
+import { buildChatRows, hidingWorkKey, queuedTailStart, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
 import { reuseMessages, reuseRows } from './chatReuse'
 import { loadMessages, type HeldMessages } from './chatDelta'
 import { expandedStartIndex, resolveStartIndex, startIndexRevealing, windowStartAt, type WindowStart } from './chatWindow'
@@ -1450,6 +1450,12 @@ export function Chat({
     )
   }, [rows, messages])
   const visibleTimes = useMemo(() => allRowTimes.slice(startIndex), [allRowTimes, startIndex])
+  /** 맨 끝 대기 메시지 줄은 작업 중 표시기 아래에 따로 그린다 (지금 차례가 끝난 뒤에 받는 글이라). 나눈 배열은 MessageRows memo 를 위해 묶어 둔다 */
+  const queuedStart = queuedTailStart(visibleRows)
+  const settledRows = useMemo(() => visibleRows.slice(0, queuedStart), [visibleRows, queuedStart])
+  const settledTimes = useMemo(() => visibleTimes.slice(0, queuedStart), [visibleTimes, queuedStart])
+  const queuedRows = useMemo(() => visibleRows.slice(queuedStart), [visibleRows, queuedStart])
+  const queuedTimes = useMemo(() => visibleTimes.slice(queuedStart), [visibleTimes, queuedStart])
   /** 위로 더 그리기 직전 첫 줄 요소와 그 화면 위치. 그린 뒤 같은 자리에 오게 scrollTop 을 보정한다 */
   const expandAnchorRef = useRef<{ element: Element; top: number } | null>(null)
   const earlierRef = useRef<HTMLDivElement>(null)
@@ -2125,8 +2131,8 @@ export function Chat({
           <ChatImageSession.Provider value={loadedSessionId}>
             <OpenChatPath.Provider value={openPathInChat}>
               <MessageRows
-                rows={visibleRows}
-                times={visibleTimes}
+                rows={settledRows}
+                times={settledTimes}
                 memberOf={memberOf}
                 workToggles={workToggles}
                 workBundles={workBundles}
@@ -2143,6 +2149,36 @@ export function Chat({
                 onSetMark={setMark}
                 onQuote={isWritable ? quoteMessage : null}
               />
+              {/* 작업 중 표시기는 지금 차례라 대기 메시지(다음 차례에 받는 글)·보내는 중 말풍선보다 위다 */}
+              {isWorking && (
+                <WorkingIndicator
+                  tools={runningTools}
+                  since={workingSince}
+                  onInterrupt={canInterrupt ? () => void interrupt() : null}
+                  isInterrupting={isInterrupting}
+                />
+              )}
+              {queuedRows.length > 0 && (
+                <MessageRows
+                  rows={queuedRows}
+                  times={queuedTimes}
+                  memberOf={memberOf}
+                  workToggles={workToggles}
+                  workBundles={workBundles}
+                  highlightKey={highlight?.key ?? null}
+                  searchKey={searchCurrentKey}
+                  lineNotice={lineNotice}
+                  lastQueuedId={lastQueuedId}
+                  canCancelQueued={canCancelQueued}
+                  cancellingId={cancellingId}
+                  markedKeys={markedKeys}
+                  onToggleWork={toggleWork}
+                  onOpenRelay={openRelay}
+                  onCancelQueued={cancelQueued}
+                  onSetMark={setMark}
+                  onQuote={isWritable ? quoteMessage : null}
+                />
+              )}
             </OpenChatPath.Provider>
           </ChatImageSession.Provider>
           {pendings.map((pending) => (
@@ -2174,14 +2210,6 @@ export function Chat({
             </div>
           )}
           {messages.length === 0 && pendings.length === 0 && <p className="hint">No messages yet</p>}
-          {isWorking && (
-            <WorkingIndicator
-              tools={runningTools}
-              since={workingSince}
-              onInterrupt={canInterrupt ? () => void interrupt() : null}
-              isInterrupting={isInterrupting}
-            />
-          )}
           <div ref={bottomRef} />
         </div>
         {/* 맨 아래가 아닐 때만 뜨는 "↓": 입력칸 위 가운데. 오른쪽 묶음(도구 버튼) 개수와 관계없이 늘 같은 자리다 */}

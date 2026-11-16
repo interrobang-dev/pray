@@ -189,3 +189,17 @@ export function hidingWorkKey<S>(rows: ChatRow<S>[], message: ChatMessage): stri
   }
   return null
 }
+
+/**
+ * 맨 끝에 이어 붙은 대기 메시지(`isQueued` 인 message 줄) 묶음이 시작하는 줄 번호. 없으면 rows.length.
+ * Chat 이 그 앞 줄 → 작업 중 표시기 → 대기 메시지 순으로 그린다 (대기 메시지는 지금 차례가 끝난 뒤에 claude 가 받는다)
+ */
+export function queuedTailStart<S>(rows: ChatRow<S>[]): number {
+  let start = rows.length
+  while (start > 0) {
+    const row = rows[start - 1]
+    if (row.kind !== 'message' || !row.message.isQueued) break
+    start -= 1
+  }
+  return start
+}

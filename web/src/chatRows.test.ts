@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildChatRows, hidingWorkKey, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
+import { buildChatRows, hidingWorkKey, queuedTailStart, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
 import type { ChatMessage, ToolUse } from './types'
 
 let nextId = 0
@@ -201,5 +201,27 @@ describe('rowIndexOfJumpKey', () => {
     const plain = message('assistant', '끝')
     const plainRows = build([message('user', '해 줘'), message('assistant', '', [tool('Read')]), plain], false)
     expect(plainRows[rowIndexOfJumpKey(plainRows, plain.id)].kind).toBe('text')
+  })
+})
+
+describe('queuedTailStart', () => {
+  it('맨 끝 대기 메시지 묶음의 시작 줄을 준다', () => {
+    const rows = build([message('user', '지시'), message('assistant', '답'), message('user', '대기 1', [], { isQueued: true }), message('user', '대기 2', [], { isQueued: true })], true)
+    const start = queuedTailStart(rows)
+    expect(rows.slice(start).map((row) => (row.kind === 'message' ? row.message.text : row.kind))).toEqual(['대기 1', '대기 2'])
+  })
+
+  it('대기 메시지가 없으면 줄 수', () => {
+    const rows = build([message('user', '지시'), message('assistant', '답')], false)
+    expect(queuedTailStart(rows)).toBe(rows.length)
+  })
+
+  it('끝에 있지 않은 대기 메시지는 앞쪽에 남긴다', () => {
+    const rows = build([message('user', '대기', [], { isQueued: true }), message('user', '지시')], false)
+    expect(queuedTailStart(rows)).toBe(rows.length)
+  })
+
+  it('빈 줄 목록은 0', () => {
+    expect(queuedTailStart([])).toBe(0)
   })
 })
