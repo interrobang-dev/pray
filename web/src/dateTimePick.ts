@@ -169,13 +169,13 @@ function formatRemaining(milliseconds: number): string {
  * 확인 한 줄: "Fires today at 15:30 · in 42m" · "Fires tomorrow at 09:00 · in 17h" · "Fires Fri, Nov 14 at 09:00".
  * 지났으면 "Today at 09:00 has passed" 꼴과 isPast (보내면 서버가 400 을 준다)
  */
-export function confirmText(date: LocalDate, minutes: number, now: number): { text: string; isPast: boolean } {
+export function confirmText(date: LocalDate, minutes: number, now: number, verb = 'Fires'): { text: string; isPast: boolean } {
   const label = dateLabel(date, now)
   const time = formatTime(minutes)
   const remaining = timeAt(date, minutes) - now
   if (remaining <= 0) return { text: `${label} at ${time} has passed`, isPast: true }
   if (label === 'Today' || label === 'Tomorrow') {
-    return { text: `Fires ${label.toLowerCase()} at ${time} · in ${formatRemaining(remaining)}`, isPast: false }
+    return { text: `${verb} ${label.toLowerCase()} at ${time} · in ${formatRemaining(remaining)}`, isPast: false }
   }
-  return { text: `Fires ${label} at ${time}`, isPast: false }
+  return { text: `${verb} ${label} at ${time}`, isPast: false }
 }

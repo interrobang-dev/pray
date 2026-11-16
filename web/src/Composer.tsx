@@ -3,6 +3,8 @@ import { flushSync } from 'react-dom'
 import { composerDraft } from './composerDraft'
 import { composerPlaceholder, composerRows, parseBtwCommand, quotePreview, withAttachmentPaths, withQuote, type ComposerQuote } from './composerText'
 import { formatSize } from './Files'
+import { ScheduleMessageModal } from './ScheduleMessageModal'
+import type { ScheduledMessage } from './types'
 
 /** 터치 기기(마우스 없음). style.css 의 터치 기기 스타일과 같은 기준. 이 기기에서는 세션을 열 때 입력칸에 포커스하지 않는다 (가상 키보드가 바로 떠 대화를 가린다) */
 const TOUCH_QUERY = '(hover: none)'
@@ -84,6 +86,10 @@ interface Props {
   onGoQuote: (key: string) => void
   /** 보낼 것이 없는(글·첨부·인용 칩이 모두 빈) 입력칸에서 Enter (승인 막대가 보이면 승인. approvalKeys.ts). 이 Enter 는 늘 기본 동작을 막는다 */
   onEmptyEnter: (event: globalThis.KeyboardEvent) => void
+  /** 예약 보내기 창 제목 아래 "To …" 에 쓸 이 세션 이름 */
+  targetName: string
+  /** 예약 보내기 등록 성공 (서버 응답 항목). 입력칸·첨부·인용은 Composer 가 이미 비웠다 */
+  onScheduled: (message: ScheduledMessage) => void
 }
 
 /** 인용 아이콘: 왼쪽으로 꺾인 답장 화살표 (말풍선 인용 버튼·입력 상자 인용 칩) */
@@ -100,7 +106,7 @@ export function QuoteIcon({ size = 14 }: { size?: number }) {
  * 대화 입력 상자: 여러 줄 입력칸·첨부 칩·보내기. 글자 state 를 여기 두어 칠 때마다 대화(Chat)가 다시 그려지지 않는다.
  * 세션을 바꿔도 쓰던 글은 남고 첨부 칩은 비운다. 글·커서는 composerDraft 에도 적어 Files·터미널 탭을 다녀와도(언마운트) 되살린다
  */
-export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw, onGoQuote, onEmptyEnter }: Props) {
+export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, suggestion, onEmptyChange, onSend, onBtw, onOpenBtw, onGoQuote, onEmptyEnter, targetName, onScheduled }: Props) {
   /** 입력칸·첨부·보내기를 막는다 (질문 중·인계 중. 회색 상자) */
   const isLocked = isAsking || isHandingOver
   const [draft, setDraft] = useState(() => composerDraft.text)
@@ -112,6 +118,8 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
   const uploaded = attachments.flatMap((attachment) => (attachment.path ? [{ id: attachment.id, path: attachment.path }] : []))
   /** 인용 칩. 보내면 글 앞에 붙이고 비운다. 탭을 오가도 남게 composerDraft 에도 적는다 */
   const [quote, setQuoteState] = useState<ComposerQuote | null>(() => (composerDraft.quote?.sessionId === sessionId ? composerDraft.quote : null))
+  /** 예약 보내기 창에 넘긴 최종 글과 그때 붙인 첨부 ID. 창이 닫혀 있으면 null */
+  const [scheduleDraft, setScheduleDraft] = useState<{ text: string; attachmentIds: ReadonlySet<number> } | null>(null)
   const nextAttachmentIdRef = useRef(1)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -188,6 +196,40 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
     if (!window.matchMedia(TOUCH_QUERY).matches) composerRef.current?.focus()
   }
   useImperativeHandle(ref, () => ({ fill, focus: () => composerRef.current?.focus(), reload, attach: attachDropped, quote: quoteMessage }))
+
+  // 쓸 수 없게 되거나(휴식·퇴근) 세션이 바뀌면 열린 예약 창을 닫는다 (다시 쓸 수 있게 될 때 저절로 다시 뜨지 않게)
+  useEffect(() => {
+    setScheduleDraft(null)
+  }, [isWritable, sessionId])
+
+  /** 보낼 최종 글 (Send 와 같은 순서: 인용 → 글 → 첨부). 보낼 것이 없으면 null */
+  function finalText(): string | null {
+    const body = withAttachmentPaths(draft.trim(), uploaded.map((attachment) => attachment.path))
+    return body ? withQuote(body, quote) : null
+  }
+
+  /** 시계 버튼: 지금 보낼 글로 예약 창을 연다 (글은 그 순간 것으로 고정 — 창이 떠 있는 동안 입력칸은 못 고친다) */
+  function openSchedule() {
+    const text = finalText()
+    if (!text || isLocked || isUploading) return
+    setScheduleDraft({ text, attachmentIds: new Set(uploaded.map((attachment) => attachment.id)) })
+  }
+
+  /** 등록 성공: Send 처럼 입력칸·인용·붙인 첨부 칩을 비운다 (실패 칩은 남긴다) */
+  function finishSchedule(message: ScheduledMessage) {
+    const sentIds = scheduleDraft?.attachmentIds ?? new Set<number>()
+    setScheduleDraft(null)
+    changeDraft('')
+    setQuote(null)
+    setAttachments((current) => current.filter((attachment) => !sentIds.has(attachment.id)))
+    onScheduled(message)
+    if (!window.matchMedia(TOUCH_QUERY).matches) composerRef.current?.focus()
+  }
+
+  function closeSchedule() {
+    setScheduleDraft(null)
+    if (!window.matchMedia(TOUCH_QUERY).matches) composerRef.current?.focus()
+  }
 
   function submit(event?: FormEvent) {
     event?.preventDefault()
@@ -286,6 +328,7 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
 
   if (!isWritable) return null
   return (
+    <>
     <form className="composer" onSubmit={submit}>
       {quote && (
         <div className="composer-quote">
@@ -378,6 +421,19 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
         </button>
       )}
       <button
+        type="button"
+        className="schedule-open"
+        disabled={(!draft.trim() && uploaded.length === 0) || isLocked || isUploading}
+        onClick={openSchedule}
+        aria-label="Schedule send"
+        title={isUploading ? "Can't schedule while files are uploading" : 'Schedule send'}
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.5V12l3 2" />
+        </svg>
+      </button>
+      <button
         type="submit"
         className="send"
         disabled={(!draft.trim() && uploaded.length === 0) || isLocked || (isUploading && !parseBtwCommand(draft))}
@@ -389,5 +445,10 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
         </svg>
       </button>
     </form>
+    {scheduleDraft && (
+      <ScheduleMessageModal sessionId={sessionId} targetName={targetName} text={scheduleDraft.text} onClose={closeSchedule} onScheduled={finishSchedule} />
+    )}
+    </>
+
   )
 }

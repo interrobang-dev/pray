@@ -25,7 +25,8 @@ import { MarkdownText } from './Markdown'
 import { PositionChip } from './PositionChip'
 import { memberOf as memberDisplay } from './sessionPosition'
 import { formatElapsed, ShellsButton, type ShellRequest } from './Shells'
-import { formatDateTime, type AskQuestion, type ChatMessage, type Shell, type ToolUse } from './types'
+import { applyScheduled, scheduledBandText, scheduledNotice } from './scheduledMessages'
+import { formatDateTime, type AskQuestion, type ChatMessage, type ScheduledMessage, type Shell, type ToolUse } from './types'
 import { isWorkOpen, type ChatStyle } from './appearance'
 import { appearance, subscribeTheme } from './theme'
 
@@ -106,6 +107,12 @@ interface Props {
   onSearchClose: () => void
   /** App 의 Ctrl+Shift+B 가 올리는 카운터. 바뀔 때마다 곁가지 질문 카드를 열고 카드 입력칸에 포커스한다 */
   btwOpenId: number
+  /** office 의 예약 보내기 전부 (옛 서버 응답은 []). 이 세션의 pending·sending 이 있으면 입력 상자 위에 띠를 띄운다 */
+  scheduledMessages: ScheduledMessage[]
+  /** 등록 응답 항목을 App 의 office 에 먼저 넣는다 (SSE 가 오면 서버 것으로 바뀐다) */
+  onScheduledChange: (update: (messages: ScheduledMessage[]) => ScheduledMessage[]) => void
+  /** 띠를 누르면 Reminders 창 (Scheduled 구역) */
+  onOpenScheduled: () => void
 }
 
 function summarizeInput(name: string, input: unknown): string {
@@ -791,6 +798,8 @@ const CANCEL_OUTCOME_LABELS: Record<string, string> = {
 }
 /** 취소 결과 한 줄을 보여 주는 시간 */
 const CANCEL_NOTICE_MS = 6_000
+/** 예약 등록 뒤 띠에 "Scheduled for …" 를 보여 주는 시간 (그 뒤 띠는 개수·시각으로 돌아간다) */
+const SCHEDULED_NOTICE_MS = 4_000
 
 /** 중지 결과 (서버 outcome) → 대화 맨 아래 한 줄. 멈춘 것(stopped)은 대화의 "중지됨" 줄과 표시기가 사라지는 것으로 충분해 알리지 않는다 */
 const INTERRUPT_OUTCOME_LABELS: Record<string, string | null> = {
@@ -1281,6 +1290,9 @@ export function Chat({
   searchFocusId,
   onSearchClose,
   btwOpenId,
+  scheduledMessages,
+  onScheduledChange,
+  onOpenScheduled,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   /** messages 가 어느 세션 것인지. 세션을 바꾼 뒤 새 대화가 오기 전까지는 앞 세션 것이 남아 있어 점프는 이것이 맞을 때만 처리한다 */
@@ -1892,6 +1904,20 @@ export function Chat({
     return () => clearTimeout(timer)
   }, [cancelNotice])
 
+  /** 예약 등록 직후 띠 글자 "Scheduled for tomorrow at 09:00". 세션이 바뀌면 버린다 */
+  const [scheduledNoticeText, setScheduledNoticeText] = useState<{ sessionId: string; text: string } | null>(null)
+  useEffect(() => {
+    if (!scheduledNoticeText) return
+    const timer = setTimeout(() => setScheduledNoticeText(null), SCHEDULED_NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [scheduledNoticeText])
+  function handleScheduled(message: ScheduledMessage) {
+    onScheduledChange((messages) => applyScheduled(messages, message))
+    setScheduledNoticeText({ sessionId: message.sessionId, text: scheduledNotice(message.at, Date.now()) })
+  }
+  const shownScheduledNotice = scheduledNoticeText?.sessionId === sessionId ? scheduledNoticeText.text : null
+  const scheduledBand = scheduledBandText(scheduledMessages, sessionId, Date.now())
+
   // 작업이 끝나면 "중지 중…" 도 끝. 멈췄다는데 상태가 안 바뀌면(그 사이 새 차례가 시작됨) 잠시 뒤 [중지] 로 되돌린다
   useEffect(() => {
     if (!isWorking) setIsInterrupting(false)
@@ -2233,6 +2259,23 @@ export function Chat({
           <span className="handover-text">{handoverBandText(handoverFrom)}</span>
         </div>
       )}
+      {/* 예약 보내기 띠: 이 세션의 대기가 있거나 막 등록했을 때. 휴식·퇴근 세션도 (입력 상자 대신 안내 위) */}
+      {(shownScheduledNotice || scheduledBand) && (
+        <button
+          type="button"
+          className={shownScheduledNotice ? 'scheduled-band is-notice' : 'scheduled-band'}
+          onClick={onOpenScheduled}
+          title="Open Reminders to see scheduled messages"
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="8" cy="8" r="6" />
+            <path d="M8 4.75V8l2.25 1.5" />
+          </svg>
+          <span className="scheduled-band-text" role="status">
+            {shownScheduledNotice ?? scheduledBand}
+          </span>
+        </button>
+      )}
       {/* 쓸 수 없는 동안에도 마운트해 두어 쓰던 글·첨부가 남는다 (그동안은 아무것도 그리지 않는다) */}
       <Composer
         ref={composerRef}
@@ -2247,6 +2290,8 @@ export function Chat({
         onOpenBtw={openBtwForInput}
         onGoQuote={goToMark}
         onEmptyEnter={(event) => answerApprovalByKey(event, 'composer')}
+        targetName={sessionNames[sessionId] ?? sessionId.slice(0, 8)}
+        onScheduled={handleScheduled}
       />
       {isWritable && (contextSize || turnCache || modelText || isModelRestarting || onChangeModel) && (
         <div className="composer-meta">

@@ -164,6 +164,32 @@ export interface Office {
   todos?: TeamTodo[]
   /** 알림 (툴바 Reminders). 서버 순서 = 넣은 순서, 정렬은 화면이 한다(reminders.ts). 옛 서버 응답은 없다 */
   reminders?: Reminder[]
+  /** 예약 보내기 (입력 상자 시계 버튼·Reminders 창 Scheduled 구역). 서버 순서 = 넣은 순서, 정렬은 화면이 한다(scheduledMessages.ts). 옛 서버 응답은 없다 */
+  scheduledMessages?: ScheduledMessage[]
+}
+
+/** 예약 보내기 실패 이유 (host/src/scheduledMessage.ts 와 같은 값) */
+export type ScheduledFailureCode = 'off-duty' | 'not-found' | 'blocked' | 'blocked-mid-send' | 'unconfirmed' | 'missed' | 'interrupted'
+
+/** 정한 시각에 웹 세션 입력으로 한 번 보내는 글 (host/src/scheduledMessage.ts 와 같은 꼴을 손으로 맞춘 사본) */
+export interface ScheduledMessage {
+  id: string
+  sessionId: string
+  text: string
+  /** 보낼 시각. UTC ISO */
+  at: string
+  createdAt: string
+  createdBy: { kind: 'user' }
+  status: 'pending' | 'sending' | 'sent' | 'failed'
+  sendingAt: string | null
+  /** Enter 를 보낸 시각 (sent 만) */
+  sentAt: string | null
+  /** sentAt 이 at 보다 90초 넘게 늦었다. 보내기 전에는 없다 */
+  isLate?: boolean
+  failedAt: string | null
+  failure: { code: ScheduledFailureCode; detail?: string } | null
+  /** 사람이 실패를 확인한 시각. 확인 전이면 null */
+  acknowledgedAt: string | null
 }
 
 /** 알림을 등록한 쪽 (host/src/reminder.ts 와 같은 꼴). 리드의 sessionId 는 등록 때 그 지휘 단위의 지시자 */

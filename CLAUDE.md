@@ -108,6 +108,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `host/src/scheduledMessage.ts` — 예약 보내기 꼴·글 검증·회차에 볼 것·보관 정리 (순수, `@pray/host/scheduledMessage`). 저장은 `hq.ts` 의 `scheduledMessages` · `server/src/scheduledSend.ts` — 보낼지 미룰지 실패할지 판정·Enter 직전 다시 보기·30초 회차와 보내기·확정(`ScheduledSender`). API·`submitText`·입력 잠금은 `server/src/index.ts`
 - `web/src/RemindersButton.tsx`·`reminders.ts` — 목록 툴바 Reminders 줄·창(등록·울린 것 확인·지우기)와 그 순수 함수
 - `web/src/DateTimePicker.tsx`·`dateTimePick.ts` — Reminders 창의 날짜·시각 고르기(빠른 칩·달력 팝오버·15분 시각 목록·직접 친 시각 해석)와 그 순수 함수
+- `web/src/ScheduleMessageModal.tsx`·`scheduledMessages.ts` — 대화 입력 상자 시계 버튼의 예약 보내기 창과, 입력 상자 위 띠·Reminders 창 Scheduled 구역·배지에 쓰는 순수 함수
 - `desktop/src/reminderNotice.ts` — 알림이 울리면 띄우는 트레이 Windows 알림의 고르기·글자·누를 때 열 리드 (띄우기는 `desktop/src/main.ts`)
 
 웹 → `web-app.md` · `toolbar.md` · `chat.md` · `workspace.md` · `office.md` · `office-art.md` · `accounts.md`

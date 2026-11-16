@@ -58,6 +58,7 @@ import {
   type OffDutyLabel,
   type Part,
   type Reminder,
+  type ScheduledMessage,
   type Session,
   type Shell,
   type SystemMemory,
@@ -81,6 +82,8 @@ interface Snapshot {
 }
 
 const EMPTY_OFFICE: OfficeData = { groups: [], teams: [] }
+/** 옛 서버 응답(scheduledMessages 없음)에 대화 탭에 넘기는 빈 목록 (렌더마다 새 배열을 만들지 않게) */
+const NO_SCHEDULED: ScheduledMessage[] = []
 
 /** 이 폭 이하는 폰 화면: 한 열(목록 ↔ 패널)이고 사무실을 마운트하지 않는다. style.css 의 @media 와 같은 값 */
 const NARROW_QUERY = '(max-width: 768px)'
@@ -1306,6 +1309,10 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   function changeReminders(update: (reminders: Reminder[]) => Reminder[]) {
     setOffice((prev) => ({ ...prev, reminders: update(prev.reminders ?? []) }))
   }
+  /** 예약 보내기 등록·확인·지우기도 같은 방식 (입력 상자 예약 창·Reminders 창 Scheduled 구역) */
+  function changeScheduledMessages(update: (messages: ScheduledMessage[]) => ScheduledMessage[]) {
+    setOffice((prev) => ({ ...prev, scheduledMessages: update(prev.scheduledMessages ?? []) }))
+  }
 
   function openTeamTodos(teamId: string) {
     setTodoScope(teamScope(teamId))
@@ -2325,6 +2332,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
                 searchFocusId={chatSearchFocusId}
                 onSearchClose={() => setIsChatSearchOpen(false)}
                 btwOpenId={btwOpenId}
+                scheduledMessages={office.scheduledMessages ?? NO_SCHEDULED}
+                onScheduledChange={changeScheduledMessages}
+                onOpenScheduled={() => setIsRemindersOpen(true)}
               />
             )}
           </section>
@@ -2351,6 +2361,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
             now={now}
             onClose={() => setIsRemindersOpen(false)}
             onChangeReminders={changeReminders}
+            onChangeScheduled={changeScheduledMessages}
           />
         )}
         {isLeadModelsOpen && (

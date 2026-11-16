@@ -12,7 +12,17 @@ import {
   removeReminder,
   unacknowledgedCount,
 } from './reminders'
-import { formatDateTime, type Office, type Reminder, type Session } from './types'
+import {
+  applyScheduled,
+  failureText,
+  removeScheduled,
+  scheduledFailureMessage,
+  scheduledOf,
+  scheduledSections,
+  targetLabel,
+  unacknowledgedFailureCount,
+} from './scheduledMessages'
+import { formatDateTime, type Office, type Reminder, type ScheduledMessage, type Session } from './types'
 
 /** 툴바 Reminders 아이콘: 알람시계 */
 function RemindersIcon() {
@@ -32,8 +42,10 @@ function RemindersIcon() {
 export function RemindersButton({ office, onOpen }: { office: Office; onOpen: () => void }) {
   const reminders = remindersOf(office)
   const sections = reminderSections(reminders)
-  const firedCount = unacknowledgedCount(reminders)
-  const hasAny = sections.fired.length + sections.upcoming.length > 0
+  const scheduled = scheduledSections(scheduledOf(office))
+  // 배지 = 울렸고 확인 전인 알림 + 확인하지 않은 예약 보내기 실패
+  const firedCount = unacknowledgedCount(reminders) + unacknowledgedFailureCount(scheduledOf(office))
+  const hasAny = sections.fired.length + sections.upcoming.length + scheduled.failed.length + scheduled.upcoming.length > 0
   return (
     <button className={hasAny ? 'toolbar-row reminders-toggle has-reminders' : 'toolbar-row reminders-toggle'} onClick={onOpen} title="Reminders">
       <RemindersIcon />
@@ -66,13 +78,30 @@ interface ViewProps {
   onClose: () => void
   /** 응답 항목을 App 의 office 에 먼저 넣는다 (SSE 가 오면 서버 것으로 바뀐다) */
   onChangeReminders: (update: (reminders: Reminder[]) => Reminder[]) => void
+  /** 예약 보내기 확인·지우기도 같은 방식 */
+  onChangeScheduled: (update: (messages: ScheduledMessage[]) => ScheduledMessage[]) => void
+}
+
+/** 예약 보내기 API 요청 (requestReminder 와 같은 꼴). message 가 없는 404 는 옛 서버라 재시작 안내 */
+async function requestScheduled(url: string, method: string, body?: unknown): Promise<{ scheduledMessage?: ScheduledMessage; failure: string | null }> {
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    const data = (await response.json().catch(() => ({}))) as { scheduledMessage?: ScheduledMessage; message?: unknown }
+    return response.ok ? { scheduledMessage: data.scheduledMessage, failure: null } : { failure: scheduledFailureMessage(response.status, data.message) }
+  } catch {
+    return { failure: 'Network error' }
+  }
 }
 
 /**
  * Reminders 창 (툴바 Reminders 줄이 연다).
  * 맨 위 등록 칸(글 + 빠른 칩 + 날짜·시각 + Add + 확인 한 줄), 그 아래 "Fired"(울렸고 확인 전: 체크 = 확인, × = 지우기), "Upcoming"(아직: × = 지우기). 확인한 것은 보이지 않는다
  */
-export function RemindersModal({ office, sessions, now, onClose, onChangeReminders }: ViewProps) {
+export function RemindersModal({ office, sessions, now, onClose, onChangeReminders, onChangeScheduled }: ViewProps) {
   const [draft, setDraft] = useState('')
   const [date, setDate] = useState<LocalDate>(() => dateOf(Date.now()))
   const [timeText, setTimeText] = useState('')
@@ -82,6 +111,8 @@ export function RemindersModal({ office, sessions, now, onClose, onChangeReminde
   const timeRef = useRef<HTMLInputElement>(null)
   const textRef = useRef<HTMLInputElement>(null)
   const { fired, upcoming } = reminderSections(remindersOf(office))
+  const scheduled = scheduledSections(scheduledOf(office))
+  const scheduledOpenCount = scheduled.failed.length + scheduled.upcoming.length
   const minutes = parseTimeText(timeText)
   const canAdd = draft.trim() !== '' && minutes !== null && !isAdding
   const confirm = minutes === null ? null : confirmText(date, minutes, now)
@@ -156,6 +187,67 @@ export function RemindersModal({ office, sessions, now, onClose, onChangeReminde
     else if (updated) onChangeReminders((reminders) => applyReminder(reminders, updated))
   }
 
+  /** 예약 보내기 확인(PATCH, 실패만)·지우기(DELETE — 대기면 취소). 기다리는 줄 표시는 알림과 같은 pendingIds 를 쓴다 */
+  async function actScheduled(message: ScheduledMessage, kind: 'acknowledge' | 'delete') {
+    if (pendingIds.has(message.id)) return
+    setErrorMessage(null)
+    setPending(message.id, true)
+    const url = `/api/scheduled-messages/${encodeURIComponent(message.id)}`
+    const result = kind === 'acknowledge' ? await requestScheduled(url, 'PATCH', { isAcknowledged: true }) : await requestScheduled(url, 'DELETE')
+    setPending(message.id, false)
+    if (result.failure !== null) {
+      setErrorMessage(result.failure)
+      return
+    }
+    const updated = result.scheduledMessage
+    if (kind === 'delete') onChangeScheduled((messages) => removeScheduled(messages, message.id))
+    else if (updated) onChangeScheduled((messages) => applyScheduled(messages, updated))
+  }
+
+  /** 예약 보내기 한 줄: [체크(실패만)] · 글(두 줄) / (실패 이유) / 시각 · → 세션 · × */
+  function renderScheduled(message: ScheduledMessage, kind: 'failed' | 'upcoming' | 'sent') {
+    const isPending = pendingIds.has(message.id)
+    const isSending = message.status === 'sending'
+    const removeTitle = isSending ? 'Being sent now' : kind === 'upcoming' ? 'Cancel scheduled message' : 'Delete record'
+    return (
+      <li key={message.id} className={`reminders-item scheduled-item ${kind}`}>
+        {kind === 'failed' && (
+          <input
+            type="checkbox"
+            checked={isPending}
+            disabled={isPending}
+            onChange={() => void actScheduled(message, 'acknowledge')}
+            aria-label={`Mark "${message.text}" as seen`}
+          />
+        )}
+        <span className="reminders-body">
+          <span className="reminders-text" title={message.text}>
+            {message.text}
+          </span>
+          {kind === 'failed' && <span className="scheduled-failure">{failureText(message.failure)}</span>}
+          <span className="reminders-meta">
+            {kind === 'upcoming' &&
+              (isSending ? <span className="scheduled-sending">Sending now</span> : <span title={formatDateTime(message.at)}>{formatDue(message.at, now)}</span>)}
+            {kind === 'failed' && <span title={formatDateTime(message.at)}>Due {formatFiredDue(message.at, now)}</span>}
+            {kind === 'sent' && <span title={message.sentAt ? formatDateTime(message.sentAt) : undefined}>Sent {message.sentAt ? formatFiredDue(message.sentAt, now) : ''}</span>}
+            {kind === 'sent' && message.isLate && <span className="reminders-late"> · Late</span>}
+            {' · '}
+            {targetLabel(message.sessionId, sessions)}
+          </span>
+        </span>
+        <button
+          className="reminders-remove"
+          onClick={() => void actScheduled(message, 'delete')}
+          disabled={isPending || isSending}
+          title={removeTitle}
+          aria-label={kind === 'upcoming' ? `Cancel "${message.text}"` : `Delete "${message.text}"`}
+        >
+          ×
+        </button>
+      </li>
+    )
+  }
+
   function renderItem(reminder: Reminder, isFired: boolean) {
     const isPending = pendingIds.has(reminder.id)
     const due = isFired ? `Due ${formatFiredDue(reminder.at, now)}` : formatDue(reminder.at, now)
@@ -225,7 +317,7 @@ export function RemindersModal({ office, sessions, now, onClose, onChangeReminde
         </div>
         {confirm && <div className={confirm.isPast ? 'reminders-confirm is-past' : 'reminders-confirm'}>{confirm.text}</div>}
       </div>
-      {fired.length === 0 && upcoming.length === 0 && <p className="side-view-empty">No reminders</p>}
+      {fired.length === 0 && upcoming.length === 0 && scheduledOpenCount + scheduled.sent.length === 0 && <p className="side-view-empty">No reminders</p>}
       {fired.length > 0 && (
         <section className="reminders-section">
           <div className="reminders-section-head">
@@ -240,6 +332,25 @@ export function RemindersModal({ office, sessions, now, onClose, onChangeReminde
             Upcoming <span className="reminders-section-count">{upcoming.length}</span>
           </div>
           <ul className="reminders-list">{upcoming.map((reminder) => renderItem(reminder, false))}</ul>
+        </section>
+      )}
+      {scheduledOpenCount + scheduled.sent.length > 0 && (
+        <section className="reminders-section">
+          <div className="reminders-section-head" title="Messages sent to a session's input at a set time (clock button next to Send)">
+            Scheduled <span className="reminders-section-count">{scheduledOpenCount}</span>
+          </div>
+          {scheduledOpenCount > 0 && (
+            <ul className="reminders-list">
+              {scheduled.failed.map((message) => renderScheduled(message, 'failed'))}
+              {scheduled.upcoming.map((message) => renderScheduled(message, 'upcoming'))}
+            </ul>
+          )}
+          {scheduled.sent.length > 0 && (
+            <details className="scheduled-sent">
+              <summary>Sent ({scheduled.sent.length})</summary>
+              <ul className="reminders-list">{scheduled.sent.map((message) => renderScheduled(message, 'sent'))}</ul>
+            </details>
+          )}
         </section>
       )}
     </Modal>
