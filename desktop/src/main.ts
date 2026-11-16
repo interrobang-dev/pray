@@ -44,6 +44,14 @@ import {
   type NotifyReminder,
   type ReminderOffice,
 } from './reminderNotice'
+import {
+  newlyFailedScheduled,
+  scheduledBundleLine,
+  scheduledBundleToast,
+  scheduledSession,
+  scheduledToast,
+  type NotifyScheduled,
+} from './scheduledNotice'
 import { DEFAULT_SYMBOL_COLORS, followTitleBarColor, titleBarOverlay } from './titleBar'
 import { toastXml, type ToastContent } from './toast'
 
@@ -70,6 +78,10 @@ let settings = { isNotifying: true }
 const REMINDER_NOTIFY_FROM = Date.now()
 /** 이미 알린(알림을 꺼 둬서 건너뛴 것 포함) 알림 ID. 폴링이 실패해도 그대로 둔다 */
 const notifiedReminderIds = new Set<string>()
+/** 이 시각(트레이를 켠 때) 이후에 실패한 예약 보내기만 Windows 알림으로 띄운다. 켜기 전에 실패한 것은 화면 배지로 본다 */
+const SCHEDULED_NOTIFY_FROM = Date.now()
+/** 이미 알린(알림을 꺼 둬서 건너뛴 것 포함) 예약 보내기 ID. 폴링이 실패해도 그대로 둔다 */
+const notifiedScheduledIds = new Set<string>()
 
 /** 트레이 전용 설정 (hq.json·config.json 과 따로) */
 function settingsPath(): string {
@@ -418,6 +430,39 @@ async function pollReminders(sessions: NotifySession[]): Promise<void> {
   await notifyReminders(fired, sessions)
 }
 
+/**
+ * 새로 실패한 예약 보내기를 띄운다. 알림(Reminders)처럼 창이 앞에 있어도 띄운다 (화면에는 배지뿐이라). 성공 알림은 없다.
+ * 하나짜리는 받을 세션의 인물 머리, 누르면 그 세션 패널 (목록에 없으면 Pray 마크·창만). 많으면 한 장으로 묶고 누르면 창만
+ */
+async function notifyScheduled(items: NotifyScheduled[], sessions: NotifySession[]): Promise<void> {
+  if (!settings.isNotifying || items.length === 0 || !Notification.isSupported()) return
+  if (items.length > MAX_SEPARATE_NOTICES) {
+    const lines = items.map((item) => scheduledBundleLine(item, sessions))
+    showNotification(scheduledBundleToast(lines, noticeIconUrl('scheduled-failed')))
+    return
+  }
+  for (const item of items) {
+    const session = scheduledSession(item, sessions)
+    const face = await sessionFace(session)
+    showNotification(scheduledToast(item, sessions, noticeIconUrl('scheduled-failed', face)), session?.id)
+  }
+}
+
+/** 예약 보내기 목록을 받아 새로 실패한 것을 고른다. 404(옛 서버)·실패면 그 회차만 건너뛴다. 고른 것은 바로 알린 것으로 적는다 (알림을 꺼 뒀으면 적기만) */
+async function pollScheduled(sessions: NotifySession[]): Promise<void> {
+  let items: NotifyScheduled[]
+  try {
+    const response = await fetch(`${SERVER_URL}/api/scheduled-messages`)
+    if (!response.ok) return
+    items = ((await response.json()) as { scheduledMessages?: NotifyScheduled[] }).scheduledMessages ?? []
+  } catch {
+    return
+  }
+  const failed = newlyFailedScheduled(notifiedScheduledIds, SCHEDULED_NOTIFY_FROM, items)
+  for (const item of failed) notifiedScheduledIds.add(item.id)
+  await notifyScheduled(failed, sessions)
+}
+
 async function pollStatus(): Promise<void> {
   try {
     const response = await fetch(`${SERVER_URL}/api/sessions`)
@@ -432,6 +477,7 @@ async function pollStatus(): Promise<void> {
     baseline = next
     void notify(notices, data.sessions)
     void pollReminders(data.sessions)
+    void pollScheduled(data.sessions)
   } catch {
     status = { ...status, isServerUp: false }
     baseline = null

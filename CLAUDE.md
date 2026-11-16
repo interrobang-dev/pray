@@ -28,7 +28,8 @@
 | `toolbar.md` | 목록 툴바(New Group·Reminders·Lead models·Today 줄)와 탭 줄(Sessions·Needs you·All TODOs 사이드바 보기), 팀장·파트장 모델 한꺼번에 바꾸기(Lead models 창), 헤더 돋보기·Ctrl+K 글로벌 검색 창 |
 | `office.md` | 사무실 캔버스(Office.tsx 전문), 배치·섬 밀기·그룹 크기, 고정 꾸미기, 라운지·라운지 휴식, 퇴근 거리 |
 | `office-art.md` | 목록 아바타·인물 고르기·색 바꾸기, 스프라이트 파이프라인·아틀라스 |
-| `reminders.md` | 알림(Reminders): 정한 시각에 사람에게 한 번 울리기 — hq.json `reminders` 저장·`/api/reminders`·30초 울리기·목록 툴바 Reminders 창. 예약 보내기: 정한 시각에 웹 세션 입력으로 글 한 번 — hq.json `scheduledMessages`·`/api/scheduled-messages`·보낼지 미룰지 판정·보내는 동안 입력 잠금 |
+| `reminders.md` | 알림(Reminders): 정한 시각에 사람에게 한 번 울리기 — hq.json `reminders` 저장·`/api/reminders`·30초 울리기·목록 툴바 Reminders 창·트레이 알림 |
+| `scheduled-messages.md` | 예약 보내기: 정한 시각에 웹 세션 입력으로 글 한 번 — hq.json `scheduledMessages`·`/api/scheduled-messages`·보낼지 미룰지 판정·보내는 동안 입력 잠금·입력 상자 시계 버튼·Reminders 창 Scheduled 구역·실패 트레이 알림 |
 | `theme.md` | 화면 테마(모드·팔레트·강조색·글자 크기)·설정 창 App 탭·대비 규칙·스크롤바·로고·대화 모양(설정 창 Chat 탭) |
 | `daily.md` | 오늘 한 일 API(`GET /api/daily`) — 팀마다 그날 커밋·끝난 task·토큰(jsonl)·끝낸 할 일, 출처별 한계·토큰 기준. 화면(Today 창)은 `toolbar.md` |
 
@@ -103,13 +104,14 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/usage.ts`·`accounts.ts`·`accountStore.ts`·`accountLogin.ts`·`switchImpact.ts` — 사용량·계정 (→ `accounts.md`)
 - `server/src/dailyReport.ts`·`dayCommits.ts`·`dayUsage.ts` — 오늘 한 일 API 의 날짜·조립, 그날 git 커밋(60초 캐시), 그날 jsonl 토큰(파일별 늘어난 바이트만) (→ `daily.md`)
 
-알림 → `reminders.md`
+알림 → `reminders.md` · 예약 보내기 → `scheduled-messages.md`
 - `host/src/reminder.ts` — 알림 꼴·시각 검증·울리기 판정 (순수, `@pray/host/reminder`). 저장은 `hq.ts` 의 `reminders`, API·시작 때와 30초마다 울리기는 `server/src/index.ts`
 - `host/src/scheduledMessage.ts` — 예약 보내기 꼴·글 검증·회차에 볼 것·보관 정리 (순수, `@pray/host/scheduledMessage`). 저장은 `hq.ts` 의 `scheduledMessages` · `server/src/scheduledSend.ts` — 보낼지 미룰지 실패할지 판정·Enter 직전 다시 보기·30초 회차와 보내기·확정(`ScheduledSender`). API·`submitText`·입력 잠금은 `server/src/index.ts`
 - `web/src/RemindersButton.tsx`·`reminders.ts` — 목록 툴바 Reminders 줄·창(등록·울린 것 확인·지우기)와 그 순수 함수
 - `web/src/DateTimePicker.tsx`·`dateTimePick.ts` — Reminders 창의 날짜·시각 고르기(빠른 칩·달력 팝오버·15분 시각 목록·직접 친 시각 해석)와 그 순수 함수
 - `web/src/ScheduleMessageModal.tsx`·`scheduledMessages.ts` — 대화 입력 상자 시계 버튼의 예약 보내기 창과, 입력 상자 위 띠·Reminders 창 Scheduled 구역·배지에 쓰는 순수 함수
 - `desktop/src/reminderNotice.ts` — 알림이 울리면 띄우는 트레이 Windows 알림의 고르기·글자·누를 때 열 리드 (띄우기는 `desktop/src/main.ts`)
+- `desktop/src/scheduledNotice.ts` — 예약 보내기가 실패하면 띄우는 트레이 Windows 알림의 고르기·글자 (띄우기는 `desktop/src/main.ts`)
 
 웹 → `web-app.md` · `toolbar.md` · `chat.md` · `workspace.md` · `office.md` · `office-art.md` · `accounts.md`
 - `web/src/main.tsx` — 로그인 또는 App, 트레이 창이면 맨 위 제목 띠(`TitleBar.tsx`, → `theme.md`) (`legacyStorage.ts`·`copyLegacyStorage.ts` — 옛 localStorage 키 한 번 옮기기) · `App.tsx` — 3열 화면(목록·사무실·패널)·상태 표시줄·폰 한 열 · `reconnect.ts` — 서버·호스트가 끊겼다 붙을 때까지 위쪽 띠 단계 · `HomePanel.tsx`·`home.ts` — 사무실을 숨기고 세션을 안 골랐을 때의 첫 화면(새 세션·최근 세션) · `NeedsYouButton.tsx`·`needsYou.ts` — 사이드바 탭 Needs you 보기(근무 중인 승인 대기·내 차례·끝남 모아 보기) · `AllTodosButton.tsx` — 사이드바 탭 All TODOs 보기(맨 위 My desk 내 할 일 추가·완료 + 모든 팀의 남은 할 일을 팀마다 묶어 보기·완료) · `LeadModelsModal.tsx`·`leadModels.ts` — 목록 툴바 Lead models 창(근무 중인 팀장·파트장 모델·effort 를 줄마다 골라 한꺼번에 바꾸기) · `DailyModal.tsx`·`daily.ts` — 목록 툴바·팀 ⋯ 메뉴·검색 명령으로 여는 Today 창(그날 숫자 칸 넷·팀별 시간대 타임라인·팀별 출력 토큰 막대와 커밋 제목, 7일 전까지) (툴바 넷 → `toolbar.md`) · `GlobalSearch.tsx`·`globalSearchItems.ts` — 헤더 돋보기·Ctrl+K 글로벌 검색 창(세션·팀·그룹·할 일·알림·명령 찾아 열기, 터미널 탭에서는 안 가로챔, → `toolbar.md`) · `sessionLink.ts` — 트레이 알림이 여는 `#session=<id>` 읽기 · `listCollapse.ts` — 목록 그룹 접기 저장 값·접힌 라벨 상태 요약 · `panelWidth.ts` — 사무실이 보일 때 끌어 바꾸는 패널 폭 · `sidebarWidth.ts` — 끌어 바꾸는 사이드바 폭(창 폭으로 줄여 `<html>` 의 `--sidebar-width`, 트레이 띠 버튼도 따라감) · `types.ts` — 응답 타입·공통 문구 함수 · `contextSize.ts` — 입력 상자 아래 문맥 크기 글자("143k")·주의/경고 단계 · `handOver.ts` — 문맥 경고 단계 팀장·파트장의 입력 상자 아래 문맥 크기 Hand over(새 지시자 창 열기) 판정
