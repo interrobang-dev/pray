@@ -154,12 +154,16 @@ export function rowKeyOf<S>(row: ChatRow<S>): string {
 /**
  * 화면 요소의 data-jump-key 가 든 줄의 번호. 없으면 -1. 키 꼴은 Chat 이 다는 것과 같다: 메시지 ID(말풍선·사람 쪽·system 글·
  * 묶음 안 설명 글), `<메시지 ID>:<순번>`(system 글 안 알림), `relay:<도구 ID>`·`relay:<메시지 ID>:<순번>`(지시·보고 한 줄),
- * `tool:<도구 ID>`(묶음 안 명령 줄)
+ * `tool:<도구 ID>`(묶음 안 명령 줄), `artifact:<도구 ID>`(Artifact 카드)
  */
 export function rowIndexOfJumpKey<S>(rows: ChatRow<S>[], jumpKey: string): number {
   if (jumpKey.startsWith('tool:')) {
     const toolId = jumpKey.slice('tool:'.length)
     return rows.findIndex((row) => row.kind === 'work' && row.work.parts.some((part) => part.toolUses.some((toolUse) => toolUse.id === toolId)))
+  }
+  if (jumpKey.startsWith('artifact:')) {
+    const toolId = jumpKey.slice('artifact:'.length)
+    return rows.findIndex((row) => row.kind === 'special' && row.toolUse.id === toolId)
   }
   const isRelay = jumpKey.startsWith('relay:')
   const id = isRelay ? jumpKey.slice('relay:'.length) : jumpKey

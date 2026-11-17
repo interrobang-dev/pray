@@ -5804,6 +5804,103 @@ li.group.drop-after::after {
 .question-status {
   color: var(--muted);
 }
+/* 대화 기록의 Artifact 호출 카드 (ArtifactCard.tsx): [그림] 상태 / 제목 / 설명 [Open ↗], 아래에 원래 도구 블록을 접어 둔다.
+   올리는 중·실패는 흐리게. 패널 아래 버튼 묶음의 목록 창은 마크 창(.marks-popover)을 그대로 쓴다 */
+.msg.artifact-card {
+  align-self: flex-start;
+  box-sizing: border-box;
+  width: min(460px, 100%);
+  border-color: var(--line);
+}
+.artifact-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.artifact-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.artifact-card-text {
+  flex: 1;
+  min-width: 0;
+}
+.artifact-card-state {
+  font-size: calc(11px * var(--font-scale));
+  color: var(--muted);
+}
+.artifact-card-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.artifact-card-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--muted);
+}
+.artifact-card-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+  text-decoration: none;
+}
+.artifact-card-open:hover {
+  filter: brightness(1.08);
+}
+.msg.artifact-card.running .artifact-card-icon,
+.msg.artifact-card.failed .artifact-card-icon {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.msg.artifact-card.failed .artifact-card-state {
+  color: var(--red);
+}
+.msg.artifact-card .tool {
+  margin-top: 6px;
+}
+.artifacts-go {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.artifacts-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.artifacts-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.artifacts-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.artifacts-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 /* 대화 기록의 AskUserQuestion (Chat.tsx): 질문 → 답, 결과가 아직 없으면 "질문 중" 한 줄 */
 .asked-label {
   margin-bottom: 4px;
@@ -9022,6 +9119,11 @@ li.group.drop-after::after {
   }
   .chat-image-frame img {
     max-height: 300px;
+  }
+  /* Artifact 카드: 대화 폭 전체 (좁으면 제목이 너무 일찍 잘린다) */
+  .msg.artifact-card {
+    width: 100%;
+    max-width: 100%;
   }
   /* 마크 창: 줄 44px, × 44px (창 폭은 화면 폭 - 32px) */
   .marks-row {

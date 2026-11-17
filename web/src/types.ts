@@ -218,6 +218,8 @@ export interface ToolUse {
   result: string | null
   /** 답한 AskUserQuestion 에만 있다: 질문문 → 답 (여러 개 고르기는 ", " 로 이음). 옛 서버 응답·취소에는 없다 */
   answers?: Record<string, string>
+  /** 서버가 결과 전문에서 찾은 첫 claude.ai Artifact 주소 (결과 글이 잘려도 남는다). 옛 서버 응답에는 없다 */
+  artifactUrl?: string
 }
 
 /** 대화 탭 메시지 (`GET /api/sessions/:id/messages`) */

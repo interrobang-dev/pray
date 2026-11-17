@@ -197,6 +197,11 @@ describe('rowIndexOfJumpKey', () => {
     expect(rowIndexOfJumpKey(rows, 'relay:없음')).toBe(-1)
   })
 
+  it('Artifact 카드: 그 도구 호출의 special 줄, 묶음 안 도구는 못 찾는다', () => {
+    expect(rows[rowIndexOfJumpKey(rows, `artifact:${relay.id}`)].kind).toBe('special')
+    expect(rowIndexOfJumpKey(rows, `artifact:${bash.id}`)).toBe(-1)
+  })
+
   it('답변 말풍선은 그 답변 줄', () => {
     const plain = message('assistant', '끝')
     const plainRows = build([message('user', '해 줘'), message('assistant', '', [tool('Read')]), plain], false)

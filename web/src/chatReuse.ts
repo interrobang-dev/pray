@@ -9,7 +9,7 @@ import type { ChatMessage, ToolUse } from './types'
 const jsonOf = (value: unknown) => JSON.stringify(value) ?? ''
 
 function isSameToolUse(a: ToolUse, b: ToolUse): boolean {
-  return a.id === b.id && a.name === b.name && a.result === b.result && jsonOf(a.input) === jsonOf(b.input) && jsonOf(a.answers) === jsonOf(b.answers)
+  return a.id === b.id && a.name === b.name && a.result === b.result && jsonOf(a.input) === jsonOf(b.input) && jsonOf(a.answers) === jsonOf(b.answers) && a.artifactUrl === b.artifactUrl
 }
 
 /** 메시지 내용이 같은지 (서버가 주는 필드 전부) */

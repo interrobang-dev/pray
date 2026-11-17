@@ -1,5 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
+import { ArtifactCard, ArtifactsButton } from './ArtifactCard'
+import { artifactLabel, artifactOf, artifactTitles, type ArtifactRef } from './artifacts'
 import { buildChatRows, hidingWorkKey, queuedTailStart, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
 import { reuseMessages, reuseRows } from './chatReuse'
 import { loadMessages, type HeldMessages } from './chatDelta'
@@ -417,8 +419,8 @@ function AskedCard({ toolUse, asked }: { toolUse: ToolUse; asked: Asked }) {
   )
 }
 
-/** 작업 묶음에 넣지 않고 그 자리에 두는 도구 호출: 팀장↔팀원 말풍선, 질문 → 답 카드 */
-type Special = { kind: 'relay'; relay: Relay } | { kind: 'asked'; asked: Asked }
+/** 작업 묶음에 넣지 않고 그 자리에 두는 도구 호출: 팀장↔팀원 말풍선, 질문 → 답 카드, Artifact 카드 */
+type Special = { kind: 'relay'; relay: Relay } | { kind: 'asked'; asked: Asked } | { kind: 'artifact'; artifact: ArtifactRef }
 
 /** 묶음 줄에 이름별 개수를 보여 주는 도구 수 (많은 순). 나머지는 전체 개수에만 든다 */
 const WORK_TOOL_NAMES_SHOWN = 3
@@ -898,6 +900,10 @@ function buildSearchTargets(rows: ChatRow<Special>[], memberOf: MemberOf): Searc
       }
     } else if (row.kind === 'special') {
       if (row.special.kind === 'relay') add(`relay:${row.toolUse.id}`, relayLineText(row.special.relay))
+      if (row.special.kind === 'artifact') {
+        const { artifact } = row.special
+        add(`artifact:${row.toolUse.id}`, [artifactLabel(artifact), artifact.description].filter(Boolean).join(' · '))
+      }
     } else {
       const { message } = row
       if (message.from) {
@@ -1052,7 +1058,16 @@ const ChatRowView = memo(function ChatRowView({
   // 팀장 대화의 지시·보고 도구 호출은 한 줄로 (내용은 팀원 대화에서 본다), AskUserQuestion 은 질문 → 답 카드로 (원래 도구 블록은 그 안에 접어 둔다)
   if (row.kind === 'special') {
     const { toolUse, special } = row
-    return special.kind === 'relay' ? renderRelayLine(special.relay, `relay:${toolUse.id}`) : <AskedCard toolUse={toolUse} asked={special.asked} />
+    if (special.kind === 'relay') return renderRelayLine(special.relay, `relay:${toolUse.id}`)
+    if (special.kind === 'artifact') {
+      const jumpKey = `artifact:${toolUse.id}`
+      return (
+        <ArtifactCard artifact={special.artifact} jumpKey={jumpKey} markClass={highlightClass(jumpKey)}>
+          <ToolBlock toolUse={toolUse} />
+        </ArtifactCard>
+      )
+    }
+    return <AskedCard toolUse={toolUse} asked={special.asked} />
   }
   const { message } = row
   // 팀원 대화: 서버가 보낸 팀장·파트장 지시 (전문)
@@ -1415,13 +1430,19 @@ export function Chat({
   /** 바로 앞의 줄. 다시 만든 줄 중 그대로인 것은 이 객체를 다시 써서 줄마다 memo 가 걸린다 */
   const rowsRef = useRef<ChatRow<Special>[]>([])
   const rows = useMemo(() => {
+    const titles = artifactTitles(messages)
     const built = buildChatRows<Special>(
       messages,
       (toolUse, message) => {
         const relay = relayOf(toolUse, message, memberOf)
         if (relay) return { kind: 'relay', relay }
         const asked = askedOf(toolUse)
-        return asked ? { kind: 'asked', asked } : null
+        if (asked) return { kind: 'asked', asked }
+        const artifact = artifactOf(toolUse)
+        if (!artifact) return null
+        // 열기 카드는 제목이 없다 — 같은 세션이 만든·읽은 문서 이름을 붙인다
+        const title = artifact.title ?? (artifact.url ? (titles.get(artifact.url) ?? null) : null)
+        return { kind: 'artifact', artifact: title === artifact.title ? artifact : { ...artifact, title } }
       },
       isTurnInProgress,
     )
@@ -2228,6 +2249,7 @@ export function Chat({
             자주 뜨고 숨는 것일수록 위에 둔다: shell 이 뜨고 끝나도 폴더는 그대로다 */}
         <div className="pane-buttons">
           <ShellsButton key={`shells:${sessionId}`} sessionId={sessionId} shells={shells} request={shellRequest} onRequestHandled={onShellRequestHandled} />
+          <ArtifactsButton key={`artifacts:${sessionId}`} messages={messages} onGo={goToMark} />
           <MarksButton key={`marks:${sessionId}`} marks={marks} messages={messages} onGo={goToMark} onSetMark={setMark} />
           <FilesButton key={sessionId} sessionId={sessionId} version={version} request={workFilesRequest} onRequestHandled={clearWorkFilesRequest} />
         </div>

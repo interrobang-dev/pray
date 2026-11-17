@@ -81,6 +81,38 @@ describe('parseMessages', () => {
     expect(message.toolUses.map((t) => t.result?.length)).toEqual([5000, 5000, 2000])
   })
 
+  it('keeps the claude.ai artifact link found past the 2000 char cut as artifactUrl', () => {
+    const url = 'https://claude.ai/artifact/Dpb46hR8bjS7L6jPH5Xmty'
+    const jsonl = [
+      line({
+        type: 'assistant',
+        uuid: 'a1',
+        message: {
+          id: 'm1',
+          content: [
+            { type: 'tool_use', id: 'doc', name: 'mcp__claude_ai_Claude_Docs__read', input: {} },
+            { type: 'tool_use', id: 'bash', name: 'Bash', input: {} },
+          ],
+        },
+      }),
+      line({
+        type: 'user',
+        uuid: 'u1',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'doc', content: [{ type: 'text', text: `${'x'.repeat(3000)}"frame":{"url":"${url}"}` }] },
+            { type: 'tool_result', tool_use_id: 'bash', content: 'ok' },
+          ],
+        },
+      }),
+    ].join('\n')
+
+    const [message] = parseMessages(jsonl)
+    expect(message.toolUses[0].result).toHaveLength(2000)
+    expect(message.toolUses[0].artifactUrl).toBe(url)
+    expect(message.toolUses[1]).not.toHaveProperty('artifactUrl')
+  })
+
   it('puts toolUseResult.answers on AskUserQuestion tool uses only', () => {
     const questions = [{ question: '어디서?', header: 'H', options: [{ label: 'main', description: '' }], multiSelect: false }]
     const jsonl = [

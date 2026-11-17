@@ -7,7 +7,15 @@ export interface ToolUse {
   result: string | null
   /** AskUserQuestion 에 답한 기록 ({ 질문문: 답 }). 결과 줄의 toolUseResult.answers */
   answers?: Record<string, string>
+  /**
+   * 결과 전문에서 찾은 첫 claude.ai Artifact 주소. 결과 글이 잘려도(RESULT_LIMIT) 화면이 그 페이지를 알 수 있게 —
+   * Claude Docs 커넥터 결과는 주소가 뒤쪽 `frame` 에 있어 잘린 글에는 없을 때가 많다. 없으면 필드를 뺀다
+   */
+  artifactUrl?: string
 }
+
+/** claude.ai/artifact/{id} · claude.ai/code/artifact/{uuid} (화면 web/src/artifacts.ts 와 같은 꼴) */
+const ARTIFACT_URL = /https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+/
 
 export interface ChatMessage {
   id: string
@@ -129,6 +137,8 @@ interface ToolResultLine {
   result: string
   /** AskUserQuestion 결과일 때만 (toolUseResult.answers) */
   answers: Record<string, string> | null
+  /** 자르기 전 결과에서 찾은 Artifact 주소 */
+  artifactUrl: string | null
 }
 
 function humanContent(content: unknown): HumanContent {
@@ -193,6 +203,7 @@ export class MessageLineParser {
             toolUseId: block.tool_use_id,
             result: UNLIMITED_RESULT_PREFIXES.some((prefix) => name.startsWith(prefix)) ? result : result.slice(0, RESULT_LIMIT),
             answers: name === 'AskUserQuestion' ? askAnswers(record.toolUseResult) : null,
+            artifactUrl: result.match(ARTIFACT_URL)?.[0] ?? null,
           })
         }
       }
@@ -382,11 +393,12 @@ export function buildMessages(lines: readonly (MessageLine | null)[]): ChatMessa
       continue
     }
     if (line.type === 'user') {
-      for (const { toolUseId, result, answers } of line.toolResults) {
+      for (const { toolUseId, result, answers, artifactUrl } of line.toolResults) {
         const toolUse = toolUseById.get(toolUseId)
         if (!toolUse) continue
         toolUse.result = result
         if (answers) toolUse.answers = answers
+        if (artifactUrl) toolUse.artifactUrl = artifactUrl
       }
       // 응답 전 중지로 입력칸에 되돌아가 대화에서 빠진 글
       if (restored.has(index)) continue
