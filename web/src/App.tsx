@@ -15,6 +15,7 @@ import { createPortal } from 'react-dom'
 import { Terminal } from './Terminal'
 import { FilesTab } from './FilesTab'
 import { Chat, type Jump, type JumpTarget } from './Chat'
+import type { RowView } from './chatWindow'
 import { addToComposerDraft } from './composerDraft'
 import { hasUnsavedEdit, confirmDiscardUnsaved, whenLeavingAllowed } from './unsavedEdits'
 import { sessionIdFromHash } from './sessionLink'
@@ -182,6 +183,8 @@ interface JumpBack {
   /** 점프할 때의 팀장 이름. 팀장이 아직 목록에 있으면 지금 이름을 쓴다 */
   fromName: string
   rowKey: string
+  /** 그 줄을 누를 때 보던 자리 (돌아오면 그대로 놓는다). 줄을 못 찾았으면 null */
+  view: RowView | null
 }
 
 /** 목록 끌어 놓기의 범위: 그룹끼리, 또는 한 그룹 안의 팀끼리 (다른 그룹으로 옮기기는 사무실에서 섬을 끌어서) */
@@ -745,10 +748,10 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   }
 
   /** 팀장 대화의 지시·보고 한 줄을 눌렀다: 그 팀원 대화의 그 메시지로 가고, 돌아올 곳으로 지금 세션과 그 줄을 둔다 */
-  function openRelay(memberSessionId: string, target: JumpTarget, rowKey: string) {
+  function openRelay(memberSessionId: string, target: JumpTarget, rowKey: string, view: RowView | null) {
     if (!selected) return
     openJump(memberSessionId, target)
-    setJumpBack({ toSessionId: memberSessionId, fromSessionId: selected.id, fromName: displayName(selected), rowKey })
+    setJumpBack({ toSessionId: memberSessionId, fromSessionId: selected.id, fromName: displayName(selected), rowKey, view })
   }
 
   /** 상태 표시줄 Shells 창의 줄을 눌렀다: 그 세션을 대화 탭으로 열고(shell 버튼은 대화 탭에만 있다) shell 모달을 그 shell 을 고른 채 연다 */
@@ -796,7 +799,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   /** 돌아가기: 팀장 대화를 다시 열고 점프할 때 누른 그 한 줄로 간다 */
   function returnFromJump() {
     if (!jumpBack) return
-    openJump(jumpBack.fromSessionId, { kind: 'row', rowKey: jumpBack.rowKey })
+    openJump(jumpBack.fromSessionId, { kind: 'row', rowKey: jumpBack.rowKey, view: jumpBack.view })
     setJumpBack(null)
   }
 

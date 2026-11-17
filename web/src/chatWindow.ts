@@ -34,6 +34,20 @@ export function expandedStartIndex(startIndex: number): number {
   return Math.max(0, startIndex - RENDER_STEP)
 }
 
+/**
+ * 돌아가기로 다시 놓을 자리: 줄을 누를 때 그 줄이 대화 칸 위 끝에서 얼마나 내려와 있었는지(offset)와 맨 아래를 보고 있었는지.
+ * 가운데로 스크롤하면 맨 아래를 보다 누른 사람은 돌아왔을 때 화면이 위로 올라가 있고 맨 아래 따라가기가 풀린다
+ */
+export interface RowView {
+  offset: number
+  isAtBottom: boolean
+}
+
+/** 줄이 대화 칸 위 끝에서 offset 만큼 내려온 자리에 오게 하는 scrollTop (rowTop·containerTop 은 화면 좌표) */
+export function scrollTopRestoring(scrollTop: number, rowTop: number, containerTop: number, offset: number): number {
+  return scrollTop + (rowTop - containerTop) - offset
+}
+
 /** target 줄이 안 그린 범위면 그 줄 위 REVEAL_MARGIN 줄부터 그린다. 이미 그렸으면 그대로 */
 export function startIndexRevealing(startIndex: number, targetIndex: number): number {
   return targetIndex >= 0 && targetIndex < startIndex ? Math.max(0, targetIndex - REVEAL_MARGIN) : startIndex

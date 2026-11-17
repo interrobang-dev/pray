@@ -5,7 +5,7 @@ import { artifactLabel, artifactOf, artifactTitles, type ArtifactRef } from './a
 import { buildChatRows, hidingWorkKey, queuedTailStart, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
 import { reuseMessages, reuseRows } from './chatReuse'
 import { loadMessages, type HeldMessages } from './chatDelta'
-import { expandedStartIndex, resolveStartIndex, startIndexRevealing, windowStartAt, type WindowStart } from './chatWindow'
+import { expandedStartIndex, resolveStartIndex, scrollTopRestoring, startIndexRevealing, windowStartAt, type RowView, type WindowStart } from './chatWindow'
 import { rowTimes, type RowStamp, type RowTime } from './chatTime'
 import { ChatSearch } from './ChatSearchBar'
 import type { SearchTarget } from './chatSearch'
@@ -34,9 +34,9 @@ import { appearance, subscribeTheme } from './theme'
 
 /**
  * 대화를 불러온 뒤 찾아 갈 곳. 지시·보고 = 팀원 대화에서 글이 같은 메시지 (같은 글이 여럿이면 at 과 시각이 가장 가까운 것),
- * row = 팀장 대화의 지시·보고 한 줄 (돌아가기)
+ * row = 팀장 대화의 지시·보고 한 줄 (돌아가기). view = 그 줄을 누를 때 보던 자리 — 있으면 가운데가 아니라 그 자리로 되돌린다
  */
-export type JumpTarget = { kind: 'instruction' | 'report'; text: string; at: string } | { kind: 'row'; rowKey: string }
+export type JumpTarget = { kind: 'instruction' | 'report'; text: string; at: string } | { kind: 'row'; rowKey: string; view: RowView | null }
 
 /** App 이 고른 세션의 Chat 에 넘기는 점프. Chat 이 그 세션 대화를 불러온 뒤 한 번 처리하고 onJumpHandled 를 부른다 */
 export interface Jump {
@@ -92,7 +92,7 @@ interface Props {
   jump: Jump | null
   onJumpHandled: () => void
   /** 지시·보고 한 줄을 누름: 그 팀원 세션을 열고 target 으로 간다. rowKey 는 돌아올 때 찾을 이 줄 */
-  onOpenRelay: (memberSessionId: string, target: JumpTarget, rowKey: string) => void
+  onOpenRelay: (memberSessionId: string, target: JumpTarget, rowKey: string, view: RowView | null) => void
   /** 실행 중인 백그라운드 shell. 있으면 오른쪽 아래 버튼 묶음에 ">_" 버튼 */
   shells: Shell[]
   /** 상태 표시줄 Shells 창에서 고른 이 세션의 shell. ShellsButton 이 그 shell 을 고른 채 모달을 열고 onShellRequestHandled 로 비운다 */
@@ -1313,7 +1313,7 @@ export function Chat({
   /** messages 가 어느 세션 것인지. 세션을 바꾼 뒤 새 대화가 오기 전까지는 앞 세션 것이 남아 있어 점프는 이것이 맞을 때만 처리한다 */
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
   /** 점프로 찾아 간 줄의 data-jump-key. JUMP_HIGHLIGHT_MS 동안 강조하고, 바뀔 때마다 그 줄로 스크롤한다 (id 는 같은 줄로 다시 갈 때도 새로 하려고) */
-  const [highlight, setHighlight] = useState<{ key: string; id: number } | null>(null)
+  const [highlight, setHighlight] = useState<{ key: string; id: number; view?: RowView | null } | null>(null)
   /** 점프한 곳을 찾지 못함. 대화 맨 아래 한 줄 */
   const [jumpNotice, setJumpNotice] = useState<string | null>(null)
   /** 지시·보고 한 줄 바로 아래 알림 (그 팀원이 세션 목록에 없을 때) */
@@ -1711,7 +1711,7 @@ export function Chat({
     if (workKey) setWorkToggles((current) => new Map(current).set(workKey, true))
     // 안 그린 범위면 거기까지 그린 뒤 스크롤한다 (같은 렌더에 묶인다)
     revealRow(rowIndexOfJumpKey(rows, found.key))
-    setHighlight({ key: found.key, id: jump.id })
+    setHighlight({ key: found.key, id: jump.id, view: target.kind === 'row' ? target.view : null })
   }, [jump, loadedSessionId, sessionId, messages, rows, onJumpHandled, revealRow])
 
   // 강조할 줄이 정해지면 (펼친 묶음까지 그려진 뒤) 가운데로 스크롤하고, 그 위치를 "맨 아래를 보고 있는지" 에 반영한다 (다음 갱신에 끌려 내려가지 않게)
@@ -1723,7 +1723,12 @@ export function Chat({
       showJumpMissing()
       return
     }
-    element.scrollIntoView({ block: 'center' })
+    // 돌아가기는 줄을 누를 때 보던 자리 그대로 (맨 아래를 보고 있었으면 맨 아래 — 따라가기가 이어진다). 그 밖의 점프는 가운데
+    const container = messagesRef.current
+    const { view } = highlight
+    if (view?.isAtBottom) scrollToBottom()
+    else if (view && container) container.scrollTop = scrollTopRestoring(container.scrollTop, element.getBoundingClientRect().top, container.getBoundingClientRect().top, view.offset)
+    else element.scrollIntoView({ block: 'center' })
     onMessagesScroll()
     const timer = setTimeout(() => setHighlight(null), JUMP_HIGHLIGHT_MS)
     return () => clearTimeout(timer)
@@ -1770,7 +1775,11 @@ export function Chat({
       return
     }
     setLineNotice(null)
-    relayContextRef.current.onOpenRelay(memberSessionId, { kind: relay.kind, text: relay.text, at: relay.at }, rowKey)
+    // 돌아올 자리: 누른 줄이 대화 칸에서 놓인 높이와 맨 아래를 보고 있었는지
+    const container = messagesRef.current
+    const line = container?.querySelector(`[data-jump-key="${CSS.escape(rowKey)}"]`)
+    const view = container && line ? { offset: line.getBoundingClientRect().top - container.getBoundingClientRect().top, isAtBottom: isAtBottomRef.current } : null
+    relayContextRef.current.onOpenRelay(memberSessionId, { kind: relay.kind, text: relay.text, at: relay.at }, rowKey, view)
   }, [])
 
   const onMessagesScroll = useCallback(() => {

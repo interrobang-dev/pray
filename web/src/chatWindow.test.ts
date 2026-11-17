@@ -41,3 +41,14 @@ describe('expandedStartIndex · startIndexRevealing', () => {
     expect(startIndexRevealing(800, -1)).toBe(800)
   })
 })
+
+describe('scrollTopRestoring', () => {
+  it('puts the row back at the same height in the chat pane', async () => {
+    const { scrollTopRestoring } = await import('./chatWindow')
+    // 줄이 칸 위 끝에서 300 내려와 있는데 120 에 있었다면 180 만큼 더 내린다
+    expect(scrollTopRestoring(5000, 400, 100, 120)).toBe(5180)
+    // 줄이 칸 위쪽 밖(음수)에 있어도 같은 식이다
+    expect(scrollTopRestoring(5000, -200, 100, 120)).toBe(4580)
+    expect(scrollTopRestoring(5000, 220, 100, 120)).toBe(5000)
+  })
+})
