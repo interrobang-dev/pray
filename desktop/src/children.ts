@@ -7,12 +7,14 @@ const MAX_RESTARTS_PER_MINUTE = 5
 export interface ChildSpec {
   name: string
   cwd: string
+  /** 실행 파일 뒤 진입 인자. 저장소 실행은 ['--import', 'tsx', 'src/index.ts'], 설치판은 [묶은 .mjs] (Pray.exe 를 ELECTRON_RUN_AS_NODE 로) */
+  entry: string[]
   args: string[]
 }
 
 /**
  * 호스트·서버 자식 프로세스 하나. 죽으면 3초 뒤 다시 띄우고, 1분에 5번 넘게 죽으면 포기한다.
- * `node --import tsx` 로 단일 프로세스로 띄운다 (tsx CLI 는 자식 node 를 하나 더 만들어 kill 때 고아가 남는다).
+ * 저장소 실행은 `node --import tsx` 로 단일 프로세스로 띄운다 (tsx CLI 는 자식 node 를 하나 더 만들어 kill 때 고아가 남는다).
  * 이벤트: change(), gaveUp(name)
  */
 export class Child extends EventEmitter {
@@ -36,7 +38,7 @@ export class Child extends EventEmitter {
   start(): void {
     if (this.isRunning) return
     this.isStopping = false
-    const child = spawn(this.nodePath, ['--import', 'tsx', 'src/index.ts', ...this.spec.args], {
+    const child = spawn(this.nodePath, [...this.spec.entry, ...this.spec.args], {
       cwd: this.spec.cwd,
       env: this.env,
       stdio: 'ignore',

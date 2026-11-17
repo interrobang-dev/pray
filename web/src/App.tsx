@@ -24,6 +24,7 @@ import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
 import { memoryLabel, memoryLevel, memoryPercent, parseSystemMemory } from './systemMemory'
+import { hookWarningTitle, parseHookStatus, type HookStatus } from './hookStatus'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
 import type { FilesOpenRequest } from './openPath'
 import { KEY_STEP, clampPanelWidth, parsePanelWidth } from './panelWidth'
@@ -318,6 +319,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   const [now, setNow] = useState(() => Date.now())
   /** 이 PC 메모리 (상태 표시줄 RAM). 5초마다 받고 실패하면 null 이라 칸을 숨긴다 */
   const [systemMemory, setSystemMemory] = useState<SystemMemory | null>(null)
+  /** Pray 훅 확인 결과. 서버가 못 넣었을 때(failed)만 상태 표시줄에 경고 */
+  const [hookStatus, setHookStatus] = useState<HookStatus | null>(null)
+  const [isHookRetrying, setIsHookRetrying] = useState(false)
   /** 상태 표시줄 RAM 사용률(%). 모르면 null 이라 칸을 숨긴다 */
   const memoryPercentShown = systemMemory ? memoryPercent(systemMemory) : null
   /**
@@ -399,6 +403,41 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
       clearInterval(timer)
     }
   }, [])
+
+  // 서버는 1분마다 훅을 확인하므로 30초마다 받으면 충분하다. 옛 서버(경로 없음)·실패면 경고 없음
+  useEffect(() => {
+    let isStopped = false
+    async function load() {
+      try {
+        const response = await fetch('/api/system/hooks')
+        const status = response.ok ? parseHookStatus(await response.json()) : null
+        if (!isStopped) setHookStatus(status)
+      } catch {
+        if (!isStopped) setHookStatus(null)
+      }
+    }
+    void load()
+    const timer = setInterval(() => void load(), 30_000)
+    return () => {
+      isStopped = true
+      clearInterval(timer)
+    }
+  }, [])
+
+  async function retryHookInstall() {
+    setIsHookRetrying(true)
+    try {
+      const response = await fetch('/api/system/hooks/install', { method: 'POST' })
+      const status = response.ok ? parseHookStatus(await response.json()) : null
+      if (status) setHookStatus(status)
+      if (status?.state === 'failed') void alertDialog(status.message ?? "Couldn't add Pray hooks to ~/.claude/settings.json")
+      else if (!status) void alertDialog(`Couldn't add Pray hooks (HTTP ${response.status})`)
+    } catch {
+      void alertDialog("Couldn't add Pray hooks: network error")
+    } finally {
+      setIsHookRetrying(false)
+    }
+  }
 
   // 목록만 스크롤한다 (scrollIntoView 는 overflow hidden 인 조상까지 움직인다)
   useEffect(() => {
@@ -2383,6 +2422,11 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
       <footer className="status-bar">
         <UsagePanel />
         <span className="status-right">
+          {hookStatus?.state === 'failed' && (
+            <button className="status-hooks" onClick={() => void retryHookInstall()} disabled={isHookRetrying} title={hookWarningTitle(hookStatus)}>
+              {isHookRetrying ? 'Adding hooks…' : '⚠ Hooks missing'}
+            </button>
+          )}
           {approvalSessions.length > 0 && (
             <button className="status-approval" onClick={() => selectSession(approvalSessions[0].id)} title="Open a session that needs approval">
               Needs approval {approvalSessions.length}

@@ -12,7 +12,8 @@ const RING_LIMIT = 200_000
 /** 작업 스케줄러 환경에는 사용자 PATH 가 없을 수 있어 설치 스크립트가 `--claude=<exe>` 로 넘긴다 */
 const CLAUDE_COMMAND = getArg('claude') ?? process.env.PRAY_CLAUDE ?? 'claude.exe'
 /** 웹 세션에만 불러오는 저장소의 mod (입력칸 제안을 서버로 보낸다). 절대 경로 */
-const MOD_DIR = join(import.meta.dirname, '..', '..', 'mod')
+/** 웹 세션에 불러올 mod 폴더. 설치판 트레이는 앱 리소스의 mod 를 PRAY_APP_MOD_DIR 로 준다 (없으면 저장소 mod) */
+const MOD_DIR = process.env.PRAY_APP_MOD_DIR ?? join(import.meta.dirname, '..', '..', 'mod')
 
 /**
  * 호스트가 Claude 세션 안에서 실행됐을 때 상속되는 변수.
@@ -24,6 +25,8 @@ function childEnv(sessionId: string): Record<string, string> {
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue
     if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_') || key === 'NO_COLOR') continue
+    // 설치판 트레이가 호스트·서버에만 주는 값. claude 가 띄우는 명령(시험 서버·electron 등)으로 새면 앱 리소스를 쓰거나 electron 이 node 로 돈다
+    if (key.startsWith('PRAY_APP_') || key === 'ELECTRON_RUN_AS_NODE') continue
     env[key] = value
   }
   env.PRAY_SESSION = sessionId

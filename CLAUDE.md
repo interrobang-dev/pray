@@ -2,7 +2,7 @@
 
 앱 이름은 **Pray** (문구 "Do your best. Then pray."). 내부 이름도 pray 다 (패키지 `@pray/*`·루트 `pray`, 호스트 pipe `\\.\pipe\pray-host`, 환경변수 `PRAY_*`, MCP 서버 `pray`·도구 `team_*`, mod 플러그인 `pray`, localStorage `pray.*`, 알림 ID `pray`, 스케줄러 작업 `pray-*`). jk-corp 로 남은 것: 저장소·worktree 폴더 이름 (GitHub 저장소는 `interrobang-dev/pray`), 인증 쿠키 `jk_session`, 스프라이트 메타 키 `jkCorp`, 옛 이름을 읽는 호환 코드 (로고·글자 로고 → `theme.md`). 설정 폴더는 `~/.claude/pray/` (옛 `~/.claude/jk-corp/` 만 있으면 트레이·호스트·서버가 시작할 때 한 번 옮긴다 → `host.md` 의 `dataDir.ts`). Windows PC에서 돌아가는 Claude Code 세션 관제판. 세션을 픽셀 사무실의 직원으로 보여주고, 웹에서 띄운 세션은 조작하고 외부(터미널·IDE) 세션은 관찰만 한다. 설계 전문: `docs/plans/2026-10-20-session-office-design.md`.
 
-하지 않는 것: 외부 세션 조작(관찰만) · 설치 파일(electron-builder) — 저장소에서 실행한다 · HTTPS(사내망 전제) · Claude 토큰 직접 갱신(Claude Code 가 한다).
+하지 않는 것: 외부 세션 조작(관찰만) · 코드 서명(설치 파일은 서명 없이 이 PC 에만 설치한다) · HTTPS(사내망 전제) · Claude 토큰 직접 갱신(Claude Code 가 한다).
 
 ## 문서 지도 — 영역별 상세는 `.claude/rules/`
 
@@ -46,12 +46,15 @@
 
 ```
 npm install
-npm run hooks:install     # ~/.claude/settings.json 에 http 훅 7개 추가 (상태용 6개 + AskUserQuestion 질문 훅 1개. 한 번만. 기존 훅은 안 건드림)
+npm run hooks:install     # ~/.claude/settings.json 에 http 훅 7개 추가 (상태용 6개 + AskUserQuestion 질문 훅 1개. 기존 훅은 안 건드림. 서버가 시작할 때와 1분마다 빠진 것을 저절로 넣으므로 서버를 띄우기 전에 미리 넣을 때만)
 npm run build             # web/dist 생성. 서버가 이걸 정적으로 제공한다
 npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으로 띄우고 창에 사무실을 연다)
+npm run package           # 설치 파일 release/dist/Pray-Setup-<버전>.exe (web 빌드 먼저. 올리기는 태그 push → .github/workflows/release.yml)
 ```
 
-**평소에는 트레이 앱으로 쓴다.** 바탕화면 `Pray.lnk` (= `node_modules\electron\dist\electron.exe "<저장소>\desktop"`, 작업 폴더 저장소. 인자가 없으면 Electron 기본 앱이 뜬다 → `host.md`). `npm install` 의 postinstall 이 그 electron.exe 의 아이콘·이름을 Pray 로 바꾼다 (바로가기·작업 표시줄 아이콘은 exe 를 따르고 Windows 아이콘 캐시 때문에 늦게 바뀔 수 있다. 트레이가 떠 있으면 경고만 내고 넘어가니 Quit 뒤 `npm run brand:electron`. 알림 머리 이름은 시작 메뉴의 옛 `Electron.lnk` 를 지워야 Pray → `host.md`). 바로가기는 빌드하지 않고 `desktop/dist/` 를 그대로 실행하므로 `desktop/src` 를 고치면 `npm run build --workspace desktop` 뒤 트레이 Quit → 다시 켜야 한다 (`npm run desktop` 은 빌드한 뒤 띄우고, 루트 `npm run build` 는 web 만 빌드한다). 트레이 아이콘: 클릭 = 창 열기, 우클릭 = Open·Notifications·Launch at login·Troubleshoot ▸(호스트·서버 상태·Restart server·Restart host…·Restart Pray…·Open log folder)·Quit, 호스트·서버가 꺼져 있으면 맨 위에 "⚠ Server stopped" 한 줄 (메뉴·툴팁·확인 창·알림 글자는 영어. Restart Pray = Quit 뒤 다시 켜기와 같다 — 빌드는 하지 않는다). 세션이 끝나거나(Done·My turn, 팀원 제외) 승인을 기다리거나 팀장·파트장 문맥이 15만을 넘으면(Hand over) Windows 알림, 누르면 그 세션 패널 (→ `host.md`). 창 X 는 숨기기이고 **트레이 "Quit"만이 진짜 종료**(호스트가 꺼져 웹 세션이 끊기고 다음 실행 때 `--resume`). 승인 대기 세션이 있으면 아이콘에 빨간 점. 자식이 죽으면 3초 뒤 재시작, 1분에 5번 넘으면 포기하고 알림. 설치 파일(electron-builder)은 만들지 않았다 — 저장소에서 실행한다.
+**설치판과 업데이트** (→ `host.md` "설치판·업데이트"). 트레이 앱은 설치형(NSIS, 사용자 폴더 `%LOCALAPPDATA%\Programs\Pray`, 서명 없음 — 처음 설치 때 SmartScreen 경고)으로도 돈다. 설치판은 호스트·서버·MCP 를 esbuild 로 묶은 `.mjs` 를 Pray.exe 를 node 모드(`ELECTRON_RUN_AS_NODE`)로 돌려 띄우고(node·tsx·저장소 불필요), 웹 빌드·mod 도 앱 리소스 것을 쓴다. **릴리스**: `desktop/package.json` 의 version 을 올리고 커밋한 뒤 같은 이름의 태그(`v0.2.0`)를 push 하면 Actions 가 설치 파일을 만들어 GitHub Releases 에 올린다. 설치판은 6시간마다(그리고 켤 때) 확인해 뒤에서 받고 Windows 알림 + 트레이 메뉴 맨 위 "Restart to update (x.y.z)" — 누르면 확인 창 뒤 Quit 처럼 끄고 설치해 다시 뜬다 (안 누르면 다음 Quit 때 설치된다). **설치판의 코드는 릴리스해야 바뀐다** — 서버·호스트 ↻ 는 설치된 코드로 다시 띄운다. 그래서 개발 중 이 PC 에서 저장소 코드를 바로 돌려 보려면 트레이 Troubleshoot ▸ "Run host & server from source…" 로 저장소를 고른다 (그 뒤 ↻ 는 지금처럼 저장소 코드를 읽는다). 설치판과 저장소 실행(`npm run desktop`)은 같은 앱 데이터 폴더·잠금이라 같이 뜨지 않는다
+
+**평소에는 트레이 앱으로 쓴다.** 저장소 실행일 때 시작 메뉴 `Pray.lnk`·로그인 자동 실행(Run 값 `electron.app.Electron`) 모두 `node_modules\electron\dist\pray.exe "<저장소>\desktop"` (작업 폴더 저장소. 인자가 없으면 Electron 기본 앱이 뜬다 → `host.md`). `pray.exe` 는 electron.exe 의 같은 폴더 사본이라 작업 관리자에 Pray 로 보인다. `npm install` 의 postinstall 이 electron.exe 의 아이콘·이름을 Pray 로 바꾸고 pray.exe 사본을 다시 만든다 (바로가기·작업 표시줄 아이콘은 exe 를 따르고 Windows 아이콘 캐시 때문에 늦게 바뀔 수 있다. 트레이가 떠 있으면 경고만 내고 넘어가니 Quit 뒤 `npm run brand:electron`. 알림 머리 이름은 시작 메뉴의 옛 `Electron.lnk` 를 지워야 Pray → `host.md`). 바로가기는 빌드하지 않고 `desktop/dist/` 를 그대로 실행하므로 `desktop/src` 를 고치면 `npm run build --workspace desktop` 뒤 트레이 Quit → 다시 켜야 한다 (`npm run desktop` 은 빌드한 뒤 바로가기와 같은 `pray.exe "<저장소>\desktop"` 으로 띄우고(`scripts/start-desktop.mjs`, pray.exe 가 없으면 electron.exe), 루트 `npm run build` 는 web 만 빌드한다). 트레이 아이콘: 클릭 = 창 열기, 우클릭 = Open·Notifications·Launch at login·Troubleshoot ▸(호스트·서버 상태·버전·(설치판) Check for updates·Run host & server from source…·Restart server·Restart host…·Restart Pray…·Open log folder)·Quit, 호스트·서버가 꺼져 있으면 맨 위에 "⚠ Server stopped" 한 줄, 서버가 settings.json 에 Pray 훅을 못 넣었으면 "⚠ Pray hooks missing · Try again" 한 줄과 알림 (메뉴·툴팁·확인 창·알림 글자는 영어. Restart Pray = Quit 뒤 다시 켜기와 같다 — 빌드는 하지 않는다). 세션이 끝나거나(Done·My turn, 팀원 제외) 승인을 기다리거나 팀장·파트장 문맥이 15만을 넘으면(Hand over) Windows 알림, 누르면 그 세션 패널 (→ `host.md`). 창 X 는 숨기기이고 **트레이 "Quit"만이 진짜 종료**(호스트가 꺼져 웹 세션이 끊기고 다음 실행 때 `--resume`). 승인 대기 세션이 있으면 아이콘에 빨간 점. 자식이 죽으면 3초 뒤 재시작, 1분에 5번 넘으면 포기하고 알림.
 
 브라우저로도 `http://127.0.0.1:4710` 접속 가능. 로그: `~/.claude/pray/logs/*.log`. 화면 아래 상태 표시줄의 연결 상태 옆 `↻` 로 재시작한다. 호스트 ↻ = `POST /api/host/restart` → 호스트가 종료 코드 2 로 나감 → 트레이가 새 코드로 다시 띄움. 웹 세션은 끊겼다가 `--resume` 된다. 서버 ↻ = `POST /api/server/restart` → 서버가 응답을 보낸 뒤 종료 코드 2 로 나감 → 트레이가 새 코드로 다시 띄움. 몇 초 끊기고 세션은 그대로지만, 서버 메모리에만 있는 훅 상태(다음 훅부터 다시 보인다)·붙잡은 질문(터미널 탭에서 답한다)·입력칸 제안은 사라진다. **작업 스케줄러 방식에서는 둘 다 종료만 되고 다시 뜨지 않는다** (서버는 `npm run dev` 에서도).
 
@@ -79,7 +82,8 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `host/src/hq.ts` — `~/.claude/pray/hq.json` 읽기·쓰기 (웹 세션·퇴근 기록·그룹·팀·이름·인물·성별·역할·팀·내 책상 할 일·알림·예약 보내기·목록 순서)
 - `host/src/runtime.ts` — `--name=value` 인자 파싱, `--log=` 파일 로그 · `host/src/dataDir.ts` — 설정 폴더 `~/.claude/pray/` 정하기·옛 폴더 한 번 옮기기 (서버가 `@pray/host/dataDir` 로 import, 트레이는 `desktop/src/dataDir.ts` 에 같은 규칙) · `host/src/protocol.ts` — pipe 메시지 타입·줄 단위 JSON
 - `desktop/src/main.ts`·`children.ts`·`icon.ts`·`confirmDialog.ts`·`confirmHtml.ts`·`notify.ts`·`toast.ts`·`noticeFace.ts`·`externalLink.ts` — Electron 트레이 앱, 자식 재시작 정책, 코드로 만든 트레이·창·알림 그림, 트레이 확인 창(앱 모양 작은 창)·그 HTML, 세션 알림 판정·글자, 알림 토스트 XML, 알림 그림의 세션 도트 인물 머리(`dotCharacter.ts`·`recolor.ts` 는 화면 인물·색 규칙 사본), 창의 웹 링크를 기본 브라우저로 넘길지 판정 · `desktop/src/titleBar.ts` — 창 제목 표시줄을 숨기고 − □ × 오버레이(투명 바탕)·기호 색을 웹 띠에 맞추기
-- `scripts/*.ps1` — 작업 스케줄러 등록·중지·제거 · `scripts/brand-electron.mts` — postinstall 로 electron.exe 아이콘·이름을 Pray 로 · `hooks/install.mjs` — settings.json 훅 설치
+- `desktop/src/appUpdate.ts` — 설치판 업데이트 알림·메뉴 글자, 호스트·서버를 묶은 스크립트로 띄울지 저장소로 띄울지 · `scripts/package-app.mts` — 묶기·설치 파일 만들기(`npm run package`) · `.github/workflows/release.yml` — 태그 push 로 Releases 에 올리기
+- `scripts/*.ps1` — 작업 스케줄러 등록·중지·제거 · `scripts/brand-electron.mts` — postinstall 로 electron.exe 아이콘·이름을 Pray 로 (저장소 실행용) · `scripts/start-desktop.mjs` — `npm run desktop` 이 트레이를 `pray.exe "<저장소>\desktop"` 로 띄우기 · `hooks/install.mts` — settings.json 훅 설치 명령(`server/src/hookInstall.ts` 를 부른다)
 
 팀 → `team.md`
 - `host/src/team.ts` — Team·Part 타입, cwd → 팀·파트·역할 판정
@@ -97,6 +101,7 @@ npm run desktop           # 트레이 앱 실행 (호스트·서버를 자식으
 - `server/src/workspaceFiles.ts` — 세션 cwd 읽기(Files 탭 API): 경로 검증·한 단계 목록·파일 글/바이너리 판정·이름 빠른 찾기 · `workspaceChanges.ts` — 세션 cwd 의 git/SVN 변경 목록·diff(읽기만) · `workspaceHistory.ts` — 세션 cwd 의 git 커밋 목록·커밋 상세·커밋 파일 diff(읽기만) · `workspaceSave.ts` — 세션 cwd 글 파일 저장(이 PC 에서만, CSRF·충돌·줄바꿈/BOM) · `workspaceSearch.ts`·`workspaceSearchWorker.ts` — 세션 cwd 전체 내용 찾기(worker 스레드에서, 시간을 넘기면 terminate) (→ `workspace.md`)
 - `server/src/chatImage.ts` — 대화 속 그림 API 의 경로 꼴·허용 범위(세션 cwd·Claude 임시 폴더) 판정, .html 링크 열기도 같은 판정 (→ `server-api.md`·`security.md`)
 - `server/src/askQuestion.ts` — AskUserQuestion 해석·답 · `serialRunner.ts` — 한 번에 하나 실행기 · `hostClient.ts` — pipe 클라이언트
+- `server/src/hookInstall.ts` — `~/.claude/settings.json` 의 Pray 훅 확인·빠진 것 넣기 (서버 시작 때·1분마다, `GET /api/system/hooks`·`POST …/install`, 못 넣으면 화면 상태 표시줄 "⚠ Hooks missing"·트레이 알림 → `host.md`)
 - `server/src/auth.ts`·`mail.ts`·`config.ts` — 메일 인증·토큰·config.json · `requestGuard.ts` — Host·Origin 머리 판정 · `openFolder.ts` — 팀 폴더를 이 PC 탐색기로 열기 · `fileClipboard.ts` — Files 탭 파일을 이 PC 클립보드에 파일로 넣기 · `openInChrome.ts` — 대화 속 .html 링크를 이 PC 의 Chrome 으로 열기 · `openPath.ts` — 대화 속 경로를 어디서 열지(cwd 안 Files 탭·scratchpad 안 작업 파일 창·밖은 이 PC 탐색기) · `folderPicker.ts` — 팀 만들기 창의 폴더 고르기·새 폴더·git init, 이 PC 전용 (→ `security.md`)
 - `server/src/messages.ts` — jsonl → 대화 메시지 (→ `chat.md`)
 - `server/src/messageCache.ts` — 대화 API 의 해석 캐시·버전·바뀐 뒤쪽만 보내기

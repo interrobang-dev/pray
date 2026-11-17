@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
-import { freemem, hostname, totalmem } from 'node:os'
+import { freemem, homedir, hostname, totalmem } from 'node:os'
 import { basename, join, relative } from 'node:path'
 import compression from 'compression'
+import { ensureHooks, type HookStatus } from './hookInstall.js'
 import express from 'express'
 import type { Request, Response } from 'express'
 import type { HostMessage } from '@pray/host/protocol'
@@ -462,12 +463,43 @@ app.get('/api/system/memory', (_req, res) => {
   res.json({ totalBytes: totalmem(), freeBytes: freemem() })
 })
 
+/** ~/.claude/settings.json. Pray 훅이 여기 있어야 상태·중지·대기 취소·승인 막대·질문 카드가 돈다 */
+const CLAUDE_SETTINGS_PATH = join(homedir(), '.claude', 'settings.json')
+/** 훅 확인 주기. 서버가 도는 중에 Claude Code 를 다시 설치해 settings.json 이 새로 생겨도 1분 안에 되살린다 */
+const HOOK_CHECK_MS = 60_000
+let hookStatus: HookStatus | null = null
+
+/** 빠진 Pray 훅을 더하고 결과를 둔다. 로그는 더했을 때와 실패 글이 바뀔 때만 (1분마다 같은 실패를 쓰지 않게). 던지지 않는다 */
+function checkHooks(): HookStatus {
+  const status = ensureHooks(CLAUDE_SETTINGS_PATH)
+  if (status.state === 'installed') console.log(`Pray 훅 ${status.added.length}개를 settings.json 에 다시 넣음 (${status.added.join(', ')})`)
+  if (status.state === 'failed' && status.message !== hookStatus?.message) console.error(`Pray 훅을 넣지 못함: ${status.message}`)
+  if (status.state !== 'failed' && hookStatus?.state === 'failed') console.log('Pray 훅 복구')
+  hookStatus = status
+  return status
+}
+
+/** 훅 상태 (화면 상태 표시줄 경고·트레이 알림). 서버가 막 떠 아직 안 봤으면 지금 본다 */
+app.get('/api/system/hooks', (_req, res) => {
+  res.set('Cache-Control', 'no-store')
+  res.json(hookStatus ?? checkHooks())
+})
+
+/** 지금 다시 확인·설치 (화면 상태 표시줄 경고의 Retry) */
+app.post('/api/system/hooks/install', (_req, res) => {
+  res.json(checkHooks())
+})
+
 app.get('/api/sessions', async (_req, res) => {
   res.json(await snapshotPayload())
 })
 
 /** 화면과 같은 인물 목록 (정면 아틀라스 meta). 빌드 결과가 아니라 원본을 읽는다 — 서버는 web/dist 없이도 뜬다 */
-const readCharacterSheet = makeCharacterSheetReader(join(import.meta.dirname, '..', '..', 'web', 'public', 'office', `${CHARACTER_SHEET}.json`))
+/** 설치판 트레이는 앱 리소스의 빌드 결과를 PRAY_APP_WEB_DIST 로 준다 (없으면 저장소 web/dist·web/public) */
+const appWebDist = process.env.PRAY_APP_WEB_DIST
+const readCharacterSheet = makeCharacterSheetReader(
+  appWebDist ? join(appWebDist, 'office', `${CHARACTER_SHEET}.json`) : join(import.meta.dirname, '..', '..', 'web', 'public', 'office', `${CHARACTER_SHEET}.json`),
+)
 /** 방금 배정한 인물. 호스트가 띄워 세션 목록에 들기 전에 다음 배정이 오면(팀장이 팀원을 연달아 띄움) 같은 인물을 주지 않게 */
 const recentCharacters = new Map<string, CharacterInUse>()
 const RECENT_CHARACTER_MS = 60_000
@@ -3741,7 +3773,7 @@ void scheduledSender.tick(true)
 setInterval(() => void scheduledSender.tick(), SCHEDULED_TICK_MS)
 
 // 빌드된 웹이 있으면 서버 하나로 화면까지 제공한다 (개발 중에는 Vite 4711 을 쓴다)
-const webDist = join(import.meta.dirname, '..', '..', 'web', 'dist')
+const webDist = appWebDist ?? join(import.meta.dirname, '..', '..', 'web', 'dist')
 if (existsSync(webDist)) {
   app.use(express.static(webDist))
   app.get('/{*path}', (_req, res) => res.sendFile(join(webDist, 'index.html')))
@@ -3764,4 +3796,6 @@ async function warmSessionSummaries(): Promise<void> {
 app.listen(PORT, config.bind, () => {
   console.log(`Pray server http://${config.bind}:${PORT} (메일 로그인 ${sendCode ? '사용' : '미설정'})`)
   void warmSessionSummaries()
+  checkHooks()
+  setInterval(checkHooks, HOOK_CHECK_MS).unref()
 })

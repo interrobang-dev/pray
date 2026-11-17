@@ -57,6 +57,15 @@ describe('lead', () => {
     expect(server.env).toEqual({ PRAY_TEAM_ID: 'abc12345', PRAY_SERVER: 'http://127.0.0.1:4710' })
   })
 
+  it('installed app: runs the bundled mcp with the same exe in node mode', () => {
+    const config = JSON.parse(leadMcpConfig(team, null, 'http://127.0.0.1:4710', 'C:/Pray/Pray.exe', 'C:/Pray/resources/pray/mcp.mjs'))
+    expect(config.mcpServers.pray).toEqual({
+      command: 'C:/Pray/Pray.exe',
+      args: ['C:/Pray/resources/pray/mcp.mjs'],
+      env: { PRAY_TEAM_ID: 'abc12345', PRAY_SERVER: 'http://127.0.0.1:4710', ELECTRON_RUN_AS_NODE: '1' },
+    })
+  })
+
   it('part lead gets its own name, prompt and part env', () => {
     const part = { id: 'p1', name: 'api', worktree: { cwd: 'D:/x.worktrees/api', branch: 'part/api' }, createdAt: '' }
     const args = leadExtraArgs(team, part, 'http://x')

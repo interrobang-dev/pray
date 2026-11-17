@@ -1,0 +1,27 @@
+# 태그(v0.2.0 처럼)를 push 하면 Windows 에서 트레이 앱 설치 파일을 만들어 GitHub Releases 에 올린다.
+# 설치된 Pray 는 electron-updater 로 이 Release 를 확인해 뒤에서 받고, 사람이 트레이 메뉴 "Restart to update" 를 누르면 적용한다.
+# 태그는 desktop/package.json 의 version 과 같아야 한다 (scripts/package-app.mts 가 다르면 멈춘다).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build --workspace desktop
+      - run: npm run package -- --publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

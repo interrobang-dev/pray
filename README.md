@@ -40,7 +40,7 @@ Windows PC에서 돌아가는 **Claude Code 세션 관제판**. 세션을 픽셀
 
 ```
 npm install
-npm run hooks:install   # ~/.claude/settings.json 에 http 훅 7개를 추가한다 (한 번만. 기존 훅은 건드리지 않는다)
+npm run hooks:install   # ~/.claude/settings.json 에 http 훅 7개를 추가한다 (기존 훅은 건드리지 않는다. 서버가 시작할 때와 1분마다 빠진 훅을 저절로 넣으므로 생략해도 된다)
 npm run build           # web/dist 생성. 서버가 이걸 정적으로 제공한다
 npm run desktop         # 트레이 앱 실행
 ```
@@ -75,7 +75,7 @@ npm run desktop         # 트레이 앱 실행
 
 ## 주의
 
-- `npm run hooks:install` 은 `~/.claude/settings.json` 에 훅을 추가한다. 기존 훅은 그대로 둔다. 서버가 꺼져 있으면 훅은 조용히 실패하고 Claude Code 에는 영향이 없다.
+- `npm run hooks:install` 은 `~/.claude/settings.json` 에 훅을 추가한다. 기존 훅은 그대로 둔다. 서버도 시작할 때와 1분마다 빠진 훅을 넣고, 넣지 못하면(settings.json 이 깨졌을 때 등) 화면 상태 표시줄에 "⚠ Hooks missing" 이 뜨고 트레이가 알린다. 서버가 꺼져 있으면 훅은 조용히 실패하고 Claude Code 에는 영향이 없다.
 - **계정 전환은 이 PC 의 모든 claude(웹·터미널·IDE)에 적용된다.** 최근 1시간 안에 쓴 세션은 다음 차례에 대화 전체를 새 계정으로 다시 캐시에 쓰므로 한도를 더 쓰고 첫 응답이 느리다. 전환 전에 영향을 받는 세션을 화면이 보여 준다.
 - 사용량은 Claude Code 의 `/usage` 와 같은 데이터이지만 **비공식 API** 라서 언제든 바뀔 수 있다.
 - 다음 입력 제안은 Claude Code 의 mod API(early access)로 얻는다. Claude Code 업데이트로 깨지면 제안 버튼·말풍선만 안 뜨고 나머지는 그대로다.

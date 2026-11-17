@@ -53,17 +53,20 @@ export function leadSystemPrompt(team: Team, part: Part | null = null): string {
 }
 
 /** 팀장·파트장 claude 가 띄울 MCP 서버 설정 (--mcp-config 에 JSON 문자열로 넘김). 파트장은 PRAY_PART_ID 를 더 받는다. 서버 키·env 이름은 mcp 의 새 모드(mcpModeOf)와 짝이다 */
-export function leadMcpConfig(team: Team, part: Part | null, serverUrl: string, nodePath = process.execPath): string {
-  const loader = pathToFileURL(join(repoRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs')).href
-  return JSON.stringify({
-    mcpServers: {
-      pray: {
-        command: nodePath,
-        args: ['--import', loader, join(repoRoot, 'mcp', 'src', 'index.ts')],
-        env: { PRAY_TEAM_ID: team.id, ...(part ? { PRAY_PART_ID: part.id } : {}), PRAY_SERVER: serverUrl },
-      },
-    },
-  })
+export function leadMcpConfig(
+  team: Team,
+  part: Part | null,
+  serverUrl: string,
+  nodePath = process.execPath,
+  appMcpEntry = process.env.PRAY_APP_MCP_ENTRY,
+): string {
+  const env = { PRAY_TEAM_ID: team.id, ...(part ? { PRAY_PART_ID: part.id } : {}), PRAY_SERVER: serverUrl }
+  // 설치판 트레이는 서버를 Pray.exe(ELECTRON_RUN_AS_NODE)로 띄우고 묶은 mcp.mjs 경로를 준다 — 같은 exe 를 node 모드로 MCP 에 쓴다.
+  // 경로는 설치 폴더(%LOCALAPPDATA%\Programs\Pray)라 업데이트해도 그대로여서 resume 때 저장된 인자로도 뜬다
+  const server = appMcpEntry
+    ? { command: nodePath, args: [appMcpEntry], env: { ...env, ELECTRON_RUN_AS_NODE: '1' } }
+    : { command: nodePath, args: ['--import', pathToFileURL(join(repoRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs')).href, join(repoRoot, 'mcp', 'src', 'index.ts')], env }
+  return JSON.stringify({ mcpServers: { pray: server } })
 }
 
 /** 팀장·파트장 claude 에 넘길 추가 인자. 호스트가 webSessions 에 저장해 resume 때도 같이 넘긴다 */

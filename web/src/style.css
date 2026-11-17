@@ -6529,6 +6529,20 @@ li.group.drop-after::after {
   background: var(--red-soft);
   border-color: transparent;
 }
+/* ⚠ Hooks missing (App.tsx, hookStatus.ts): 서버가 settings.json 에 Pray 훅을 못 넣었을 때만. Needs approval 과 같은 빨간 글자 버튼, 누르면 다시 넣어 본다 */
+.status-bar .status-hooks {
+  padding: 0 5px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--red-dot);
+  background: transparent;
+  border-color: transparent;
+  white-space: nowrap;
+}
+.status-bar .status-hooks:hover:not(:disabled) {
+  background: var(--red-soft);
+  border-color: transparent;
+}
 /* Shells N (Shells.tsx ShellsStatus): 글자처럼 보이는 버튼. 0 이면 disabled 라 흐리다 */
 .shells-status-toggle {
   padding: 0 5px;

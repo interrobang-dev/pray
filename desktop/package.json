@@ -1,10 +1,12 @@
 {
   "name": "@pray/desktop",
+  "version": "0.1.0",
+  "description": "Pray tray app",
   "private": true,
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p .",
-    "start": "npm run build && electron .",
+    "start": "npm run build && node ../scripts/start-desktop.mjs",
     "test": "vitest run"
   },
   "devDependencies": {
@@ -12,5 +14,8 @@
     "electron": "^44.9.1",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
   }
 }

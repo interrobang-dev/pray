@@ -17,14 +17,17 @@
     "build": "npm run build --workspace web",
     "desktop": "npm run start --workspace desktop",
     "shot": "node scripts/shot.mjs",
-    "hooks:install": "node hooks/install.mjs",
+    "hooks:install": "node --import tsx hooks/install.mts",
     "startup:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-startup.ps1",
     "startup:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-startup.ps1",
     "postinstall": "node --import tsx scripts/brand-electron.mts",
-    "brand:electron": "node --import tsx scripts/brand-electron.mts"
+    "brand:electron": "node --import tsx scripts/brand-electron.mts",
+    "package": "node --import tsx scripts/package-app.mts"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
     "rcedit": "^5.0.2"
   },
   "allowScripts": {

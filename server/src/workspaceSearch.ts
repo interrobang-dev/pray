@@ -25,6 +25,8 @@ export const MAX_PREVIEW_CHARS = 300
 const PREVIEW_LEAD_CHARS = 40
 /** worker 가 스스로 멈추지 못할 때(정규식 한 번이 끝나지 않을 때) 기다려 주는 여유 */
 const TERMINATE_GRACE_MS = 300
+/** 저장소 실행(tsx)은 .ts 를, 설치판(esbuild 로 묶은 server.mjs)은 옆에 같이 묶은 workspaceSearchWorker.mjs 를 띄운다 */
+const WORKER_FILE = import.meta.url.endsWith('.ts') ? './workspaceSearchWorker.ts' : './workspaceSearchWorker.mjs'
 
 /** 켜고 끄는 쿼리 값: 없음·`0`·`false` = 끔, `1`·`true` = 켬, 그 밖(배열 포함)은 null */
 function parseFlag(value: unknown): boolean | null {
@@ -198,7 +200,7 @@ export function runSearchWorker(job: SearchJob, signal?: AbortSignal): Promise<S
     let matchCount = 0
     let searchedFileCount = 0
     let isSettled = false
-    const worker = new Worker(new URL('./workspaceSearchWorker.ts', import.meta.url), { workerData: job })
+    const worker = new Worker(new URL(WORKER_FILE, import.meta.url), { workerData: job })
     const settle = (result: { isTruncated: boolean; isCancelled: boolean } | Error) => {
       if (isSettled) return
       isSettled = true
