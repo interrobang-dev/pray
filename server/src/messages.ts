@@ -105,6 +105,15 @@ function isKilledNotification(content: string | undefined): boolean {
   return content !== undefined && content.startsWith('<task-notification>') && content.includes('<status>killed</status>')
 }
 
+/**
+ * 끝 알림(상태가 있는 task-notification 하나)의 task-id. 한 프로세스는 한 task 의 끝을 한 번만 알린다.
+ * 상태 없는 모니터 이벤트는 한 task 가 여러 번 보내 null
+ */
+function finishedTaskIdOf(content: string | undefined): string | null {
+  if (content === undefined || !content.startsWith('<task-notification>') || !content.includes('<status>')) return null
+  return /<task-id>([^<]+)<\/task-id>/.exec(content)?.[1] ?? null
+}
+
 /** 대기열에서 빼는 queue-operation. popAll 은 빈 입력칸 ↑ 로 대기 메시지를 입력칸에 꺼낸 것(꺼낸 것마다 한 줄), popOne 은 하나만 꺼낸 것 */
 const TAKE_OPERATIONS = new Set(['remove', 'popAll', 'popOne'])
 
@@ -273,6 +282,9 @@ function applyQueueRecord(
   if (operation === 'enqueue') {
     const item = { id: `queued-${index}`, timestamp: line.timestamp, content }
     if (queue.isAfterExit && isKilledNotification(content)) return item
+    // 같은 task 의 끝 알림이 다시 들어오면 앞 것은 사라진 프로세스가 넣은 것이다 (cost-state 없이 끝난 뒤 resume 한 프로세스가 stopped 로 다시 알림)
+    const taskId = finishedTaskIdOf(content)
+    if (taskId !== null) queue.items = queue.items.filter((queued) => finishedTaskIdOf(queued.content) !== taskId)
     queue.items.push(item)
   }
   if (TAKE_OPERATIONS.has(operation as string)) {

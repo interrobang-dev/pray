@@ -559,6 +559,33 @@ describe('parseMessages: messages sent while claude is working', () => {
     expect(queuedPrompts(jsonl)).toEqual([])
   })
 
+  it('drops a queued finish notice when the same task is notified again (process ended without cost-state, resumed one re-notifies)', () => {
+    // 실제 jsonl 의 꼴 (EMT 리드 세션): failed 알림을 넣은 프로세스가 cost-state 없이 끝나고, 다시 뜬 프로세스가 같은 task 를 stopped 로 넣고 꺼낸다
+    const failed = '<task-notification>\n<task-id>b7</task-id>\n<status>failed</status>\n<summary>Background command "Start" failed with exit code 4</summary>\n</task-notification>'
+    const stopped = '<task-notification>\n<task-id>b7</task-id>\n<status>stopped</status>\n</task-notification>'
+    const monitor = (event: string) => `<task-notification>\n<task-id>m2</task-id>\n<event>${event}</event>\n</task-notification>`
+    const jsonl = [
+      user('u1', '서버 띄워 줘'),
+      assistant('a1', '띄움'),
+      enqueue(monitor('one')),
+      enqueue(monitor('two')),
+      enqueue(failed),
+      assistant('a2', '확인 중'),
+      enqueue(stopped),
+      dequeue(),
+      user('u2', stopped),
+    ].join('\n')
+    expect(view(parseMessages(jsonl))).toEqual([
+      ['user', '서버 띄워 줘', false],
+      ['assistant', '띄움', false],
+      ['assistant', '확인 중', false],
+      ['system', stopped, false],
+      // 상태 없는 모니터 이벤트는 같은 task 여도 따로 대기 중이다
+      ['system', monitor('one'), true],
+      ['system', monitor('two'), true],
+    ])
+  })
+
   it('keeps a killed notice queued when it comes in a running process (not right after cost-state)', () => {
     // 메모리 부족 정리 등: 살아 있는 프로세스가 넣은 killed 알림은 그 프로세스가 꺼낼 때까지 대기 중이다
     const notice = '<task-notification>\n<task-id>m1</task-id>\n<status>killed</status>\n</task-notification>'
