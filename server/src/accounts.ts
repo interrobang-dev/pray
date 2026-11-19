@@ -1,4 +1,4 @@
-import { planOf } from './usage.js'
+import { accountPlanOf } from './usage.js'
 
 /**
  * Claude 계정 보관함·전환의 순수 로직 (파일·잠금·claude 실행 없음). 파일과 잠금은 accountStore.ts, claude 실행은 accountLogin.ts.
@@ -203,7 +203,7 @@ export function toAccount(stored: StoredAccount, activeId: string | null): Accou
     email: stringOrNull(stored.oauthAccount.emailAddress),
     displayName: stringOrNull(stored.oauthAccount.displayName),
     organizationName: stringOrNull(stored.oauthAccount.organizationName),
-    plan: planOf(oauth?.subscriptionType, oauth?.rateLimitTier),
+    plan: accountPlanOf(stored.oauthAccount, oauth),
     isActive: stored.id === activeId,
     refreshExpiresAt: refreshExpiresAt === null ? null : new Date(refreshExpiresAt).toISOString(),
     savedAt: stored.savedAt,

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { makeUsageCache, parseUsage, planOf, readAccountEmail } from './usage.js'
+import { accountPlanOf, makeUsageCache, parseUsage, planOf, readAccountEmail } from './usage.js'
 
 const now = new Date('2026-10-20T04:00:00Z')
 
@@ -73,6 +73,23 @@ describe('planOf', () => {
   it('is null without subscriptionType', () => {
     expect(planOf(undefined, 'default_claude_max_5x')).toBeNull()
     expect(planOf('', 'default_claude_max_5x')).toBeNull()
+  })
+})
+
+describe('accountPlanOf', () => {
+  const signIn = { subscriptionType: 'max', rateLimitTier: 'default_claude_max_5x' }
+
+  it('prefers oauthAccount.planDisplayName (refreshed by Claude Code) over the sign-in credentials', () => {
+    expect(accountPlanOf({ planDisplayName: 'Ultra', organizationRateLimitTier: 'default_claude_max_20x' }, signIn)).toBe('Ultra')
+    expect(accountPlanOf({ planDisplayName: ' Ultra ' }, signIn)).toBe('Ultra')
+  })
+
+  it('falls back to planOf of the credentials without a display name', () => {
+    expect(accountPlanOf({ planDisplayName: '' }, signIn)).toBe('max 5x')
+    expect(accountPlanOf({ planDisplayName: 5 }, signIn)).toBe('max 5x')
+    expect(accountPlanOf({}, signIn)).toBe('max 5x')
+    expect(accountPlanOf(null, signIn)).toBe('max 5x')
+    expect(accountPlanOf(null, null)).toBeNull()
   })
 })
 

@@ -82,25 +82,47 @@ export function planOf(subscriptionType: unknown, rateLimitTier: unknown): strin
   return multiplier ? `${subscriptionType} ${multiplier}x` : subscriptionType
 }
 
-async function readCredentials(): Promise<{ accessToken: string; plan: string | null } | null> {
+/**
+ * 화면에 보일 요금제 이름. ~/.claude.json oauthAccount 의 `planDisplayName`(예 "Ultra")이 있으면 그것, 없으면 credentials 의 planOf.
+ * credentials 의 subscriptionType·rateLimitTier 는 로그인 때 적혀(`subscriptionTypeSource: sign_in`) 플랜을 바꿔도 다시 로그인하기 전에는 그대로이고,
+ * oauthAccount 는 Claude Code 가 프로필을 받을 때마다 고쳐 쓴다 (실측: credentials 는 max 5x 인데 oauthAccount 는 Ultra·max_20x)
+ */
+export function accountPlanOf(oauthAccount: unknown, oauth: { subscriptionType?: unknown; rateLimitTier?: unknown } | null | undefined): string | null {
+  const displayName = (oauthAccount as { planDisplayName?: unknown } | null | undefined)?.planDisplayName
+  if (typeof displayName === 'string' && displayName.trim()) return displayName.trim()
+  return planOf(oauth?.subscriptionType, oauth?.rateLimitTier)
+}
+
+async function readCredentials(): Promise<{ accessToken: string; subscriptionType: unknown; rateLimitTier: unknown } | null> {
   try {
     const parsed = JSON.parse(await readFile(credentialsPath, 'utf8'))
     const oauth = parsed.claudeAiOauth
     if (typeof oauth?.accessToken !== 'string') return null
-    return { accessToken: oauth.accessToken, plan: planOf(oauth.subscriptionType, oauth.rateLimitTier) }
+    return { accessToken: oauth.accessToken, subscriptionType: oauth.subscriptionType, rateLimitTier: oauth.rateLimitTier }
   } catch {
     return null
   }
 }
 
-/** Claude Code 가 로그인 때 ~/.claude.json 에 남긴 계정 이메일. 읽기만 한다 (Claude Code 가 수시로 다시 쓰는 파일이라 쓰는 중이면 해석에 실패할 수 있다). 없거나 못 읽으면 null */
-export async function readAccountEmail(path = claudeJsonPath): Promise<string | null> {
+/** Claude Code 가 ~/.claude.json 에 남긴 oauthAccount. 읽기만 한다 (Claude Code 가 수시로 다시 쓰는 파일이라 쓰는 중이면 해석에 실패할 수 있다). 없거나 못 읽으면 null */
+async function readOauthAccount(path: string): Promise<Record<string, unknown> | null> {
   try {
-    const email = JSON.parse(await readFile(path, 'utf8'))?.oauthAccount?.emailAddress
-    return typeof email === 'string' && email ? email : null
+    const account = JSON.parse(await readFile(path, 'utf8'))?.oauthAccount
+    return account && typeof account === 'object' ? account : null
   } catch {
     return null
   }
+}
+
+/** oauthAccount 의 이메일. 없거나 못 읽으면 null */
+function emailOf(oauthAccount: Record<string, unknown> | null): string | null {
+  const email = oauthAccount?.emailAddress
+  return typeof email === 'string' && email ? email : null
+}
+
+/** Claude Code 가 로그인 때 ~/.claude.json 에 남긴 계정 이메일. 없거나 못 읽으면 null */
+export async function readAccountEmail(path = claudeJsonPath): Promise<string | null> {
+  return emailOf(await readOauthAccount(path))
 }
 
 /** 비공식 엔드포인트. Claude Code 가 로그인 시 저장한 OAuth 토큰을 그대로 쓴다. 토큰 갱신은 하지 않는다 (Claude Code 가 실행 중일 때 스스로 갱신) */
@@ -119,7 +141,8 @@ export async function fetchUsage(now = new Date()): Promise<UsageResult> {
   if (response.status === 401) return { ok: false, reason: 'Token expired. Run a claude session to refresh it' }
   if (!response.ok) return { ok: false, reason: `Usage request failed: HTTP ${response.status}` }
   const raw: unknown = await response.json()
-  return { ok: true, usage: parseUsage(raw, { plan: credentials.plan, email: await readAccountEmail() }, now) }
+  const oauthAccount = await readOauthAccount(claudeJsonPath)
+  return { ok: true, usage: parseUsage(raw, { plan: accountPlanOf(oauthAccount, credentials), email: emailOf(oauthAccount) }, now) }
 }
 
 /**

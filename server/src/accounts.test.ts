@@ -158,6 +158,17 @@ describe('toAccount', () => {
       refreshExpiresAt: null,
     })
   })
+
+  it('takes the plan name from oauthAccount.planDisplayName over the sign-in credentials', () => {
+    const stored = {
+      id: 'a',
+      oauthAccount: { accountUuid: 'a', planDisplayName: 'Ultra' },
+      credentials: { claudeAiOauth: oauth('r') },
+      savedAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    }
+    expect(toAccount(stored, 'a').plan).toBe('Ultra')
+  })
 })
 
 describe('profile', () => {
