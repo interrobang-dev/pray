@@ -810,8 +810,8 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     // 추천 이름을 그대로 쓸 때만 그 성별을 넘긴다 (직접 고친 이름은 성별 없음)
     const isSuggestedName = Boolean(sessionForm.teamId) && typedSessionName === null && suggestedSessionName !== null
     const isCarryingOver = isCarryOverShown(sessionForm.teamId, sessionForm.partId) && isCarryOverChecked
-    // 살아 있는 지시자가 있으면 그를 끝내고 띄운다 (서버가 끝나기를 기다린다). 확인 창을 취소하면 아무것도 안 한다
-    const liveLead = liveLeadOf(sessionForm.teamId, sessionForm.partId)
+    // Lead 를 골랐고 살아 있는 지시자가 있으면 그를 끝내고 띄운다 (서버가 끝나기를 기다린다). 확인 창을 취소하면 아무것도 안 한다
+    const liveLead = sessionForm.teamId && sessionRole === 'lead' ? liveLeadOf(sessionForm.teamId, sessionForm.partId) : undefined
     if (liveLead) {
       const isMidTurn = liveLead.status === 'working' || liveLead.status === 'waiting' || liveLead.status === 'needs-approval'
       const leadLabel = sessionForm.partId ? 'part lead' : 'lead'
