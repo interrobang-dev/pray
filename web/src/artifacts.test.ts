@@ -93,6 +93,18 @@ describe('deletedArtifacts', () => {
     const again = message('2026-11-17T03:00:00Z', [tool({ file_path: 'board.html', url: URL_A }, `Updated ${URL_A}`, 't4')])
     expect(deletedArtifacts([published, deleting, again]).size).toBe(0)
   })
+
+  it('shows links marked deleted in Pray, with the session delete winning', () => {
+    const deleting = message('2026-11-17T02:00:00Z', [tool({ action: 'delete', url: URL_A }, 'Deleted.', 't3')])
+    const marked = new Map([
+      [URL_A, '2026-11-18T00:00:00Z'],
+      [URL_B, '2026-11-18T01:00:00Z'],
+    ])
+    expect(sessionArtifacts([published, deleting], marked).map((item) => [item.url, item.deletedAt, item.isMarkedDeleted])).toEqual([
+      [URL_A, '2026-11-17T02:00:00Z', false],
+      [URL_B, '2026-11-18T01:00:00Z', true],
+    ])
+  })
 })
 
 describe('Claude Docs connector', () => {
@@ -129,7 +141,7 @@ describe('Claude Docs connector', () => {
       message('2026-11-17T06:12:00Z', [docs('update', { ref: {} }, '{"verdict":"allow","rev":27}', 'u1')]),
       message('2026-11-17T06:16:00Z', [docs('read', { ref: {} }, `{"verdict":"allow","frame":{"url":"${URL_B}"}}`, 'r2')]),
     ])
-    expect(list).toEqual([{ url: URL_B, title: '교체 "가이드"', description: null, at: '2026-11-17T06:16:00Z', cardToolId: null, deletedAt: null }])
+    expect(list).toEqual([{ url: URL_B, title: '교체 "가이드"', description: null, at: '2026-11-17T06:16:00Z', cardToolId: null, deletedAt: null, isMarkedDeleted: false }])
   })
 
   it('names the open card of a doc created in the same session', () => {
@@ -138,7 +150,7 @@ describe('Claude Docs connector', () => {
       message('2026-11-17T05:51:50Z', [tool({ action: 'open', url: URL_B }, `Opened the Artifact at ${URL_B} for the user.`, 'o1')]),
     ]
     expect(artifactTitles(messages).get(URL_B)).toBe('교체 가이드')
-    expect(sessionArtifacts(messages)).toEqual([{ url: URL_B, title: '교체 가이드', description: null, at: '2026-11-17T05:51:50Z', cardToolId: 'o1', deletedAt: null }])
+    expect(sessionArtifacts(messages)).toEqual([{ url: URL_B, title: '교체 가이드', description: null, at: '2026-11-17T05:51:50Z', cardToolId: 'o1', deletedAt: null, isMarkedDeleted: false }])
   })
 })
 

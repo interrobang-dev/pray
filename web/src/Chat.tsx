@@ -1427,6 +1427,8 @@ export function Chat({
   const isTurnInProgress = isWorking || isApprovalNeeded
   /** 작업 중 표시기의 실행 중인 도구. 메시지가 바뀔 때만 다시 찾는다 (표시기의 1초 타이머와 무관) */
   const runningTools = useMemo(() => runningToolNames(messages), [messages])
+  /** 사람이 Pray 에서 지운 것으로 표시한 Artifact 주소 → 표시한 시각 (hq.json deletedArtifacts, 모든 세션 공통). 아래 효과가 받는다 */
+  const [markedDeleted, setMarkedDeleted] = useState<ReadonlyMap<string, string>>(() => new Map())
   /** 바로 앞의 줄. 다시 만든 줄 중 그대로인 것은 이 객체를 다시 써서 줄마다 memo 가 걸린다 */
   const rowsRef = useRef<ChatRow<Special>[]>([])
   const rows = useMemo(() => {
@@ -1443,8 +1445,8 @@ export function Chat({
         if (!artifact) return null
         // 열기 카드는 제목이 없다 — 같은 세션이 만든·읽은 문서 이름을 붙인다
         const title = artifact.title ?? (artifact.url ? (titles.get(artifact.url) ?? null) : null)
-        // 이 세션이 지운 주소면 지운 카드로
-        const isDeleted = artifact.state === 'done' && artifact.url !== null && deleted.has(artifact.url)
+        // 이 세션이 지웠거나 사람이 지운 것으로 표시한 주소면 지운 카드로
+        const isDeleted = artifact.state === 'done' && artifact.url !== null && (deleted.has(artifact.url) || markedDeleted.has(artifact.url))
         if (title === artifact.title && !isDeleted) return { kind: 'artifact', artifact }
         return { kind: 'artifact', artifact: { ...artifact, title, ...(isDeleted ? { isDeleted: true as const } : {}) } }
       },
@@ -1453,7 +1455,7 @@ export function Chat({
     const reused = reuseRows(rowsRef.current, built, (a, b) => JSON.stringify(a) === JSON.stringify(b))
     rowsRef.current = reused
     return reused
-  }, [messages, memberOf, isTurnInProgress])
+  }, [messages, memberOf, isTurnInProgress, markedDeleted])
   /** 그리는 범위의 시작 줄 (줄 키). null = 아직 정하지 않음(최근 RENDER_STEP 줄). 세션을 바꾸면 null */
   const [windowStart, setWindowStart] = useState<WindowStart | null>(null)
   const startIndex = resolveStartIndex(rows, windowStart)
@@ -1560,6 +1562,49 @@ export function Chat({
       if (failure === null || sessionIdRef.current !== targetSessionId) return
       setMarks((current) => (isMarked ? withoutMark(current, key) : previous ? withMark(current, key, previous.createdAt) : current))
       setJumpNotice(`Couldn't ${isMarked ? 'mark' : 'unmark'} the message · ${failure}`)
+    })
+  }, [])
+  /** 지운 것으로 표시한 Artifact: 대화 탭을 열거나 세션을 바꾸면 받는다 (SSE 없음 — 다른 창에서 바꾼 것은 다시 열 때 보인다) */
+  useEffect(() => {
+    let isCancelled = false
+    fetch('/api/artifacts/deleted', { cache: 'no-store' })
+      .then((response) => (response.ok ? (response.json() as Promise<{ deleted: { url: string; markedAt: string }[] }>) : null))
+      .then((data) => {
+        if (!isCancelled && data) setMarkedDeleted(new Map(data.deleted.map((mark) => [mark.url, mark.markedAt])))
+      })
+      .catch(() => {})
+    return () => {
+      isCancelled = true
+    }
+  }, [sessionId])
+  /** 표시하기·풀기. 마크처럼 화면을 먼저 바꾸고 요청은 차례로, 실패하면 그 주소만 되돌리고 맨 아래 한 줄로 알린다 */
+  const markedDeletedRef = useRef(markedDeleted)
+  markedDeletedRef.current = markedDeleted
+  const setArtifactDeleted = useCallback((url: string, isDeleted: boolean) => {
+    const previous = markedDeletedRef.current.get(url)
+    if (isDeleted === (previous !== undefined)) return
+    const withUrl = (current: ReadonlyMap<string, string>, markedAt: string) => new Map(current).set(url, markedAt)
+    const withoutUrl = (current: ReadonlyMap<string, string>) => {
+      const next = new Map(current)
+      next.delete(url)
+      return next
+    }
+    setMarkedDeleted((current) => (isDeleted ? withUrl(current, new Date().toISOString()) : withoutUrl(current)))
+    markQueueRef.current = markQueueRef.current.then(async () => {
+      let failure: string | null = null
+      try {
+        const response = await fetch('/api/artifacts/deleted', {
+          method: isDeleted ? 'PUT' : 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        })
+        if (!response.ok) failure = ((await response.json().catch(() => ({}))) as { message?: string }).message ?? `HTTP ${response.status}`
+      } catch {
+        failure = 'Network error'
+      }
+      if (failure === null) return
+      setMarkedDeleted((current) => (isDeleted ? withoutUrl(current) : previous !== undefined ? withUrl(current, previous) : current))
+      setJumpNotice(`Couldn't ${isDeleted ? 'mark' : 'unmark'} the artifact · ${failure}`)
     })
   }, [])
   /** 마크 창에서 고른 말풍선으로 간다: 점프와 같이 안 그린 줄이면 거기까지 그리고, 끝난 작업 묶음 안이면 펼친 뒤 강조 효과가 스크롤한다 */
@@ -2262,7 +2307,7 @@ export function Chat({
             자주 뜨고 숨는 것일수록 위에 둔다: shell 이 뜨고 끝나도 폴더는 그대로다 */}
         <div className="pane-buttons">
           <ShellsButton key={`shells:${sessionId}`} sessionId={sessionId} shells={shells} request={shellRequest} onRequestHandled={onShellRequestHandled} />
-          <ArtifactsButton key={`artifacts:${sessionId}`} messages={messages} onGo={goToMark} />
+          <ArtifactsButton key={`artifacts:${sessionId}`} messages={messages} markedDeleted={markedDeleted} onGo={goToMark} onMarkDeleted={setArtifactDeleted} />
           <MarksButton key={`marks:${sessionId}`} marks={marks} messages={messages} onGo={goToMark} onSetMark={setMark} />
           <FilesButton key={sessionId} sessionId={sessionId} version={version} request={workFilesRequest} onRequestHandled={clearWorkFilesRequest} />
         </div>

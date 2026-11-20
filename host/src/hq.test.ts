@@ -27,6 +27,9 @@ import {
   listChatMarks,
   addChatMark,
   removeChatMark,
+  listDeletedArtifacts,
+  markArtifactDeleted,
+  unmarkArtifactDeleted,
   listGenders,
   listOffDuty,
   listPositions,
@@ -1075,5 +1078,25 @@ describe('scheduled messages', () => {
     expect(saved.webSessions).toHaveLength(1)
     expect(saved.reminders.map((r: { text: string }) => r.text)).toEqual(['알림'])
     expect(saved.scheduledMessages.map((m: { text: string }) => m.text)).toEqual(['가'])
+  })
+})
+
+describe('deleted artifact marks', () => {
+  beforeEach(() => rmSync(hqDir, { recursive: true, force: true }))
+  const URL_A = 'https://claude.ai/artifact/Dpb46hR8bjS7L6jPH5Xmty'
+  const URL_B = 'https://claude.ai/code/artifact/3f2b9c1e-1111-2222-3333-444455556666'
+
+  it('adds in order once, removes, and keeps other keys', () => {
+    addChatMark('a', 'm1')
+    expect(listDeletedArtifacts()).toEqual([])
+    markArtifactDeleted(URL_A, new Date('2026-11-20T01:00:00Z'))
+    markArtifactDeleted(URL_B, new Date('2026-11-20T02:00:00Z'))
+    expect(markArtifactDeleted(URL_A, new Date('2026-11-20T03:00:00Z'))).toEqual([
+      { url: URL_A, markedAt: '2026-11-20T01:00:00.000Z' },
+      { url: URL_B, markedAt: '2026-11-20T02:00:00.000Z' },
+    ])
+    expect(unmarkArtifactDeleted(URL_A).map((mark) => mark.url)).toEqual([URL_B])
+    expect(unmarkArtifactDeleted(URL_A).map((mark) => mark.url)).toEqual([URL_B])
+    expect(listChatMarks('a').map((mark) => mark.key)).toEqual(['m1'])
   })
 })

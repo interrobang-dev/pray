@@ -143,8 +143,10 @@ export interface SessionArtifact {
   at: string
   /** 대화에서 갈 카드의 도구 호출 (가장 최근 카드). 카드가 없으면 null — 다른 세션이 만든 문서를 읽고 고치기만 한 경우 */
   cardToolId: string | null
-  /** 이 세션이 지운 시각 (`deletedArtifacts`). 살아 있으면 null */
+  /** 이 세션이 지운 시각 (`deletedArtifacts`) 또는 사람이 Pray 에서 지운 것으로 표시한 시각. 살아 있으면 null */
   deletedAt: string | null
+  /** 지운 것이 사람의 표시(되돌릴 수 있다)일 때만 true. 세션이 지운 것이 이긴다 */
+  isMarkedDeleted: boolean
 }
 
 /**
@@ -152,7 +154,7 @@ export interface SessionArtifact {
  * (읽기 등 — 다른 세션이 만든 문서를 이어 고치는 세션에도 목록이 뜨게). 제목·설명은 그 주소의 가장 최근 올리기·만들기 것,
  * 없으면 Docs 읽기 결과의 문서 이름 (open 은 제목이 없다)
  */
-export function sessionArtifacts(messages: readonly ChatMessage[]): SessionArtifact[] {
+export function sessionArtifacts(messages: readonly ChatMessage[], markedDeleted: ReadonlyMap<string, string> = new Map()): SessionArtifact[] {
   const byUrl = new Map<string, SessionArtifact>()
   for (const message of messages) {
     for (const toolUse of message.toolUses) {
@@ -169,11 +171,17 @@ export function sessionArtifacts(messages: readonly ChatMessage[]): SessionArtif
         at: message.timestamp,
         cardToolId: ref?.toolId ?? previous?.cardToolId ?? null,
         deletedAt: null,
+        isMarkedDeleted: false,
       })
     }
   }
   const deleted = deletedArtifacts(messages)
-  for (const artifact of byUrl.values()) artifact.deletedAt = deleted.get(artifact.url) ?? null
+  for (const artifact of byUrl.values()) {
+    const deletedAt = deleted.get(artifact.url) ?? null
+    const markedAt = markedDeleted.get(artifact.url) ?? null
+    artifact.deletedAt = deletedAt ?? markedAt
+    artifact.isMarkedDeleted = deletedAt === null && markedAt !== null
+  }
   return [...byUrl.values()].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
 }
 

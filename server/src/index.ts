@@ -42,6 +42,9 @@ import {
   addChatMark,
   listChatMarks,
   removeChatMark,
+  listDeletedArtifacts,
+  markArtifactDeleted,
+  unmarkArtifactDeleted,
   migratePositionNames,
   migrateWaitingNotes,
   parseTodoText,
@@ -1512,6 +1515,37 @@ app.put('/api/sessions/:id/marks/:key', (req, res) => {
 app.delete('/api/sessions/:id/marks/:key', (req, res) => {
   if (!isValidMarkRequest(req, res, true)) return
   res.json({ marks: removeChatMark(req.params.id, req.params.key) })
+})
+
+/** 지운 것으로 표시할 수 있는 claude.ai Artifact 주소 (화면 artifacts.ts·messages.ts 의 주소 꼴 전체) */
+const ARTIFACT_PAGE_URL = /^https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]{1,128}$/
+
+/** body 의 url 이 Artifact 주소면 그 글, 아니면 400 을 보내고 null */
+function artifactUrlOf(req: Request, res: Response): string | null {
+  const url = (req.body as { url?: unknown } | undefined)?.url
+  if (typeof url === 'string' && ARTIFACT_PAGE_URL.test(url)) return url
+  res.status(400).json({ message: 'Invalid artifact URL' })
+  return null
+}
+
+/**
+ * 사람이 Pray 에서 "지운 것" 으로 표시한 Artifact (hq.json deletedArtifacts). claude.ai 의 것은 건드리지 않는다.
+ * 모든 세션에 걸리고 SSE 에는 싣지 않는다 — 대화 탭이 열 때 받는다. 응답 deleted 는 표시한 순서
+ */
+app.get('/api/artifacts/deleted', (_req, res) => {
+  res.set('Cache-Control', 'no-store').json({ deleted: listDeletedArtifacts() })
+})
+
+/** 표시하기 `{ url }`. 이미 있으면 그대로 */
+app.put('/api/artifacts/deleted', (req, res) => {
+  const url = artifactUrlOf(req, res)
+  if (url) res.json({ deleted: markArtifactDeleted(url) })
+})
+
+/** 표시 지우기 `{ url }`. 없어도 성공 */
+app.delete('/api/artifacts/deleted', (req, res) => {
+  const url = artifactUrlOf(req, res)
+  if (url) res.json({ deleted: unmarkArtifactDeleted(url) })
 })
 
 /**

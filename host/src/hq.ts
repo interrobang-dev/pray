@@ -90,6 +90,14 @@ interface HqFile extends Office {
   positions: Record<string, string>
   /** 대화 탭에서 마크한 말풍선 (세션 ID → 마크한 순서). 외부 세션에도 붙일 수 있다. 이름과 같이 지운다 */
   chatMarks: Record<string, ChatMark[]>
+  /** 사람이 Pray 에서 "지운 것" 으로 표시한 claude.ai Artifact 주소 (표시한 순서). 모든 세션에 걸린다. claude.ai 의 것은 건드리지 않는다 */
+  deletedArtifacts: DeletedArtifactMark[]
+}
+
+/** 지운 것으로 표시한 Artifact 하나. url 은 서버가 꼴을 본 `https://claude.ai/(code/)artifact/<id>` */
+export interface DeletedArtifactMark {
+  url: string
+  markedAt: string
 }
 
 /** 대화 탭에서 마크한 말풍선 하나. key = 그 말풍선의 data-jump-key(메시지 ID). 미리보기 글은 화면이 대화로 만든다 */
@@ -132,6 +140,7 @@ function readHq(): HqFile {
     genders: rest.genders ?? {},
     positions: rest.positions ?? {},
     chatMarks: rest.chatMarks ?? {},
+    deletedArtifacts: rest.deletedArtifacts ?? [],
     todos: rest.todos ?? [],
     reminders: rest.reminders ?? [],
     scheduledMessages: rest.scheduledMessages ?? [],
@@ -346,6 +355,31 @@ export function removeChatMark(sessionId: string, key: string): ChatMark[] {
   else delete hq.chatMarks[sessionId]
   writeHq(hq)
   return next
+}
+
+// ---------- 지운 것으로 표시한 Artifact ----------
+
+/** 표시한 순서. 없으면 [] */
+export function listDeletedArtifacts(): DeletedArtifactMark[] {
+  return readHq().deletedArtifacts
+}
+
+/** 끝에 더한다. 이미 있으면 쓰지 않고 그대로. 전부를 돌려준다 */
+export function markArtifactDeleted(url: string, now = new Date()): DeletedArtifactMark[] {
+  const hq = readHq()
+  if (hq.deletedArtifacts.some((mark) => mark.url === url)) return hq.deletedArtifacts
+  hq.deletedArtifacts = [...hq.deletedArtifacts, { url, markedAt: now.toISOString() }]
+  writeHq(hq)
+  return hq.deletedArtifacts
+}
+
+/** 표시를 지운다. 없으면 쓰지 않는다. 남은 것 전부를 돌려준다 */
+export function unmarkArtifactDeleted(url: string): DeletedArtifactMark[] {
+  const hq = readHq()
+  if (!hq.deletedArtifacts.some((mark) => mark.url === url)) return hq.deletedArtifacts
+  hq.deletedArtifacts = hq.deletedArtifacts.filter((mark) => mark.url !== url)
+  writeHq(hq)
+  return hq.deletedArtifacts
 }
 
 // ---------- 세션 역할 ----------

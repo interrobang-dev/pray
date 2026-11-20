@@ -28,7 +28,25 @@ const STATE_LABEL: Record<ArtifactRef['action'], Record<ArtifactRef['state'], st
   create: { running: 'Creating doc…', done: 'Created doc', failed: 'Doc not created' },
 }
 
-/** 이 세션이 지운 주소의 카드 상태 글 */
+/** 휴지통 (목록 줄의 "지운 것으로 표시") */
+function TrashIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 8.5h6.6l.7-8.5" />
+    </svg>
+  )
+}
+
+/** 되돌리기 (목록 줄의 표시 풀기) */
+function UndoIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5.5 3 2.5 6l3 3M2.5 6h7a4 4 0 0 1 0 8H7" />
+    </svg>
+  )
+}
+
+/** 지운 주소의 카드 상태 글 (이 세션이 지웠거나 사람이 표시함) */
 const DELETED_LABEL: Record<ArtifactRef['action'], string> = { publish: 'Artifact deleted', open: 'Artifact deleted', create: 'Doc deleted' }
 
 /** 목록 줄의 제목 쪽: 대화에 카드가 있으면 그 카드로 가는 버튼, 없으면(읽고 고치기만 한 문서) 페이지를 여는 링크. 지운 것은 카드가 없으면 누를 수 없는 글 */
@@ -83,13 +101,24 @@ export function ArtifactCard({ artifact, jumpKey, markClass, children }: { artif
 /**
  * 대화 오른쪽 아래 버튼 묶음의 Artifact 버튼: 이 세션이 올리거나 연 claude.ai 페이지가 있을 때만. 누르면 목록 창
  * (줄 = [제목 · 설명 · 시각] ↗ — 제목을 누르면 대화의 그 카드로, ↗ 은 페이지를 새 탭으로).
- * 이 세션이 지운 것은 줄을 흐리게 남기고 시각 자리에 "Deleted · 시각", ↗ 없음. 버튼 개수는 살아 있는 것만 센다
+ * 이 세션이 지운 것은 줄을 흐리게 남기고 시각 자리에 "Deleted · 시각", ↗ 없음. 버튼 개수는 살아 있는 것만 센다.
+ * 살아 있는 줄의 휴지통 = Pray 에서만 지운 것으로 표시(모든 세션, claude.ai 는 그대로), 표시한 줄은 "Marked deleted · 시각" 과 되돌리기
  */
-export function ArtifactsButton({ messages, onGo }: { messages: ChatMessage[]; onGo: (jumpKey: string) => void }) {
+export function ArtifactsButton({
+  messages,
+  markedDeleted,
+  onGo,
+  onMarkDeleted,
+}: {
+  messages: ChatMessage[]
+  markedDeleted: ReadonlyMap<string, string>
+  onGo: (jumpKey: string) => void
+  onMarkDeleted: (url: string, isDeleted: boolean) => void
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
-  const artifacts = useMemo(() => sessionArtifacts(messages), [messages])
+  const artifacts = useMemo(() => sessionArtifacts(messages, markedDeleted), [messages, markedDeleted])
   const isShown = isOpen && artifacts.length > 0
   useDismiss(isShown, rootRef, toggleRef, setIsOpen)
   if (artifacts.length === 0) return null
@@ -117,8 +146,8 @@ export function ArtifactsButton({ messages, onGo }: { messages: ChatMessage[]; o
                   {artifact.description && <span className="artifacts-description">{artifact.description}</span>}
                 </span>
                 {artifact.deletedAt !== null ? (
-                  <span className="marks-time" title={`Deleted ${formatDateTime(artifact.deletedAt)}`}>
-                    Deleted · {formatAgo(artifact.deletedAt, now)}
+                  <span className="marks-time" title={`${artifact.isMarkedDeleted ? 'Marked deleted' : 'Deleted'} ${formatDateTime(artifact.deletedAt)}`}>
+                    {artifact.isMarkedDeleted ? 'Marked deleted' : 'Deleted'} · {formatAgo(artifact.deletedAt, now)}
                   </span>
                 ) : (
                   <span className="marks-time" title={formatDateTime(artifact.at)}>
@@ -126,6 +155,28 @@ export function ArtifactsButton({ messages, onGo }: { messages: ChatMessage[]; o
                   </span>
                 )}
               </RowMain>
+              {artifact.deletedAt === null && (
+                <button
+                  type="button"
+                  className="marks-remove artifacts-open"
+                  title="Mark as deleted · Only hides it in Pray. Doesn't delete it on claude.ai"
+                  aria-label={`Mark ${artifactLabel(artifact)} as deleted`}
+                  onClick={() => onMarkDeleted(artifact.url, true)}
+                >
+                  <TrashIcon />
+                </button>
+              )}
+              {artifact.isMarkedDeleted && (
+                <button
+                  type="button"
+                  className="marks-remove artifacts-open"
+                  title="Undo · Show it as not deleted"
+                  aria-label={`Undo deleting ${artifactLabel(artifact)}`}
+                  onClick={() => onMarkDeleted(artifact.url, false)}
+                >
+                  <UndoIcon />
+                </button>
+              )}
               {artifact.deletedAt === null && (
                 <a className="marks-remove artifacts-open" href={artifact.url} target="_blank" rel="noreferrer" title={`Open ${artifact.url}`} aria-label={`Open ${artifactLabel(artifact)}`}>
                   <ExternalIcon />
