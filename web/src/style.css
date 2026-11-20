@@ -2972,6 +2972,38 @@ li.group.drop-after::after {
   word-break: break-all;
   text-align: left;
 }
+/* 모르는 슬래시 명령 한 줄 (Chat.tsx UnknownCommandLine): 알림 한 줄 + 오른쪽 [Send as text]. details 가 안쪽이라 펼침 화살표를 따로 바꾼다 */
+.msg.notice.unknown-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.msg.notice.unknown-command details {
+  min-width: 0;
+}
+.msg.notice.unknown-command details[open] summary::before {
+  content: '▼';
+}
+.unknown-command-send {
+  flex: none;
+  padding: 0 8px;
+  font: inherit;
+  color: var(--accent-text);
+  background: transparent;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.unknown-command-send:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+.unknown-command-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.unknown-command-sent {
+  flex: none;
+}
 /* 답변 전 작업 묶음 (Chat.tsx). 알림 한 줄처럼 가운데 작은 회색, 길면 말줄임(올리면 옅은 알약 면). 누르면 아래에 설명 글·도구 줄이 패널 면의 둥근 상자로 펼쳐진다 */
 .work {
   display: flex;

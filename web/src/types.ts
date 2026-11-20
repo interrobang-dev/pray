@@ -239,6 +239,8 @@ export interface ChatMessage {
   isCompactSummary?: true
   /** 작업을 중지(Esc)해 Claude Code 가 남긴 "[Request interrupted by user]" 줄 (role system, text 는 원문). 옛 서버 응답에는 없다 */
   isInterrupt?: true
+  /** Claude Code 가 모르는 슬래시 명령이라 버린 글 (role system, text 는 버려진 글 = 명령 + 뒤 글). 옛 서버 응답에는 없다 */
+  unknownCommand?: { command: string }
 }
 
 /** 세션 작업 폴더(scratchpad)의 파일 하나 (`GET /api/sessions/:id/files`) */

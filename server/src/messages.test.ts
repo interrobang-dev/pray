@@ -143,6 +143,23 @@ describe('parseMessages', () => {
     expect(message.toolUses[1]).not.toHaveProperty('isError')
   })
 
+  it('turns a dropped unknown slash command into a system message holding the dropped text', () => {
+    const informational = (uuid: string, content: string) =>
+      line({ type: 'system', subtype: 'informational', uuid, timestamp: 't1', content, level: 'warning', isMeta: false })
+    const jsonl = [
+      informational('s1', 'Unknown command: /tracking'),
+      informational('s2', 'Args from unknown skill: 페이지 구현 안 된거지 아직?'),
+      informational('s3', 'Unknown command: /nope'),
+      informational('s4', 'Some other notice'),
+      line({ type: 'system', subtype: 'turn_duration', uuid: 's5', timestamp: 't1', durationMs: 10 }),
+    ].join('\n')
+
+    expect(parseMessages(jsonl)).toEqual([
+      { id: 's1', role: 'system', timestamp: 't1', text: '/tracking 페이지 구현 안 된거지 아직?', toolUses: [], unknownCommand: { command: '/tracking' } },
+      { id: 's3', role: 'system', timestamp: 't1', text: '/nope', toolUses: [], unknownCommand: { command: '/nope' } },
+    ])
+  })
+
   it('puts toolUseResult.answers on AskUserQuestion tool uses only', () => {
     const questions = [{ question: '어디서?', header: 'H', options: [{ label: 'main', description: '' }], multiSelect: false }]
     const jsonl = [

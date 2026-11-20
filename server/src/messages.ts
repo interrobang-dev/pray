@@ -33,6 +33,11 @@ export interface ChatMessage {
   isCompactSummary?: true
   /** 사람이 작업을 중지(Esc)해 Claude Code 가 남긴 "[Request interrupted by user]" 줄 (role system, text 는 원문)에만 있다 */
   isInterrupt?: true
+  /**
+   * Claude Code 가 모르는 슬래시 명령이라 글을 버린 기록 (role system)에만 있다. text 는 버려진 글(명령 + 뒤 글).
+   * 화면이 앞에 공백을 붙여 글로 다시 보내게 한다 (공백이 앞에 있으면 명령으로 보지 않는다)
+   */
+  unknownCommand?: { command: string }
 }
 
 /** instructions.jsonl 한 줄. 서버가 팀원 터미널에 지시를 보낼 때 남긴다 */
@@ -120,6 +125,10 @@ function finishedTaskIdOf(content: string | undefined): string | null {
 /** 대기열에서 빼는 queue-operation. popAll 은 빈 입력칸 ↑ 로 대기 메시지를 입력칸에 꺼낸 것(꺼낸 것마다 한 줄), popOne 은 하나만 꺼낸 것 */
 const TAKE_OPERATIONS = new Set(['remove', 'popAll', 'popOne'])
 
+/** Claude Code 가 모르는 슬래시 명령을 버릴 때 남기는 system informational 두 줄의 머리 (실측 2.1.327·2.1.329) */
+const UNKNOWN_COMMAND_PREFIX = 'Unknown command: '
+const UNKNOWN_ARGS_PREFIX = 'Args from unknown skill: '
+
 /** 사람 쪽 글: 문자열 그대로이거나 text 블록만 남긴 배열 (userTextMessage·promptAfter 는 text 블록만 본다). 그 밖의 꼴은 undefined */
 type HumanContent = string | Block[] | undefined
 
@@ -132,6 +141,9 @@ export type MessageLine =
   | { type: 'cost-state' }
   | { type: 'queued-command'; uuid: string | undefined; timestamp: string; prompt: HumanContent }
   | { type: 'compact-summary'; uuid: string | undefined; timestamp: string; text: string }
+  /** 모르는 슬래시 명령 (system informational "Unknown command: /x"). 그 뒤 글은 바로 다음 줄 unknown-command-args 에 온다 */
+  | { type: 'unknown-command'; uuid: string | undefined; timestamp: string; command: string }
+  | { type: 'unknown-command-args'; args: string }
   | {
       type: 'user'
       uuid: string | undefined
@@ -198,6 +210,13 @@ export class MessageLineParser {
       const attachment = record.attachment as { type?: string; prompt?: unknown } | undefined
       if (attachment?.type !== 'queued_command') return null
       return { type: 'queued-command', uuid, timestamp, prompt: humanContent(attachment.prompt) }
+    }
+    if (type === 'system') {
+      const { subtype, content } = record
+      if (subtype !== 'informational' || typeof content !== 'string') return null
+      if (content.startsWith(UNKNOWN_COMMAND_PREFIX)) return { type: 'unknown-command', uuid, timestamp, command: content.slice(UNKNOWN_COMMAND_PREFIX.length) }
+      if (content.startsWith(UNKNOWN_ARGS_PREFIX)) return { type: 'unknown-command-args', args: content.slice(UNKNOWN_ARGS_PREFIX.length) }
+      return null
     }
     if (type !== 'user' && type !== 'assistant') return null
     const message = record.message as { id?: unknown; content?: string | Block[] } | undefined
@@ -396,12 +415,22 @@ export function buildMessages(lines: readonly (MessageLine | null)[]): ChatMessa
       continue
     }
     queue.isAfterExit = false
+    // 모르는 명령의 뒤 글은 바로 앞 모르는 명령 메시지에 붙인다
+    if (line.type === 'unknown-command-args') {
+      const last = messages.at(-1)
+      if (last?.unknownCommand && last.text === last.unknownCommand.command && line.args) last.text = `${last.text} ${line.args}`
+      continue
+    }
     const { timestamp } = line
     const uuid = line.uuid ?? `${messages.length}`
 
     if (line.type === 'queued-command') {
       const queued = userTextMessage(uuid, timestamp, line.prompt)
       if (queued) messages.push(queued)
+      continue
+    }
+    if (line.type === 'unknown-command') {
+      messages.push({ id: uuid, role: 'system', timestamp, text: line.command, toolUses: [], unknownCommand: { command: line.command } })
       continue
     }
     // 압축 요약은 type user 줄이지만 사람 말이 아니다. 붙여넣기 풀기 없이 원문 그대로 system 으로 낸다

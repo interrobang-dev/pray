@@ -31,6 +31,7 @@ import { applyScheduled, scheduledBandText, scheduledNotice } from './scheduledM
 import { formatDateTime, type AskQuestion, type ChatMessage, type ScheduledMessage, type Shell, type ToolUse } from './types'
 import { isWorkOpen, type ChatStyle } from './appearance'
 import { appearance, subscribeTheme } from './theme'
+import { asPlainText, sentAsTextIds, unknownCommandTitle } from './unknownCommand'
 
 /**
  * 대화를 불러온 뒤 찾아 갈 곳. 지시·보고 = 팀원 대화에서 글이 같은 메시지 (같은 글이 여럿이면 at 과 시각이 가장 가까운 것),
@@ -199,6 +200,47 @@ function NoticeLine({ title, raw, isFailed = false, jumpKey, markClass = '' }: {
       <summary title={title}>{title}</summary>
       <pre>{raw}</pre>
     </details>
+  )
+}
+
+/**
+ * 모르는 슬래시 명령 한 줄 "Unknown command /tracking" + [Send as text] (이미 다시 보냈으면 "Sent as text").
+ * 버튼은 summary 밖이라 눌러도 펼치지 않는다
+ */
+function UnknownCommandLine({
+  message,
+  command,
+  isSentAsText,
+  onSendAsText,
+  markClass,
+}: {
+  message: ChatMessage
+  command: string
+  isSentAsText: boolean
+  onSendAsText: ((text: string) => void) | null
+  markClass: string
+}) {
+  const title = unknownCommandTitle(command)
+  return (
+    <div className={`msg notice unknown-command${markClass}`} data-jump-key={message.id}>
+      <details>
+        <summary title={title}>{title}</summary>
+        <pre>{message.text}</pre>
+      </details>
+      {isSentAsText ? (
+        <span className="unknown-command-sent">Sent as text</span>
+      ) : (
+        <button
+          type="button"
+          className="unknown-command-send"
+          disabled={!onSendAsText}
+          title="Send it to claude as a message, not a command"
+          onClick={() => onSendAsText?.(message.text)}
+        >
+          Send as text
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -912,6 +954,8 @@ function buildSearchTargets(rows: ChatRow<Special>[], memberOf: MemberOf): Searc
         add(message.id, COMPACT_SUMMARY_TITLE)
       } else if (message.isInterrupt) {
         add(message.id, INTERRUPT_TITLE)
+      } else if (message.unknownCommand) {
+        add(message.id, unknownCommandTitle(message.unknownCommand.command))
       } else {
         const parts = message.role === 'system' ? splitNotifications(message.text) : null
         if (!parts) {
@@ -952,6 +996,10 @@ interface ChatRowViewProps {
   time: string | null
   /** 이 줄의 claude 답·내 말 말풍선을 마크했는지 */
   isMarked: boolean
+  /** 이 모르는 명령 줄의 글을 이미 글로 다시 보냈는지 (모르는 명령 줄만) */
+  isSentAsText: boolean
+  /** 모르는 명령 줄의 [Send as text] (그 줄이고 보낼 수 있을 때만. 아니면 null 이라 버튼이 흐리다) */
+  onSendAsText: ((text: string) => void) | null
   /** 묶음 키와 지금 펼쳐졌는지 (누르면 그 반대로 정한다) */
   onToggleWork: (key: string, isOpen: boolean) => void
   onOpenRelay: (relay: Relay, rowKey: string) => void
@@ -1014,6 +1062,8 @@ const ChatRowView = memo(function ChatRowView({
   cancellingId,
   time,
   isMarked,
+  isSentAsText,
+  onSendAsText,
   onToggleWork,
   onOpenRelay,
   onCancelQueued,
@@ -1088,6 +1138,18 @@ const ChatRowView = memo(function ChatRowView({
   // 중지(Esc) 기록: 사람 말이 아니라 한 줄. 원문은 접어 둔다
   if (message.isInterrupt) {
     return <NoticeLine title={INTERRUPT_TITLE} raw={message.text} jumpKey={message.id} markClass={highlightClass(message.id)} />
+  }
+  // 모르는 슬래시 명령이라 Claude Code 가 버린 글: 한 줄 + 글로 다시 보내기. 버려진 글은 접어 둔다
+  if (message.unknownCommand) {
+    return (
+      <UnknownCommandLine
+        message={message}
+        command={message.unknownCommand.command}
+        isSentAsText={isSentAsText}
+        onSendAsText={onSendAsText}
+        markClass={highlightClass(message.id)}
+      />
+    )
   }
   // 백그라운드 작업 알림: 팀장 대화의 팀 대기 도구 팀원 보고는 보고 한 줄, 그 밖은 알림마다 한 줄. 알림 앞뒤 글은 system 글 그대로
   const parts = message.role === 'system' ? splitNotifications(message.text) : null
@@ -1169,6 +1231,8 @@ const MessageRows = memo(function MessageRows({
   canCancelQueued,
   cancellingId,
   markedKeys,
+  sentAsText,
+  onSendAsText,
   onToggleWork,
   onOpenRelay,
   onCancelQueued,
@@ -1193,6 +1257,9 @@ const MessageRows = memo(function MessageRows({
   cancellingId: string | null
   /** 마크한 말풍선 키 (줄에는 그 줄 것인지만 boolean 으로 넘긴다) */
   markedKeys: ReadonlySet<string>
+  /** 이미 글로 다시 보낸 모르는 명령 메시지 ID (줄에는 그 줄 것인지만 boolean 으로 넘긴다) */
+  sentAsText: ReadonlySet<string>
+  onSendAsText: ((text: string) => void) | null
   onToggleWork: (key: string, isOpen: boolean) => void
   onOpenRelay: (relay: Relay, rowKey: string) => void
   onCancelQueued: (message: ChatMessage) => void
@@ -1219,6 +1286,8 @@ const MessageRows = memo(function MessageRows({
           cancellingId={isQueuedRow ? cancellingId : null}
           time={rowTime?.time ?? null}
           isMarked={(row.kind === 'text' || row.kind === 'message') && markedKeys.has(row.message.id)}
+          isSentAsText={row.kind === 'message' && sentAsText.has(row.message.id)}
+          onSendAsText={row.kind === 'message' && row.message.unknownCommand ? onSendAsText : null}
           onToggleWork={onToggleWork}
           onOpenRelay={onOpenRelay}
           onCancelQueued={onCancelQueued}
@@ -1629,6 +1698,11 @@ export function Chat({
   )
 
   /** 말풍선 인용 버튼: 입력 상자에 인용 칩을 붙인다 (보낼 때 글 앞에 붙는다 → composerText.ts withQuote). 고정 함수라 줄 memo 를 깨지 않는다 */
+  /** 이미 글로 다시 보낸 모르는 명령 메시지 ID */
+  const sentAsText = useMemo(() => sentAsTextIds(messages), [messages])
+  /** 줄에 넘기는 함수라 고정하고, 보내기는 최신 send 를 ref 로 부른다 (send 는 렌더마다 새로 만든다) */
+  const sendRef = useRef<(text: string) => void>(() => {})
+  const sendAsText = useCallback((text: string) => sendRef.current(asPlainText(text)), [])
   const quoteMessage = useCallback((message: ChatMessage) => {
     composerRef.current?.quote({
       sessionId: sessionIdRef.current,
@@ -1944,6 +2018,10 @@ export function Chat({
     sendQueueRef.current = sendQueueRef.current.then(run)
   }
 
+  sendRef.current = send
+  /** [Send as text] 를 켤 때: 입력 상자의 Send 와 같은 조건 (근무 중인 웹 세션, 질문·인계 중 아님) */
+  const canSendAsText = isWritable && !isAsking && !isHandingOver
+
   /** 입력칸의 `/btw`. 질문이면 카드에 바로 띄우고 서버 요청은 보내기 줄에 세운다 (서버가 pty 에 쓰는 명령 글이 앞 글·Enter 와 섞이지 않게) */
   function sendBtw(question: string | null) {
     const card = btwRef.current
@@ -2227,6 +2305,8 @@ export function Chat({
                 onCancelQueued={cancelQueued}
                 onSetMark={setMark}
                 onQuote={isWritable ? quoteMessage : null}
+                sentAsText={sentAsText}
+                onSendAsText={canSendAsText ? sendAsText : null}
               />
               {/* 작업 중 표시기는 지금 차례라 대기 메시지(다음 차례에 받는 글)·보내는 중 말풍선보다 위다 */}
               {isWorking && (
@@ -2256,6 +2336,8 @@ export function Chat({
                   onCancelQueued={cancelQueued}
                   onSetMark={setMark}
                   onQuote={isWritable ? quoteMessage : null}
+                  sentAsText={sentAsText}
+                  onSendAsText={canSendAsText ? sendAsText : null}
                 />
               )}
             </OpenChatPath.Provider>
