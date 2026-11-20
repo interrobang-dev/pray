@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { artifactLabel, artifactOf, artifactTitles, sessionArtifacts } from './artifacts'
+import { artifactLabel, artifactOf, artifactTitles, deletedArtifacts, sessionArtifacts } from './artifacts'
 import type { ChatMessage, ToolUse } from './types'
 
 const URL_A = 'https://claude.ai/code/artifact/3f2b9c1e-1111-2222-3333-444455556666'
@@ -62,7 +62,36 @@ describe('sessionArtifacts', () => {
       message('2026-11-17T02:00:00Z', [tool({ file_path: 'v2.html', url: URL_A }, `Updated ${URL_A}`, 't2')]),
     ])
     expect(list).toHaveLength(1)
-    expect(list[0]).toMatchObject({ title: 'v2.html', cardToolId: 't2' })
+    expect(list[0]).toMatchObject({ title: 'v2.html', cardToolId: 't2', deletedAt: null })
+  })
+})
+
+describe('deletedArtifacts', () => {
+  const published = message('2026-11-17T01:00:00Z', [tool({ file_path: 'board.html' }, URL_A, 't1'), tool({ file_path: 'notes.html' }, URL_B, 't2')])
+
+  it('marks a link this session deleted, and the list row with the time', () => {
+    const deleting = message('2026-11-17T02:00:00Z', [tool({ action: 'delete', url: URL_A }, 'Deleted.', 't3')])
+    expect([...deletedArtifacts([published, deleting])]).toEqual([[URL_A, '2026-11-17T02:00:00Z']])
+    expect(sessionArtifacts([published, deleting]).map((item) => [item.url, item.deletedAt])).toEqual([
+      [URL_A, '2026-11-17T02:00:00Z'],
+      [URL_B, null],
+    ])
+  })
+
+  it('ignores refused or failed deletes, deletes still running and asset deletes', () => {
+    const tries = message('2026-11-17T02:00:00Z', [
+      { ...tool({ action: 'delete', url: URL_A }, 'The user declined.', 't3'), isError: true },
+      tool({ action: 'delete', url: URL_A }, null, 't4'),
+      tool({ action: 'delete', url: URL_A, path: '0123456789abcdef0123456789abcdef' }, 'Removed the asset.', 't5'),
+      tool({ action: 'delete', url: 'https://example.com/x' }, 'Deleted.', 't6'),
+    ])
+    expect(deletedArtifacts([published, tries]).size).toBe(0)
+  })
+
+  it('treats publishing to the link again after the delete as live', () => {
+    const deleting = message('2026-11-17T02:00:00Z', [tool({ action: 'delete', url: URL_A }, 'Deleted.', 't3')])
+    const again = message('2026-11-17T03:00:00Z', [tool({ file_path: 'board.html', url: URL_A }, `Updated ${URL_A}`, 't4')])
+    expect(deletedArtifacts([published, deleting, again]).size).toBe(0)
   })
 })
 
@@ -100,7 +129,7 @@ describe('Claude Docs connector', () => {
       message('2026-11-17T06:12:00Z', [docs('update', { ref: {} }, '{"verdict":"allow","rev":27}', 'u1')]),
       message('2026-11-17T06:16:00Z', [docs('read', { ref: {} }, `{"verdict":"allow","frame":{"url":"${URL_B}"}}`, 'r2')]),
     ])
-    expect(list).toEqual([{ url: URL_B, title: '교체 "가이드"', description: null, at: '2026-11-17T06:16:00Z', cardToolId: null }])
+    expect(list).toEqual([{ url: URL_B, title: '교체 "가이드"', description: null, at: '2026-11-17T06:16:00Z', cardToolId: null, deletedAt: null }])
   })
 
   it('names the open card of a doc created in the same session', () => {
@@ -109,7 +138,7 @@ describe('Claude Docs connector', () => {
       message('2026-11-17T05:51:50Z', [tool({ action: 'open', url: URL_B }, `Opened the Artifact at ${URL_B} for the user.`, 'o1')]),
     ]
     expect(artifactTitles(messages).get(URL_B)).toBe('교체 가이드')
-    expect(sessionArtifacts(messages)).toEqual([{ url: URL_B, title: '교체 가이드', description: null, at: '2026-11-17T05:51:50Z', cardToolId: 'o1' }])
+    expect(sessionArtifacts(messages)).toEqual([{ url: URL_B, title: '교체 가이드', description: null, at: '2026-11-17T05:51:50Z', cardToolId: 'o1', deletedAt: null }])
   })
 })
 

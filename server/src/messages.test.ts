@@ -113,6 +113,36 @@ describe('parseMessages', () => {
     expect(message.toolUses[1]).not.toHaveProperty('artifactUrl')
   })
 
+  it('marks results that came back as is_error (refused or failed)', () => {
+    const jsonl = [
+      line({
+        type: 'assistant',
+        uuid: 'a1',
+        message: {
+          id: 'm1',
+          content: [
+            { type: 'tool_use', id: 'denied', name: 'Artifact', input: { action: 'delete', url: 'https://claude.ai/artifact/x' } },
+            { type: 'tool_use', id: 'ok', name: 'Bash', input: {} },
+          ],
+        },
+      }),
+      line({
+        type: 'user',
+        uuid: 'u1',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'denied', is_error: true, content: 'The user declined.' },
+            { type: 'tool_result', tool_use_id: 'ok', is_error: false, content: 'ok' },
+          ],
+        },
+      }),
+    ].join('\n')
+
+    const [message] = parseMessages(jsonl)
+    expect(message.toolUses[0].isError).toBe(true)
+    expect(message.toolUses[1]).not.toHaveProperty('isError')
+  })
+
   it('puts toolUseResult.answers on AskUserQuestion tool uses only', () => {
     const questions = [{ question: '어디서?', header: 'H', options: [{ label: 'main', description: '' }], multiSelect: false }]
     const jsonl = [

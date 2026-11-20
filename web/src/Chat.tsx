@@ -1,7 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { ArtifactCard, ArtifactsButton } from './ArtifactCard'
-import { artifactLabel, artifactOf, artifactTitles, type ArtifactRef } from './artifacts'
+import { artifactLabel, artifactOf, artifactTitles, deletedArtifacts, type ArtifactRef } from './artifacts'
 import { buildChatRows, hidingWorkKey, queuedTailStart, rowIndexOfJumpKey, rowKeyOf, type ChatRow, type Work } from './chatRows'
 import { reuseMessages, reuseRows } from './chatReuse'
 import { loadMessages, type HeldMessages } from './chatDelta'
@@ -1431,6 +1431,7 @@ export function Chat({
   const rowsRef = useRef<ChatRow<Special>[]>([])
   const rows = useMemo(() => {
     const titles = artifactTitles(messages)
+    const deleted = deletedArtifacts(messages)
     const built = buildChatRows<Special>(
       messages,
       (toolUse, message) => {
@@ -1442,7 +1443,10 @@ export function Chat({
         if (!artifact) return null
         // 열기 카드는 제목이 없다 — 같은 세션이 만든·읽은 문서 이름을 붙인다
         const title = artifact.title ?? (artifact.url ? (titles.get(artifact.url) ?? null) : null)
-        return { kind: 'artifact', artifact: title === artifact.title ? artifact : { ...artifact, title } }
+        // 이 세션이 지운 주소면 지운 카드로
+        const isDeleted = artifact.state === 'done' && artifact.url !== null && deleted.has(artifact.url)
+        if (title === artifact.title && !isDeleted) return { kind: 'artifact', artifact }
+        return { kind: 'artifact', artifact: { ...artifact, title, ...(isDeleted ? { isDeleted: true as const } : {}) } }
       },
       isTurnInProgress,
     )

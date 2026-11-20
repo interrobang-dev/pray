@@ -31,6 +31,8 @@ export interface ArtifactRef {
   description: string | null
   /** running = 결과 전, done = 됐음 (옛 서버의 잘린 문서 결과면 주소가 null 일 수 있다), failed = 거절·오류 */
   state: 'running' | 'done' | 'failed'
+  /** 이 세션이 그 주소를 지웠다 (`deletedArtifacts`. Chat 이 줄을 만들 때 붙인다) */
+  isDeleted?: true
 }
 
 function objectOf(value: unknown): Record<string, unknown> {
@@ -108,6 +110,30 @@ export function artifactOf(toolUse: ToolUse): ArtifactRef | null {
   }
 }
 
+/**
+ * 이 세션이 Artifact 도구로 지운 주소 → 지운 시각. 지우기 = `action: "delete"` + `url`(`path` 가 있으면 asset 하나 지우기라 뺀다),
+ * 결과가 왔고 is_error 가 아님(거절·실패 제외). 지운 뒤 그 주소로 다시 올리거나 열거나 만들면 살아 있다고 본다.
+ * 다른 곳(claude.ai·다른 세션)에서 지운 것과 Claude Docs 의 지우기(내부 ID 로 지워 주소를 모른다)는 알 수 없다
+ */
+export function deletedArtifacts(messages: readonly ChatMessage[]): Map<string, string> {
+  const deleted = new Map<string, string>()
+  for (const message of messages) {
+    for (const toolUse of message.toolUses) {
+      const ref = artifactOf(toolUse)
+      if (ref) {
+        if (ref.state === 'done' && ref.url) deleted.delete(ref.url)
+        continue
+      }
+      if (toolUse.name !== ARTIFACT_TOOL || toolUse.result === null || toolUse.isError) continue
+      const input = objectOf(toolUse.input)
+      if (stringField(input, 'action') !== 'delete' || input.path !== undefined) continue
+      const url = stringField(input, 'url')?.match(ARTIFACT_URL)?.[0]
+      if (url) deleted.set(url, message.timestamp)
+    }
+  }
+  return deleted
+}
+
 /** 세션 패널 목록의 한 줄 = 주소 하나 */
 export interface SessionArtifact {
   url: string
@@ -117,6 +143,8 @@ export interface SessionArtifact {
   at: string
   /** 대화에서 갈 카드의 도구 호출 (가장 최근 카드). 카드가 없으면 null — 다른 세션이 만든 문서를 읽고 고치기만 한 경우 */
   cardToolId: string | null
+  /** 이 세션이 지운 시각 (`deletedArtifacts`). 살아 있으면 null */
+  deletedAt: string | null
 }
 
 /**
@@ -140,9 +168,12 @@ export function sessionArtifacts(messages: readonly ChatMessage[]): SessionArtif
         description: (isNamed ? ref.description : null) ?? previous?.description ?? null,
         at: message.timestamp,
         cardToolId: ref?.toolId ?? previous?.cardToolId ?? null,
+        deletedAt: null,
       })
     }
   }
+  const deleted = deletedArtifacts(messages)
+  for (const artifact of byUrl.values()) artifact.deletedAt = deleted.get(artifact.url) ?? null
   return [...byUrl.values()].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
 }
 

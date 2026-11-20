@@ -220,6 +220,8 @@ export interface ToolUse {
   answers?: Record<string, string>
   /** 서버가 결과 전문에서 찾은 첫 claude.ai Artifact 주소 (결과 글이 잘려도 남는다). 옛 서버 응답에는 없다 */
   artifactUrl?: string
+  /** 결과가 is_error(거절·실패)일 때만 true. 옛 서버 응답에는 없다 */
+  isError?: true
 }
 
 /** 대화 탭 메시지 (`GET /api/sessions/:id/messages`) */

@@ -5873,6 +5873,19 @@ li.group.drop-after::after {
 .msg.artifact-card.failed .artifact-card-state {
   color: var(--red);
 }
+/* 이 세션이 지운 주소: 그림은 회색, 제목은 흐리게 줄 긋기, Open 없음 (목록 줄도 흐리게) */
+.msg.artifact-card.deleted .artifact-card-icon {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.msg.artifact-card.deleted .artifact-card-title,
+.artifacts-deleted .artifacts-title {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.artifacts-deleted .artifacts-go {
+  opacity: 0.7;
+}
 .msg.artifact-card .tool {
   margin-top: 6px;
 }
