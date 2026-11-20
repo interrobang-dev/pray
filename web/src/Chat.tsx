@@ -13,6 +13,7 @@ import { Composer, QuoteIcon, type ComposerHandle } from './Composer'
 import { restoreToComposerDraft } from './composerDraft'
 import { handoverBandText, isSuggestionVisible } from './composerText'
 import { approvalKeyAction, type ApprovalKeyFocus } from './approvalKeys'
+import { questionEnterAction, type QuestionKeyFocus } from './questionKeys'
 import { BtwCard, type BtwCardHandle } from './BtwCard'
 import { ChatImageSession } from './ChatImage'
 import { OpenChatPath } from './ChatPath'
@@ -588,6 +589,14 @@ const ANSWER_CONFLICT_MESSAGE = 'Already answered, or the server lost the questi
  * claude 의 AskUserQuestion 에 답하는 카드. 승인 막대 자리(대화와 입력칸 사이)에 뜬다.
  * 질문이 바뀌면 Chat 이 key 를 바꿔 상태를 새로 시작한다
  */
+/** 질문 카드 Enter 의 포커스 자리 (questionKeys.ts). 카드 안 직접 입력 칸·선택지 버튼, 아무 데도 없음(body), 그 밖 */
+function questionKeyFocusOf(target: EventTarget | null): QuestionKeyFocus {
+  if (!(target instanceof Element) || target === document.body || target === document.documentElement) return 'none'
+  if (target.matches('.question-card textarea.question-custom')) return 'custom'
+  if (target.matches('.question-card button.question-option')) return 'option'
+  return 'other'
+}
+
 function QuestionCard({ sessionId, questions }: { sessionId: string; questions: AskQuestion[] }) {
   const [activeIndex, setActiveIndex] = useState(0)
   const [drafts, setDrafts] = useState<Draft[]>(() => questions.map(() => ({ labels: [], customText: '' })))
@@ -625,9 +634,20 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
     }))
   }
 
-  // 숫자 키로 지금 탭의 선택지를 고른다. 입력칸에 포커스가 있으면 글자로 둔다
+  // 숫자 키로 지금 탭의 선택지를 고른다. 입력칸에 포커스가 있으면 글자로 둔다.
+  // Enter = Submit (직접 입력 칸·선택지 버튼·포커스 없음에서. 직접 입력 칸 줄바꿈은 Shift+Enter → questionKeys.ts)
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Enter') {
+        const action = questionEnterAction(event, {
+          focus: questionKeyFocusOf(event.target),
+          isModalOpen: document.querySelector('[aria-modal="true"]') !== null,
+          canSubmit: !isBusy && isAllAnswered,
+        })
+        if (action) event.preventDefault()
+        if (action === 'submit') submit()
+        return
+      }
       if (isBusy || event.ctrlKey || event.altKey || event.metaKey || event.isComposing || !/^[1-9]$/.test(event.key)) return
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return
       const option = active.options[Number(event.key) - 1]
@@ -745,7 +765,7 @@ function QuestionCard({ sessionId, questions }: { sessionId: string; questions: 
           </span>
         )}
         {sendState === 'sent' && <span className="question-status">Sent</span>}
-        <button type="button" className="primary" disabled={isBusy || !isAllAnswered} onClick={submit} title={isAllAnswered ? undefined : 'Answer every question first'}>
+        <button type="button" className="primary" disabled={isBusy || !isAllAnswered} onClick={submit} title={isAllAnswered ? 'Submit (Enter)' : 'Answer every question first'}>
           Submit
         </button>
         <button type="button" disabled={isBusy} onClick={() => void send({ chat: true })}>
