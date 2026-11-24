@@ -78,7 +78,9 @@ export function UsagePanel() {
   const [now, setNow] = useState(() => Date.now())
   const [isOpen, setIsOpen] = useState(false)
   /** 계정 추가 모달. 상세 창은 연 채로 두고 모달이 위에 뜬다 */
-  const [isAddingAccount, setIsAddingAccount] = useState(false)
+  /** 띄운 로그인 창의 제목 (계정 추가·지금 계정 다시 로그인). null 이면 안 떴다 */
+  const [loginTitle, setLoginTitle] = useState<string | null>(null)
+  const isAddingAccount = loginTitle !== null
   /** 계정 추가에 성공할 때마다 늘려 계정 목록이 다시 받게 한다 */
   const [accountsVersion, setAccountsVersion] = useState(0)
   /** 계정 전환 확인 모달 (Accounts 가 .usage 안으로 띄운다). 상세 창은 연 채로 둔다 */
@@ -193,7 +195,8 @@ export function UsagePanel() {
           )}
           <Accounts
             version={accountsVersion}
-            onAdd={() => setIsAddingAccount(true)}
+            onAdd={() => setLoginTitle('Add Claude account')}
+            onSignInAgain={() => setLoginTitle('Sign in to Claude')}
             onUsageChange={load}
             modalRoot={rootElement}
             onSwitchOpenChange={setIsSwitchOpen}
@@ -201,7 +204,16 @@ export function UsagePanel() {
         </div>
       )}
       {/* 상세 창 밖(쌓임 맥락 밖)이지만 .usage 안이라 모달 클릭이 상세 창의 바깥 클릭이 되지 않는다 */}
-      {isAddingAccount && <AddAccountModal onClose={() => setIsAddingAccount(false)} onAdded={() => setAccountsVersion((version) => version + 1)} />}
+      {loginTitle !== null && (
+        <AddAccountModal
+          title={loginTitle}
+          onClose={() => setLoginTitle(null)}
+          onAdded={() => {
+            setAccountsVersion((version) => version + 1)
+            void load()
+          }}
+        />
+      )}
     </div>
   )
 }

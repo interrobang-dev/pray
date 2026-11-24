@@ -160,6 +160,20 @@ describe('parseMessages', () => {
     ])
   })
 
+  it('marks the API error reply left when the login ran out, and only that one', () => {
+    const errorReply = (uuid: string, error: string, text: string) =>
+      line({ type: 'assistant', uuid, timestamp: 't1', error, isApiErrorMessage: true, message: { id: uuid, content: [{ type: 'text', text }] } })
+    const jsonl = [
+      errorReply('a1', 'authentication_failed', 'Login reached its time limit · Please run /login'),
+      errorReply('a2', 'server_error', 'API Error: Connection lost mid-response. The response above may be incomplete.'),
+    ].join('\n')
+
+    expect(parseMessages(jsonl)).toEqual([
+      { id: 'a1', role: 'assistant', timestamp: 't1', text: 'Login reached its time limit · Please run /login', toolUses: [], isLoginNeeded: true },
+      { id: 'a2', role: 'assistant', timestamp: 't1', text: 'API Error: Connection lost mid-response. The response above may be incomplete.', toolUses: [] },
+    ])
+  })
+
   it('puts toolUseResult.answers on AskUserQuestion tool uses only', () => {
     const questions = [{ question: '어디서?', header: 'H', options: [{ label: 'main', description: '' }], multiSelect: false }]
     const jsonl = [

@@ -23,6 +23,7 @@ export function isSameMessage(a: ChatMessage, b: ChatMessage): boolean {
     a.isCompactSummary === b.isCompactSummary &&
     a.isInterrupt === b.isInterrupt &&
     a.unknownCommand?.command === b.unknownCommand?.command &&
+    a.isLoginNeeded === b.isLoginNeeded &&
     a.from?.sessionId === b.from?.sessionId &&
     a.from?.name === b.from?.name &&
     a.toolUses.length === b.toolUses.length &&

@@ -17,6 +17,9 @@ export interface ToolUse {
 }
 
 /** claude.ai/artifact/{id} · claude.ai/code/artifact/{uuid} (화면 web/src/artifacts.ts 와 같은 꼴) */
+/** 로그인이 끊겨 API 가 거절한 응답 줄의 `error` 값 (실측: "Login reached its time limit · Please run /login") */
+const LOGIN_NEEDED_ERROR = 'authentication_failed'
+
 const ARTIFACT_URL = /https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+/
 
 export interface ChatMessage {
@@ -38,6 +41,8 @@ export interface ChatMessage {
    * 화면이 앞에 공백을 붙여 글로 다시 보내게 한다 (공백이 앞에 있으면 명령으로 보지 않는다)
    */
   unknownCommand?: { command: string }
+  /** 로그인이 끊겨 Claude Code 가 남긴 API 오류 응답(jsonl `error: "authentication_failed"`, 예 "Login reached its time limit · Please run /login")에만 있다 */
+  isLoginNeeded?: true
 }
 
 /** instructions.jsonl 한 줄. 서버가 팀원 터미널에 지시를 보낼 때 남긴다 */
@@ -153,7 +158,7 @@ export type MessageLine =
       content: HumanContent
       toolResults: ToolResultLine[]
     }
-  | { type: 'assistant'; uuid: string | undefined; timestamp: string; messageId: unknown; blocks: Block[] }
+  | { type: 'assistant'; uuid: string | undefined; timestamp: string; messageId: unknown; blocks: Block[]; isLoginNeeded: boolean }
 
 /** user 줄의 도구 결과. 앞서 나온 도구 호출(이름을 아는 것)에 붙는 것만 남기고 결과 글은 그 이름으로 이미 잘랐다 */
 interface ToolResultLine {
@@ -249,7 +254,7 @@ export class MessageLineParser {
     if (isCommitted) {
       for (const block of blocks) if (block.type === 'tool_use') this.toolNames.set(block.id!, block.name ?? '?')
     }
-    return { type, uuid, timestamp, messageId: message?.id, blocks }
+    return { type, uuid, timestamp, messageId: message?.id, blocks, isLoginNeeded: record.error === LOGIN_NEEDED_ERROR }
   }
 }
 
@@ -463,6 +468,7 @@ export function buildMessages(lines: readonly (MessageLine | null)[]): ChatMessa
       assistantByMessageId.set(messageId, target)
       messages.push(target)
     }
+    if (line.isLoginNeeded) target.isLoginNeeded = true
     for (const block of line.blocks) {
       if (block.type === 'text' && block.text) {
         target.text = target.text ? `${target.text}\n${block.text}` : block.text

@@ -3004,6 +3004,29 @@ li.group.drop-after::after {
 .unknown-command-sent {
   flex: none;
 }
+/* 로그인이 끊긴 오류 답 아래 [Sign in] (Chat.tsx). 버튼 모양은 Send as text 와 같다 */
+.login-needed {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.9em;
+}
+.login-needed-signin {
+  flex: none;
+  padding: 2px 10px;
+  font: inherit;
+  color: var(--accent-text);
+  background: transparent;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.login-needed-signin:hover {
+  background: var(--accent-soft);
+}
 /* 답변 전 작업 묶음 (Chat.tsx). 알림 한 줄처럼 가운데 작은 회색, 길면 말줄임(올리면 옅은 알약 면). 누르면 아래에 설명 글·도구 줄이 패널 면의 둥근 상자로 펼쳐진다 */
 .work {
   display: flex;

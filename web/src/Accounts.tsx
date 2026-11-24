@@ -32,6 +32,8 @@ const RESTART_NOTE_MS = 5000
 interface AccountsProps {
   version: number
   onAdd: () => void
+  /** 지금 계정 다시 로그인 (그 줄의 [Sign in again]. 같은 로그인 창이고 서버가 이 PC 로그인까지 새 것으로 바꾼다) */
+  onSignInAgain: () => void
   onUsageChange: () => Promise<void>
   /** 전환 확인 모달을 띄울 자리 (.usage). 상세 창 안에 두면 모달이 그 쌓임 맥락에 갇힌다 */
   modalRoot: HTMLElement | null
@@ -41,9 +43,9 @@ interface AccountsProps {
 
 /**
  * 사용량 상세 창 아래 계정 목록. 창을 열 때(마운트)·`version` 이 바뀔 때(추가 모달 성공)·동작 뒤에 목록을 다시 받는다.
- * 지금 계정은 [Log out], 나머지는 [Switch](확인 모달)·[Remove]. 실패는 그 줄 아래 빨강 (서버 문구)
+ * 지금 계정은 [Log out](재로그인이 3일 이하·지났으면 앞에 [Sign in again]), 나머지는 [Switch](확인 모달)·[Remove]. 실패는 그 줄 아래 빨강 (서버 문구)
  */
-export function Accounts({ version, onAdd, onUsageChange, modalRoot, onSwitchOpenChange }: AccountsProps) {
+export function Accounts({ version, onAdd, onSignInAgain, onUsageChange, modalRoot, onSwitchOpenChange }: AccountsProps) {
   const [list, setList] = useState<AccountsResponse | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -193,9 +195,16 @@ export function Accounts({ version, onAdd, onUsageChange, modalRoot, onSwitchOpe
                   </span>
                   <span className="account-actions">
                     {account.isActive ? (
-                      <button className="danger" onClick={() => void logOut(account)} disabled={busy !== null}>
-                        {label(account, 'logout', 'Log out')}
-                      </button>
+                      <>
+                        {relogin?.level && (
+                          <button onClick={onSignInAgain} disabled={busy !== null}>
+                            Sign in again
+                          </button>
+                        )}
+                        <button className="danger" onClick={() => void logOut(account)} disabled={busy !== null}>
+                          {label(account, 'logout', 'Log out')}
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button onClick={() => openSwitch(account)} disabled={busy !== null}>
@@ -351,10 +360,11 @@ function cancelLogin(loginId: string) {
 /**
  * 계정 추가: 열면 로그인을 시작하고(POST /api/accounts/login) → 로그인 페이지 링크 → 받은 코드를 붙여 넣어 [Sign in].
  * 실패하면 로그인이 끝났는지(`isLoginOver`: 404·500·400 의 isLoginEnded)에 따라 서버 문구 + [Start again], 아니면 입력칸에 서버 문구를 두고 다시 넣는다.
- * 새 계정은 전환하지 않는다.
+ * 새 계정은 전환하지 않는다. 받은 계정이 지금 계정(isActive)이면 다시 로그인한 것이라 "Signed in again" 으로 알린다 (서버가 이 PC 로그인도 바꿨다).
+ * 제목은 여는 곳이 정한다 (계정 추가 "Add Claude account", 다시 로그인·대화 탭 "Sign in to Claude").
  * 닫으면(×·Esc·바깥 클릭·Cancel) 진행 중인 로그인을 취소한다 — 시작 요청이 아직 안 끝났으면 받은 뒤에 취소한다
  */
-export function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+export function AddAccountModal({ title = 'Add Claude account', onClose, onAdded }: { title?: string; onClose: () => void; onAdded: () => void }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'starting' })
   const [code, setCode] = useState('')
   /** 서버에 살아 있는 로그인. 성공하거나 로그인이 끝나면 null (취소할 것 없음) */
@@ -415,7 +425,7 @@ export function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onA
   }
 
   return (
-    <Modal title="Add Claude account" onClose={close} className="account-modal" hasCloseButton>
+    <Modal title={title} onClose={close} className="account-modal" hasCloseButton>
       {phase.kind === 'starting' && <p className="account-modal-note">Starting…</p>}
       {phase.kind === 'start-failed' && (
         <div className="create">
@@ -478,12 +488,25 @@ export function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onA
           </div>
         </div>
       )}
-      {phase.kind === 'added' && (
+      {phase.kind === 'added' && phase.account.isActive && (
+        <div className="create">
+          <p className="account-modal-note">
+            Signed in again as <b>{accountName(phase.account)}</b>
+          </p>
+          <span className="form-hint">Every claude on this PC uses the new sign-in. Send a message to continue.</span>
+          <div className="actions">
+            <button type="button" className="primary" onClick={close}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+      {phase.kind === 'added' && !phase.account.isActive && (
         <div className="create">
           <p className="account-modal-note">
             Added <b>{accountName(phase.account)}</b>
           </p>
-          <span className="form-hint">It isn't active yet. To use it, press Switch in the account list.</span>
+          <span className="form-hint">It isn't active yet. To use it, press Switch in Claude accounts (usage in the bottom bar).</span>
           <div className="actions">
             <button type="button" className="primary" onClick={close}>
               Done

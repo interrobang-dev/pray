@@ -33,6 +33,8 @@ import { formatDateTime, type AskQuestion, type ChatMessage, type ScheduledMessa
 import { isWorkOpen, type ChatStyle } from './appearance'
 import { appearance, subscribeTheme } from './theme'
 import { asPlainText, sentAsTextIds, unknownCommandTitle } from './unknownCommand'
+import { lastLoginNeededId } from './loginNeeded'
+import { AddAccountModal } from './Accounts'
 
 /**
  * 대화를 불러온 뒤 찾아 갈 곳. 지시·보고 = 팀원 대화에서 글이 같은 메시지 (같은 글이 여럿이면 at 과 시각이 가장 가까운 것),
@@ -1020,6 +1022,8 @@ interface ChatRowViewProps {
   isSentAsText: boolean
   /** 모르는 명령 줄의 [Send as text] (그 줄이고 보낼 수 있을 때만. 아니면 null 이라 버튼이 흐리다) */
   onSendAsText: ((text: string) => void) | null
+  /** 로그인이 끊긴 오류 답의 [Sign in] (대화의 마지막 claude 답이 그 오류인 줄만. 아니면 null 이라 버튼이 없다) */
+  onSignIn: (() => void) | null
   /** 묶음 키와 지금 펼쳐졌는지 (누르면 그 반대로 정한다) */
   onToggleWork: (key: string, isOpen: boolean) => void
   onOpenRelay: (relay: Relay, rowKey: string) => void
@@ -1084,6 +1088,7 @@ const ChatRowView = memo(function ChatRowView({
   isMarked,
   isSentAsText,
   onSendAsText,
+  onSignIn,
   onToggleWork,
   onOpenRelay,
   onCancelQueued,
@@ -1121,6 +1126,14 @@ const ChatRowView = memo(function ChatRowView({
         <CopyButton text={row.message.text} />
         <MarkButton messageKey={row.message.id} isMarked={isMarked} onSetMark={onSetMark} />
         <MarkdownText text={row.message.text} isChat />
+        {onSignIn && (
+          <div className="login-needed">
+            <button type="button" className="login-needed-signin" onClick={onSignIn}>
+              Sign in
+            </button>
+            <span>Sign in again, then send a message to continue.</span>
+          </div>
+        )}
         {time && <MessageTime time={time} at={row.message.timestamp} />}
       </div>
     )
@@ -1253,6 +1266,8 @@ const MessageRows = memo(function MessageRows({
   markedKeys,
   sentAsText,
   onSendAsText,
+  loginNeededId,
+  onSignIn,
   onToggleWork,
   onOpenRelay,
   onCancelQueued,
@@ -1280,6 +1295,9 @@ const MessageRows = memo(function MessageRows({
   /** 이미 글로 다시 보낸 모르는 명령 메시지 ID (줄에는 그 줄 것인지만 boolean 으로 넘긴다) */
   sentAsText: ReadonlySet<string>
   onSendAsText: ((text: string) => void) | null
+  /** [Sign in] 을 붙일 claude 답 ID (loginNeeded.ts). 없으면 null */
+  loginNeededId: string | null
+  onSignIn: () => void
   onToggleWork: (key: string, isOpen: boolean) => void
   onOpenRelay: (relay: Relay, rowKey: string) => void
   onCancelQueued: (message: ChatMessage) => void
@@ -1308,6 +1326,7 @@ const MessageRows = memo(function MessageRows({
           isMarked={(row.kind === 'text' || row.kind === 'message') && markedKeys.has(row.message.id)}
           isSentAsText={row.kind === 'message' && sentAsText.has(row.message.id)}
           onSendAsText={row.kind === 'message' && row.message.unknownCommand ? onSendAsText : null}
+          onSignIn={row.kind === 'text' && row.message.id === loginNeededId ? onSignIn : null}
           onToggleWork={onToggleWork}
           onOpenRelay={onOpenRelay}
           onCancelQueued={onCancelQueued}
@@ -1720,6 +1739,10 @@ export function Chat({
   /** 말풍선 인용 버튼: 입력 상자에 인용 칩을 붙인다 (보낼 때 글 앞에 붙는다 → composerText.ts withQuote). 고정 함수라 줄 memo 를 깨지 않는다 */
   /** 이미 글로 다시 보낸 모르는 명령 메시지 ID */
   const sentAsText = useMemo(() => sentAsTextIds(messages), [messages])
+  const loginNeededId = useMemo(() => lastLoginNeededId(messages), [messages])
+  /** 로그인이 끊긴 오류 답의 [Sign in] 으로 띄운 로그인 창 (사용량 창의 계정 로그인과 같은 창) */
+  const [isSigningIn, setIsSigningIn] = useState(false)
+  const openSignIn = useCallback(() => setIsSigningIn(true), [])
   /** 줄에 넘기는 함수라 고정하고, 보내기는 최신 send 를 ref 로 부른다 (send 는 렌더마다 새로 만든다) */
   const sendRef = useRef<(text: string) => void>(() => {})
   const sendAsText = useCallback((text: string) => sendRef.current(asPlainText(text)), [])
@@ -2327,6 +2350,8 @@ export function Chat({
                 onQuote={isWritable ? quoteMessage : null}
                 sentAsText={sentAsText}
                 onSendAsText={canSendAsText ? sendAsText : null}
+                loginNeededId={loginNeededId}
+                onSignIn={openSignIn}
               />
               {/* 작업 중 표시기는 지금 차례라 대기 메시지(다음 차례에 받는 글)·보내는 중 말풍선보다 위다 */}
               {isWorking && (
@@ -2358,6 +2383,8 @@ export function Chat({
                   onQuote={isWritable ? quoteMessage : null}
                   sentAsText={sentAsText}
                   onSendAsText={canSendAsText ? sendAsText : null}
+                  loginNeededId={loginNeededId}
+                  onSignIn={openSignIn}
                 />
               )}
             </OpenChatPath.Provider>
@@ -2551,6 +2578,7 @@ export function Chat({
         </div>
       )}
       {!isWritable && (footer ?? <p className="hint">Started from a terminal or IDE, so this session is view-only</p>)}
+      {isSigningIn && <AddAccountModal title="Sign in to Claude" onClose={() => setIsSigningIn(false)} onAdded={() => {}} />}
     </div>
   )
 }
