@@ -39,13 +39,20 @@ function text(content: string, placement?: string): string {
   return `<text${placement ? ` placement="${placement}"` : ''}>${escapeXml(content)}</text>`
 }
 
+export interface ToastOptions {
+  /** true 면 `<audio silent="true"/>` 로 소리 없이 (알림 설정 sound false) */
+  isSilent?: boolean
+}
+
 /** ToastGeneric 한 장: 제목 · 본문 · 작은 회색 줄 · 왼쪽 원 그림. 버튼·머리줄은 없고 누르면 launch 로 click 이 온다 */
-export function toastXml(content: ToastContent): string {
+export function toastXml(content: ToastContent, options: ToastOptions = {}): string {
   const parts = [`<toast launch="${escapeAttribute(TOAST_OPEN_ARGUMENT)}" activationType="foreground">`]
   parts.push('<visual><binding template="ToastGeneric">', text(content.title))
   if (content.body) parts.push(text(content.body))
   if (content.attribution) parts.push(text(content.attribution, 'attribution'))
   if (content.iconUrl) parts.push(`<image placement="appLogoOverride" hint-crop="circle" src="${escapeAttribute(content.iconUrl)}"/>`)
-  parts.push('</binding></visual>', '</toast>')
+  parts.push('</binding></visual>')
+  if (options.isSilent) parts.push('<audio silent="true"/>')
+  parts.push('</toast>')
   return parts.join('')
 }

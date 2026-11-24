@@ -4,6 +4,7 @@ import { ACCENT_PRESETS, PALETTES } from './palettes'
 import { DEFAULT_APPEARANCE, FONT_SIZE_OPTIONS, accentBase, accentSurface, accentVars, normalizeHex, paletteVars, type Appearance, type FontSize, type ThemeChoice } from './appearance'
 import { appearance, setAppearance, setThemeChoice, subscribeTheme, themeChoice, themeMode } from './theme'
 import { ChatStyleTab } from './ChatStyleTab'
+import { NotificationsTab } from './NotificationsTab'
 
 const MODE_OPTIONS: { value: ThemeChoice; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -11,25 +12,28 @@ const MODE_OPTIONS: { value: ThemeChoice; label: string }[] = [
   { value: 'system', label: 'System' },
 ]
 
-type Tab = 'app' | 'chat'
+type Tab = 'app' | 'chat' | 'notifications'
+
+const TAB_LABEL: Record<Tab, string> = { app: 'App', chat: 'Chat', notifications: 'Notifications' }
 
 /**
- * 화면 스타일 설정 창 (목록 헤더 톱니 버튼). 탭 App(앱 전체) · Chat(대화 모양, ChatStyleTab.tsx). 바꾸면 바로 걸리고 이 브라우저에 저장된다 (theme.ts).
+ * 설정 창 "Settings" (목록 헤더 톱니 버튼). 탭 App(앱 전체) · Chat(대화 모양, ChatStyleTab.tsx) · Notifications(이 PC 트레이 알림, NotificationsTab.tsx).
+ * App·Chat 은 바꾸면 바로 걸리고 이 브라우저에 저장된다 (theme.ts). Notifications 는 서버에 저장된다.
  * 열 때는 늘 App 탭이다
  */
 export function AppearanceModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('app')
   // Chat 탭은 미리보기를 왼쪽에 다 보이게 창을 넓힌다 (.is-chat)
   return (
-    <Modal title="Appearance" onClose={onClose} className={tab === 'chat' ? 'appearance-modal is-chat' : 'appearance-modal'} hasCloseButton>
-      <div className="appearance-tabs" role="tablist" aria-label="Appearance">
-        {(['app', 'chat'] as const).map((value) => (
+    <Modal title="Settings" onClose={onClose} className={tab === 'chat' ? 'appearance-modal is-chat' : 'appearance-modal'} hasCloseButton>
+      <div className="appearance-tabs" role="tablist" aria-label="Settings">
+        {(['app', 'chat', 'notifications'] as const).map((value) => (
           <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}>
-            {value === 'app' ? 'App' : 'Chat'}
+            {TAB_LABEL[value]}
           </button>
         ))}
       </div>
-      {tab === 'app' ? <AppTab /> : <ChatStyleTab />}
+      {tab === 'app' ? <AppTab /> : tab === 'chat' ? <ChatStyleTab /> : <NotificationsTab />}
     </Modal>
   )
 }

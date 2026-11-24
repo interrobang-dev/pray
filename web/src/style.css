@@ -2687,6 +2687,34 @@ li.group.drop-after::after {
     transition: none;
   }
 }
+/* 설정 창 Notifications 탭: 스위치 · 이름 · (아래 줄) 설명. 전체가 꺼지면 아래 구역은 흐리고 잠긴다 */
+.notifications-hint {
+  grid-column: auto;
+  margin: 0;
+}
+.notifications-list {
+  gap: 12px;
+}
+.notifications-list.is-off {
+  opacity: 0.45;
+}
+.notification-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 12px;
+}
+.notification-row .appearance-hint {
+  grid-column: 2;
+}
+.notification-row .switch:disabled {
+  cursor: default;
+}
+.notifications-error {
+  margin: 0;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--error);
+}
 .chat-color-warning {
   grid-column: 2;
   font-size: calc(11px * var(--font-scale));
@@ -8911,6 +8939,12 @@ li.group.drop-after::after {
   }
   .switch[aria-checked='true']::before {
     transform: translateX(18px);
+  }
+  .notification-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+  .notification-row .appearance-hint {
+    grid-column: 2;
   }
   .chat-preview {
     max-height: 260px;

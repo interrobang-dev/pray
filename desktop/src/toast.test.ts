@@ -63,6 +63,13 @@ describe('toastXml', () => {
     expect(xml).toContain('src="file:///a&amp;b.png"')
   })
 
+  it('isSilent 면 visual 뒤에 audio silent, 아니면 audio 없음', () => {
+    const silent = toastXml(content(), { isSilent: true })
+    expect(silent.endsWith('</binding></visual><audio silent="true"/></toast>')).toBe(true)
+    expect(toastXml(content(), { isSilent: false })).not.toContain('<audio')
+    expect(toastXml(content())).not.toContain('<audio')
+  })
+
   it('클릭 arguments 는 Electron 이 action·reply 로 가르는 글자를 담지 않는다', () => {
     expect(TOAST_OPEN_ARGUMENT).not.toMatch(/type=|tag=/)
   })

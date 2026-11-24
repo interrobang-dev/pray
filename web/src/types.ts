@@ -157,6 +157,18 @@ export interface Team {
   todos?: TeamTodo[]
 }
 
+/** 이 PC 트레이 앱의 Windows 알림 설정 (`/api/notification-settings`, 서버 `notificationSettings` 와 손으로 맞춘다) */
+export interface NotificationSettings {
+  enabled: boolean
+  done: boolean
+  myTurn: boolean
+  needsApproval: boolean
+  handOver: boolean
+  reminders: boolean
+  scheduledFailed: boolean
+  sound: boolean
+}
+
 export interface Office {
   groups: Group[]
   teams: Team[]

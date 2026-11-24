@@ -17,6 +17,14 @@ import { hasArgLessLoginItem, needsAppArg } from './launchShortcut'
 import { isLaunchAtLogin, LOGIN_ITEM_NAME } from './loginItem'
 import { HOOK_MENU_LABEL, hookWarningOf, hookWarningToast, shouldNotifyHookWarning } from './hookNotice'
 import {
+  allowedNotices,
+  isNoticeAllowed,
+  legacyNotificationFile,
+  readNotificationSettings,
+  writeNotificationPatch,
+  type NotificationSettings,
+} from './notificationSettings'
+import {
   buildFaceArt,
   FACE_SHEET,
   faceFileKey,
@@ -79,8 +87,13 @@ let baseline: StatusBaseline | null = null
 const MAX_SEPARATE_NOTICES = 3
 /** 클릭 처리기가 GC 로 사라지지 않게 떠 있는 알림을 잡아 둔다 */
 const shownNotifications = new Set<Notification>()
-/** isNotifying: 알림 메뉴. sourceDir: 설치판에서 호스트·서버를 저장소 코드(node + tsx)로 띄울 저장소 폴더 ("Run host & server from source", 개발용). null 이면 앱에 묶인 것 */
-let settings: { isNotifying: boolean; sourceDir: string | null } = { isNotifying: true, sourceDir: null }
+/** sourceDir: 설치판에서 호스트·서버를 저장소 코드(node + tsx)로 띄울 저장소 폴더 ("Run host & server from source", 개발용). null 이면 앱에 묶인 것 */
+let settings: { sourceDir: string | null } = { sourceDir: null }
+/**
+ * 알림 설정 파일 `~/.claude/pray/notifications.json` (전체·종류별·소리. 화면은 서버 API 로 바꾼다). 설정 폴더를 정한 뒤 채운다.
+ * 알림을 띄우기 직전·메뉴를 만들 때 매번 읽는다 (작은 파일)
+ */
+let notificationsPath = ''
 /** 이 시각(트레이를 켠 때) 이후에 울린 알림(Reminders)만 Windows 알림으로 띄운다. 켜기 전에 울린 것은 화면 배지로 본다 */
 const REMINDER_NOTIFY_FROM = Date.now()
 /** 이미 알린(알림을 꺼 둬서 건너뛴 것 포함) 알림 ID. 폴링이 실패해도 그대로 둔다 */
@@ -100,13 +113,32 @@ function settingsPath(): string {
   return join(app.getPath('userData'), 'tray-settings.json')
 }
 
-function loadSettings(): void {
+/** tray-settings.json 을 읽는다. 옛 알림 메뉴 값 isNotifying 은 notifications.json 으로 한 번 옮길 때만 쓰려고 돌려준다 (없거나 깨졌으면 undefined) */
+function loadSettings(): unknown {
   try {
     const saved = JSON.parse(readFileSync(settingsPath(), 'utf8')) as { isNotifying?: unknown; sourceDir?: unknown }
-    if (typeof saved.isNotifying === 'boolean') settings = { ...settings, isNotifying: saved.isNotifying }
     if (typeof saved.sourceDir === 'string' && saved.sourceDir) settings = { ...settings, sourceDir: saved.sourceDir }
+    return saved.isNotifying
   } catch {
     // 없거나 깨졌으면 기본값
+    return undefined
+  }
+}
+
+/** 지금 알림 설정 (없음·깨짐 = 모두 켜짐) */
+function notificationSettings(): NotificationSettings {
+  return readNotificationSettings(notificationsPath)
+}
+
+/** 옛 트레이 메뉴(tray-settings.json 의 isNotifying)에서 알림을 꺼 뒀고 notifications.json 이 아직 없으면 enabled false 로 옮긴다 (한 번) */
+function migrateLegacyNotifying(legacyIsNotifying: unknown): void {
+  const patch = legacyNotificationFile(existsSync(notificationsPath), legacyIsNotifying)
+  if (!patch) return
+  try {
+    writeNotificationPatch(notificationsPath, patch)
+    console.log('트레이 알림 꺼짐을 notifications.json 으로 옮겼다')
+  } catch (error) {
+    console.error('Failed to move the tray Notifications setting', error)
   }
 }
 
@@ -351,17 +383,18 @@ async function sessionFace(session: NotifySession | undefined): Promise<{ key: s
  * 누르면 target 세션을 연다 — 함수면 누를 때 불러 정한다 (알림(Reminders)의 지금 리드). 없거나 null 이면 창만
  */
 function showNotification(content: ToastContent, target?: string | (() => Promise<string | null>), isPlain = false): void {
+  const isSilent = !notificationSettings().sound
   let xml: string | null = null
   if (!isPlain) {
     try {
-      xml = toastXml(content)
+      xml = toastXml(content, { isSilent })
     } catch (error) {
       console.warn(`알림 XML 을 못 만들어 평범한 알림으로 띄운다: ${String(error)}`)
     }
   }
   const notification = xml
     ? new Notification({ toastXml: xml })
-    : new Notification({ title: content.title, body: content.body, icon: nativeImage.createFromBuffer(trayIconPng(false)) })
+    : new Notification({ title: content.title, body: content.body, icon: nativeImage.createFromBuffer(trayIconPng(false)), silent: isSilent })
   shownNotifications.add(notification)
   const release = () => shownNotifications.delete(notification)
   notification.on('click', () => {
@@ -390,11 +423,13 @@ async function fetchOffice(): Promise<ReminderOffice | null> {
   }
 }
 
-/** 창이 앞에 있고 그 세션이 열려 있으면 빼고 띄운다. 많으면 한 장으로 묶고 누르면 창만 연다 */
+/** 알림 설정(전체·종류별)으로 거르고, 창이 앞에 있고 그 세션이 열려 있으면 빼고 띄운다. 남은 것이 많으면 한 장으로 묶고 누르면 창만 연다 */
 async function notify(notices: SessionNotice[], sessions: NotifySession[]): Promise<void> {
-  if (!settings.isNotifying || notices.length === 0 || !Notification.isSupported()) return
+  if (notices.length === 0 || !Notification.isSupported()) return
+  const allowed = allowedNotices(notices, notificationSettings())
+  if (allowed.length === 0) return
   const openId = await focusedSessionId()
-  const shown = notices.filter((notice) => notice.sessionId !== openId)
+  const shown = allowed.filter((notice) => notice.sessionId !== openId)
   if (shown.length === 0) return
   const office = await fetchOffice()
   const sessionOf = (sessionId: string) => sessions.find((each) => each.id === sessionId)
@@ -418,7 +453,7 @@ async function notify(notices: SessionNotice[], sessions: NotifySession[]): Prom
  * 하나짜리를 누르면 그때 /api/office 를 다시 받아 그 지휘 단위의 지금 리드를 연다 (Hand over 로 바뀌었을 수 있다)
  */
 async function notifyReminders(reminders: NotifyReminder[], sessions: NotifySession[]): Promise<void> {
-  if (!settings.isNotifying || reminders.length === 0 || !Notification.isSupported()) return
+  if (reminders.length === 0 || !Notification.isSupported() || !isNoticeAllowed(notificationSettings(), 'reminders')) return
   if (reminders.length > MAX_SEPARATE_NOTICES) {
     const lines = reminders.map((reminder) => reminderBundleLine(reminder, sessions))
     showNotification(reminderBundleToast(lines, noticeIconUrl('reminder')))
@@ -432,7 +467,7 @@ async function notifyReminders(reminders: NotifyReminder[], sessions: NotifySess
   }
 }
 
-/** 알림 목록을 받아 새로 울린 것을 고른다. 고른 것은 바로 알린 것으로 적는다 (알림을 꺼 뒀으면 띄우지 않고 적기만 — 다시 켤 때 몰아서 안 뜨게) */
+/** 알림 목록을 받아 새로 울린 것을 고른다. 고른 것은 바로 알린 것으로 적는다 (알림(전체·reminders)을 꺼 뒀으면 띄우지 않고 적기만 — 다시 켤 때 몰아서 안 뜨게) */
 async function pollReminders(sessions: NotifySession[]): Promise<void> {
   let reminders: NotifyReminder[]
   try {
@@ -452,7 +487,7 @@ async function pollReminders(sessions: NotifySession[]): Promise<void> {
  * 하나짜리는 받을 세션의 인물 머리, 누르면 그 세션 패널 (목록에 없으면 Pray 마크·창만). 많으면 한 장으로 묶고 누르면 창만
  */
 async function notifyScheduled(items: NotifyScheduled[], sessions: NotifySession[]): Promise<void> {
-  if (!settings.isNotifying || items.length === 0 || !Notification.isSupported()) return
+  if (items.length === 0 || !Notification.isSupported() || !isNoticeAllowed(notificationSettings(), 'scheduledFailed')) return
   if (items.length > MAX_SEPARATE_NOTICES) {
     const lines = items.map((item) => scheduledBundleLine(item, sessions))
     showNotification(scheduledBundleToast(lines, noticeIconUrl('scheduled-failed')))
@@ -465,7 +500,7 @@ async function notifyScheduled(items: NotifyScheduled[], sessions: NotifySession
   }
 }
 
-/** 예약 보내기 목록을 받아 새로 실패한 것을 고른다. 404(옛 서버)·실패면 그 회차만 건너뛴다. 고른 것은 바로 알린 것으로 적는다 (알림을 꺼 뒀으면 적기만) */
+/** 예약 보내기 목록을 받아 새로 실패한 것을 고른다. 404(옛 서버)·실패면 그 회차만 건너뛴다. 고른 것은 바로 알린 것으로 적는다 (알림(전체·scheduledFailed)을 꺼 뒀으면 적기만) */
 async function pollScheduled(sessions: NotifySession[]): Promise<void> {
   let items: NotifyScheduled[]
   try {
@@ -483,7 +518,7 @@ async function pollScheduled(sessions: NotifySession[]): Promise<void> {
 /** 훅 경고를 바꾸고, 새로 생겼으면 알린다 (알림을 꺼 뒀으면 메뉴 줄만) */
 function applyHookStatus(value: unknown): void {
   const next = hookWarningOf(value)
-  if (shouldNotifyHookWarning(hookWarning, next) && settings.isNotifying && Notification.isSupported()) showNotification(hookWarningToast(next!))
+  if (shouldNotifyHookWarning(hookWarning, next) && Notification.isSupported() && isNoticeAllowed(notificationSettings())) showNotification(hookWarningToast(next!))
   if (next !== hookWarning) {
     hookWarning = next
     refreshTray()
@@ -557,13 +592,18 @@ function refreshTray(): void {
       ...(downloadedUpdate ? [{ label: updateMenuLabel(downloadedUpdate), click: () => void installUpdate() }] : []),
       { label: 'Open', click: () => void showWindow() },
       { type: 'separator' },
+      // notifications.json 의 enabled (화면 설정 창에서 바꾼 값은 다음 메뉴 다시 만들기 — 5초 폴링 — 때 보인다). 누르면 enabled 만 바꿔 쓴다
       {
         label: 'Notifications',
         type: 'checkbox',
-        checked: settings.isNotifying,
+        checked: notificationSettings().enabled,
         click: (item) => {
-          settings = { ...settings, isNotifying: item.checked }
-          saveSettings()
+          try {
+            writeNotificationPatch(notificationsPath, { enabled: item.checked })
+          } catch (error) {
+            console.error('Failed to save the notification setting', error)
+            refreshTray()
+          }
         },
       },
       {
@@ -706,7 +746,7 @@ function setupUpdater(): void {
     if (downloadedUpdate === info.version) return
     downloadedUpdate = info.version
     refreshTray()
-    if (settings.isNotifying && Notification.isSupported()) showNotification(updateReadyToast(info.version))
+    if (Notification.isSupported() && isNoticeAllowed(notificationSettings())) showNotification(updateReadyToast(info.version))
   })
   autoUpdater.on('error', (error) => console.warn(`업데이트 확인 실패: ${String(error)}`))
   const check = () => void autoUpdater.checkForUpdates().catch((error) => console.warn(`업데이트 확인 실패: ${String(error)}`))
@@ -805,7 +845,8 @@ if (!app.requestSingleInstanceLock()) {
     const dataDir = resolveDataDir(join(homedir(), '.claude'))
     if (dataDir.warning) console.warn(dataDir.warning)
     logDir = join(dataDir.dir, 'logs')
-    loadSettings()
+    notificationsPath = join(dataDir.dir, 'notifications.json')
+    migrateLegacyNotifying(loadSettings())
     try {
       children = createChildren()
     } catch (error) {

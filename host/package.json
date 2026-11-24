@@ -10,7 +10,8 @@
     "./team": "./src/team.ts",
     "./dotCharacter": "./src/dotCharacter.ts",
     "./reminder": "./src/reminder.ts",
-    "./scheduledMessage": "./src/scheduledMessage.ts"
+    "./scheduledMessage": "./src/scheduledMessage.ts",
+    "./notificationSettings": "./src/notificationSettings.ts"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

@@ -38,6 +38,7 @@ Express 서버의 API 경로 전부, 세션 목록 합치기, jsonl 요약, 훅 
 - 곁가지 질문의 흐름·실측·`btw.ts` → queue-interrupt.md (API 꼴은 아래 `index.ts`)
 - 팀·파트·팀원 이름·모델 규칙 → team.md
 - 계정 API 규칙 → accounts.md
+- 알림 설정 API `GET`·`PUT /api/notification-settings`(본문 `{ settings: 일부 }` → 합친 전체, 모르는 키·boolean 아님 400)와 `server/src/notificationSettings.ts`(`~/.claude/pray/notifications.json` 읽기·쓰기) → host.md "알림 설정"
 - 대화 메시지(`messages.ts`) → chat.md (그 응답 캐시·증분 `messageCache.ts` 는 여기)
 - 화면 쪽 증분 받기(`chatDelta.ts`) → chat.md
 - 팀 할 일 저장 규칙·시작 때 옮기기 → host.md

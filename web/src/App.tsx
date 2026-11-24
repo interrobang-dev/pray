@@ -1908,7 +1908,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   /** 사이드바 헤더 버튼: 브라우저는 헤더 줄, 트레이 창은 제목 띠에 그린다 */
   const headerButtons = (
     <>
-      <button className="icon" onClick={() => setIsAppearanceOpen(true)} title="Appearance" aria-label="Appearance">
+      <button className="icon" onClick={() => setIsAppearanceOpen(true)} title="Settings" aria-label="Settings">
         <AppearanceIcon />
       </button>
       <button className="icon" onClick={() => setIsCommandPaletteOpen(true)} title="Search (Ctrl+K)" aria-label="Search">

@@ -87,6 +87,8 @@ import {
 import { normalizeCwd } from '@pray/host/team'
 import { parseReminderAt } from '@pray/host/reminder'
 import { parseScheduledText } from '@pray/host/scheduledMessage'
+import { parseNotificationPatch } from '@pray/host/notificationSettings'
+import { readNotificationSettings, saveNotificationSettings } from './notificationSettings.js'
 import { ScheduledSender, type SessionActivity, type SubmitOutcome } from './scheduledSend.js'
 import { setupFileLog } from '@pray/host/runtime'
 import { dataDir } from '@pray/host/dataDir'
@@ -491,6 +493,27 @@ app.get('/api/system/hooks', (_req, res) => {
 /** 지금 다시 확인·설치 (화면 상태 표시줄 경고의 Retry) */
 app.post('/api/system/hooks/install', (_req, res) => {
   res.json(checkHooks())
+})
+
+/** 알림 설정 파일. dataDir() 은 쓸 때 부른다 (import 때 부르면 시험이 실제 설정 폴더를 옮긴다) */
+function notificationSettingsPath(): string {
+  return join(dataDir(), 'notifications.json')
+}
+
+/** 트레이 Windows 알림 설정 (전체·종류별·소리). 없음·깨짐은 기본값(모두 켜짐) */
+app.get('/api/notification-settings', (_req, res) => {
+  res.set('Cache-Control', 'no-store')
+  res.json({ settings: readNotificationSettings(notificationSettingsPath()) })
+})
+
+/** 일부 키만 받아 지금 값에 합쳐 저장하고 합친 전체를 준다. 모르는 키·boolean 아닌 값은 400. 다른 Origin 은 전역 검사가 403 */
+app.put('/api/notification-settings', (req, res) => {
+  const parsed = parseNotificationPatch((req.body as { settings?: unknown } | undefined)?.settings)
+  if ('message' in parsed) {
+    res.status(400).json({ message: parsed.message })
+    return
+  }
+  res.json({ settings: saveNotificationSettings(notificationSettingsPath(), parsed.patch) })
 })
 
 app.get('/api/sessions', async (_req, res) => {

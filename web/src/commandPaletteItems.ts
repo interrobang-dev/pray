@@ -121,7 +121,7 @@ export function commandItems(input: SearchInput): Extract<SearchItem, { kind: 'c
     { command: 'new-session', label: 'New session', disabledReason: input.isHostReachable ? null : 'Session host disconnected' },
     { command: 'new-group', label: 'New group' },
     ...(input.isNarrow ? [] : [{ command: 'toggle-office' as const, label: input.isOfficeHidden ? 'Show office' : 'Hide office' }]),
-    { command: 'appearance', label: 'Appearance' },
+    { command: 'appearance', label: 'Settings' },
     { command: 'reminders', label: 'Reminders' },
     { command: 'lead-models', label: 'Lead models', disabledReason: leadSessions(input.sessions).length > 0 ? null : 'No leads on duty' },
     { command: 'daily', label: "Today's work" },
@@ -181,7 +181,7 @@ export function searchGroups(input: SearchInput, query: string): SearchGroup[] {
     { key: 'groups', title: 'Groups', items: rankMatches(groupItems, (item) => ({ name: item.group.name, fields: [] }), tokens, OTHER_LIMIT) },
     { key: 'todos', title: 'TODOs', items: rankMatches(openTodoItems(office), (item) => ({ name: item.todo.text, fields: [] }), tokens, OTHER_LIMIT) },
     { key: 'reminders', title: 'Reminders', items: rankMatches(reminderItems, (item) => ({ name: item.reminder.text, fields: [] }), tokens, OTHER_LIMIT) },
-    { key: 'commands', title: 'Commands', items: rankMatches(commands, (item) => ({ name: item.label, fields: [] }), tokens, OTHER_LIMIT) },
+    { key: 'commands', title: 'Commands', items: rankMatches(commands, (item) => ({ name: item.label, fields: item.command === 'appearance' ? ['Appearance'] : [] }), tokens, OTHER_LIMIT) },
   ])
 }
 
