@@ -35,15 +35,17 @@ export function isLoopbackUrl(value: string): boolean {
 }
 
 /**
- * Host 머리의 이름이 IP 숫자 주소·`localhost`·이 PC 이름(대소문자 무시)인지 (DNS rebinding 막기).
- * rebinding 은 공격 사이트의 도메인 이름을 127.0.0.1 로 풀어 쓰므로 Host 가 그 도메인 이름이 된다. `localhost.` 처럼 끝에 점이 붙은 이름도 거절한다
+ * Host 머리의 이름이 IP 숫자 주소·`localhost`·이 PC 이름(대소문자 무시)·extraNames(이 PC 자신의 Tailscale 이름 — 전체 MagicDNS 이름과 첫 칸, 대소문자 무시)인지 (DNS rebinding 막기).
+ * rebinding 은 공격 사이트의 도메인 이름을 127.0.0.1 로 풀어 쓰므로 Host 가 그 도메인 이름이 된다. `localhost.` 처럼 끝에 점이 붙은 이름도 거절한다.
+ * `*.ts.net` 처럼 접미사로 열지 않고 정확히 같은 이름만 더한다
  */
-export function isAllowedHost(host: string | undefined, machineName: string): boolean {
+export function isAllowedHost(host: string | undefined, machineName: string, extraNames: readonly string[] = []): boolean {
   const url = parseHost(host)
   if (!url) return false
   const hostname = url.hostname
   if (isIP(hostname.replace(/^\[(.*)\]$/, '$1')) !== 0) return true
-  return hostname === 'localhost' || hostname === machineName.toLowerCase()
+  if (hostname === 'localhost' || hostname === machineName.toLowerCase()) return true
+  return extraNames.some((name) => name.toLowerCase() === hostname)
 }
 
 /**

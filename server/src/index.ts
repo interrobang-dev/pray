@@ -95,6 +95,7 @@ import { dataDir } from '@pray/host/dataDir'
 import { readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
 import { isAllowedHost, isSameOriginRequest } from './requestGuard.js'
+import { selfHostNames, Tailscale } from './tailscale.js'
 import { makeSendCode } from './mail.js'
 import { applyApprovalAnswered, applyApprovalDenied, applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { answerInterruptBox, decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptBox, type InterruptJudgement } from './interrupt.js'
@@ -287,9 +288,27 @@ const POSITION_FORMAT_MESSAGE = 'position must be 1–12 characters with no [ ] 
 const app = express()
 /** 이 PC 이름. 다른 PC 가 `http://<PC 이름>:4710` 으로 열 때의 Host */
 const machineName = hostname()
-// DNS rebinding 막기: Host 이름이 IP 숫자 주소·localhost·이 PC 이름일 때만 (정적 파일·SSE 포함 모든 요청. 공격 사이트 도메인으로 연 화면은 처음부터 안 뜬다)
+/** Tailscale 상태·PC 목록 (30초 캐시, `GET /api/machines`) */
+const tailscale = new Tailscale(PORT)
+/**
+ * 이 PC 자신의 Tailscale 이름 (MagicDNS 전체 이름과 첫 칸, 소문자). Tailscale 기기 이름이 Windows 이름과 달라 Host 검사에 따로 더한다.
+ * 서버 시작 때와 60초마다 다시 읽고, 못 읽거나 이름이 없으면 지난 값을 그대로 둔다
+ */
+let tailscaleHostNames: string[] = []
+const TAILSCALE_NAMES_REFRESH_MS = 60_000
+async function refreshTailscaleHostNames(): Promise<void> {
+  try {
+    const names = selfHostNames(await tailscale.status())
+    if (names.length === 0 || names.join(',') === tailscaleHostNames.join(',')) return
+    tailscaleHostNames = names
+    console.log(`Tailscale 이름 허용: ${names.join(', ')}`)
+  } catch (error) {
+    console.error(`Tailscale 이름 읽기 실패: ${error}`)
+  }
+}
+// DNS rebinding 막기: Host 이름이 IP 숫자 주소·localhost·이 PC 이름·이 PC 의 Tailscale 이름일 때만 (정적 파일·SSE 포함 모든 요청. 공격 사이트 도메인으로 연 화면은 처음부터 안 뜬다)
 app.use((req, res, next) => {
-  if (isAllowedHost(req.headers.host, machineName)) return next()
+  if (isAllowedHost(req.headers.host, machineName, tailscaleHostNames)) return next()
   res.status(403).json({ message: 'Host name not allowed' })
 })
 // CSRF 막기: 쓰기 요청의 Origin 이 있으면 같은 출처여야 한다 (본문을 읽기 전에 거절)
@@ -335,7 +354,8 @@ app.use('/api', (req, res, next) => {
 app.get('/api/auth/me', (req, res) => {
   const isLocal = isLoopback(req.socket.remoteAddress)
   const email = auth.emailOf(parseCookie(req.headers.cookie, COOKIE))
-  res.json({ isAuthenticated: isLocal || email !== null, isLocal, email, canLogin: sendCode !== null })
+  // app: 다른 PC 의 Pray 가 이 응답으로 여기 Pray 가 있는지 안다 (tailscale.ts 의 probePray)
+  res.json({ isAuthenticated: isLocal || email !== null, isLocal, email, canLogin: sendCode !== null, app: 'pray' })
 })
 
 app.post('/api/auth/request', async (req, res) => {
@@ -462,6 +482,17 @@ async function broadcastOnce(): Promise<void> {
   isBroadcastFailing = false
   for (const res of subscribers) sendSse(res, 'sessions', payload)
 }
+
+/** Tailscale 로 이어진 PC 목록 (이 PC 맨 앞, 온라인 PC 는 4710 에 Pray 가 있는지 물어 hasPray) */
+app.get('/api/machines', async (_req, res) => {
+  res.set('Cache-Control', 'no-store')
+  try {
+    res.json(await tailscale.machines())
+  } catch (error) {
+    console.error(`PC 목록 실패: ${error}`)
+    res.json({ tailscale: 'error', machines: [] })
+  }
+})
 
 app.get('/api/system/memory', (_req, res) => {
   res.set('Cache-Control', 'no-store')
@@ -3855,4 +3886,6 @@ app.listen(PORT, config.bind, () => {
   void warmSessionSummaries()
   checkHooks()
   setInterval(checkHooks, HOOK_CHECK_MS).unref()
+  void refreshTailscaleHostNames()
+  setInterval(() => void refreshTailscaleHostNames(), TAILSCALE_NAMES_REFRESH_MS).unref()
 })

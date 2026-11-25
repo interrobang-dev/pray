@@ -31,6 +31,21 @@ describe('isAllowedHost', () => {
     expect(isAllowedHost('', MACHINE)).toBe(false)
     expect(isAllowedHost(undefined, MACHINE)).toBe(false)
   })
+
+  it("accepts only this PC's own Tailscale names, not every ts.net name", () => {
+    const tailscale = ['office.tailda52be.ts.net', 'office']
+    expect(isAllowedHost('office.tailda52be.ts.net:4710', MACHINE, tailscale)).toBe(true)
+    expect(isAllowedHost('Office.TailDA52BE.ts.net:4710', MACHINE, tailscale)).toBe(true)
+    expect(isAllowedHost('office:4710', MACHINE, tailscale)).toBe(true)
+    expect(isAllowedHost('OFFICE', MACHINE, ['Office'])).toBe(true)
+    expect(isAllowedHost('desktop-abc:4710', MACHINE, tailscale)).toBe(true)
+    expect(isAllowedHost('evil.ts.net:4710', MACHINE, tailscale)).toBe(false)
+    expect(isAllowedHost('home.tailda52be.ts.net:4710', MACHINE, tailscale)).toBe(false)
+    expect(isAllowedHost('office.tailda52be.ts.net.:4710', MACHINE, tailscale)).toBe(false)
+    expect(isAllowedHost('office.evil.com:4710', MACHINE, tailscale)).toBe(false)
+    expect(isAllowedHost('x.office.tailda52be.ts.net:4710', MACHINE, tailscale)).toBe(false)
+    expect(isAllowedHost('office:4710', MACHINE)).toBe(false)
+  })
 })
 
 describe('isSameOriginRequest', () => {
@@ -44,6 +59,10 @@ describe('isSameOriginRequest', () => {
     expect(isSameOriginRequest('http://desktop-abc:4710', 'DESKTOP-ABC:4710')).toBe(true)
     // 기본 포트는 Origin·Host 어느 쪽에 적혀도 같다
     expect(isSameOriginRequest('http://192.168.60.21', '192.168.60.21:80')).toBe(true)
+    // Tailscale MagicDNS 이름으로 연 화면 (Host 검사를 통과한 이름이면 Origin 도 같은 이름)
+    expect(isSameOriginRequest('http://office.tailda52be.ts.net:4710', 'office.tailda52be.ts.net:4710')).toBe(true)
+    expect(isSameOriginRequest('http://office:4710', 'office:4710')).toBe(true)
+    expect(isSameOriginRequest('http://home.tailda52be.ts.net:4710', 'office.tailda52be.ts.net:4710')).toBe(false)
   })
 
   it('accepts loopback to loopback on another port (Vite 4711 proxy)', () => {

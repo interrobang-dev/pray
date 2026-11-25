@@ -24,6 +24,8 @@ import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
 import { layoutOffice, spotForNewGroup, spotForNewTeam } from './officeLayout'
 import { UsagePanel } from './UsagePanel'
+import { MachineSwitcher, openMachine, useMachines } from './MachineSwitcher'
+import { switchTargets } from './machines'
 import { memoryLabel, memoryLevel, memoryPercent, parseSystemMemory } from './systemMemory'
 import { hookWarningTitle, parseHookStatus, type HookStatus } from './hookStatus'
 import { ShellsStatus, shellLines, type ShellRequest } from './Shells'
@@ -367,6 +369,12 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   const [isRemindersOpen, setIsRemindersOpen] = useState(false)
   /** Ctrl+K 커맨드 팔레트 (헤더 돋보기 버튼도 연다) */
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  // Tailscale 로 이어진 PC 목록 (상태 표시줄 PC 칩·팔레트 Switch to). 처음 뜰 때와 PC 메뉴·팔레트를 열 때 받는다
+  const { machines, refresh: refreshMachines } = useMachines()
+  const machineTargets = useMemo(() => switchTargets(machines), [machines])
+  useEffect(() => {
+    if (isCommandPaletteOpen) refreshMachines()
+  }, [isCommandPaletteOpen, refreshMachines])
   /** 커맨드 팔레트에서 고른 팀·그룹. 바뀌면 세션 목록을 그 팀 카드(접힌 그룹이면 그룹 라벨)·그룹 라벨까지 스크롤한다 (목록이 보이게 그려진 다음에) */
   const [listScrollRequest, setListScrollRequest] = useState<{ id: number; kind: 'team' | 'group'; targetId: string } | null>(null)
   const nextListScrollIdRef = useRef(1)
@@ -736,6 +744,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
         return
       case 'command':
         runCommand(item.command)
+        return
+      case 'machine':
+        openMachine(item.machine)
         return
     }
   }
@@ -2390,6 +2401,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
             isHostReachable={snapshot.isHostReachable}
             isNarrow={isNarrow}
             isOfficeHidden={isOfficeHidden}
+            machines={machineTargets}
             renderAvatar={renderAvatar}
             stateLabelOf={sessionStateLabel}
             onClose={() => setIsCommandPaletteOpen(false)}
@@ -2453,6 +2465,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           <span className="status-counts-short" hidden title={`Working ${workingCount} · On duty ${presentSessions.length}`}>
             {workingCount}/{presentSessions.length}
           </span>
+          <MachineSwitcher machines={machines} onRefresh={refreshMachines} />
           <span className="status-link" title={isConnected ? 'Server connected' : 'Server disconnected'}>
             <span className="status-link-label">Server</span>
             <span className={[isConnected ? 'dot on' : 'dot', isServerWaiting ? 'is-waiting' : ''].join(' ')} />

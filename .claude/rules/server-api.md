@@ -43,6 +43,7 @@ Express 서버의 API 경로 전부, 세션 목록 합치기, jsonl 요약, 훅 
 - 화면 쪽 증분 받기(`chatDelta.ts`) → chat.md
 - 팀 할 일 저장 규칙·시작 때 옮기기 → host.md
 - 인증(`auth.ts`)·Host 검사·Origin(CSRF) 검사·훅 경로 loopback 전용·미들웨어 순서·`isLocalPageRequest` 규칙 → security.md
+- **PC 목록 `GET /api/machines`** (인증 안, no-store) → `{ tailscale: 'ready'|'not-installed'|'stopped'|'error', machines: { name, hostName, url, isSelf, isOnline, hasPray }[] }` — 꼴은 화면(`MachineSwitcher.tsx`)이 그대로 쓴다. `GET /api/auth/me` 는 `app: 'pray'` 를 더 준다 (다른 PC 의 Pray 가 이것으로 알아본다). 만드는 규칙(`tailscale.ts`) → security.md
 - 알림 → reminders.md, 예약 보내기(`/api/scheduled-messages`, 보내는 동안 `/input` 등 409) → scheduled-messages.md
 
 ## 구조

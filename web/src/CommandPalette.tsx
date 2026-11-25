@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { firstSelectable, isSelectable, moveSelection, searchGroups, type SearchItem } from './commandPaletteItems'
 import { lastActivityOf } from './home'
 import { PositionChip } from './PositionChip'
+import type { Machine } from './machines'
 import { formatDue } from './reminders'
 import { nameOf, positionOf } from './sessionPosition'
 import { PriorityChip } from './TeamTodosModal'
@@ -15,6 +16,8 @@ interface Props {
   isHostReachable: boolean
   isNarrow: boolean
   isOfficeHidden: boolean
+  /** "Switch to <name>" 을 넣을 다른 PC (machines.ts switchTargets) */
+  machines: readonly Machine[]
   /** 목록 세션 줄과 같은 아바타(머리 그림·상태 테두리) */
   renderAvatar: (session: Session) => ReactNode
   /** 목록 아바타 툴팁·첫 화면과 같은 상태 글자 ("Working"·"Break"·"Off duty"…) */
@@ -31,7 +34,7 @@ const LIST_ID = 'command-palette-list'
  * ↑↓(끝에서 돈다)·마우스 올리기로 고르고 Enter·클릭으로 연 뒤 닫는다. Esc·바깥 클릭으로 닫는다 (Esc 는 window 캡처에서 전파를 멈춘다).
  * 닫으면 열 때 포커스 요소로 돌린다 — 고른 줄을 열기 전에 돌려, 그 동작이 여는 창(TODO·Reminders 등)의 입력칸 포커스를 빼앗지 않는다
  */
-export function CommandPalette({ sessions, office, now, isHostReachable, isNarrow, isOfficeHidden, renderAvatar, stateLabelOf, onClose, onPick }: Props) {
+export function CommandPalette({ sessions, office, now, isHostReachable, isNarrow, isOfficeHidden, machines, renderAvatar, stateLabelOf, onClose, onPick }: Props) {
   const [query, setQuery] = useState('')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const previousFocusRef = useRef<Element | null>(document.activeElement)
@@ -39,8 +42,8 @@ export function CommandPalette({ sessions, office, now, isHostReachable, isNarro
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const groups = useMemo(
-    () => searchGroups({ sessions, office, now, isHostReachable, isNarrow, isOfficeHidden }, query),
-    [sessions, office, now, isHostReachable, isNarrow, isOfficeHidden, query],
+    () => searchGroups({ sessions, office, now, isHostReachable, isNarrow, isOfficeHidden, machines }, query),
+    [sessions, office, now, isHostReachable, isNarrow, isOfficeHidden, machines, query],
   )
   const items = useMemo(() => groups.flatMap((group) => group.items), [groups])
   // 세션 목록 SSE 로 줄이 바뀌어도 고른 줄은 키로 남는다. 없어지면 첫 줄
@@ -174,6 +177,13 @@ export function CommandPalette({ sessions, office, now, isHostReachable, isNarro
         )
       case 'command':
         return <span className="search-row-text">{item.label}</span>
+      case 'machine':
+        return (
+          <>
+            <span className="search-row-text">{item.label}</span>
+            <span className="search-row-end">{item.machine.hostName}</span>
+          </>
+        )
     }
   }
 

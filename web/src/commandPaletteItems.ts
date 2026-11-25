@@ -1,6 +1,7 @@
 /** Ctrl+K 커맨드 팔레트(CommandPalette.tsx)의 순수 함수: 화면이 이미 가진 세션·팀·그룹·할 일·알림·명령에서 찾고 묶음을 만든다. 이름이 commandPalette.ts 가 아닌 것은 Windows 가 대소문자를 가리지 않아 ./CommandPalette 와 겹쳐서다 */
 import { recentSessions } from './home'
 import { leadSessions } from './leadModels'
+import type { Machine } from './machines'
 import { needsYouSessions } from './needsYou'
 import { isUnacknowledgedFired, remindersOf } from './reminders'
 import { nameOf, positionOf } from './sessionPosition'
@@ -30,6 +31,7 @@ export type SearchItem =
   | { kind: 'todo'; key: string; todo: TeamTodo; scope: TodoScope; placeName: string }
   | { kind: 'reminder'; key: string; reminder: Reminder; isFired: boolean }
   | { kind: 'command'; key: string; command: CommandId; label: string; disabledReason: string | null }
+  | { kind: 'machine'; key: string; machine: Machine; label: string }
 
 export interface SearchGroup {
   key: 'needs-you' | 'recent' | 'sessions' | 'teams' | 'groups' | 'todos' | 'reminders' | 'commands'
@@ -45,6 +47,8 @@ export interface SearchInput {
   /** 폰 폭: 사무실이 없어 Hide/Show office 명령을 넣지 않는다 */
   isNarrow: boolean
   isOfficeHidden: boolean
+  /** "Switch to <name>" 을 넣을 다른 PC (machines.ts switchTargets: 온라인·Pray 가 돎·주소 있음). Commands 묶음 끝에 붙는다 */
+  machines: readonly Machine[]
 }
 
 /**
@@ -132,6 +136,11 @@ export function commandItems(input: SearchInput): Extract<SearchItem, { kind: 'c
   return commands.map(({ command, label, disabledReason }) => ({ kind: 'command', key: `command:${command}`, command, label, disabledReason: disabledReason ?? null }))
 }
 
+/** 다른 PC 로 옮겨 가는 명령 줄 "Switch to home" (Commands 묶음 끝) */
+export function machineItems(machines: readonly Machine[]): Extract<SearchItem, { kind: 'machine' }>[] {
+  return machines.map((machine) => ({ kind: 'machine', key: `machine:${machine.name}`, machine, label: `Switch to ${machine.name}` }))
+}
+
 function sessionItem(session: Session): SearchItem {
   return { kind: 'session', key: `session:${session.id}`, session }
 }
@@ -142,7 +151,7 @@ function sessionItem(session: Session): SearchItem {
  */
 export function searchGroups(input: SearchInput, query: string): SearchGroup[] {
   const tokens = queryTokens(query)
-  const commands = commandItems(input)
+  const commands: SearchItem[] = [...commandItems(input), ...machineItems(input.machines)]
   if (tokens.length === 0) {
     const needsYou = needsYouSessions(input.sessions, input.now).filter((session) => session.status !== 'done')
     const needsYouIds = new Set(needsYou.map((session) => session.id))
@@ -181,8 +190,15 @@ export function searchGroups(input: SearchInput, query: string): SearchGroup[] {
     { key: 'groups', title: 'Groups', items: rankMatches(groupItems, (item) => ({ name: item.group.name, fields: [] }), tokens, OTHER_LIMIT) },
     { key: 'todos', title: 'TODOs', items: rankMatches(openTodoItems(office), (item) => ({ name: item.todo.text, fields: [] }), tokens, OTHER_LIMIT) },
     { key: 'reminders', title: 'Reminders', items: rankMatches(reminderItems, (item) => ({ name: item.reminder.text, fields: [] }), tokens, OTHER_LIMIT) },
-    { key: 'commands', title: 'Commands', items: rankMatches(commands, (item) => ({ name: item.label, fields: item.command === 'appearance' ? ['Appearance'] : [] }), tokens, OTHER_LIMIT) },
+    { key: 'commands', title: 'Commands', items: rankMatches(commands, commandSearchText, tokens, OTHER_LIMIT) },
   ])
+}
+
+/** 명령 줄의 검색 글: 이름 + Settings 는 옛 이름 Appearance, PC 는 hostName */
+function commandSearchText(item: SearchItem): { name: string; fields: string[] } {
+  if (item.kind === 'machine') return { name: item.label, fields: [item.machine.hostName] }
+  if (item.kind === 'command') return { name: item.label, fields: item.command === 'appearance' ? ['Appearance'] : [] }
+  return { name: '', fields: [] }
 }
 
 function dropEmpty(groups: SearchGroup[]): SearchGroup[] {

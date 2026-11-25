@@ -3,6 +3,7 @@ import {
   commandItems,
   firstSelectable,
   isCommandPaletteShortcut,
+  isSelectable,
   matchRank,
   moveSelection,
   openTodoItems,
@@ -52,7 +53,7 @@ function reminder(id: string, text: string, overrides: Partial<Reminder> = {}): 
 }
 
 function input(overrides: Partial<SearchInput> = {}): SearchInput {
-  return { sessions: [], office: { groups: [], teams: [] }, now: NOW, isHostReachable: true, isNarrow: false, isOfficeHidden: false, ...overrides }
+  return { sessions: [], office: { groups: [], teams: [] }, now: NOW, isHostReachable: true, isNarrow: false, isOfficeHidden: false, machines: [], ...overrides }
 }
 
 const keys = (items: SearchItem[]) => items.map((item) => item.key)
@@ -208,6 +209,28 @@ describe('commandItems', () => {
   it('has no dangerous commands', () => {
     const labels = commandItems(input()).map((item) => item.label).join(' ')
     expect(labels).not.toMatch(/End|Restart|Delete/)
+  })
+})
+
+describe('Switch to commands', () => {
+  const home = { name: 'home', hostName: 'home.tail.ts.net', url: 'http://home.tail.ts.net:4710', isSelf: false, isOnline: true, hasPray: true }
+
+  it('adds Switch to <name> at the end of Commands', () => {
+    const commands = searchGroups(input({ machines: [home] }), '').find((group) => group.key === 'commands')
+    const last = commands?.items.at(-1)
+    expect(last).toMatchObject({ kind: 'machine', key: 'machine:home', label: 'Switch to home' })
+    expect(last && isSelectable(last)).toBe(true)
+  })
+
+  it('finds a machine by name or host name', () => {
+    const byName = searchGroups(input({ machines: [home] }), 'switch home').flatMap((group) => group.items)
+    expect(byName.map((item) => item.key)).toEqual(['machine:home'])
+    const byHost = searchGroups(input({ machines: [home] }), 'tail.ts').flatMap((group) => group.items)
+    expect(byHost.map((item) => item.key)).toEqual(['machine:home'])
+  })
+
+  it('has no machine rows without targets', () => {
+    expect(searchGroups(input(), '').flatMap((group) => group.items).some((item) => item.kind === 'machine')).toBe(false)
   })
 })
 

@@ -10,7 +10,7 @@ import { Child } from './children'
 import { confirmDialog } from './confirmDialog'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
 import { dotLookOf } from './dotCharacter'
-import { isExternalUrl } from './externalLink'
+import { isExternalUrl, navigationDecision, parseMachines, type PrayMachine } from './externalLink'
 import { appIconIco, noticeIconPng, trayIconIco, trayIconPng, type NoticeRingKind } from './icon'
 import { isPipeAlive, LEGACY_PIPE_PATH } from './legacyHost'
 import { hasArgLessLoginItem, needsAppArg } from './launchShortcut'
@@ -221,6 +221,36 @@ function trayIcon(isAlert: boolean): string | NativeImage {
   return trayIconPaths.get(isAlert) ?? nativeImage.createFromBuffer(trayIconPng(isAlert))
 }
 
+/** Tailscale 로 이어진 PC 목록 (서버 `GET /api/machines`). 창이 다른 PC 의 Pray 로 옮겨 갈 때 받고, 못 받으면 마지막 값 */
+let prayMachines: PrayMachine[] = []
+const MACHINES_TIMEOUT_MS = 3_000
+
+async function refreshPrayMachines(): Promise<PrayMachine[]> {
+  try {
+    const response = await fetch(`${SERVER_URL}/api/machines`, { signal: AbortSignal.timeout(MACHINES_TIMEOUT_MS) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const machines = parseMachines(await response.json())
+    if (machines) prayMachines = machines
+  } catch (error) {
+    console.warn(`PC 목록을 못 받아 지난 값을 쓴다: ${String(error)}`)
+  }
+  return prayMachines
+}
+
+/**
+ * 창 안 이동(`will-navigate`): 이 PC 서버는 그대로, Tailscale 로 이어진 다른 PC 의 Pray 는 같은 창에서 열고,
+ * 이 PC 자신의 Tailscale 주소는 127.0.0.1 로 다시 연다 (loopback 이라 로그인 없이 이 PC 전용 기능을 쓴다). 그 밖의 http(s) 는 기본 브라우저로
+ */
+function handleNavigation(win: BrowserWindow, url: string): void {
+  void (async () => {
+    const decision = navigationDecision(url, SERVER_URL, await refreshPrayMachines())
+    if (win.isDestroyed()) return
+    if (decision === 'allow') await win.loadURL(url).catch((error: unknown) => console.error(`Failed to load ${url}`, error))
+    else if (decision === 'self') await win.loadURL(SERVER_URL + new URL(url).hash).catch((error: unknown) => console.error(`Failed to load ${SERVER_URL}`, error))
+    else if (decision === 'external') await shell.openExternal(url).catch((error: unknown) => console.error(`Failed to open ${url}`, error))
+  })()
+}
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1400,
@@ -241,9 +271,15 @@ function createWindow(): BrowserWindow {
   }
   // 대화 속 웹 링크(target=_blank)가 새 Pray 창이 아니라 기본 브라우저로 열리게
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!isExternalUrl(url, SERVER_URL)) return { action: 'allow' }
+    if (!isExternalUrl(url, SERVER_URL, prayMachines)) return { action: 'allow' }
     shell.openExternal(url).catch((error: unknown) => console.error(`Failed to open ${url}`, error))
     return { action: 'deny' }
+  })
+  // 이 PC 서버 안 이동은 그대로 두고, 그 밖은 일단 막은 뒤 PC 목록을 받아 정한다 (막기는 이벤트 안에서 바로 해야 한다)
+  win.webContents.on('will-navigate', (event) => {
+    if (new URL(SERVER_URL).origin === originOf(event.url)) return
+    event.preventDefault()
+    handleNavigation(win, event.url)
   })
   // F5 새로고침: Ctrl+R 은 숨긴 기본 메뉴(View → Reload)에 있지만 F5 는 없어 따로 받는다 (브라우저처럼 조합 키 없는 F5 만)
   win.webContents.on('before-input-event', (event, input) => {
@@ -257,6 +293,14 @@ function createWindow(): BrowserWindow {
     win.hide()
   })
   return win
+}
+
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -288,6 +332,9 @@ async function showWindow(sessionId?: string): Promise<void> {
     if (!isUp) {
       dialog.showErrorBox('Pray', `The server didn't start. Check the logs:\n${logDir}`)
     }
+    await window.loadURL(SERVER_URL + hash)
+  } else if (hash && originOf(window.webContents.getURL()) !== new URL(SERVER_URL).origin) {
+    // 다른 PC 의 Pray 를 보고 있으면 이 PC 화면으로 돌아와 그 세션을 연다 (세션은 이 PC 것이다)
     await window.loadURL(SERVER_URL + hash)
   } else if (hash) {
     void window.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`).catch(() => undefined)
