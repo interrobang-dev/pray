@@ -511,6 +511,7 @@ export function expandPalette(core: PaletteCore, mode: Mode): Vars {
     'shadow-pop': isDark ? DEFAULT_VARS.dark['shadow-pop'] : `0 1px 3px ${rgba(text, 0.06)}, 0 6px 20px ${rgba(text, 0.1)}`,
     // 상태 표시줄 팝업 테두리: 라이트는 팔레트 글자색 기운, 다크는 흰색 (Default 와 같은 규칙)
     'pop-ring': isDark ? DEFAULT_VARS.dark['pop-ring'] : rgba(text, 0.08),
+    'claude-mark': DEFAULT_VARS.light['claude-mark'],
     'shadow-modal': isDark ? DEFAULT_VARS.dark['shadow-modal'] : `0 2px 8px ${rgba(text, 0.08)}, 0 18px 48px ${rgba(text, 0.18)}`,
   }
 }

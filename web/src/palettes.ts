@@ -75,6 +75,7 @@ const DEFAULT_LIGHT = {
   'pop-bg': '#ffffff',
   'shadow-pop': '0 1px 3px rgba(43, 47, 58, 0.06), 0 6px 20px rgba(43, 47, 58, 0.1)',
   'pop-ring': 'rgba(43, 47, 58, 0.08)',
+  'claude-mark': '#d97757',
   'shadow-modal': '0 2px 8px rgba(43, 47, 58, 0.08), 0 18px 48px rgba(43, 47, 58, 0.18)',
 }
 
