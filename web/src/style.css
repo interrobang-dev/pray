@@ -8629,6 +8629,18 @@ button.machine-row:hover:not(:disabled) {
   .create select {
     font-size: 16px;
   }
+  /* 로그인 카드: 입력칸·버튼은 한 줄에 하나씩 전체 폭 44px (코드 단계는 칸·Verify·Resend 셋이라 한 줄이면 칸이 좁다) */
+  .login form {
+    flex-direction: column;
+  }
+  .login input {
+    flex: none;
+    box-sizing: border-box;
+  }
+  .login input,
+  .login form button {
+    min-height: 44px;
+  }
   .approval {
     flex-wrap: wrap;
   }
