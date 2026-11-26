@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pray 는 HTTPS 가 아니다 (사내망·Tailscale 전제). 주소가 Tailscale 이름·IP 라 도메인별로 나눌 수 없어 전부 허용한다 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

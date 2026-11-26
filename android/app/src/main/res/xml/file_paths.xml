@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 첨부 고르기의 카메라 사진을 둘 곳 -->
+<paths>
+    <cache-path name="camera" path="camera/" />
+</paths>

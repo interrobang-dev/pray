@@ -22,7 +22,8 @@
     "startup:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-startup.ps1",
     "postinstall": "node --import tsx scripts/brand-electron.mts",
     "brand:electron": "node --import tsx scripts/brand-electron.mts",
-    "package": "node --import tsx scripts/package-app.mts"
+    "package": "node --import tsx scripts/package-app.mts",
+    "android": "android\\gradlew.bat -p android assembleDebug"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

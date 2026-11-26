@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DayNight: WebView 의 prefers-color-scheme 가 폰 다크 모드를 따른다 (API 33+ 는 앱 테마의 isLightTheme 를 본다) -->
+    <style name="Theme.Pray" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:colorAccent">@color/logo_accent</item>
+    </style>
+</resources>

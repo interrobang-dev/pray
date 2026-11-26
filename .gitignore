@@ -3,3 +3,12 @@ dist/
 *.log
 __pycache__/
 release/
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml
+android/captures/

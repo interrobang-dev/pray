@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 로고 U-2 의 색 (web/public/logo.svg) -->
+    <color name="logo_background">#23262E</color>
+    <color name="logo_accent">#F5B841</color>
+</resources>

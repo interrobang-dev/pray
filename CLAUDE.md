@@ -32,6 +32,7 @@
 | `scheduled-messages.md` | 예약 보내기: 정한 시각에 웹 세션 입력으로 글 한 번 — hq.json `scheduledMessages`·`/api/scheduled-messages`·보낼지 미룰지 판정·보내는 동안 입력 잠금·입력 상자 시계 버튼·Reminders 창 Scheduled 구역·실패 트레이 알림 |
 | `theme.md` | 화면 테마(모드·팔레트·강조색·글자 크기)·설정 창 App 탭·대비 규칙·스크롤바·로고·대화 모양(설정 창 Chat 탭) |
 | `daily.md` | 오늘 한 일 API(`GET /api/daily`) — 팀마다 그날 커밋·끝난 task·토큰(jsonl)·끝낸 할 일, 출처별 한계·토큰 기준. 화면(Today 창)은 `toolbar.md` |
+| `android.md` | 안드로이드 앱(`android/`): WebView 로 지금 웹을 띄우는 껍데기·PC 목록·알림 서비스(각 PC 의 `/api/notifications/stream` SSE), 빌드(`npm run android`, 이 PC debug 키)·Taildrop 설치 |
 
 저절로 읽히는 경로는 각 파일 머리의 `paths:` 를 본다.
 
@@ -111,6 +112,9 @@ npm run package           # 설치 파일 release/dist/Pray-Setup-<버전>.exe (
 - `server/src/suggestion.ts`·`unqueue.ts`·`interrupt.ts`·`btw.ts` — 입력 제안·대기 취소·작업 중지·곁가지 질문(`/btw`) (→ `queue-interrupt.md`) · `mod/` — 웹 세션 전용 mod (→ 같은 파일)
 - `server/src/usage.ts`·`accounts.ts`·`accountStore.ts`·`accountLogin.ts`·`switchImpact.ts` — 사용량·계정 (→ `accounts.md`)
 - `server/src/dailyReport.ts`·`dayCommits.ts`·`dayUsage.ts` — 오늘 한 일 API 의 날짜·조립, 그날 git 커밋(60초 캐시), 그날 jsonl 토큰(파일별 늘어난 바이트만) (→ `daily.md`)
+
+안드로이드 → `android.md`
+- `android/` — Kotlin 앱 (패키지 `dev.interrobang.pray`): `MainActivity`(WebView·PC 주소 입력·못 붙음 화면)·`MachineStore`(PC 목록)·`NotifyService`·`StreamWorker`(PC 마다 알림 SSE·재연결)와 순수 로직 `Machines`·`Sse`·`NoticeText`
 
 알림 → `reminders.md` · 예약 보내기 → `scheduled-messages.md`
 - `host/src/reminder.ts` — 알림 꼴·시각 검증·울리기 판정 (순수, `@pray/host/reminder`). 저장은 `hq.ts` 의 `reminders`, API·시작 때와 30초마다 울리기는 `server/src/index.ts`
