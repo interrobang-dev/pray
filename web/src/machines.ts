@@ -69,20 +69,19 @@ function compareNames(a: Machine, b: Machine): number {
 }
 
 /**
- * 메뉴 줄: 지금 PC → 옮겨 갈 수 있는 PC → 갈 수 없는 PC(온라인이 먼저), 각 묶음 안은 이름순.
- * 칩이 숨는 때(selfMachine 이 null)는 빈 목록
+ * 메뉴 줄: 지금 PC 와 옮겨 갈 수 있는 PC 를 섞어 이름순 (= 단축키 Shift+F1·F2… 순서) → 갈 수 없는 PC(온라인이 먼저, 이름순).
+ * 갈 수 없는 PC 는 번호가 없어 아래로 모은다 (사이에 끼면 번호가 떨어져 보인다). 칩이 숨는 때(selfMachine 이 null)는 빈 목록
  */
 export function machineRows(response: MachinesResponse | null): MachineRow[] {
   const self = selfMachine(response)
   if (!response || !self) return []
   const others = response.machines.filter((machine) => !machine.isSelf)
-  const available = others.filter((machine) => unavailableReason(machine) === null).sort(compareNames)
+  const reachable = [self, ...others.filter((machine) => unavailableReason(machine) === null)].sort(compareNames)
   const unavailable = others
     .filter((machine) => unavailableReason(machine) !== null)
     .sort((a, b) => Number(b.isOnline) - Number(a.isOnline) || compareNames(a, b))
   return [
-    { machine: self, isCurrent: true, disabledReason: null },
-    ...available.map((machine) => ({ machine, isCurrent: false, disabledReason: null })),
+    ...reachable.map((machine) => ({ machine, isCurrent: machine === self, disabledReason: null })),
     ...unavailable.map((machine) => ({ machine, isCurrent: false, disabledReason: unavailableReason(machine) })),
   ]
 }

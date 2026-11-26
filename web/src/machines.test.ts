@@ -52,7 +52,7 @@ describe('unavailableReason', () => {
 })
 
 describe('machineRows', () => {
-  it('puts self first, then available by name, then unavailable (online first) by name', () => {
+  it('sorts self and available PCs by name together, then unavailable (online first) by name', () => {
     const rows = machineRows(
       response([
         office,
@@ -64,9 +64,9 @@ describe('machineRows', () => {
       ]),
     )
     expect(rows.map((row) => [row.machine.name, row.isCurrent, row.disabledReason])).toEqual([
-      ['office', true, null],
       ['Home', false, null],
       ['laptop', false, null],
+      ['office', true, null],
       ['s26', false, 'Pray not running'],
       ['alpha', false, 'Offline'],
       ['zeta', false, 'Offline'],
