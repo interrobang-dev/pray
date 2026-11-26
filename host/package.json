@@ -11,7 +11,8 @@
     "./dotCharacter": "./src/dotCharacter.ts",
     "./reminder": "./src/reminder.ts",
     "./scheduledMessage": "./src/scheduledMessage.ts",
-    "./notificationSettings": "./src/notificationSettings.ts"
+    "./notificationSettings": "./src/notificationSettings.ts",
+    "./sessionNotice": "./src/sessionNotice.ts"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

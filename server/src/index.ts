@@ -89,6 +89,7 @@ import { parseReminderAt } from '@pray/host/reminder'
 import { parseScheduledText } from '@pray/host/scheduledMessage'
 import { parseNotificationPatch } from '@pray/host/notificationSettings'
 import { readNotificationSettings, saveNotificationSettings } from './notificationSettings.js'
+import { NoticeStream } from './noticeStream.js'
 import { ScheduledSender, type SessionActivity, type SubmitOutcome } from './scheduledSend.js'
 import { setupFileLog } from '@pray/host/runtime'
 import { dataDir } from '@pray/host/dataDir'
@@ -3494,6 +3495,7 @@ function fireReminders(): void {
     for (const reminder of fired) console.log(`알림 ${reminder.id} 울림${reminder.isLate ? ' (늦음)' : ''} (예정 ${reminder.at})`)
     if (prunedCount > 0) console.log(`확인한 지 보관 기간이 지난 알림 ${prunedCount}개를 지움`)
     if (fired.length > 0) broadcastOffice()
+    if (fired.length > 0) void noticeStream.publishReminders(fired)
   } catch (error) {
     if (!isReminderTickFailing) console.error(`알림 울리기 실패 (${REMINDER_TICK_MS / 1000}초 뒤 다시): ${error}`)
     isReminderTickFailing = true
@@ -3775,6 +3777,29 @@ app.get('/api/events', (req, res) => {
   subscribers.add(res)
   req.on('close', () => subscribers.delete(res))
   void broadcast()
+})
+
+/**
+ * 알림 이벤트 스트림 (안드로이드 앱). 구독자가 있을 때만 3초마다 세션 목록으로 트레이와 같은 판정을 하고, 울린 알림(Reminders)도 싣는다.
+ * 꺼 둔 종류(notifications.json)는 빼고 보낸다. Last-Event-ID 머리(또는 ?lastEventId=) 뒤의 최근 것(50개·10분)을 먼저 보낸다 → noticeStream.ts
+ */
+const noticeStream = new NoticeStream({
+  readSessions: async () => (await snapshotPayload()).sessions,
+  readOffice: () => {
+    try {
+      return { teams: listTeams() }
+    } catch {
+      return null
+    }
+  },
+  readSettings: () => readNotificationSettings(notificationSettingsPath()),
+})
+
+app.get('/api/notifications/stream', (req, res) => {
+  openSse(res)
+  const queryId = typeof req.query.lastEventId === 'string' ? req.query.lastEventId : null
+  const unsubscribe = noticeStream.subscribe({ write: (chunk) => res.write(chunk) }, req.get('Last-Event-ID') ?? queryId)
+  req.on('close', unsubscribe)
 })
 
 host.on('reachable', (isReachable: boolean) => {
