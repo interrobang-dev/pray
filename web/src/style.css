@@ -8721,8 +8721,11 @@ button.machine-row:hover:not(:disabled) {
   .dtp-time-option {
     min-height: 40px;
   }
+  /* 빠른 칩 넷은 한 줄: 안쪽 14px 이면 "Tomorrow 9:00" 이 둘째 줄로 넘어가 창이 46px 높아졌다. 8px 로 줄이고 남는 폭을 나눠 갖는다 */
   .reminders-chip {
-    padding: 0 14px;
+    flex: 1 1 auto;
+    padding: 0 8px;
+    white-space: nowrap;
   }
   .dtp-field {
     font-size: 16px;
@@ -9020,13 +9023,58 @@ button.machine-row:hover:not(:disabled) {
     width: calc(100vw - 32px);
     max-width: none;
   }
-  /* 이름 바꾸기·세션 추가 창: 프로필 카드 오른쪽은 Role·Name 을 위아래로, Auto 버튼은 전체 폭 40px, 그 아래 인물 격자(이것만 스크롤) */
+  /* 이름 바꾸기·세션 추가 창: 창 본문(.create) 하나만 스크롤하고 인물 격자는 안에서 스크롤하지 않는다 (격자 111px 칸이 창 안에서 또 스크롤했다).
+     Create·Save 줄은 본문 아래에 붙어 늘 보인다. 본문은 창 안쪽 여백까지 넓혀(음수 margin + padding) 색 칸 선택 고리·포커스 링이 안 잘린다.
+     프로필 카드는 grid: [큰 미리보기 | Role·Name · Auto] 아래에 머리·윗옷 색 칸이 전체 폭 (오른쪽 148px 열에서 24px 칸이 세 줄로 접히고 미리보기 아래가 비었다).
+     .character-profile-side 는 display: contents 로 풀어 그 자식이 grid 칸이 된다 */
   .modal.character-modal {
     width: calc(100vw - 32px);
     max-height: calc(100dvh - var(--titlebar-height, 0px) - 32px);
   }
+  .character-modal .create {
+    overflow-y: auto;
+    margin: 0 -20px;
+    padding: 2px 20px 0;
+  }
+  .character-modal .create > .character-layout,
+  .character-layout .character-picker {
+    flex: none;
+    overflow: visible;
+  }
+  .character-modal .create > .actions {
+    position: sticky;
+    bottom: 0;
+    margin-top: 0;
+    padding-top: 8px;
+    background: var(--panel);
+  }
   .character-profile {
-    gap: 12px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 10px 12px;
+  }
+  .character-profile-side {
+    display: contents;
+  }
+  .character-preview-box {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+  .character-profile .field-row,
+  .character-auto-row {
+    grid-column: 2;
+  }
+  .character-swatches,
+  .character-profile-side > .form-hint {
+    grid-column: 1 / -1;
+  }
+  .character-swatches {
+    gap: 8px;
+  }
+  .create .character-swatches button {
+    width: 40px;
+    height: 40px;
   }
   .character-profile .field-row {
     flex-direction: column;
@@ -9064,10 +9112,20 @@ button.machine-row:hover:not(:disabled) {
     min-height: 40px;
     box-sizing: border-box;
   }
+  /* 10px 글자는 폰에서 읽기 어려워 역할 칩·SVN 칩은 11px. .position-chip 규칙이 이 블록보다 뒤에 있어 :root 로 한 단계 더 구체적으로 */
+  :root .position-chip,
+  .team-head .vcs-chip,
+  .folder-list .vcs-chip {
+    font-size: calc(11px * var(--font-scale));
+  }
   /* Tasks 창: 화면 폭(.modal 폰 폭을 다시 덮는다 — 600px 가 더 구체적이라), 주소창이 보여도 화면 안 */
   .modal.tasks-modal {
     width: calc(100vw - 32px);
     max-height: calc(100dvh - var(--titlebar-height, 0px) - 32px);
+  }
+  /* 부제 "Tasks from the last 7 days, members from the last 30" 는 경로가 아니라 말줄임 대신 줄바꿈 (360 에서 "members from the la…" 로 잘렸다) */
+  .tasks-modal .modal-title .cwd {
+    white-space: normal;
   }
   .task-summary {
     min-height: 44px;
@@ -9107,6 +9165,36 @@ button.machine-row:hover:not(:disabled) {
   .todo-item input[type='checkbox'] {
     width: 22px;
     height: 22px;
+  }
+  /* 할 일 줄 두 줄: 위는 체크박스 · 글(줄 폭 전부), 아래는 우선순위 칩 … × ⠿.
+     한 줄에 두면 360 폭에서 글 칸이 97px 라 한글이 글자 중간에서 접혔다 ("토큰 사용 최적/화"). 한글은 낱말 단위로 접는다 (긴 낱말은 overflow-wrap 이 자른다).
+     완료 줄은 ⠿·"Priority" 자리가 없어 한 줄 그대로 */
+  .todo-text {
+    word-break: keep-all;
+  }
+  .todo-list:not(.done) .todo-item {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto auto;
+    gap: 0 6px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+  .todo-list:not(.done) .todo-item > :is(.todo-text, .todo-edit) {
+    grid-row: 1;
+    grid-column: 2 / -1;
+  }
+  .todo-list:not(.done) .todo-priority-button {
+    grid-row: 2;
+    grid-column: 2;
+    justify-self: start;
+  }
+  .todo-list:not(.done) .todo-delete {
+    grid-row: 2;
+    grid-column: 3;
+  }
+  .todo-list:not(.done) .todo-handle {
+    grid-row: 2;
+    grid-column: 4;
   }
   /* 패널 헤더 두 줄: [← 이름 ··· 탭 ⋯] / [폴더]. 검색·이름 바꾸기·종료는 ⋯ 메뉴 하나(App.tsx .panel-more)라 이름이 남는 폭을 다 쓰고, 길면 말줄임된다.
      flex 줄바꿈은 이름의 전체 폭으로 줄을 나눠 긴 이름이면 세 줄이 되므로 grid */
@@ -9171,9 +9259,23 @@ button.machine-row:hover:not(:disabled) {
   .model-modal .actions button {
     min-height: 40px;
   }
-  /* Appearance 창: 화면 높이 안에서 스크롤, 세그먼트·버튼 40px, 강조색 칩 손가락 크기 */
-  .modal.appearance-modal {
-    max-height: calc(100dvh - var(--titlebar-height, 0px) - 48px);
+  /* Effort 세그먼트(칸 여섯)는 3×2 두 줄: 한 줄이면 288px 에 칸이 43px 라 "Medium"·"XHigh" 가 붙었다. 두 줄이라 홈은 알약 대신 둥근 면 */
+  .model-modal .segmented:has(> button:nth-child(5)) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-radius: var(--radius-lg);
+  }
+  /* 설정 창: 세 탭 모두 같은 높이의 바닥 시트 (화면 폭 전부, 위 48px 만 비운다). 탭마다 폭·높이·자리가 달라 탭을 바꾸면 창이 튀었다.
+     창은 스크롤하지 않고 옵션 칸(.appearance-scroll)만 스크롤한다. 세그먼트·버튼 40px, 강조색 칩 손가락 크기 */
+  .modal-overlay:has(> .modal.appearance-modal) {
+    align-items: flex-end;
+  }
+  .modal.appearance-modal,
+  .modal.appearance-modal.is-chat {
+    width: 100vw;
+    height: calc(100dvh - var(--titlebar-height, 0px) - 48px);
+    max-height: none;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   }
   .appearance-modal .segmented button,
   .appearance-actions button {
@@ -9191,23 +9293,16 @@ button.machine-row:hover:not(:disabled) {
     width: 44px;
     height: 40px;
   }
-  /* Chat 탭: 넓힌 창·2열을 풀어 한 열(미리보기 위, 옵션 아래)로 */
-  .modal.appearance-modal.is-chat {
-    width: calc(100vw - 32px);
-    height: auto;
-  }
+  /* Chat 탭: 2열을 풀어 한 열(미리보기 위, 옵션 아래). 미리보기는 위 180px 만 보이고 스크롤하지 않는다 —
+     미리보기와 옵션이 둘 다 스크롤했다. 표·코드 블록은 잘려 안 보인다 (누를 수 없는 견본이라 받아들임) */
   .chat-style-layout {
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
   .chat-style-layout > .chat-preview {
-    max-height: 260px;
-  }
-  /* Chat 탭: 라벨을 위로, 미리보기는 붙이지 않는다 (화면 절반을 가려서) */
-  /* 폰은 화면이 낮아 고정 미리보기가 옵션 칸을 너무 줄이지 않게 */
-  .chat-preview {
-    max-height: 30dvh;
+    max-height: 180px;
+    overflow: hidden;
   }
   .appearance-row {
     grid-template-columns: minmax(0, 1fr);
@@ -9244,9 +9339,6 @@ button.machine-row:hover:not(:disabled) {
   }
   .notification-row .appearance-hint {
     grid-column: 2;
-  }
-  .chat-preview {
-    max-height: 260px;
   }
   .appearance-tabs button {
     min-height: 40px;
