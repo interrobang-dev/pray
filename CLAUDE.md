@@ -64,7 +64,7 @@ npm run package           # 설치 파일 release/dist/Pray-Setup-<버전>.exe (
 { "bind": "0.0.0.0", "loginEmails": ["..."], "smtp": { "host", "port", "user", "pass" } }
 ```
 
-파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP 또는 PC 이름>:4710` (도메인 이름은 Host 검사로 403 → `security.md`) → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 토큰은 `~/.claude/pray/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
+파일이 없으면 127.0.0.1 전용·메일 로그인 없음으로 뜬다. 다른 PC 에서는 `http://<이 PC IP 또는 PC 이름>:4710` (도메인 이름은 Host 검사로 403 → `security.md`) → 메일 주소 입력 → 6자리 코드(10분, 5회) → 30일 쿠키. 단 같은 Tailscale 계정의 다른 기기(Tailscale 주소로 온 요청)는 메일 로그인 없이 열린다 (→ `security.md`). 토큰은 `~/.claude/pray/auth-tokens.json`. HTTPS 가 아니라 쿠키에 Secure 가 없다 (사내망 전제). Windows 방화벽이 node.exe 인바운드를 막으면 다른 PC 에서 안 열린다 — 첫 접속 시 허용 필요.
 
 **트레이 앱 없이 쓰는 대안: 작업 스케줄러.** `npm run startup:install` 이 `pray-host`/`pray-server` 작업을 등록한다(옛 이름 `jk-corp-*` 작업이 있으면 지우고, `stop.ps1`·`uninstall-startup.ps1` 도 옛 이름까지 멈추고 지운다. `wscript launch-hidden.vbs` 래퍼로 창 없이. S4U 는 관리자 권한 필요. PowerShell `-WindowStyle Hidden` 은 대화형 작업에서 콘솔 창이 보여 사용자가 닫는 사고가 두 번 났다). 멈출 때는 반드시 `scripts/stop.ps1` (`Stop-ScheduledTask` 는 래퍼만 죽이고 node 가 고아로 남는다). **트레이 앱과 스케줄러를 같이 쓰면 pipe·포트가 충돌한다** — 지금은 스케줄러 작업을 제거한 상태.
 

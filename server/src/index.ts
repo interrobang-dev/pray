@@ -95,7 +95,7 @@ import { dataDir } from '@pray/host/dataDir'
 import { readConfig } from './config.js'
 import { AuthStore, TOKEN_TTL_SECONDS, isLoopback, parseCookie } from './auth.js'
 import { isAllowedHost, isSameOriginRequest } from './requestGuard.js'
-import { selfHostNames, Tailscale } from './tailscale.js'
+import { isOwnPeerAddress, selfHostNames, Tailscale } from './tailscale.js'
 import { makeSendCode } from './mail.js'
 import { applyApprovalAnswered, applyApprovalDenied, applyHook, applyInterrupted, applyQuestionDenied, type HookPayload, type HookState } from './hookState.js'
 import { answerInterruptBox, decideInterrupt, isAwaitingFirstResponse, judgeInterrupt, type InterruptBox, type InterruptJudgement } from './interrupt.js'
@@ -338,7 +338,15 @@ app.use((req, res, next) => {
 
 /** claude 의 http 훅 경로 (Express 라우팅처럼 대소문자·끝 슬래시 무시). 이 PC 의 claude 만 보내므로 loopback 소켓만 받는다 — 다른 PC 가 가짜 Stop 으로 팀원 task 결과를 꾸미지 못하게 */
 const CLAUDE_HOOK_PATH = /^\/hook(?:\/ask)?\/?$/i
-// 로컬(127.0.0.1)은 무인증. 그 외는 로그인 쿠키 필요. 인증 API 는 예외, 훅은 로컬만 (로그인한 다른 PC 도 403)
+/** 같은 Tailscale 계정의 다른 기기에서 온 요청인지 (status 30초 캐시). 못 읽으면 false — 쿠키가 없으면 401 그대로 */
+async function isOwnTailnetRequest(req: Request): Promise<boolean> {
+  try {
+    return isOwnPeerAddress(await tailscale.status(), req.socket.remoteAddress)
+  } catch {
+    return false
+  }
+}
+// 로컬(127.0.0.1)·같은 Tailscale 계정의 다른 기기는 무인증. 그 외는 로그인 쿠키 필요. 인증 API 는 예외, 훅은 로컬만 (로그인한 다른 PC 도 403)
 app.use('/api', (req, res, next) => {
   if (CLAUDE_HOOK_PATH.test(req.path)) {
     if (isLoopback(req.socket.remoteAddress)) return next()
@@ -348,14 +356,18 @@ app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/auth/')) return next()
   if (isLoopback(req.socket.remoteAddress)) return next()
   if (auth.emailOf(parseCookie(req.headers.cookie, COOKIE))) return next()
-  res.status(401).json({ message: 'Login required' })
+  void isOwnTailnetRequest(req).then((isOwn) => {
+    if (isOwn) return next()
+    res.status(401).json({ message: 'Login required' })
+  })
 })
 
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', async (req, res) => {
   const isLocal = isLoopback(req.socket.remoteAddress)
   const email = auth.emailOf(parseCookie(req.headers.cookie, COOKIE))
+  const isAuthenticated = isLocal || email !== null || (await isOwnTailnetRequest(req))
   // app: 다른 PC 의 Pray 가 이 응답으로 여기 Pray 가 있는지 안다 (tailscale.ts 의 probePray)
-  res.json({ isAuthenticated: isLocal || email !== null, isLocal, email, canLogin: sendCode !== null, app: 'pray' })
+  res.json({ isAuthenticated, isLocal, email, canLogin: sendCode !== null, app: 'pray' })
 })
 
 app.post('/api/auth/request', async (req, res) => {

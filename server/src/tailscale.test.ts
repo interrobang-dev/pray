@@ -5,6 +5,7 @@ import {
   findTailscale,
   isProbeTarget,
   machineUrl,
+  isOwnPeerAddress,
   parseTailscaleStatus,
   probePray,
   readTailscaleStatus,
@@ -17,16 +18,17 @@ const SAMPLE = {
   BackendState: 'Running',
   MagicDNSSuffix: 'tailda52be.ts.net',
   CurrentTailnet: { MagicDNSSuffix: 'tailda52be.ts.net', MagicDNSEnabled: true },
-  Self: { HostName: 'DESKTOP-R7FM8CI', DNSName: 'office.tailda52be.ts.net.', TailscaleIPs: ['100.89.244.81', 'fd7a:115c:a1e0::2348:f452'], OS: 'windows', Online: true },
+  Self: { HostName: 'DESKTOP-R7FM8CI', DNSName: 'office.tailda52be.ts.net.', TailscaleIPs: ['100.89.244.81', 'fd7a:115c:a1e0::2348:f452'], OS: 'windows', Online: true, UserID: 7 },
   Peer: {
-    'nodekey:b': { HostName: '준기의 S26', DNSName: 's26.tailda52be.ts.net.', TailscaleIPs: ['fd7a:115c:a1e0::9648:c54c', '100.101.197.75'], OS: 'android', Online: false },
-    'nodekey:a': { HostName: 'DESKTOP-U8JGUV7', DNSName: 'home.tailda52be.ts.net.', TailscaleIPs: ['100.105.169.121'], OS: 'windows', Online: true },
+    'nodekey:b': { HostName: '준기의 S26', DNSName: 's26.tailda52be.ts.net.', TailscaleIPs: ['fd7a:115c:a1e0::9648:c54c', '100.101.197.75'], OS: 'android', Online: false, UserID: 7 },
+    'nodekey:a': { HostName: 'DESKTOP-U8JGUV7', DNSName: 'home.tailda52be.ts.net.', TailscaleIPs: ['100.105.169.121'], OS: 'windows', Online: true, UserID: 7 },
   },
 }
 
 describe('parseTailscaleStatus', () => {
   it('reads self, peers and MagicDNS', () => {
-    const status = parseTailscaleStatus(SAMPLE)
+    const friend = { HostName: 'FRIEND-PC', DNSName: 'friend.tailda52be.ts.net.', TailscaleIPs: ['100.77.0.9'], OS: 'windows', Online: true, UserID: 99 }
+  const status = parseTailscaleStatus({ ...SAMPLE, Peer: { ...SAMPLE.Peer, 'nodekey:c': friend } })
     expect(status.state).toBe('ready')
     expect(status.isMagicDnsEnabled).toBe(true)
     expect(status.self).toEqual({ name: 'office', hostName: 'DESKTOP-R7FM8CI', dnsName: 'office.tailda52be.ts.net', ipv4: '100.89.244.81', os: 'windows', isOnline: true })
@@ -45,6 +47,31 @@ describe('parseTailscaleStatus', () => {
     expect(status.self).toMatchObject({ name: 'PC', dnsName: null, ipv4: null, isOnline: false })
     expect(status.peers).toEqual([])
     expect(status.isMagicDnsEnabled).toBe(false)
+  })
+})
+
+describe('isOwnPeerAddress', () => {
+  const status = parseTailscaleStatus(SAMPLE)
+
+  it('trusts only peers of the same Tailscale user, IPv4 and IPv6', () => {
+    expect(status.ownerPeerIps).toEqual(['fd7a:115c:a1e0::9648:c54c', '100.101.197.75', '100.105.169.121'])
+    expect(isOwnPeerAddress(status, '100.105.169.121')).toBe(true)
+    expect(isOwnPeerAddress(status, '::ffff:100.105.169.121')).toBe(true)
+    expect(isOwnPeerAddress(status, 'FD7A:115C:A1E0::9648:C54C')).toBe(true)
+  })
+
+  it('rejects another user, this PC itself, LAN and unknown addresses', () => {
+    expect(isOwnPeerAddress(status, '100.77.0.9')).toBe(false)
+    expect(isOwnPeerAddress(status, '100.89.244.81')).toBe(false)
+    expect(isOwnPeerAddress(status, '192.168.0.10')).toBe(false)
+    expect(isOwnPeerAddress(status, undefined)).toBe(false)
+  })
+
+  it('trusts nobody when not ready or this PC has no user', () => {
+    expect(isOwnPeerAddress(parseTailscaleStatus({ ...SAMPLE, BackendState: 'Stopped' }), '100.105.169.121')).toBe(false)
+    const noUser = parseTailscaleStatus({ ...SAMPLE, Self: { ...SAMPLE.Self, UserID: undefined } })
+    expect(noUser.ownerPeerIps).toEqual([])
+    expect(isOwnPeerAddress(noUser, '100.105.169.121')).toBe(false)
   })
 })
 
@@ -86,7 +113,7 @@ describe('buildMachines', () => {
   })
 
   it('returns no machines unless ready', () => {
-    expect(buildMachines({ state: 'stopped', isMagicDnsEnabled: false, self: null, peers: [] }, new Set(), 4710)).toEqual({ tailscale: 'stopped', machines: [] })
+    expect(buildMachines({ state: 'stopped', isMagicDnsEnabled: false, self: null, peers: [], ownerPeerIps: [] }, new Set(), 4710)).toEqual({ tailscale: 'stopped', machines: [] })
   })
 })
 
@@ -218,7 +245,7 @@ describe('Tailscale', () => {
   })
 
   it('does not probe when tailscale is not ready', async () => {
-    const stopped: TailscaleStatus = { state: 'not-installed', isMagicDnsEnabled: false, self: null, peers: [] }
+    const stopped: TailscaleStatus = { state: 'not-installed', isMagicDnsEnabled: false, self: null, peers: [], ownerPeerIps: [] }
     const tailscale = new Tailscale(4710, { readStatus: async () => stopped, probe: async () => { throw new Error('no') } })
     expect(await tailscale.machines()).toEqual({ tailscale: 'not-installed', machines: [] })
   })

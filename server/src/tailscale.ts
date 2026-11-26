@@ -26,6 +26,8 @@ export interface TailscaleStatus {
   isMagicDnsEnabled: boolean
   self: TailnetNode | null
   peers: TailnetNode[]
+  /** 이 PC 와 같은 Tailscale 계정(UserID)인 다른 기기의 Tailscale IP 전부 (IPv4·IPv6, 소문자). 여기서 온 요청은 로그인 없이 받는다 (isOwnPeerAddress) */
+  ownerPeerIps: string[]
 }
 
 /** `GET /api/machines` 의 기기 하나 (화면이 그대로 쓰는 꼴) */
@@ -48,7 +50,7 @@ export const TAILSCALE_CACHE_MS = 30_000
 /** 다른 PC 의 Pray 를 찾을 때 한 PC 를 기다리는 시간 */
 export const PRAY_PROBE_TIMEOUT_MS = 1_500
 
-const EMPTY_STATUS = { isMagicDnsEnabled: false, self: null, peers: [] }
+const EMPTY_STATUS = { isMagicDnsEnabled: false, self: null, peers: [], ownerPeerIps: [] }
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -78,7 +80,34 @@ export function parseTailscaleStatus(json: unknown): TailscaleStatus {
     isMagicDnsEnabled: tailnet?.MagicDNSEnabled === true,
     self: nodeOf(raw.Self),
     peers: peers.map(nodeOf).filter((node): node is TailnetNode => node !== null),
+    ownerPeerIps: ownerPeerIpsOf(raw.Self, peers),
   }
+}
+
+function userIdOf(value: unknown): number | null {
+  const userId = value && typeof value === 'object' ? (value as Record<string, unknown>).UserID : null
+  return typeof userId === 'number' && userId > 0 ? userId : null
+}
+
+/** 이 PC 와 UserID 가 같은 peer 의 TailscaleIPs. 남이 공유한 기기·태그 기기는 UserID 가 달라 빠진다. 이 PC 의 UserID 가 없으면 [] */
+function ownerPeerIpsOf(self: unknown, peers: unknown[]): string[] {
+  const selfUserId = userIdOf(self)
+  if (selfUserId === null) return []
+  return peers.flatMap((peer) => {
+    if (userIdOf(peer) !== selfUserId) return []
+    const ips = (peer as Record<string, unknown>).TailscaleIPs
+    return Array.isArray(ips) ? ips.filter((ip): ip is string => typeof ip === 'string' && isIP(ip) !== 0).map((ip) => ip.toLowerCase()) : []
+  })
+}
+
+/**
+ * 소켓 주소가 이 PC 와 같은 Tailscale 계정의 다른 기기인지 (순수). ready 일 때만. `::ffff:100.x` 꼴도 IPv4 로 본다.
+ * Tailscale 이 기기 인증·암호화를 하고 TCP 라 주소를 꾸밀 수 없어, 여기 맞으면 메일 로그인을 건너뛴다 (이 PC 전용 기능은 여전히 loopback 만)
+ */
+export function isOwnPeerAddress(status: TailscaleStatus, remoteAddress: string | undefined): boolean {
+  if (status.state !== 'ready' || !remoteAddress) return false
+  const address = remoteAddress.toLowerCase().replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, '')
+  return status.ownerPeerIps.includes(address)
 }
 
 /** 이 PC 자신의 Tailscale 이름 (Host 검사에 더한다, 소문자). MagicDNS 전체 이름과 그 첫 칸. ready 가 아니거나 이름이 없으면 [] */
