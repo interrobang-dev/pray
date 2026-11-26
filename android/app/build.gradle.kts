@@ -12,8 +12,8 @@ android {
         minSdk = 29
         targetSdk = 35
         // 덮어 설치하려면 올린다 (→ .claude/rules/android.md)
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
     }
 
     buildTypes {

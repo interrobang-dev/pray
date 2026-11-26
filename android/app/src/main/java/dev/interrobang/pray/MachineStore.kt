@@ -45,6 +45,7 @@ sealed class MachinesResult {
 /** Pray PC 에 보내는 GET (HttpURLConnection, 의존성 없음). 메인 스레드에서 부르지 않는다 */
 object PrayHttp {
     const val CONNECT_TIMEOUT_MS = 5_000
+    const val PROBE_TIMEOUT_MS = 1_500
 
     /** WebView 가 받은 쿠키(메일 로그인 `jk_session`)를 같이 보낸다. 같은 Tailscale 계정이면 쿠키 없이도 열린다 */
     fun open(url: String, readTimeoutMs: Int): HttpURLConnection {
@@ -76,6 +77,24 @@ object PrayHttp {
             MachinesResult.Failed(error.message ?: error.javaClass.simpleName)
         } catch (error: RuntimeException) {
             MachinesResult.Failed(error.message ?: error.javaClass.simpleName)
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    /** 랜딩 카드: 그 PC 에 Pray 가 답하는지 (`GET /api/auth/me` 의 app 이 'pray', 연결·읽기 각 1.5초) */
+    fun probe(baseUrl: String): Boolean {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = open("$baseUrl/api/auth/me", PROBE_TIMEOUT_MS)
+            connection.connectTimeout = PROBE_TIMEOUT_MS
+            connection.setRequestProperty("Accept", "application/json")
+            if (connection.responseCode != 200) return false
+            Landing.isPrayAnswer(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+        } catch (error: IOException) {
+            false
+        } catch (error: RuntimeException) {
+            false
         } finally {
             connection?.disconnect()
         }

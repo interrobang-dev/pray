@@ -3,4 +3,15 @@
     <!-- 로고 U-2 의 색 (web/public/logo.svg) -->
     <color name="logo_background">#23262E</color>
     <color name="logo_accent">#F5B841</color>
+
+    <!-- 랜딩 (라이트. 다크는 values-night) -->
+    <color name="landing_background">#F4F5F7</color>
+    <color name="landing_card">#FFFFFF</color>
+    <color name="landing_border">#DADCE2</color>
+    <color name="landing_text">#1C1E24</color>
+    <color name="landing_text_secondary">#5F6470</color>
+    <color name="landing_ok">#1A7F37</color>
+    <color name="landing_warn">#B35900</color>
+    <!-- 노랑 칩 위 글자: 두 모드 다 어둡게 -->
+    <color name="landing_chip_text">#23262E</color>
 </resources>

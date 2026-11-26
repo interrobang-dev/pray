@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 랜딩 (다크) -->
+    <color name="landing_background">#23262E</color>
+    <color name="landing_card">#2D313B</color>
+    <color name="landing_border">#3A3F4B</color>
+    <color name="landing_text">#FFFFFF</color>
+    <color name="landing_text_secondary">#B0B4BE</color>
+    <color name="landing_ok">#3FB950</color>
+    <color name="landing_warn">#F5B841</color>
+</resources>

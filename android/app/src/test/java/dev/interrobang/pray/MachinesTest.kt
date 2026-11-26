@@ -41,7 +41,7 @@ class MachinesTest {
             {"name":"3-mobile","hostName":"S26","url":null,"isSelf":false,"isOnline":true,"hasPray":false}]}"""
         val listed = Machines.parsePayload(json)!!
         assertEquals(3, listed.size)
-        assertEquals(ListedMachine("2-office", "http://2-office.tailda52be.ts.net:4710", isSelf = true, hasPray = true), listed[0])
+        assertEquals(ListedMachine("2-office", "http://2-office.tailda52be.ts.net:4710", isSelf = true, hasPray = true, hostName = "DESKTOP-R7FM8CI"), listed[0])
         assertNull(listed[2].url)
     }
 
@@ -116,5 +116,15 @@ class MachinesTest {
         assertEquals(machines, Machines.fromJson(Machines.toJson(machines)))
         assertEquals(emptyList<Machine>(), Machines.fromJson(null))
         assertEquals(emptyList<Machine>(), Machines.fromJson("not json"))
+    }
+
+    @Test
+    fun hostNameIsKeptThroughMergeAndJson() {
+        val listed = listOf(ListedMachine("2-office", office.url, isSelf = true, hasPray = true, hostName = "DESKTOP-R7FM8CI"))
+        val merged = Machines.merge(listOf(office), listed)
+        assertEquals(listOf(office.copy(hostName = "DESKTOP-R7FM8CI")), merged)
+        assertEquals(merged, Machines.fromJson(Machines.toJson(merged)))
+        // 옛 저장 꼴(hostName 없음)도 읽는다
+        assertEquals(listOf(office), Machines.fromJson("""[{"name":"2-office","url":"${office.url}"}]"""))
     }
 }

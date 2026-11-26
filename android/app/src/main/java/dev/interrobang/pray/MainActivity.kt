@@ -44,8 +44,8 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.io.File
 
 /**
- * 전체 화면 WebView 로 Pray 웹을 띄운다. 첫 실행이면 PC 주소 입력 화면, 그 뒤로는 마지막에 본 PC.
- * 저장한 PC 주소는 앱 안, 그 밖은 폰 브라우저. 못 붙으면 "Can't reach <name>" + Retry + 다른 PC
+ * 앱을 새로 열면 늘 랜딩(Tailscale 상태·PC 카드, LandingScreen.kt). 카드를 누르면 전체 화면 WebView 로 Pray 웹을 띄운다.
+ * 알림을 누르면 랜딩을 건너뛰고 그 세션으로. 저장한 PC 주소는 앱 안, 그 밖은 폰 브라우저. 못 붙으면 "Can't reach <name>" + Retry + 다른 PC
  */
 class MainActivity : ComponentActivity() {
     private lateinit var store: MachineStore
@@ -53,6 +53,13 @@ class MainActivity : ComponentActivity() {
     private lateinit var refresh: SwipeRefreshLayout
     private lateinit var setupView: View
     private lateinit var errorView: View
+    private lateinit var landingView: View
+    private lateinit var landing: LandingScreen
+
+    private var screen = Screen.LANDING
+
+    /** 다음에 끝나는 PC 페이지에서 WebView 기록을 지운다 (랜딩·알림에서 연 PC 에서 뒤로 가면 랜딩이지, 전에 본 PC·about:blank 가 아니게) */
+    private var shouldClearHistory = false
 
     /** WebView 가 보고 있는(또는 열려는) PC */
     private var currentMachine: Machine? = null
@@ -87,27 +94,42 @@ class MainActivity : ComponentActivity() {
         refresh = findViewById(R.id.refresh)
         setupView = findViewById(R.id.setup)
         errorView = findViewById(R.id.error)
+        landingView = findViewById(R.id.landing)
+        landing = LandingScreen(
+            this,
+            store,
+            onOpen = { openMachine(it) },
+            onAddPc = { showSetup(prefill = "") },
+            onMachinesChanged = { NotifyService.start(this) },
+        )
         setupWebView()
         setupPullRefresh()
         setupSetupScreen()
         findViewById<Button>(R.id.error_retry).setOnClickListener { currentMachine?.let { openMachine(it) } }
-        findViewById<Button>(R.id.error_change_address).setOnClickListener { showSetup() }
+        findViewById<Button>(R.id.error_change_address).setOnClickListener { showSetup(prefill = currentMachine?.url) }
 
         onBackPressedDispatcher.addCallback(this) {
-            if (web.visibility == View.VISIBLE && errorView.visibility != View.VISIBLE && setupView.visibility != View.VISIBLE && web.canGoBack()) {
-                web.goBack()
-            } else {
-                finish()
+            when (Landing.back(screen, errorView.visibility == View.VISIBLE, web.canGoBack())) {
+                BackAction.WEB_BACK -> web.goBack()
+                BackAction.TO_LANDING -> showLanding()
+                BackAction.CLOSE -> finish()
             }
         }
 
+        // 새로 열면 랜딩. 알림이 넘긴 주소면 그 세션으로 바로. 시스템이 뒤에서 화면을 지웠다 되살린 것이면 보던 웹 주소로
         val requestedUrl = takeRequestedUrl(intent)
-        val last = store.lastMachine()
+        val restoredUrl = savedInstanceState?.getString(STATE_WEB_URL)
         when {
             requestedUrl != null -> openUrl(requestedUrl)
-            last != null -> openMachine(last)
-            else -> showSetup()
+            restoredUrl != null -> openUrl(restoredUrl)
+            else -> showLanding()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val url = web.url
+        if (screen == Screen.WEB && url != null && url != BLANK_URL) outState.putString(STATE_WEB_URL, url)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -119,17 +141,20 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         if (store.machines.isEmpty()) return
         NotifyService.start(this)
-        refreshMachinesIfStale()
+        // 랜딩은 보일 때마다 스스로 목록을 다시 받는다
+        if (screen != Screen.LANDING) refreshMachinesIfStale()
     }
 
     override fun onResume() {
         super.onResume()
         isResumedNow = true
         updateVisibleMachine()
+        if (screen == Screen.LANDING) landing.start()
     }
 
     override fun onPause() {
         isResumedNow = false
+        landing.stop()
         AppState.visibleMachineName = null
         CookieManager.getInstance().flush()
         super.onPause()
@@ -197,15 +222,21 @@ class MainActivity : ComponentActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 refresh.isRefreshing = false
+                if (url == BLANK_URL) return
+                if (shouldClearHistory) {
+                    shouldClearHistory = false
+                    view.clearHistory()
+                }
                 // 당기기 판정 스크립트는 저장한 PC 페이지에만 넣는다
                 if (Machines.machineFor(url, store.machines) != null) view.evaluateJavascript(PullRefresh.SCRIPT, null)
-                if (hasMainFrameError) return
+                if (hasMainFrameError || screen != Screen.WEB) return
                 errorView.visibility = View.GONE
                 web.visibility = View.VISIBLE
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (!request.isForMainFrame) return
+                // 랜딩으로 나가며 멈춘 페이지의 오류는 보이지 않는다
+                if (!request.isForMainFrame || screen != Screen.WEB) return
                 hasMainFrameError = true
                 refresh.isRefreshing = false
                 showError(Machines.machineFor(request.url.toString(), store.machines) ?: currentMachine, error.description?.toString())
@@ -260,12 +291,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun showSetup() {
+    /** 랜딩: 웹 페이지는 about:blank 로 멈춘다 (뒤에서 SSE·폴링을 붙들지 않고, 다른 PC 를 열 때 옛 화면이 비치지 않게) */
+    private fun showLanding() {
+        screen = Screen.LANDING
+        setupView.visibility = View.GONE
+        errorView.visibility = View.GONE
+        web.visibility = View.INVISIBLE
+        refresh.isRefreshing = false
+        landingView.visibility = View.VISIBLE
+        web.stopLoading()
+        web.loadUrl(BLANK_URL)
+        updateVisibleMachine()
+        if (isResumedNow) landing.start()
+    }
+
+    /** 주소 입력 (Add PC·"Use another address"). prefill null 이면 입력칸을 그대로 둔다 */
+    private fun showSetup(prefill: String?) {
+        screen = Screen.SETUP
+        landing.stop()
+        landingView.visibility = View.GONE
         errorView.visibility = View.GONE
         setupView.visibility = View.VISIBLE
+        setSetupMessage(null)
         findViewById<EditText>(R.id.setup_address).apply {
-            if (text.isEmpty()) setText(currentMachine?.url ?: "")
+            if (prefill != null) setText(prefill)
         }
+        updateVisibleMachine()
     }
 
     private fun setSetupMessage(message: String?) {
@@ -301,6 +352,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openUrl(url: String) {
+        screen = Screen.WEB
+        landing.stop()
+        landingView.visibility = View.GONE
+        shouldClearHistory = true
         noteUrl(url)
         setupView.visibility = View.GONE
         errorView.visibility = View.GONE
@@ -318,7 +373,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateVisibleMachine() {
-        AppState.visibleMachineName = if (isResumedNow) currentMachine?.name else null
+        AppState.visibleMachineName = if (isResumedNow && screen == Screen.WEB) currentMachine?.name else null
     }
 
     private fun openOutside(url: String) {
@@ -362,7 +417,8 @@ class MainActivity : ComponentActivity() {
         val entered = Machine(Machines.nameOf(address), address)
         when (result) {
             is MachinesResult.Ok -> {
-                val machines = Machines.merge(listOf(entered), result.listed)
+                // Add PC: 이미 있던 PC 도 아는 PC 로 넘겨 남긴다
+                val machines = Machines.merge(store.machines + entered, result.listed)
                 val self = result.listed.firstOrNull { it.isSelf }?.name
                 store.machines = machines
                 val first = machines.firstOrNull { it.name == self } ?: machines.firstOrNull { it.name == entered.name } ?: machines.first()
@@ -372,7 +428,7 @@ class MainActivity : ComponentActivity() {
             }
             // 메일 로그인이 필요한 PC (같은 Tailscale 계정이 아님): 그 PC 하나로 열어 웹 로그인 화면을 따른다
             is MachinesResult.HttpError -> if (result.code == 401) {
-                store.machines = listOf(entered)
+                store.machines = Landing.sorted(store.machines.filter { it.name != entered.name } + entered)
                 openMachine(entered)
                 NotifyService.start(this)
             } else {
@@ -463,6 +519,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val EXTRA_URL = "dev.interrobang.pray.URL"
+        private const val STATE_WEB_URL = "webUrl"
+        private const val BLANK_URL = "about:blank"
 
         /** 알림을 누르면 열 화면: 그 주소를 앱 안에서 */
         fun openIntent(context: Context, url: String): Intent =

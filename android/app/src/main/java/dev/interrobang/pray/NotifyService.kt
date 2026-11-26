@@ -20,10 +20,18 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import java.util.concurrent.ConcurrentHashMap
 
-/** 앱 화면이 지금 보고 있는 PC (앞에 있을 때만, 아니면 null). 같은 PC 의 알림은 화면 배지로 보이니 띄우지 않는다 */
 object AppState {
+    /** 앱 화면이 지금 보고 있는 PC (앞에서 WebView 를 보고 있을 때만, 아니면 null). 같은 PC 의 알림은 화면 배지로 보이니 띄우지 않는다 */
     @Volatile
     var visibleMachineName: String? = null
+
+    /** PC 이름 → 알림 스트림 상태 (NotifyService 가 메인 스레드에서 바꾼다. 서비스가 없으면 비었다). 랜딩 카드가 읽는다 */
+    @Volatile
+    var streamStates: Map<String, StreamState> = emptyMap()
+
+    /** streamStates 가 바뀌면 메인 스레드에서 부른다 (랜딩이 보일 때만 건다) */
+    @Volatile
+    var onStreamStatesChanged: (() -> Unit)? = null
 }
 
 /**
@@ -98,6 +106,8 @@ class NotifyService : Service(), StreamWorker.Listener {
         }
         workers.values.forEach { it.shutdown() }
         workers.clear()
+        states.clear()
+        publishStates()
         super.onDestroy()
     }
 
@@ -122,6 +132,7 @@ class NotifyService : Service(), StreamWorker.Listener {
             workers[machine.name] = StreamWorker(machine, this).also { it.isDaemon = true; it.start() }
         }
         updateOngoing()
+        publishStates()
     }
 
     private fun refreshMachines() {
@@ -139,7 +150,10 @@ class NotifyService : Service(), StreamWorker.Listener {
     override fun onState(machine: Machine, state: StreamState) {
         handler.post {
             if (workers[machine.name]?.machine != machine) return@post
-            if (states.put(machine.name, state) != state) updateOngoing()
+            if (states.put(machine.name, state) != state) {
+                updateOngoing()
+                publishStates()
+            }
         }
     }
 
@@ -167,6 +181,11 @@ class NotifyService : Service(), StreamWorker.Listener {
             .setPriority(if (channel == NoticeChannel.TURN) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .build()
         post(id, notification)
+    }
+
+    private fun publishStates() {
+        AppState.streamStates = HashMap(states)
+        AppState.onStreamStatesChanged?.invoke()
     }
 
     private fun updateOngoing() {

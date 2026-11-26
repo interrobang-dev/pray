@@ -3,11 +3,11 @@ package dev.interrobang.pray
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Pray 가 도는 PC 하나. url = 끝 슬래시 없는 `http://이름:4710` */
-data class Machine(val name: String, val url: String)
+/** Pray 가 도는 PC 하나. name = Tailscale 기기 이름, url = 끝 슬래시 없는 `http://이름:4710`, hostName = 그 PC 의 OS 이름(랜딩 카드에 작게. 주소를 손으로 넣은 PC 는 목록을 받기 전까지 null) */
+data class Machine(val name: String, val url: String, val hostName: String? = null)
 
 /** `GET /api/machines` 의 기기 하나 중 앱이 쓰는 칸 */
-data class ListedMachine(val name: String, val url: String?, val isSelf: Boolean, val hasPray: Boolean)
+data class ListedMachine(val name: String, val url: String?, val isSelf: Boolean, val hasPray: Boolean, val hostName: String? = null)
 
 /** 링크를 어디서 열지 */
 enum class LinkTarget { IN_APP, EXTERNAL }
@@ -62,7 +62,8 @@ object Machines {
             val name = item.optString("name", "")
             if (name.isEmpty()) return@mapNotNull null
             val url = if (item.isNull("url")) null else item.optString("url", "").trimEnd('/').ifEmpty { null }
-            ListedMachine(name, url, item.optBoolean("isSelf", false), item.optBoolean("hasPray", false))
+            val hostName = if (item.isNull("hostName")) null else item.optString("hostName", "").ifEmpty { null }
+            ListedMachine(name, url, item.optBoolean("isSelf", false), item.optBoolean("hasPray", false), hostName)
         }
     }
 
@@ -76,7 +77,7 @@ object Machines {
         val known = previous.map { it.name }.toSet()
         return listed
             .filter { it.url != null && (it.hasPray || it.name in known) }
-            .map { Machine(it.name, it.url!!) }
+            .map { Machine(it.name, it.url!!, it.hostName) }
             .distinctBy { it.name }
             .sortedBy { it.name }
     }
@@ -103,7 +104,7 @@ object Machines {
     }
 
     fun toJson(machines: List<Machine>): String =
-        JSONArray(machines.map { JSONObject().put("name", it.name).put("url", it.url) }).toString()
+        JSONArray(machines.map { JSONObject().put("name", it.name).put("url", it.url).put("hostName", it.hostName) }).toString()
 
     fun fromJson(json: String?): List<Machine> {
         if (json.isNullOrEmpty()) return emptyList()
@@ -116,7 +117,8 @@ object Machines {
             val item = array.optJSONObject(index) ?: return@mapNotNull null
             val name = item.optString("name", "")
             val url = item.optString("url", "")
-            if (name.isEmpty() || url.isEmpty()) null else Machine(name, url)
+            val hostName = if (item.isNull("hostName")) null else item.optString("hostName", "").ifEmpty { null }
+            if (name.isEmpty() || url.isEmpty()) null else Machine(name, url, hostName)
         }
     }
 }
