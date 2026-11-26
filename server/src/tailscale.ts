@@ -147,6 +147,14 @@ export function readTailscaleStatus(run: typeof execFile = execFile, command: st
   })
 }
 
+/** Pray 가 돌 수 없는 OS (tailscale status 의 OS 값, 소문자로 비교). 폰은 4710 에 응답하지 않아 확인이 제한 시간까지 기다렸다 */
+const NO_PRAY_OS = new Set(['android', 'ios'])
+
+/** Pray 가 떠 있는지 물어볼 기기: 온라인·IPv4 있음·폰이 아님 */
+export function isProbeTarget(node: TailnetNode): boolean {
+  return node.isOnline && node.ipv4 !== null && !NO_PRAY_OS.has(node.os.toLowerCase())
+}
+
 /** 그 IP 의 4710 에 Pray 가 있는지: `/api/auth/me` 응답 JSON 의 `app` 이 'pray'. 시간 초과·연결 실패·다른 응답은 false */
 export async function probePray(ipv4: string, port: number, fetchImpl: typeof fetch = fetch): Promise<boolean> {
   try {
@@ -159,7 +167,10 @@ export async function probePray(ipv4: string, port: number, fetchImpl: typeof fe
   }
 }
 
-/** 시계 주입 30초 캐시 + 같이 온 요청은 하나를 기다린다 */
+/**
+ * 시계 주입 30초 캐시 + 같이 온 요청은 하나를 기다린다.
+ * isStaleServed 면 시간이 지난 값도 바로 주고 새 값은 뒤에서 읽는다 (값이 아직 없을 때만 기다린다)
+ */
 class Cached<T> {
   private value: { at: number; data: T } | null = null
   private pending: Promise<T> | null = null
@@ -168,10 +179,21 @@ class Cached<T> {
     private readonly load: () => Promise<T>,
     private readonly ttlMs: number,
     private readonly now: () => number,
+    private readonly isStaleServed = false,
   ) {}
 
   get(): Promise<T> {
     if (this.value && this.now() - this.value.at < this.ttlMs) return Promise.resolve(this.value.data)
+    const loading = this.refresh()
+    if (this.value && this.isStaleServed) {
+      // load 는 던지지 않지만, 혹시 던져도 처리되지 않은 거부로 서버가 죽지 않게
+      loading.catch(() => {})
+      return Promise.resolve(this.value.data)
+    }
+    return loading
+  }
+
+  private refresh(): Promise<T> {
     if (!this.pending) {
       this.pending = this.load()
         .then((data) => {
@@ -205,12 +227,14 @@ export class Tailscale {
     this.machinesCache = new Cached(
       async () => {
         const status = await this.status()
-        const targets = status.state === 'ready' ? status.peers.filter((node) => node.isOnline && node.ipv4) : []
+        const targets = status.state === 'ready' ? status.peers.filter(isProbeTarget) : []
         const found = await Promise.all(targets.map(async (node) => ((await probe(node.ipv4!, port)) ? node.ipv4! : null)))
         return buildMachines(status, new Set(found.filter((ip): ip is string => ip !== null)), port)
       },
       TAILSCALE_CACHE_MS,
       now,
+      // 상대 PC 확인은 응답 없는 기기에서 1.5초를 기다려서, 지난 목록을 바로 주고 뒤에서 새로 만든다 (처음 한 번만 기다린다)
+      true,
     )
   }
 

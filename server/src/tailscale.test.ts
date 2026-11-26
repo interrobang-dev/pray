@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildMachines,
   findTailscale,
+  isProbeTarget,
   machineUrl,
   parseTailscaleStatus,
   probePray,
@@ -166,14 +167,72 @@ describe('Tailscale', () => {
     await tailscale.status()
     expect(reads).toBe(1)
     time = 30_000
-    await tailscale.machines()
+    // 시간이 지나면 지난 목록을 바로 주고 뒤에서 새로 만든다
+    expect(await tailscale.machines()).toBe(a)
     expect(reads).toBe(2)
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(probed).toHaveLength(2)
+    expect(await tailscale.machines()).not.toBe(a)
+    expect(reads).toBe(2)
+  })
+
+  it('waits for the first list but serves the old one while a slow refresh runs', async () => {
+    let time = 0
+    let release: (() => void) | null = null
+    let hasPray = false
+    const tailscale = new Tailscale(4710, {
+      now: () => time,
+      readStatus: async () => parseTailscaleStatus(SAMPLE),
+      probe: () =>
+        new Promise((resolve) => {
+          const answer = hasPray
+          release = () => resolve(answer)
+        }),
+    })
+    const first = tailscale.machines()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    release!()
+    expect((await first).machines.find((m) => m.name === 'home')?.hasPray).toBe(false)
+    time = 40_000
+    hasPray = true
+    expect((await tailscale.machines()).machines.find((m) => m.name === 'home')?.hasPray).toBe(false)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    release!()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect((await tailscale.machines()).machines.find((m) => m.name === 'home')?.hasPray).toBe(true)
+  })
+
+  it('does not probe phones', async () => {
+    const probed: string[] = []
+    const online = { ...SAMPLE, Peer: { ...SAMPLE.Peer, 'nodekey:b': { ...SAMPLE.Peer['nodekey:b'], Online: true } } }
+    const tailscale = new Tailscale(4710, {
+      readStatus: async () => parseTailscaleStatus(online),
+      probe: async (ip) => {
+        probed.push(ip)
+        return true
+      },
+    })
+    const result = await tailscale.machines()
+    expect(probed).toEqual(['100.105.169.121'])
+    expect(result.machines.find((m) => m.name === 's26')).toMatchObject({ isOnline: true, hasPray: false })
   })
 
   it('does not probe when tailscale is not ready', async () => {
     const stopped: TailscaleStatus = { state: 'not-installed', isMagicDnsEnabled: false, self: null, peers: [] }
     const tailscale = new Tailscale(4710, { readStatus: async () => stopped, probe: async () => { throw new Error('no') } })
     expect(await tailscale.machines()).toEqual({ tailscale: 'not-installed', machines: [] })
+  })
+})
+
+describe('isProbeTarget', () => {
+  const node = { name: 'home', hostName: 'HOME', dnsName: null, ipv4: '100.1.1.1', os: 'windows', isOnline: true }
+
+  it('asks online PCs with an IPv4 that are not phones', () => {
+    expect(isProbeTarget(node)).toBe(true)
+    expect(isProbeTarget({ ...node, os: 'linux' })).toBe(true)
+    expect(isProbeTarget({ ...node, os: 'android' })).toBe(false)
+    expect(isProbeTarget({ ...node, os: 'iOS' })).toBe(false)
+    expect(isProbeTarget({ ...node, isOnline: false })).toBe(false)
+    expect(isProbeTarget({ ...node, ipv4: null })).toBe(false)
   })
 })
