@@ -319,6 +319,8 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
       return
     }
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+    // 폰(터치)은 키보드에 Shift+Enter 가 없어 Enter = 줄바꿈, 보내기는 ➤ 버튼만. 빈 입력칸 Enter 로 승인하지도 않는다 (실수 승인 막기)
+    if (window.matchMedia(TOUCH_QUERY).matches) return
     // 보낼 것이 없으면 Chat 에 넘긴다 (승인 막대 Enter). 막기 전에 불러 Chat 이 defaultPrevented 로 넘기지 않게 한다
     const isNothingToSend = !draft.trim() && attachments.length === 0 && !quote
     if (isNothingToSend) onEmptyEnter(event.nativeEvent)
