@@ -526,14 +526,16 @@ header h1 {
   background: var(--surface-2);
   border-radius: var(--radius-pill);
 }
+/* 칸 폭은 글자 길이를 바탕으로 남는 폭을 똑같이 나눈다 (같은 폭이면 배지가 붙은 Needs you 만 꽉 낀다) */
 .side-tab {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 4px 6px;
+  gap: 5px;
+  padding: 4px 8px;
   border: 0;
   background: transparent;
   color: var(--muted);
