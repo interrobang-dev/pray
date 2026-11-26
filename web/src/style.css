@@ -2912,6 +2912,16 @@ li.group.drop-after::after {
   --scrollbar-thumb: rgba(227, 229, 234, 0.2);
   --scrollbar-thumb-hover: rgba(227, 229, 234, 0.36);
 }
+/* xterm 이 자기 요소에도 class "terminal" 을 붙여 위 여백·패딩이 안쪽에 한 번 더 걸리므로 안쪽은 0 으로 */
+.terminal .terminal {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+}
+/* 터미널 아래 특수 키 줄 (Terminal.tsx): 폰 키보드에 없는 키라 폰 폭에서만 보인다 (아래 768px 블록) */
+.terminal-keys {
+  display: none;
+}
 .chat {
   position: relative;
   flex: 1;
@@ -9693,17 +9703,35 @@ button.machine-row:hover:not(:disabled) {
   .search-row {
     min-height: 44px;
   }
-  /* 터미널 탭: 바깥 카드 여백·패딩을 줄여 열을 늘린다 (360 에서 38열 → 44열).
-     xterm 이 자기 요소에도 class "terminal" 을 붙여 위 .terminal 의 여백·패딩이 안쪽에 한 번 더 걸리므로 안쪽은 0 으로 */
+  /* 터미널 탭: 바깥 카드 여백·패딩을 줄여 열을 늘린다 (360 에서 38열 → 44열) */
   .terminal {
     margin: 0 4px 4px;
     padding: 6px 2px 6px 6px;
     border-radius: var(--radius-md);
   }
-  .terminal .terminal {
-    margin: 0;
-    padding: 0;
-    border-radius: 0;
+  /* 특수 키 줄: 40px 버튼 한 줄, 넘치면 가로 스크롤 (360 폭은 간격 2px·안쪽 6px 로 딱 들어간다). 남는 폭은 버튼이 나눠 갖는다 */
+  .terminal-keys {
+    display: flex;
+    flex-shrink: 0;
+    gap: 2px;
+    padding: 0 4px 4px;
+    overflow-x: auto;
+  }
+  .terminal-keys button {
+    flex: 1 0 auto;
+    min-width: 40px;
+    height: 40px;
+    padding: 0 6px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: calc(13px * var(--font-scale));
+    white-space: nowrap;
+    touch-action: manipulation;
+  }
+  .terminal-keys button:active {
+    background: var(--surface-3);
   }
   /* 말풍선 복사·마크·인용 버튼: 터치 폰은 40px (위 hover: none 블록의 32px 자리 규칙을 40px 간격으로 다시 쓴다).
      마우스 기기의 좁은 창은 위 모서리 hover 버튼 그대로 둔다 (40px 이면 글을 가린다) */

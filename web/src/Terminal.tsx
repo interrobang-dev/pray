@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type SyntheticEvent } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import { TERMINAL_KEYS, terminalKeyData, type TerminalKeyId } from './terminalKeys'
 
 interface Props {
   sessionId: string
@@ -12,6 +13,7 @@ export const NEWLINE_KEYS = '\x1b\r'
 
 export function Terminal({ sessionId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const termRef = useRef<XTerm | null>(null)
 
   useEffect(() => {
     const container = containerRef.current
@@ -22,6 +24,7 @@ export function Terminal({ sessionId }: Props) {
     term.loadAddon(fit)
     term.open(container)
     fit.fit()
+    termRef.current = term
 
     const post = (path: string, body: unknown) =>
       fetch(`/api/sessions/${sessionId}/${path}`, {
@@ -87,11 +90,41 @@ export function Terminal({ sessionId }: Props) {
 
     return () => {
       clearTimeout(newlineFallbackTimer)
+      termRef.current = null
       source.close()
       observer.disconnect()
       term.dispose()
     }
   }, [sessionId])
 
-  return <div ref={containerRef} className="terminal" />
+  // 키 줄 버튼: xterm 에 친 것과 같은 길(onData → 입력 POST)로 보낸다. 화살표 꼴은 지금 커서 모드를 따른다
+  const sendKey = (id: TerminalKeyId) => {
+    const term = termRef.current
+    if (term) term.input(terminalKeyData(id, term.modes.applicationCursorKeysMode), true)
+  }
+  // 누를 때 포커스가 버튼으로 옮겨 가면 xterm 입력칸이 포커스를 잃어 폰 키보드가 닫힌다
+  const keepFocus = (event: SyntheticEvent) => event.preventDefault()
+
+  return (
+    <>
+      <div ref={containerRef} className="terminal" />
+      {/* 폰 키보드에 없는 키. 화면에 보이는 것은 폰 폭뿐이다 (style.css) */}
+      <div className="terminal-keys">
+        {TERMINAL_KEYS.map((key) => (
+          <button
+            key={key.id}
+            type="button"
+            tabIndex={-1}
+            aria-label={key.ariaLabel}
+            title={key.ariaLabel}
+            onPointerDown={keepFocus}
+            onMouseDown={keepFocus}
+            onClick={() => sendKey(key.id)}
+          >
+            {key.label}
+          </button>
+        ))}
+      </div>
+    </>
+  )
 }
