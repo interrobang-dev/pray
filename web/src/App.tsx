@@ -19,6 +19,7 @@ import type { RowView } from './chatWindow'
 import { addToComposerDraft } from './composerDraft'
 import { hasUnsavedEdit, confirmDiscardUnsaved, whenLeavingAllowed } from './unsavedEdits'
 import { sessionIdFromHash } from './sessionLink'
+import { PANEL_STATE, isPanelState, panelHistoryStep, shouldClosePanelOnPop } from './panelHistory'
 import { parseCollapsedGroupIds, statusSummary, summaryLabel, toggleCollapsedGroup, type StatusCount } from './listCollapse'
 import { isBtwShortcut } from './composerText'
 import { Office, type OfficeFocus } from './Office'
@@ -793,12 +794,48 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     const onHash = () => {
       const sessionId = sessionIdFromHash(window.location.hash)
       if (!sessionId) return
-      history.replaceState(null, '', window.location.pathname + window.location.search)
+      // state 는 그대로 둔다 — 폰 패널 기록(panelHistory.ts)을 알아보는 표시다
+      history.replaceState(history.state, '', window.location.pathname + window.location.search)
       selectSessionRef.current(sessionId)
     }
     onHash()
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  // 폰 폭에서 패널을 열면 기록을 하나 쌓아 뒤로 가기(브라우저·안드로이드 앱)가 목록으로 돌아가게 한다 (panelHistory.ts).
+  // ← 버튼 등 앱이 패널을 닫으면 쌓은 기록을 되돌린다. 새로고침·다른 PC 에서 돌아와 남은 패널 기록은 처음 그릴 때 state 만 지운다
+  const isPanelPushedRef = useRef(false)
+  const hasPanelOpen = selected !== null
+  useEffect(() => {
+    if (isPanelState(history.state)) history.replaceState(null, '')
+  }, [])
+  useEffect(() => {
+    const step = panelHistoryStep(isNarrow, hasPanelOpen, isPanelPushedRef.current)
+    if (step === 'push') {
+      history.pushState(PANEL_STATE, '')
+      isPanelPushedRef.current = true
+    } else if (step === 'back') {
+      // 먼저 내려 두어 이 back 의 popstate 는 아무 일 없게 한다
+      isPanelPushedRef.current = false
+      if (isPanelState(history.state)) history.back()
+    }
+  }, [isNarrow, hasPanelOpen])
+  useEffect(() => {
+    const onPop = (event: PopStateEvent) => {
+      if (!shouldClosePanelOnPop(isPanelPushedRef.current, event.state)) return
+      isPanelPushedRef.current = false
+      if (!hasUnsavedEdit()) {
+        setSelectedId(null)
+        return
+      }
+      // 뒤로 가기는 취소할 수 없어 패널 기록을 다시 쌓고 묻는다. 버리면 닫고(위 effect 가 그 기록을 되돌린다), 아니면 그대로
+      history.pushState(PANEL_STATE, '')
+      isPanelPushedRef.current = true
+      void confirmDiscardUnsaved().then((isAllowed) => isAllowed && setSelectedId(null))
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
   }, [])
 
   // 트레이 앱이 "그 세션이 지금 열려 있으면 알리지 않기" 에 읽는다
