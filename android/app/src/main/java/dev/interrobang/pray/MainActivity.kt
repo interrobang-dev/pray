@@ -13,12 +13,15 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.inputmethod.EditorInfo
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -71,6 +74,14 @@ class MainActivity : ComponentActivity() {
     /** 이번 손짓에 페이지가 알린 "당겨 새로고침을 막을지" (브리지 스레드가 쓴다). null = 아직 안 옴 → 막는다 (→ PullRefresh.kt) */
     @Volatile private var pageBlocksPull: Boolean? = null
     private var isDispatchingDown = false
+
+    // 뒤로 길게 누르기: DOWN 에서 걸고 그 전에 UP 이 오면 취소. 돌면 랜딩(랜딩이면 아무것도 안 함)
+    private val backHandler = Handler(Looper.getMainLooper())
+    private var isBackLongPressed = false
+    private val backLongPress = Runnable {
+        isBackLongPressed = true
+        if (Landing.longBack(screen) == BackAction.TO_LANDING) showLanding()
+    }
 
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var cameraUri: Uri? = null
@@ -175,35 +186,30 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 뒤로 키는 화면(WebView 포함)을 거치지 않고 바로 이 Activity 의 onKeyDown·onKeyLongPress·onKeyUp 으로 보낸다.
-     * Activity.dispatchKeyEvent 와 같은 DispatcherState 를 써서 길게 누르기 판정·손 뗄 때 취소 표시가 그대로 된다
+     * 뒤로 키는 화면(WebView 포함)을 거치지 않고 바로 여기서 처리한다.
+     * 길게 누르기는 시스템 판정(onKeyLongPress)을 쓰지 않고 DOWN 에서 타이머를 건다 — 삼성 내비 막대 ◁ 는 누르고 있어도
+     * 반복 DOWN(FLAG_LONG_PRESS)을 안 보내 onKeyLongPress 가 오지 않았다. DOWN(손 댐)·UP(손 뗌)만 있으면 된다
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode != KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
-        return event.dispatch(this, window.decorView.keyDispatcherState, this)
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode != KeyEvent.KEYCODE_BACK) return super.onKeyDown(keyCode, event)
-        event.startTracking()
-        return true
-    }
-
-    /** 길게 누르면 바로 랜딩. 랜딩에서도 true — 그래야 손을 뗄 때 오는 UP 이 취소로 표시돼 짧은 뒤로(앱 닫기)가 돌지 않는다 */
-    override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode != KeyEvent.KEYCODE_BACK) return super.onKeyLongPress(keyCode, event)
-        if (Landing.longBack(screen) == BackAction.TO_LANDING) showLanding()
-        return true
-    }
-
-    /** 짧게 눌렀다 뗐을 때만 지금의 뒤로 (길게 누른 뒤의 UP 은 isCanceled) */
-    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode != KeyEvent.KEYCODE_BACK) return super.onKeyUp(keyCode, event)
-        if (event.isTracking && !event.isCanceled) onBackPressedDispatcher.onBackPressed()
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> if (event.repeatCount == 0) {
+                isBackLongPressed = false
+                backHandler.removeCallbacks(backLongPress)
+                backHandler.postDelayed(backLongPress, ViewConfiguration.getLongPressTimeout().toLong())
+            }
+            KeyEvent.ACTION_UP -> {
+                backHandler.removeCallbacks(backLongPress)
+                // 길게 눌러 이미 랜딩으로 갔으면 손 뗀 UP 은 버린다 (랜딩의 짧은 뒤로 = 앱 닫기가 돌지 않게)
+                if (!isBackLongPressed && !event.isCanceled) onBackPressedDispatcher.onBackPressed()
+                isBackLongPressed = false
+            }
+        }
         return true
     }
 
     override fun onDestroy() {
+        backHandler.removeCallbacks(backLongPress)
         fileCallback?.onReceiveValue(null)
         fileCallback = null
         web.destroy()
