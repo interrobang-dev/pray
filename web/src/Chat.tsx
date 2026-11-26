@@ -1216,15 +1216,13 @@ const ChatRowView = memo(function ChatRowView({
       </>
     )
   }
-  // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다). 내 말이면 마크 버튼
+  // 사람 쪽 말·system 글 (도구 호출은 claude 메시지에만 있다). 내 말에는 버튼이 없다 — 예전에 마크해 둔 내 말은 테두리만 보이고 마크 창에서 찾고 지운다
   const isMarkable = isMarkableMessage(message)
   return (
     <div
       className={`msg ${message.role}${message.isQueued ? ' queued' : ''}${isMarkable && isMarked ? ' marked' : ''}${highlightClass(message.id)}`}
       data-jump-key={message.id}
     >
-      {isMarkable && onQuote && <QuoteButton message={message} onQuote={onQuote} />}
-      {isMarkable && <MarkButton messageKey={message.id} isMarked={isMarked} onSetMark={onSetMark} />}
       {message.text && <div className="text">{message.text}</div>}
       {message.isQueued && (
         <div className="queued-label">

@@ -5680,10 +5680,13 @@ li.group.drop-after::after {
   bottom: auto;
   right: 0;
 }
-/* 아래에 붙는 시각만큼 아래 간격을 비운다 (터치 기기는 버튼 줄 간격이 이미 있어 아래 hover: none 블록이 정한다) */
+/* 아래에 붙는 시각만큼 아래 간격을 비운다. Bar 내 말은 버튼이 없어 터치 기기도 같다.
+   claude 답 Plain 의 터치 기기는 버튼 줄 간격이 이미 있어 아래 hover: none 블록이 정한다 */
+:root[data-chat-user='bar']:not([data-chat-timestamps='hide']) .chat-scope .msg.user:not(.relay):has(> .msg-time) {
+  margin-bottom: 16px;
+}
 @media (hover: hover) {
-  :root:not([data-chat-reply='card']):not([data-chat-timestamps='hide']) .chat-scope .msg.assistant:has(> .msg-time),
-  :root[data-chat-user='bar']:not([data-chat-timestamps='hide']) .chat-scope .msg.user:not(.relay):has(> .msg-time) {
+  :root:not([data-chat-reply='card']):not([data-chat-timestamps='hide']) .chat-scope .msg.assistant:has(> .msg-time) {
     margin-bottom: 16px;
   }
 }
@@ -8494,11 +8497,11 @@ button.machine-row:hover:not(:disabled) {
   /* 말풍선 복사·마크 버튼은 터치 기기에서 늘 보이므로 글을 가리지 않게 말풍선 바깥에 둔다 (마우스 기기는 위 모서리에 걸친 그대로):
      claude 답(Plain·Card)은 답 아래 왼쪽 줄(복사 · 마크) — 그만큼 아래 간격을 비운다. Plain 답은 좌우 여백이 없어 위 모서리에 두면 첫 줄 끝을 가렸다.
      오른쪽에 두지 않는 것은 마지막 답 아래가 오른쪽 아래 원 버튼 묶음(.pane-buttons) 자리라서다. left 를 주면 위 Plain 규칙의 right 는 무시된다.
-     오른쪽에 붙은 내 말·지시 말풍선은 왼쪽 바깥 — 말풍선 최대 폭이 82% 라 남는 자리에 들어간다. 위에 걸치면 "진행" 같은 짧은 말을 가렸다 */
+     오른쪽에 붙은 지시 말풍선의 복사 버튼은 왼쪽 바깥 — 말풍선 최대 폭이 82% 라 남는 자리에 들어간다. 위에 걸치면 짧은 글을 가렸다. 내 말에는 버튼이 없다 */
   .msg.assistant:has(> .copy-button, > .mark-button) {
     margin-bottom: 36px;
   }
-  /* 인용 버튼은 복사 · 마크 뒤 (답 아래 줄 76px, 내 말 왼쪽 바깥은 마크 왼쪽) */
+  /* 인용 버튼은 복사 · 마크 뒤 (답 아래 줄 76px) */
   .msg > .quote-button {
     width: 32px;
     height: 32px;
@@ -8512,15 +8515,6 @@ button.machine-row:hover:not(:disabled) {
     right: auto;
     left: 76px;
   }
-  .msg.user > .quote-button {
-    top: 3px;
-    right: calc(100% + 44px);
-  }
-  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) > .quote-button {
-    top: calc(100% + 4px);
-    right: auto;
-    left: 38px;
-  }
   .msg.assistant > .copy-button,
   .msg.assistant > .mark-button {
     top: calc(100% + 4px);
@@ -8529,19 +8523,9 @@ button.machine-row:hover:not(:disabled) {
   .msg.assistant > .copy-button + .mark-button {
     left: 38px;
   }
-  .msg.user > .copy-button,
-  .msg.user > .mark-button {
+  .msg.relay > .copy-button {
     top: 3px;
     right: calc(100% + 6px);
-  }
-  /* Bar 모양 내 말은 왼쪽 정렬 전체 폭이라 왼쪽 바깥 자리가 없어 답처럼 아래 줄 */
-  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay):has(> .mark-button) {
-    margin-bottom: 36px;
-  }
-  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) > .mark-button {
-    top: calc(100% + 4px);
-    right: auto;
-    left: 0;
   }
   .code-block > .copy-button {
     top: 4px;
@@ -8566,7 +8550,8 @@ button.machine-row:hover:not(:disabled) {
     height: 18px;
   }
   /* 보낸 시각: 늘 보이는 터치 버튼과 겹치지 않게. claude 답(Plain·Card)은 답 아래 왼쪽 버튼 줄(복사 · 마크 · 인용) 바로 오른쪽,
-     내 말·지시 말풍선은 왼쪽 바깥이 버튼 자리라 말풍선 아래 오른쪽(그만큼 아래 간격), Bar 내 말은 아래 버튼 줄(마크 · 인용) 바로 오른쪽 */
+     지시 말풍선은 왼쪽 바깥이 복사 버튼 자리라 말풍선 아래 오른쪽(그만큼 아래 간격).
+     내 말은 버튼이 없어 마우스 기기와 같은 자리(Bubble·Plain 왼쪽 아래 바깥, Bar 아래 오른쪽)라 여기서 덮지 않는다 */
   :root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .msg-time,
   :root[data-chat-reply='card'] .chat-scope .msg.assistant > .msg-time {
     top: calc(100% + 4px);
@@ -8577,22 +8562,13 @@ button.machine-row:hover:not(:disabled) {
   :root .chat-scope .msg.assistant:has(> .quote-button) > .msg-time {
     left: 114px;
   }
-  .msg.user > .msg-time {
+  .msg.relay > .msg-time {
     top: calc(100% + 3px);
     bottom: auto;
     right: 2px;
   }
-  :root:not([data-chat-timestamps='hide']) .chat-scope .msg.user:has(> .msg-time) {
+  :root:not([data-chat-timestamps='hide']) .chat-scope .msg.relay:has(> .msg-time) {
     margin-bottom: 16px;
-  }
-  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) > .msg-time {
-    top: calc(100% + 4px);
-    right: auto;
-    left: 38px;
-    line-height: 32px;
-  }
-  :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay):has(> .quote-button) > .msg-time {
-    left: 76px;
   }
 }
 
@@ -9760,8 +9736,7 @@ button.machine-row:hover:not(:disabled) {
       width: 40px;
       height: 40px;
     }
-    .msg.assistant:has(> .copy-button, > .mark-button),
-    :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay):has(> .mark-button) {
+    .msg.assistant:has(> .copy-button, > .mark-button) {
       margin-bottom: 44px;
     }
     .msg.assistant > .copy-button + .mark-button {
@@ -9770,17 +9745,6 @@ button.machine-row:hover:not(:disabled) {
     .msg.assistant > .quote-button {
       left: 88px;
     }
-    .msg.user > .quote-button {
-      right: calc(100% + 50px);
-    }
-    /* 내 말 왼쪽 바깥의 마크 · 인용 둘(6 + 40 + 4 + 40 + 2 = 92)이 대화 열 안에 들게 말풍선 최대 폭을 줄인다 (max-width 는 글 칸 폭이라 좌우 padding·테두리 26 을 더 뺀다).
-       82% 그대로면 긴 말에서 인용이 화면 왼쪽 밖으로 나갔다 */
-    :root:not([data-chat-user='bar']) .chat-scope .msg.user:not(.relay):has(> .quote-button) {
-      max-width: calc(100% - 118px);
-    }
-    :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) > .quote-button {
-      left: 44px;
-    }
     :root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .msg-time,
     :root[data-chat-reply='card'] .chat-scope .msg.assistant > .msg-time {
       left: 88px;
@@ -9788,13 +9752,6 @@ button.machine-row:hover:not(:disabled) {
     }
     :root .chat-scope .msg.assistant:has(> .quote-button) > .msg-time {
       left: 132px;
-    }
-    :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay) > .msg-time {
-      left: 44px;
-      line-height: 40px;
-    }
-    :root[data-chat-user='bar'] .chat-scope .msg.user:not(.relay):has(> .quote-button) > .msg-time {
-      left: 88px;
     }
   }
 }
