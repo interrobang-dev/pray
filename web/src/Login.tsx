@@ -48,29 +48,31 @@ export function Login({ canLogin, onLoggedIn }: Props) {
   }
 
   return (
-    <main className="login">
-      <h1>
-        <img className="logo" src="/logo.svg" width={32} height={32} alt="" />
-        Pray
-      </h1>
-      <p className="tagline">Do your best. Then pray.</p>
-      {!canLogin && <p>Remote login isn't set up. Open 127.0.0.1 on this PC.</p>}
-      {canLogin && !isCodeSent && (
-        <form onSubmit={requestCode}>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address" required autoFocus />
-          <button type="submit">Send code</button>
-        </form>
-      )}
-      {canLogin && isCodeSent && (
-        <form onSubmit={verify}>
-          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="6-digit code" inputMode="numeric" pattern="\d{6}" required autoFocus />
-          <button type="submit">Verify</button>
-          <button type="button" onClick={() => setIsCodeSent(false)}>
-            Resend
-          </button>
-        </form>
-      )}
-      {message && <p className="message">{message}</p>}
-    </main>
+    <div className="login-page">
+      <main className="login">
+        <h1>
+          <img className="logo" src="/logo.svg" width={32} height={32} alt="" />
+          Pray
+        </h1>
+        <p className="tagline">Do your best. Then pray.</p>
+        {!canLogin && <p>Remote login isn't set up. Open 127.0.0.1 on this PC.</p>}
+        {canLogin && !isCodeSent && (
+          <form onSubmit={requestCode}>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address" required autoFocus />
+            <button type="submit">Send code</button>
+          </form>
+        )}
+        {canLogin && isCodeSent && (
+          <form onSubmit={verify}>
+            <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="6-digit code" inputMode="numeric" pattern="\d{6}" required autoFocus />
+            <button type="submit">Verify</button>
+            <button type="button" onClick={() => setIsCodeSent(false)}>
+              Resend
+            </button>
+          </form>
+        )}
+        {message && <p className="message">{message}</p>}
+      </main>
+    </div>
   )
 }
