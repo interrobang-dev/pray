@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.MediaStore
 import android.provider.Settings
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -113,6 +114,7 @@ class MainActivity : ComponentActivity() {
                 BackAction.WEB_BACK -> web.goBack()
                 BackAction.TO_LANDING -> showLanding()
                 BackAction.CLOSE -> finish()
+                BackAction.NONE -> Unit
             }
         }
 
@@ -170,6 +172,35 @@ class MainActivity : ComponentActivity() {
         } finally {
             isDispatchingDown = false
         }
+    }
+
+    /**
+     * 뒤로 키는 화면(WebView 포함)을 거치지 않고 바로 이 Activity 의 onKeyDown·onKeyLongPress·onKeyUp 으로 보낸다.
+     * Activity.dispatchKeyEvent 와 같은 DispatcherState 를 써서 길게 누르기 판정·손 뗄 때 취소 표시가 그대로 된다
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
+        return event.dispatch(this, window.decorView.keyDispatcherState, this)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode != KeyEvent.KEYCODE_BACK) return super.onKeyDown(keyCode, event)
+        event.startTracking()
+        return true
+    }
+
+    /** 길게 누르면 바로 랜딩. 랜딩에서도 true — 그래야 손을 뗄 때 오는 UP 이 취소로 표시돼 짧은 뒤로(앱 닫기)가 돌지 않는다 */
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode != KeyEvent.KEYCODE_BACK) return super.onKeyLongPress(keyCode, event)
+        if (Landing.longBack(screen) == BackAction.TO_LANDING) showLanding()
+        return true
+    }
+
+    /** 짧게 눌렀다 뗐을 때만 지금의 뒤로 (길게 누른 뒤의 UP 은 isCanceled) */
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode != KeyEvent.KEYCODE_BACK) return super.onKeyUp(keyCode, event)
+        if (event.isTracking && !event.isCanceled) onBackPressedDispatcher.onBackPressed()
+        return true
     }
 
     override fun onDestroy() {

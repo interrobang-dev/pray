@@ -17,7 +17,7 @@ enum class TailscaleBanner(val title: String, val detail: String?, val hasButton
 enum class Screen { LANDING, SETUP, WEB }
 
 /** 뒤로 가기 */
-enum class BackAction { WEB_BACK, TO_LANDING, CLOSE }
+enum class BackAction { WEB_BACK, TO_LANDING, CLOSE, NONE }
 
 /** 랜딩 화면의 판정·글자 (순수) */
 object Landing {
@@ -75,4 +75,7 @@ object Landing {
         Screen.SETUP -> BackAction.TO_LANDING
         Screen.WEB -> if (!isErrorShown && canGoBack) BackAction.WEB_BACK else BackAction.TO_LANDING
     }
+
+    /** 뒤로 길게 누르기: 어느 화면이든 바로 랜딩. 랜딩에서는 아무것도 하지 않는다 (앱을 닫지 않는다) */
+    fun longBack(screen: Screen): BackAction = if (screen == Screen.LANDING) BackAction.NONE else BackAction.TO_LANDING
 }

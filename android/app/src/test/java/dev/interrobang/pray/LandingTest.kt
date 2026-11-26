@@ -75,4 +75,11 @@ class LandingTest {
         assertEquals(BackAction.TO_LANDING, Landing.back(Screen.WEB, isErrorShown = false, canGoBack = false))
         assertEquals(BackAction.TO_LANDING, Landing.back(Screen.WEB, isErrorShown = true, canGoBack = true))
     }
+
+    @Test
+    fun longBackGoesStraightToLandingAndNeverCloses() {
+        assertEquals(BackAction.NONE, Landing.longBack(Screen.LANDING))
+        assertEquals(BackAction.TO_LANDING, Landing.longBack(Screen.SETUP))
+        assertEquals(BackAction.TO_LANDING, Landing.longBack(Screen.WEB))
+    }
 }
