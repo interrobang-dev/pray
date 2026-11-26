@@ -1,12 +1,9 @@
-import { createContext, useContext, type KeyboardEvent, type ReactNode } from 'react'
+import { useContext, type KeyboardEvent, type ReactNode } from 'react'
 import { defaultUrlTransform } from 'react-markdown'
 import { ChatImageSession, MarkdownSource } from './ChatImage'
 import { localHtmlPath, localLinkPath, rawLinkUrl } from './chatLinkUrl'
-import { useOpenPathProps } from './ChatPath'
-import { alertDialog } from './Dialog'
-
-/** 이 PC 에서 연 화면인지 (`/api/auth/me` 의 isLocal, main.tsx 가 준다). 로컬 .html 링크는 이 PC 에서만 Chrome 으로 연다 */
-export const IsLocalPage = createContext(false)
+import { IsLocalPage, useOpenPathProps } from './ChatPath'
+import { openInChrome } from './openPath'
 
 interface Props {
   /** 마크다운 원문에서 이 링크 자리 (react-markdown 이 넘긴 hast node 의 position) */
@@ -16,21 +13,6 @@ interface Props {
   href?: string
   title?: string
   children?: ReactNode
-}
-
-async function openInChrome(sessionId: string, path: string) {
-  try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/open-in-chrome`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
-    })
-    if (response.ok) return
-    const { message } = (await response.json().catch(() => ({}))) as { message?: string }
-    void alertDialog(`Couldn't open in Chrome: ${message ?? `HTTP ${response.status}`}`)
-  } catch {
-    void alertDialog("Couldn't open in Chrome: Network error")
-  }
 }
 
 /**

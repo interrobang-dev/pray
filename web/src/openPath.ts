@@ -74,3 +74,26 @@ export async function openChatPath(
     void alertDialog(isCopied ? `Opens only on this PC. Path copied:\n${path}` : `Opens only on this PC. Couldn't copy the path:\n${path}`)
   }
 }
+
+/**
+ * 이 PC 의 .html 파일을 이 PC 의 Chrome 으로 연다 (`POST /api/sessions/:id/open-in-chrome`, 대화 속 .html 링크·경로).
+ * 404(세션 작업 폴더·Claude 임시 폴더 밖이거나 없음)는 onNotFound 가 있으면 그것을 부르고(경로는 보통 경로 열기로 넘긴다), 그 밖의 실패는 알림 창
+ */
+export async function openInChrome(sessionId: string, path: string, onNotFound?: () => void): Promise<void> {
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/open-in-chrome`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    })
+    if (response.ok) return
+    if (response.status === 404 && onNotFound) {
+      onNotFound()
+      return
+    }
+    const { message } = (await response.json().catch(() => ({}))) as { message?: string }
+    void alertDialog(`Couldn't open in Chrome: ${message ?? `HTTP ${response.status}`}`)
+  } catch {
+    void alertDialog("Couldn't open in Chrome: Network error")
+  }
+}

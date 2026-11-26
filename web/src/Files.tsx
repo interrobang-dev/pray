@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from 'react'
-import { IsLocalPage } from './ChatLink'
+import { IsLocalPage } from './ChatPath'
 import { alertDialog } from './Dialog'
 import { MarkdownText } from './Markdown'
 import { Modal, Segmented } from './Modal'
