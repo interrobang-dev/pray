@@ -23,7 +23,8 @@ object PullRefresh {
 
     /**
      * 페이지가 뜰 때마다 넣는다 (같은 문서에 두 번 넣어도 한 번만 건다). 손가락이 둘 이상·Pray 창(.modal-overlay, 확인 창 .dialog-overlay 포함)이 떠 있음·
-     * 손가락 밑에서 위로 올라가며 overflow-y 가 auto/scroll/overlay 이고 scrollTop > 0 인 조상이 있음·document 가 내려가 있음 → 막는다
+     * 손가락 밑에서 위로 올라가며 overflow-y 가 auto/scroll/overlay 이고 scrollTop > 0 인 조상이 있음·document 가 내려가 있음·
+     * touch-action: none 인 요소(웹이 손짓을 직접 받는 곳 — 목록 ⠿ 끌기 손잡이. 맨 위 목록에서 아래로 끌면 새로고침됐다)·그 조상 → 막는다
      */
     const val SCRIPT = """
 (function () {
@@ -35,8 +36,10 @@ object PullRefresh {
     var scroller = document.scrollingElement || document.documentElement;
     if (scroller && scroller.scrollTop > 0) return true;
     for (var el = event.target; el && el.nodeType === 1; el = el.parentElement) {
+      var style = getComputedStyle(el);
+      if (style.touchAction === 'none') return true;
       if (el.scrollTop > 0) {
-        var overflow = getComputedStyle(el).overflowY;
+        var overflow = style.overflowY;
         if (overflow === 'auto' || overflow === 'scroll' || overflow === 'overlay') return true;
       }
     }
