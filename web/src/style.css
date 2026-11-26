@@ -8808,6 +8808,10 @@ button.machine-row:hover:not(:disabled) {
     min-height: 40px;
     justify-content: center;
   }
+  /* 팀·파트 머리줄은 그 40px 버튼에 위아래 -8px: 누르는 자리는 40px 그대로 위아래 여백으로 뻗고, 줄은 52 → 36px 로 낮아져 카드 위 빈 곳이 이름 왼쪽 여백과 비슷해진다 */
+  :is(.team-head, .part-head) :is(.head-actions button, .todo-button) {
+    margin-block: -8px;
+  }
   /* 헤더 아이콘 버튼(테마): 손가락으로 누르기 쉽게 40×36. 음수 위아래 여백으로 헤더 높이는 그대로 (헤더 위아래 padding 10px 안에 든다) */
   header button.icon {
     min-width: 40px;
