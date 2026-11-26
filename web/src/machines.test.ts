@@ -91,10 +91,10 @@ describe('switchTargets', () => {
 })
 
 describe('shortcutMachines', () => {
-  it('numbers this PC and openable PCs by name, so both PCs agree', () => {
-    const list = response([office, machine({ name: 's26', hasPray: false }), machine({ name: 'home' }), machine({ name: 'nas', isOnline: false })])
-    expect(shortcutMachines(list).map((target) => target.name)).toEqual(['home', 'office'])
-    expect(shortcutLabel(list, office)).toBe('Shift+F2')
+  it('numbers this PC first, then openable PCs by name', () => {
+    const list = response([machine({ name: 'zeta' }), office, machine({ name: 's26', hasPray: false }), machine({ name: 'home' }), machine({ name: 'nas', isOnline: false })])
+    expect(shortcutMachines(list).map((target) => target.name)).toEqual(['office', 'home', 'zeta'])
+    expect(shortcutLabel(list, office)).toBe('Shift+F1')
     expect(shortcutLabel(list, machine({ name: 's26', hasPray: false }))).toBeNull()
   })
 

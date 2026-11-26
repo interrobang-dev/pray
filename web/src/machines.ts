@@ -91,14 +91,13 @@ export function machineRows(response: MachinesResponse | null): MachineRow[] {
 const SHORTCUT_LIMIT = 12
 
 /**
- * 단축키 번호를 붙일 PC: 지금 PC + 옮겨 갈 수 있는 PC 를 이름순으로 (index 0 = Shift+F1).
- * 지금 PC 도 넣고 이름순이라 두 PC 에서 같은 키가 같은 PC 를 가리킨다. 칩이 숨는 때는 빈 목록
+ * 단축키 번호를 붙일 PC: 메뉴 순서 그대로 지금 PC(Shift+F1) → 옮겨 갈 수 있는 PC 이름순 (index 0 = Shift+F1).
+ * 그래서 같은 키가 PC 마다 다른 PC 를 가리킨다 (두 PC 면 Shift+F2 가 늘 다른 PC). 칩이 숨는 때는 빈 목록
  */
 export function shortcutMachines(response: MachinesResponse | null): Machine[] {
   return machineRows(response)
     .filter((row) => row.disabledReason === null)
     .map((row) => row.machine)
-    .sort(compareNames)
     .slice(0, SHORTCUT_LIMIT)
 }
 

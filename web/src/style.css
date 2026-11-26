@@ -9353,6 +9353,10 @@ button.machine-row:hover:not(:disabled) {
   .machine-row {
     min-height: 44px;
   }
+  /* 폰은 키보드가 없어 단축키 글자를 숨긴다 */
+  .machine-row-key {
+    display: none;
+  }
   /* 대화 그림 크게 보기: 화면 전체 (작업 파일 모달과 같다). Open original 은 누르기 쉬운 높이로 */
   .modal.image-viewer {
     width: 100vw;
