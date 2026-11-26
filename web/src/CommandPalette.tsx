@@ -208,7 +208,7 @@ export function CommandPalette({ sessions, office, now, isHostReachable, isNarro
               setSelectedKey(null)
             }}
             onKeyDown={onInputKeyDown}
-            placeholder="Search sessions, teams, TODOs, commands"
+            placeholder={isNarrow ? 'Search sessions, teams…' : 'Search sessions, teams, TODOs, commands'}
             aria-label="Search"
             role="combobox"
             aria-expanded="true"
@@ -218,6 +218,12 @@ export function CommandPalette({ sessions, office, now, isHostReachable, isNarro
             spellCheck={false}
             ref={inputRef}
           />
+          {/* 폰은 Esc 가 없고 결과가 많으면 창이 화면을 다 덮어 바깥을 누를 자리가 없을 수 있어 닫는 버튼을 둔다 */}
+          {isNarrow && (
+            <button type="button" className="search-cancel" onClick={() => finish()}>
+              Cancel
+            </button>
+          )}
         </div>
         <div className="search-list" id={LIST_ID} role="listbox" aria-label="Results" ref={listRef}>
           {items.length === 0 && <p className="search-empty">No results</p>}

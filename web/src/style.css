@@ -8855,10 +8855,6 @@ button.machine-row:hover:not(:disabled) {
   .question-actions button {
     flex: 1 1 auto;
   }
-  /* 보내기 버튼 크기가 em 이라 입력칸과 같은 16px 이어야 높이가 맞는다 */
-  .composer .send {
-    font-size: 16px;
-  }
   /* 곁가지 질문 카드: 주소창이 보여도 화면을 다 덮지 않게 dvh, 본문만 스크롤. 입력칸 글자 16px(아이폰 확대 방지)이라 보내기도 em 을 맞춘다 */
   .btw-card {
     max-height: 55dvh;
@@ -8880,12 +8876,39 @@ button.machine-row:hover:not(:disabled) {
   .btw-close {
     min-height: 32px;
   }
-  /* 첨부 버튼은 보내기와 같은 높이에 손가락 폭 40px. 칩은 36px 높이에 × 를 32px 로 */
+  /* 입력 상자는 두 줄: 위는 글 칸이 한 줄 전체(인용·첨부 칩 줄은 그 위), 아래는 왼쪽 [첨부][곁가지 질문][예약] … 오른쪽 [Tab][보내기].
+     버튼을 글 칸과 한 줄에 두면 360 폭에서 글 칸이 126px(제안 Tab 칩이 있으면 76px)뿐이었다.
+     DOM 순서는 데스크톱 그대로 두고 order 로만 옮긴다. 아래 줄 버튼은 손가락으로 누르게 40px, 칩은 36px 높이에 × 를 32px 로 */
+  .composer {
+    row-gap: 4px;
+  }
+  .composer .composer-quote,
+  .composer .attachments {
+    order: -2;
+  }
+  .composer-field {
+    order: -1;
+    flex: 0 0 100%;
+  }
   .composer .attach,
   .composer .btw-open,
   .composer .schedule-open {
+    order: 1;
     font-size: 16px;
     width: 40px;
+    height: 40px;
+  }
+  .composer .schedule-open {
+    margin-right: auto;
+  }
+  .composer .suggestion-tab {
+    order: 2;
+    height: 40px;
+  }
+  .composer .send {
+    order: 3;
+    width: 40px;
+    height: 40px;
   }
   .attachment {
     height: 36px;
@@ -9228,6 +9251,23 @@ button.machine-row:hover:not(:disabled) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    margin-right: auto;
+  }
+  /* 파일·diff 를 볼 때 경로는 버튼 줄 아래 자기 줄(폭 전체)로 내린다. 버튼(40px)이 여섯~여덟 개라 한 줄이면
+     360 폭에서 경로 칸이 0 이 되어 파일 이름이 사라졌다. ← 는 왼쪽, 나머지 버튼은 오른쪽 끝.
+     버튼 사이 4px·양옆 6px 이면 360 폭에 버튼 여덟 개(md 미리보기 전환·이 PC 의 Show in folder 까지)가 한 줄에 들어간다.
+     편집 중 Save 처럼 더 넘치면 버튼이 다음 줄로 넘어가고 경로는 늘 맨 아래 줄 */
+  .ws.is-viewing .ws-toolbar {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  .ws.is-viewing .ws-path {
+    order: 1;
+    flex: 0 0 100%;
+    box-sizing: border-box;
+    padding: 0 4px 2px;
   }
   .ws-reload,
   .ws-back,
@@ -9428,17 +9468,31 @@ button.machine-row:hover:not(:disabled) {
   .marks-remove {
     width: 44px;
   }
-  /* 커맨드 팔레트: 화면 폭 전체로 맨 위에 붙이고 줄 44px, 입력칸 16px (아이폰 확대 방지) */
+  /* 커맨드 팔레트: 화면 폭 전체로 맨 위에 붙이고 줄 44px, 입력칸 16px (아이폰 확대 방지).
+     폰 키보드에는 Esc 가 없어 입력칸 오른쪽 Cancel 과, 결과가 많아도 아래 72px 은 바깥(누르면 닫힘)으로 남긴다 */
   .modal-overlay.search-overlay {
     padding-top: 0;
   }
   .search-panel {
     width: 100%;
-    max-height: calc(100dvh - var(--titlebar-height, 0px));
+    max-height: calc(100dvh - var(--titlebar-height, 0px) - 72px);
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   }
   .search-panel .search-input {
     font-size: 16px;
+  }
+  .search-input-row {
+    padding-right: 8px;
+  }
+  .search-cancel {
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 0 12px;
+    background: transparent;
+    color: var(--text);
+  }
+  .search-cancel:active {
+    background: var(--surface-2);
   }
   .search-row {
     min-height: 44px;
