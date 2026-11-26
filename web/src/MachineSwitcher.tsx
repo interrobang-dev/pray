@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { machineRows, parseMachines, selfMachine, shortcutIndexOf, shortcutLabel, shortcutMachines, type Machine, type MachinesResponse } from './machines'
 import { useDismiss } from './Shells'
+import { alertDialog } from './Dialog'
 
 /**
  * GET /api/machines 를 받아 둔다 (처음 뜰 때 한 번, 그 뒤는 refresh 를 부를 때 — PC 메뉴·커맨드 팔레트를 열 때).
@@ -30,13 +31,60 @@ export function useMachines(): { machines: MachinesResponse | null; refresh: () 
   return { machines, refresh }
 }
 
-/** 다른 PC 의 Pray 로 옮겨 간다. 트레이 창에서도 같은 창이 그 주소로 간다 (트레이 쪽 허용은 desktop 이 한다) */
+/** 옮겨 가는 동안 덮개를 두는 최대 시간. 넘으면 덮개를 지우고 알린다 (덮개만 남아 멈춘 화면이 되지 않게) */
+const SWITCH_TIMEOUT_MS = 15_000
+
+let switchingCover: { element: HTMLElement; timer: number } | null = null
+
+function removeSwitchingCover() {
+  if (!switchingCover) return
+  window.clearTimeout(switchingCover.timer)
+  switchingCover.element.remove()
+  switchingCover = null
+}
+
+// 뒤로 가기로 돌아오면 브라우저가 이 페이지를 덮개째 되살릴 수 있다 (bfcache)
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) removeSwitchingCover()
+})
+
+/**
+ * 다른 PC 의 Pray 로 옮겨 간다. 트레이 창에서도 같은 창이 그 주소로 간다 (트레이 쪽 허용은 desktop 이 한다).
+ * 상대가 응답할 때까지 화면 전체 덮개 "Switching to home…" 를 둔다 — 메뉴·Shift+F·커맨드 팔레트가 모두 여기를 거쳐서
+ * React 밖에서 body 에 직접 붙인다. 새 페이지가 뜨면 함께 사라진다
+ */
 export function openMachine(machine: Machine) {
-  if (machine.url) window.location.assign(machine.url)
+  if (!machine.url) return
+  removeSwitchingCover()
+  const element = document.createElement('div')
+  element.className = 'switching-overlay'
+  element.setAttribute('role', 'status')
+  const card = document.createElement('div')
+  card.className = 'switching-card'
+  const spinner = document.createElement('span')
+  spinner.className = 'reconnect-spinner'
+  spinner.setAttribute('aria-hidden', 'true')
+  const text = document.createElement('span')
+  text.className = 'switching-text'
+  const title = document.createElement('b')
+  title.textContent = `Switching to ${machine.name}…`
+  const address = document.createElement('span')
+  address.className = 'switching-address'
+  address.textContent = new URL(machine.url).host
+  text.append(title, address)
+  card.append(spinner, text)
+  element.append(card)
+  document.body.append(element)
+  const timer = window.setTimeout(() => {
+    removeSwitchingCover()
+    void alertDialog(`Couldn't reach ${machine.name}. Check that Pray is running there.`)
+  }, SWITCH_TIMEOUT_MS)
+  switchingCover = { element, timer }
+  window.location.assign(machine.url)
 }
 
 /**
- * 상태 표시줄 맨 왼쪽의 지금 PC 칩 "office ▾" + PC 목록 메뉴 (상태 표시줄 바로 위에 뜬다).
+ * 상태 표시줄 맨 왼쪽의 지금 PC 칩 "office" + PC 목록 메뉴 (상태 표시줄 바로 위에 뜬다).
  * Tailscale 이 ready 가 아니거나 API 가 없으면 아무것도 그리지 않는다. 메뉴를 열 때 목록을 다시 받는다.
  * 줄: 온라인 점 · 이름 · hostName · 단축키, 지금 PC 는 ✓, 옮겨 갈 수 없는 PC 는 흐리게 + 이유 (machines.ts). 바깥 클릭·Esc 로 닫는다 (Esc 는 칩으로 포커스를 돌린다).
  * Shift+F1·F2… 는 그 번호의 PC 로 바로 옮겨 간다 (shortcutMachines. 지금 PC 번호는 아무 일 없음)
@@ -93,9 +141,6 @@ export function MachineSwitcher({ machines, onRefresh }: { machines: MachinesRes
         title={selfShortcut ? `This PC · ${self.hostName} · ${selfShortcut}` : `This PC · ${self.hostName}`}
       >
         <span className="machine-chip-name">{self.name}</span>
-        <span className="machine-chip-caret" aria-hidden="true">
-          ▾
-        </span>
       </button>
       {isShown && (
         <div id="machine-menu" className="machine-menu" role="menu" aria-label="Switch PC" style={{ left: anchorLeft }}>
