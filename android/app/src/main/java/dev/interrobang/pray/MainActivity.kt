@@ -16,9 +16,11 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.MediaStore
 import android.provider.Settings
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -38,6 +40,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.io.File
 
 /**
@@ -47,6 +50,7 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     private lateinit var store: MachineStore
     private lateinit var web: WebView
+    private lateinit var refresh: SwipeRefreshLayout
     private lateinit var setupView: View
     private lateinit var errorView: View
 
@@ -55,6 +59,10 @@ class MainActivity : ComponentActivity() {
     private var isResumedNow = false
     private var hasMainFrameError = false
     private var lastRefreshAt = 0L
+
+    /** 이번 손짓에 페이지가 알린 "당겨 새로고침을 막을지" (브리지 스레드가 쓴다). null = 아직 안 옴 → 막는다 (→ PullRefresh.kt) */
+    @Volatile private var pageBlocksPull: Boolean? = null
+    private var isDispatchingDown = false
 
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var cameraUri: Uri? = null
@@ -76,9 +84,11 @@ class MainActivity : ComponentActivity() {
         setContentView(R.layout.activity_main)
         setupEdgeToEdge()
         web = findViewById(R.id.web)
+        refresh = findViewById(R.id.refresh)
         setupView = findViewById(R.id.setup)
         errorView = findViewById(R.id.error)
         setupWebView()
+        setupPullRefresh()
         setupSetupScreen()
         findViewById<Button>(R.id.error_retry).setOnClickListener { currentMachine?.let { openMachine(it) } }
         findViewById<Button>(R.id.error_change_address).setOnClickListener { showSetup() }
@@ -123,6 +133,18 @@ class MainActivity : ComponentActivity() {
         AppState.visibleMachineName = null
         CookieManager.getInstance().flush()
         super.onPause()
+    }
+
+    /** 손가락을 대면 지난 손짓의 페이지 답을 지운다. DOWN 을 넘기는 동안은 SwipeRefreshLayout 이 시작 위치를 잡게 막지 않는다 */
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked != MotionEvent.ACTION_DOWN) return super.dispatchTouchEvent(event)
+        pageBlocksPull = null
+        isDispatchingDown = true
+        try {
+            return super.dispatchTouchEvent(event)
+        } finally {
+            isDispatchingDown = false
+        }
     }
 
     override fun onDestroy() {
@@ -174,6 +196,9 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun onPageFinished(view: WebView, url: String) {
+                refresh.isRefreshing = false
+                // 당기기 판정 스크립트는 저장한 PC 페이지에만 넣는다
+                if (Machines.machineFor(url, store.machines) != null) view.evaluateJavascript(PullRefresh.SCRIPT, null)
                 if (hasMainFrameError) return
                 errorView.visibility = View.GONE
                 web.visibility = View.VISIBLE
@@ -182,6 +207,7 @@ class MainActivity : ComponentActivity() {
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (!request.isForMainFrame) return
                 hasMainFrameError = true
+                refresh.isRefreshing = false
                 showError(Machines.machineFor(request.url.toString(), store.machines) ?: currentMachine, error.description?.toString())
             }
         }
@@ -197,6 +223,29 @@ class MainActivity : ComponentActivity() {
                     false
                 }
             }
+        }
+    }
+
+    /**
+     * 맨 위에서 당기면 web.reload(), onPageFinished·onReceivedError 에서 스피너를 멈춘다.
+     * Pray 웹은 안쪽 요소가 스크롤돼서 페이지 스크립트가 알린 값으로 막는다 (→ PullRefresh.kt).
+     * 브리지는 boolean 하나만 받아 당기기를 막을지만 바꾼다 — 다른 출처 페이지가 불러도 해가 없다
+     */
+    @SuppressLint("JavascriptInterface")
+    private fun setupPullRefresh() {
+        refresh.setColorSchemeResources(R.color.logo_accent)
+        refresh.setProgressBackgroundColorSchemeResource(R.color.logo_background)
+        refresh.setOnRefreshListener { web.reload() }
+        refresh.setOnChildScrollUpCallback { _, _ ->
+            PullRefresh.isBlocked(web.visibility == View.VISIBLE, isDispatchingDown, pageBlocksPull, web.canScrollVertically(-1))
+        }
+        web.addJavascriptInterface(PullBridge(), PullRefresh.BRIDGE_NAME)
+    }
+
+    private inner class PullBridge {
+        @JavascriptInterface
+        fun report(blocked: Boolean) {
+            pageBlocksPull = blocked
         }
     }
 

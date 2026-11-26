@@ -12,8 +12,8 @@ android {
         minSdk = 29
         targetSdk = 35
         // 덮어 설치하려면 올린다 (→ .claude/rules/android.md)
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     buildTypes {
@@ -35,6 +35,7 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.2.0")
 
     testImplementation("junit:junit:4.13.2")
     // 단위 테스트의 android.jar 는 org.json 이 빈 껍데기라 진짜 구현을 앞에 둔다

@@ -11,7 +11,7 @@ paths:
 
 ## 구조
 
-Kotlin 한 모듈 `app`, 패키지 `dev.interrobang.pray`, minSdk 29·targetSdk·compileSdk 35. 의존성은 `androidx.core`·`androidx.activity` 뿐 (HTTP·SSE 는 `HttpURLConnection`, JSON 은 안드로이드 내장 `org.json`).
+Kotlin 한 모듈 `app`, 패키지 `dev.interrobang.pray`, minSdk 29·targetSdk·compileSdk 35. 의존성은 `androidx.core`·`androidx.activity`·`androidx.swiperefreshlayout` 뿐 (HTTP·SSE 는 `HttpURLConnection`, JSON 은 안드로이드 내장 `org.json`).
 
 - `Machines.kt` — (순수) `Machine`(name·url), 주소 정리(`normalizeAddress`: scheme 없으면 http, port 없으면 4710), `/api/machines` 해석, 저장 목록 합치기(`merge`), url → PC(`machineFor`), 링크를 앱 안에서 열지(`linkTarget`)
 - `Sse.kt` — (순수) SSE 줄 해석(`SseParser`), notice data 해석(`Notices.parse`), 다시 붙는 간격(`reconnectDelayMs`)
@@ -19,8 +19,9 @@ Kotlin 한 모듈 `app`, 패키지 `dev.interrobang.pray`, minSdk 29·targetSdk�
 - `MachineStore.kt` — SharedPreferences `pray`(PC 목록·마지막에 본 PC·권한을 물었는지), `PrayHttp`(GET·WebView 쿠키 붙이기·`/api/machines` 받기·저장 목록 다시 받기)
 - `StreamWorker.kt` — PC 하나의 SSE 스레드: 붙기·읽기·끊기면 다시·`Last-Event-ID`
 - `NotifyService.kt` — 포그라운드 서비스(specialUse): PC 마다 StreamWorker, 네트워크 콜백, 10분마다 목록 다시 받기, 알림 띄우기. `AppState.visibleMachineName`(앱이 앞에서 보고 있는 PC)
-- `MainActivity.kt` — WebView·첫 실행 주소 입력·못 붙음 화면·첨부 고르기·권한 한 번 묻기·알림이 넘긴 주소 열기
-- `res/layout/activity_main.xml` — WebView 위에 겹친 주소 입력(`setup`)·못 붙음(`error`) 화면 · `res/drawable/ic_launcher_*`·`ic_notification` — 로고 벡터 · `res/xml/network_security_config.xml` — cleartext 전부 허용
+- `PullRefresh.kt` — (순수) 당겨 새로고침을 막을지(`isBlocked`)·페이지에 넣는 touchstart 스크립트(`SCRIPT`)·브리지 이름 `PrayPull`
+- `MainActivity.kt` — WebView·당겨 새로고침·첫 실행 주소 입력·못 붙음 화면·첨부 고르기·권한 한 번 묻기·알림이 넘긴 주소 열기
+- `res/layout/activity_main.xml` — `SwipeRefreshLayout`(`refresh`)로 감싼 WebView 위에 겹친 주소 입력(`setup`)·못 붙음(`error`) 화면 · `res/drawable/ic_launcher_*`·`ic_notification` — 로고 벡터 · `res/xml/network_security_config.xml` — cleartext 전부 허용
 
 ## 핵심 개념
 
@@ -34,6 +35,7 @@ Kotlin 한 모듈 `app`, 패키지 `dev.interrobang.pray`, minSdk 29·targetSdk�
 - **상시 알림**(채널 Connection, 낮음·소리 없음): 제목 "Connected · 1-home, 2-office"(붙은 PC 이름순, 없으면 "Not connected"), 본문 PC 별 문제 "2-office: update Pray"(OUTDATED)·"2-office: sign in"(UNAUTHORIZED). 누르면 앱
 - **알림**: 채널 Needs approval(높음)·Done / My turn(보통)·Hand over(높음)·Reminders(높음), 모르는 kind 는 Done / My turn. 제목 "2-office · <서버 title>", 본문 body. 같은 PC·같은 세션은 알림 한 칸을 바꿔 쓴다(승인 대기 뒤 Done 이 오면 Done 만), 세션 없는 것(reminder)은 알림마다. 누르면 `<pc url>/#session=<id>`(없으면 그 PC 첫 화면)를 앱 안 WebView 로 연다 — 같은 PC 면 해시만 바뀌어 웹의 hashchange 가 패널을 연다 (`web/src/sessionLink.ts`). **앱이 앞에 있고 같은 PC 를 보고 있으면 띄우지 않는다** (`AppState.visibleMachineName`, onResume·onPause·이동 때 고친다). 끈 종류는 서버가 이미 빼고 보낸다
 - **권한**: 첫 페이지를 열 때 한 번만 알림 권한(API 33+) → 그 답 뒤 배터리 최적화 제외 요청(삼성은 제외하지 않으면 서비스를 끈다). 거절해도 다시 묻지 않는다 (폰 설정에서 바꾼다)
+- **당겨 새로고침**: WebView 를 `SwipeRefreshLayout` 으로 감싸 당기면 `web.reload()`, `onPageFinished`·주 프레임 `onReceivedError` 에서 스피너를 멈춘다 (색 `logo_accent`, 바탕 `logo_background`). **함정: Pray 웹은 document 가 아니라 안쪽 요소(목록·대화·xterm `.xterm-viewport`·모달 본문)가 스크롤돼 `WebView.canScrollVertically(-1)` 이 늘 false** — 그대로면 대화 중간에서 아래로 당겨도 새로고침된다. 그래서 저장한 PC 페이지가 끝날 때마다(`onPageFinished`) `PullRefresh.SCRIPT` 를 넣는다(같은 문서엔 한 번): touchstart(capture·passive)에서 손가락 둘 이상·`.modal-overlay`(확인 창 `.dialog-overlay`·팔레트 포함, 창 안 글이 날아가지 않게)·document 가 내려감·터치 대상부터 위로 overflow-y auto/scroll/overlay 이고 `scrollTop > 0` 인 조상 중 하나라도 있으면 막는다고 `PrayPull.report(boolean)` 로 알린다. `setOnChildScrollUpCallback` 이 그 값을 쓴다. **손짓 맞추기**: `dispatchTouchEvent` 의 ACTION_DOWN 에서 지난 값을 지우고(null = 아직 안 옴 → 막음), DOWN 을 넘기는 동안만은 막지 않는다 — SwipeRefreshLayout 은 DOWN 때 막히면 시작 위치를 안 잡아 그 손짓 전체가 안 된다. 당기기는 MOVE 에서 시작하므로 JS 답이 늦으면 몇 MOVE 늦게 시작할 뿐이다. 스크립트가 없는 페이지(다른 출처·스크립트 실패)는 답이 안 와 당기기가 안 된다. 브리지는 boolean 하나로 당기기를 막을지만 바꿔 다른 출처 frame 이 불러도 해가 없다. 웹 코드(`web/`)에는 이 기능이 없다 — 웹의 스크롤 class 를 바꿔도 조상 계산이라 영향이 없지만 `.modal-overlay` 이름을 바꾸면 창 위 당기기 막기가 빠진다
 - **화면 칸**: targetSdk 35 는 화면이 상태 표시줄·내비 막대 밑까지 그려져서 root 에 그 높이와 키보드 높이만큼 안쪽 여백을 준다 — 웹의 `100dvh` 가 남는 칸이 된다. 테마가 DayNight 라 웹의 `prefers-color-scheme` 이 폰 다크 모드를 따른다. `configChanges` 로 회전·다크 모드 전환 때 Activity 를 다시 만들지 않는다(WebView 를 다시 불러오지 않게)
 - **첨부**: `onShowFileChooser` → 웹 `accept` 대로의 파일 고르기 + 카메라(`ACTION_IMAGE_CAPTURE`, cache `camera/` 의 FileProvider `<패키지>.files` 파일). CAMERA 권한은 선언하지 않는다 (선언하면 받기 전에 카메라 앱 호출이 막힌다)
 - **화면 글자는 영어** (루트 규칙과 같다). 디버그 빌드는 WebView 원격 디버깅이 켜진다 (USB 로 PC Chrome `chrome://inspect`)
@@ -55,7 +57,7 @@ Kotlin 한 모듈 `app`, 패키지 `dev.interrobang.pray`, minSdk 29·targetSdk�
 
 ## 확인하지 못한 것
 
-- 실제 폰(S26) 전부: 설치, 아이콘 모양(adaptive·테마 아이콘), 주소 입력 → PC 목록, WebView 화면(상태 표시줄·키보드 여백·100dvh), PC 칩으로 옮겨 가기, claude.ai 링크가 브라우저로 가는지, 첨부(사진·카메라), 뒤로 가기, 못 붙음 화면
+- 실제 폰(S26) 전부: 당겨 새로고침(맨 위 목록에서 되는지·대화·목록·터미널 중간에서 안 되는지·창이 떠 있을 때 안 되는지·스피너가 멈추는지·JS 답이 늦어 당김이 굼뜨지 않은지), 설치, 아이콘 모양(adaptive·테마 아이콘), 주소 입력 → PC 목록, WebView 화면(상태 표시줄·키보드 여백·100dvh), PC 칩으로 옮겨 가기, claude.ai 링크가 브라우저로 가는지, 첨부(사진·카메라), 뒤로 가기, 못 붙음 화면
 - 실제 서버 스트림에 붙기: 이 앱을 만들 때 서버 스트림이 아직 없어 가짜 서버(`StreamWorkerTest`)와 옛 서버(HTML 200 → OUTDATED)만 확인했다. 실제 이벤트 꼴·`Last-Event-ID`·ping 은 서버가 올라간 뒤 확인
 - 알림: 권한 묻기·배터리 최적화 요청 창, 채널 소리, 상시 알림 글자, 누르면 그 세션이 열리는지, 같은 PC 를 보고 있을 때 숨는지
 - 오래 두기: 삼성 배터리 관리·Doze 에서 서비스가 살아 있는지, 화면이 꺼진 동안 SSE 로 알림이 바로 오는지, 와이파이 ↔ LTE 전환 뒤 다시 붙는지, 시스템이 서비스를 죽였다 `START_STICKY` 로 되살릴 때 뒤에서 포그라운드 시작이 허용되는지

@@ -5,11 +5,18 @@
     android:layout_height="match_parent"
     android:background="@color/logo_background">
 
-    <WebView
-        android:id="@+id/web"
+    <!-- 맨 위에서 당기면 새로고침 (막는 판정은 PullRefresh.kt) -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/refresh"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="invisible" />
+        android:layout_height="match_parent">
+
+        <WebView
+            android:id="@+id/web"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="invisible" />
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     <!-- 첫 실행: PC 주소 넣기 -->
     <LinearLayout
