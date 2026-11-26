@@ -97,6 +97,8 @@
   --pop-bg: #ffffff;
   /* 떠 있는 것에만 주는 그림자: 메뉴·팝오버·입력 상자 / 모달 */
   --shadow-pop: 0 1px 3px rgba(43, 47, 58, 0.06), 0 6px 20px rgba(43, 47, 58, 0.1);
+  /* 상태 표시줄 팝업의 1px 테두리 (box-shadow 로). 다크는 팝업 면이 사이드바 카드(--surface-1)와 같은 색이라 그림자만으로는 묻혔다 */
+  --pop-ring: rgba(43, 47, 58, 0.08);
   --shadow-modal: 0 2px 8px rgba(43, 47, 58, 0.08), 0 18px 48px rgba(43, 47, 58, 0.18);
   /* 둥글기 (색이 아니라 팔레트와 무관하다 — DEFAULT_VARS 에 없다): sm = 줄·작은 칸(예전 기본 6px), md = 메뉴·여러 줄 입력칸, lg = 카드, xl = 모달·입력 상자, pill = 버튼·칩·입력칸 */
   --radius-sm: 6px;
@@ -183,6 +185,7 @@
   --surface-3: #373c46;
   --pop-bg: #262a31;
   --shadow-pop: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --pop-ring: rgba(255, 255, 255, 0.14);
   --shadow-modal: 0 2px 8px rgba(0, 0, 0, 0.35), 0 18px 48px rgba(0, 0, 0, 0.5);
 }
 html,
@@ -6826,7 +6829,7 @@ li.group.drop-after::after {
   white-space: normal;
   background: var(--pop-bg);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
+  box-shadow: 0 0 0 1px var(--pop-ring), var(--shadow-pop);
 }
 .shells-popover-head {
   padding: 2px 8px 6px;
@@ -6931,7 +6934,7 @@ li.group.drop-after::after {
   white-space: normal;
   background: var(--pop-bg);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-pop);
+  box-shadow: 0 0 0 1px var(--pop-ring), var(--shadow-pop);
 }
 .machine-menu-head,
 .machine-menu-empty {
@@ -7075,7 +7078,7 @@ button.machine-row:hover:not(:disabled) {
   white-space: normal;
   background: var(--pop-bg);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
+  box-shadow: 0 0 0 1px var(--pop-ring), var(--shadow-pop);
 }
 /* 머리: Claude 별 + "Claude", 그 아래 갱신 시각. 칸 사이는 선 없이 여백(창 gap)으로 가른다 */
 .usage-head {
