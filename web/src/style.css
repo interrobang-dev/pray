@@ -6842,7 +6842,7 @@ li.group.drop-after::after {
   padding-left: 32px;
 }
 
-/* 지금 PC 칩 "office ▾" (MachineSwitcher.tsx, 연결 상태 앞): Shells N 처럼 글자처럼 보이는 버튼. 이름이 길면 말줄임 */
+/* 지금 PC 칩 "office ▾" (MachineSwitcher.tsx, 상태 표시줄 맨 왼쪽): Shells N 처럼 글자처럼 보이는 버튼. 이름이 길면 말줄임 */
 .machine-chip {
   display: inline-flex;
   align-items: center;
@@ -6872,7 +6872,7 @@ li.group.drop-after::after {
   flex-shrink: 0;
   font-size: calc(9px * var(--font-scale));
 }
-/* PC 목록 메뉴: 상태 표시줄 바로 위, 칩 오른쪽 끝에 맞춘다 (right 는 인라인). 모양은 .menu-list 와 같다.
+/* PC 목록 메뉴: 상태 표시줄 바로 위, 칩 왼쪽 끝에 맞춘다 (left 는 인라인). 모양은 .menu-list 와 같다.
    Shells 창과 같은 이유로 fixed (상태 표시줄이 overflow: hidden) */
 .machine-menu {
   position: fixed;
@@ -6957,6 +6957,13 @@ button.machine-row:hover:not(:disabled) {
 .machine-row-reason {
   flex-shrink: 0;
   font-size: calc(11px * var(--font-scale));
+}
+/* 그 PC 로 바로 가는 단축키 "Shift+F1" (machines.ts shortcutLabel). 회색 작은 글자 */
+.machine-row-key {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: calc(10px * var(--font-scale));
+  color: var(--muted);
 }
 
 /* 계정 사용량 (상태 표시줄 왼쪽. 남은 비율만, 리셋 시각은 툴팁. 줄을 누르면 위에 상세 창) */
@@ -9334,13 +9341,13 @@ button.machine-row:hover:not(:disabled) {
     align-items: center;
   }
   /* 지금 PC 칩: 390px 한 줄에 들어가게 이름을 짧게 말줄임 (넘치면 사용량 끝이 잘리는 규칙 그대로).
-     PC 목록 메뉴는 Shells 창처럼 화면 폭(양옆 16px, 인라인 right 를 덮는다), 줄은 44px */
+     PC 목록 메뉴는 Shells 창처럼 화면 폭(양옆 16px, 인라인 left 를 덮는다), 줄은 44px */
   .machine-chip {
     max-width: 84px;
   }
   .machine-menu {
-    left: 16px;
-    right: 16px !important;
+    left: 16px !important;
+    right: 16px;
     width: auto;
   }
   .machine-row {

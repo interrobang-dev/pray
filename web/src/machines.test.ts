@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { machineRows, parseMachines, selfMachine, switchTargets, unavailableReason, type Machine, type MachinesResponse } from './machines'
+import { machineRows, parseMachines, selfMachine, shortcutIndexOf, shortcutLabel, shortcutMachines, switchTargets, unavailableReason, type Machine, type MachinesResponse } from './machines'
 
 function machine(overrides: Partial<Machine> = {}): Machine {
   return { name: 'home', hostName: 'home.tail.ts.net', url: 'http://home.tail.ts.net:4710', isSelf: false, isOnline: true, hasPray: true, ...overrides }
@@ -87,5 +87,34 @@ describe('switchTargets', () => {
 
   it('is empty when tailscale is not ready', () => {
     expect(switchTargets(response([office, machine()], 'error'))).toEqual([])
+  })
+})
+
+describe('shortcutMachines', () => {
+  it('numbers this PC and openable PCs by name, so both PCs agree', () => {
+    const list = response([office, machine({ name: 's26', hasPray: false }), machine({ name: 'home' }), machine({ name: 'nas', isOnline: false })])
+    expect(shortcutMachines(list).map((target) => target.name)).toEqual(['home', 'office'])
+    expect(shortcutLabel(list, office)).toBe('Shift+F2')
+    expect(shortcutLabel(list, machine({ name: 's26', hasPray: false }))).toBeNull()
+  })
+
+  it('is empty when the chip is hidden', () => {
+    expect(shortcutMachines(response([office, machine()], 'stopped'))).toEqual([])
+  })
+})
+
+describe('shortcutIndexOf', () => {
+  const keys = { shiftKey: true, ctrlKey: false, altKey: false, metaKey: false }
+
+  it('reads Shift+F1 to Shift+F12', () => {
+    expect(shortcutIndexOf({ ...keys, key: 'F1' })).toBe(0)
+    expect(shortcutIndexOf({ ...keys, key: 'F12' })).toBe(11)
+  })
+
+  it('ignores other keys and modifiers', () => {
+    expect(shortcutIndexOf({ ...keys, key: 'F13' })).toBeNull()
+    expect(shortcutIndexOf({ ...keys, key: 'f' })).toBeNull()
+    expect(shortcutIndexOf({ ...keys, shiftKey: false, key: 'F1' })).toBeNull()
+    expect(shortcutIndexOf({ ...keys, ctrlKey: true, key: 'F1' })).toBeNull()
   })
 })

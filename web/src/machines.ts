@@ -87,6 +87,36 @@ export function machineRows(response: MachinesResponse | null): MachineRow[] {
   ]
 }
 
+/** Shift+F1 ~ Shift+F12 */
+const SHORTCUT_LIMIT = 12
+
+/**
+ * 단축키 번호를 붙일 PC: 지금 PC + 옮겨 갈 수 있는 PC 를 이름순으로 (index 0 = Shift+F1).
+ * 지금 PC 도 넣고 이름순이라 두 PC 에서 같은 키가 같은 PC 를 가리킨다. 칩이 숨는 때는 빈 목록
+ */
+export function shortcutMachines(response: MachinesResponse | null): Machine[] {
+  return machineRows(response)
+    .filter((row) => row.disabledReason === null)
+    .map((row) => row.machine)
+    .sort(compareNames)
+    .slice(0, SHORTCUT_LIMIT)
+}
+
+/** 그 PC 의 단축키 글자 "Shift+F1". 번호가 없으면 null */
+export function shortcutLabel(response: MachinesResponse | null, machine: Machine): string | null {
+  const index = shortcutMachines(response).findIndex((candidate) => candidate.name === machine.name)
+  return index === -1 ? null : `Shift+F${index + 1}`
+}
+
+/** Shift+F1 ~ Shift+F12 (Ctrl·Alt·Meta 없이) 이면 0 부터의 번호, 아니면 null */
+export function shortcutIndexOf(event: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlKey' | 'altKey' | 'metaKey'>): number | null {
+  if (!event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return null
+  const match = /^F(\d{1,2})$/.exec(event.key)
+  if (!match) return null
+  const number = Number(match[1])
+  return number >= 1 && number <= SHORTCUT_LIMIT ? number - 1 : null
+}
+
 /** 커맨드 팔레트 "Switch to <name>" 을 넣을 PC: 지금 PC 가 아니고 옮겨 갈 수 있는 것, 이름순. 칩이 숨는 때는 없다 */
 export function switchTargets(response: MachinesResponse | null): Machine[] {
   return machineRows(response)

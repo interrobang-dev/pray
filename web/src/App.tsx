@@ -2433,8 +2433,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           />
         )}
       </main>
-      {/* 화면 아래 상태 표시줄: 왼쪽 사용량, 오른쪽 세션 집계·연결 상태와 재시작 ↻ (폰은 목록 화면에서만. style.css) */}
+      {/* 화면 아래 상태 표시줄: 왼쪽 지금 PC 칩·사용량, 오른쪽 세션 집계·연결 상태와 재시작 ↻ (폰은 목록 화면에서만. style.css) */}
       <footer className="status-bar">
+        <MachineSwitcher machines={machines} onRefresh={refreshMachines} />
         <UsagePanel />
         <span className="status-right">
           {hookStatus?.state === 'failed' && (
@@ -2465,7 +2466,6 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           <span className="status-counts-short" hidden title={`Working ${workingCount} · On duty ${presentSessions.length}`}>
             {workingCount}/{presentSessions.length}
           </span>
-          <MachineSwitcher machines={machines} onRefresh={refreshMachines} />
           <span className="status-link" title={isConnected ? 'Server connected' : 'Server disconnected'}>
             <span className="status-link-label">Server</span>
             <span className={[isConnected ? 'dot on' : 'dot', isServerWaiting ? 'is-waiting' : ''].join(' ')} />
