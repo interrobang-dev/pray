@@ -2444,8 +2444,15 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
             </button>
           )}
           {approvalSessions.length > 0 && (
-            <button className="status-approval" onClick={() => selectSession(approvalSessions[0].id)} title="Open a session that needs approval">
-              Needs approval {approvalSessions.length}
+            <button
+              className="status-approval"
+              onClick={() => selectSession(approvalSessions[0].id)}
+              title="Open a session that needs approval"
+              aria-label={`Needs approval ${approvalSessions.length}`}
+            >
+              {/* 폰(360px)은 글자를 숨기고 빨간 점 + 수만 (style.css 폰 블록) */}
+              <span className="status-approval-label">Needs approval </span>
+              {approvalSessions.length}
             </button>
           )}
           <ShellsStatus lines={shellLines(office, snapshot.sessions)} onOpen={openShell} />
@@ -2461,10 +2468,6 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           )}
           <span className="status-counts">
             Working {workingCount} · On duty {presentSessions.length}
-          </span>
-          {/* 폰(390px)에서는 위 글자 대신 이 짧은 꼴 "3/9". 데스크톱 CSS 를 건드리지 않으려고 hidden 으로 숨겨 두고 style.css 폰 블록에서만 보인다 */}
-          <span className="status-counts-short" hidden title={`Working ${workingCount} · On duty ${presentSessions.length}`}>
-            {workingCount}/{presentSessions.length}
           </span>
           <span className="status-link" title={isConnected ? 'Server connected' : 'Server disconnected'}>
             <span className="status-link-label">Server</span>

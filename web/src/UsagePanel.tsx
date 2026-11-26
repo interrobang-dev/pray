@@ -158,6 +158,16 @@ export function UsagePanel() {
             <div className="usage-title">
               <ClaudeMark />
               <b>Claude</b>
+              {/* 폰은 상태 표시줄 ↻ 를 숨기고(360px 한 줄에 안 들어간다) 이 ↻ 를 쓴다. 데스크톱 CSS 를 건드리지 않으려고 hidden 으로 숨겨 두고 style.css 폰 블록에서만 보인다 */}
+              <button
+                className={isRefreshing ? 'usage-popover-refresh is-spinning' : 'usage-popover-refresh'}
+                onClick={() => void refresh()}
+                title="Refresh"
+                aria-label="Refresh usage"
+                hidden
+              >
+                <span className="restart-glyph">↻</span>
+              </button>
             </div>
             {result?.ok && <div className="usage-sub">{fetchedLabel(result.usage.fetchedAt, now)}</div>}
           </div>
