@@ -168,6 +168,7 @@ npm run package           # 설치 파일 release/dist/Pray-Setup-<버전>.exe (
 ```
 npm run shot -- http://127.0.0.1:4710 --out scratchpad/a.png                 # 데스크톱 1600x900, 6초 기다린 뒤 캡처
 npm run shot -- http://127.0.0.1:4710 --out scratchpad/p.png --phone         # 390x844 mobile·터치·hover:none
+npm run shot -- http://127.0.0.1:4710 --out scratchpad/s.png --s26           # 360x780 배율 3 (갤럭시 S26). --height 400 을 더하면 키보드가 열린 높이
 npm run shot -- <url> --out a.png --eval "document.title"                    # 캡처 직전 JS 결과를 JSON 으로 출력
 npm run shot -- <url> --out a.png --steps steps.json                         # [{type: click|drag|key|eval|wait|shot, ...}]
 ```

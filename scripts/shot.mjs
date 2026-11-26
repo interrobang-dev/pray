@@ -12,7 +12,9 @@ const HELP = `Usage: npm run shot -- <url> --out <png> [options]
 
   --out <png>          capture file (required)
   --phone              390x844 mobile, touch, hover:none
-  --width <n> --height <n>   desktop viewport (default 1600x900)
+  --s26                360x780 mobile at devicePixelRatio 3 (Galaxy S26), touch, hover:none
+  --width <n> --height <n>   desktop viewport (default 1600x900). With --phone/--s26 they override that size
+                       (e.g. --s26 --height 400 for an open on-screen keyboard)
   --wait <ms>          wait after load before steps/capture (default 6000)
   --allow-writes       do not stub non-GET /api requests (default: answered with fake 200 '{}')
   --port <n>           Chrome debugging port (default: a free port)
@@ -28,7 +30,7 @@ Order: load -> wait -> steps -> --eval -> final capture.
 Console errors and exceptions are listed at the end (exit code stays 0). Failures exit 1.`
 
 function parseArgs(argv) {
-  const o = { url: null, out: null, phone: false, width: 1600, height: 900, wait: 6000, allowWrites: false, port: 0, eval: null, steps: null, help: false }
+  const o = { url: null, out: null, phone: false, s26: false, width: null, height: null, wait: 6000, allowWrites: false, port: 0, eval: null, steps: null, help: false }
   const need = (i, n) => {
     if (i + 1 >= argv.length) throw new Error(`${n} needs a value`)
     return argv[i + 1]
@@ -37,6 +39,7 @@ function parseArgs(argv) {
     const a = argv[i]
     if (a === '--help' || a === '-h') o.help = true
     else if (a === '--phone') o.phone = true
+    else if (a === '--s26') o.s26 = true
     else if (a === '--allow-writes') o.allowWrites = true
     else if (a === '--out') o.out = need(i++, a)
     else if (a === '--width') o.width = Number(need(i++, a))
@@ -49,7 +52,8 @@ function parseArgs(argv) {
     else if (!o.url) o.url = a
     else throw new Error(`unexpected argument ${a}`)
   }
-  for (const k of ['width', 'height', 'wait', 'port']) if (!Number.isFinite(o[k]) || o[k] < 0) throw new Error(`--${k} must be a number`)
+  for (const k of ['width', 'height', 'wait', 'port']) if (o[k] !== null && (!Number.isFinite(o[k]) || o[k] < 0)) throw new Error(`--${k} must be a number`)
+  if (o.phone && o.s26) throw new Error('--phone and --s26 cannot be used together')
   return o
 }
 
@@ -161,8 +165,10 @@ async function main() {
 
   const port = o.port || (await freePort())
   profileDir = mkdtempSync(join(tmpdir(), 'pray-shot-'))
-  const w = o.phone ? 390 : o.width
-  const h = o.phone ? 844 : o.height
+  // 폰 꼴: --phone 390x844 배율 2, --s26 360x780 배율 3 (갤럭시 S26 CSS 크기). 둘 다 mobile·터치·hover:none
+  const device = o.phone ? { width: 390, height: 844, scale: 2 } : o.s26 ? { width: 360, height: 780, scale: 3 } : null
+  const w = o.width ?? device?.width ?? 1600
+  const h = o.height ?? device?.height ?? 900
   const child = spawn(
     CHROME,
     [
@@ -230,8 +236,8 @@ async function main() {
   await cdp.send('Runtime.enable')
   await cdp.send('Log.enable')
   if (!o.allowWrites) await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*' }] })
-  await cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: o.phone ? 2 : 1, mobile: o.phone })
-  if (o.phone) {
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: device ? device.scale : 1, mobile: Boolean(device) })
+  if (device) {
     await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true })
     await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'hover', value: 'none' }, { name: 'pointer', value: 'coarse' }] })
   }
