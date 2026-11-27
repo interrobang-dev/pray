@@ -27,6 +27,7 @@ import {
   type WorkspaceFindResult,
   type WorkspaceFolder,
 } from './types'
+import { PdfPreview } from './PdfPreview'
 import { SearchPanel, EMPTY_SEARCH, type SearchState } from './SearchPanel'
 import { DelimitedTable } from './SheetTable'
 import { delimiterOf } from './tableData'
@@ -37,7 +38,7 @@ import { selectionQuery } from './workspaceSearch'
 import { ancestorFolders, nameOf, treeRows, type FolderState } from './workspaceTree'
 
 const FIND_DEBOUNCE_MS = 150
-/** PDF 를 iframe 으로 못 그리는 화면: 폰 폭(App 의 NARROW_QUERY)·마우스 없는 기기(TOUCH_QUERY). 안드로이드 Chrome·WebView 는 내장 PDF 뷰어가 없다 */
+/** PDF 를 iframe 으로 못 그리는 화면: 폰 폭(App 의 NARROW_QUERY)·마우스 없는 기기(TOUCH_QUERY). 안드로이드 Chrome·WebView 는 내장 PDF 뷰어가 없어 pdf.js 로 그린다 (PdfPreview) */
 const NO_PDF_FRAME_QUERY = '(max-width: 768px), (hover: none)'
 
 /** 받은 파일. path 가 지금 고른 파일과 다르면 받는 중으로 본다 (고른 직후 한 번 그릴 때 앞 파일 내용이 보이지 않게) */
@@ -1143,7 +1144,7 @@ function FileView({
     )
   }
   if (kind === 'pdf') {
-    if (window.matchMedia(NO_PDF_FRAME_QUERY).matches) return <p className="hint">No PDF preview on phone</p>
+    if (window.matchMedia(NO_PDF_FRAME_QUERY).matches) return <PdfPreview key={path} url={rawUrl} />
     return (
       <div className="ws-frame">
         <iframe src={rawUrl} title={nameOf(path)} />
