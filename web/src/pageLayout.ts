@@ -1,10 +1,13 @@
-// 폰·터치 화면의 PDF 미리보기(PdfPreview, pdf.js canvas)의 크기·확대·쪽 번호 순수 함수 (이름이 pdfPreview.ts 가 아닌 것은 Windows 가 대소문자를 가리지 않아 ./PdfPreview 와 겹쳐서다)
+// 쪽 단위 미리보기(PagedView — 폰 PDF·hwp·hwpx)의 크기 상한·확대·쪽 번호 순수 함수 (이름이 pagedView.ts 가 아닌 것은 Windows 가 대소문자를 가리지 않아 ./PagedView 와 겹쳐서다)
 
-/** 받기 상한. 넘으면 받다 말고 "Too large to preview" — 폰 망으로 받는 시간·worker 가 통째로 쥐는 메모리 때문 */
+/** PDF 받기 상한. 넘으면 받다 말고 "Too large to preview" — 폰 망으로 받는 시간·worker 가 통째로 쥐는 메모리 때문 */
 export const PDF_PREVIEW_LIMIT_BYTES = 50 * 1024 ** 2
 
+/** hwp·hwpx 받기 상한 — rhwp 가 메인 스레드에서 통째로 풀고, 쪽 SVG 마다 그림을 base64 로 다시 넣어 메모리가 몇 배로 는다 */
+export const HWP_PREVIEW_LIMIT_BYTES = 30 * 1024 ** 2
+
 /** 확대 단계. 1 = 칸 폭에 맞춤 */
-export const PDF_ZOOM_STEPS = [1, 1.25, 1.5, 2, 3]
+export const ZOOM_STEPS = [1, 1.25, 1.5, 2, 3]
 
 /** canvas 배율 상한 (devicePixelRatio 가 이보다 커도 여기까지) */
 export const MAX_PIXEL_RATIO = 3
@@ -22,9 +25,9 @@ export function canvasPixelRatio(cssWidth: number, cssHeight: number, devicePixe
 
 /** 다음 확대 단계 (끝이면 그대로) */
 export function nextZoom(zoom: number, direction: 1 | -1): number {
-  const index = PDF_ZOOM_STEPS.indexOf(zoom)
+  const index = ZOOM_STEPS.indexOf(zoom)
   const next = (index < 0 ? 0 : index) + direction
-  return PDF_ZOOM_STEPS[Math.min(Math.max(next, 0), PDF_ZOOM_STEPS.length - 1)]
+  return ZOOM_STEPS[Math.min(Math.max(next, 0), ZOOM_STEPS.length - 1)]
 }
 
 export function zoomLabel(zoom: number): string {

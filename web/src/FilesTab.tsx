@@ -15,6 +15,7 @@ import { formatSize } from './Files'
 import { MarkdownDocument, type DocLinks } from './Markdown'
 import { docImageTarget, isMarkdownPath, resolveDocPath } from './markdownDoc'
 import { CommitDiffView, EMPTY_HISTORY, HistoryPanel, type HistoryState } from './HistoryPanel'
+import { HwpPreview } from './HwpPreview'
 import { openInChrome, type FilesOpenRequest } from './openPath'
 import {
   formatAgo,
@@ -1156,6 +1157,7 @@ function FileView({
   }
   if (kind === 'docx') return <DocxPreview key={path} url={rawUrl} title={nameOf(path)} />
   if (kind === 'sheet') return <WorkbookPreview key={path} url={rawUrl} />
+  if (kind === 'hwp') return <HwpPreview key={path} url={rawUrl} />
   if (kind === 'unsupported') return <p className="hint">No preview for this file type</p>
   if (!state) return <p className="hint">Loading…</p>
   if (state.status === 'error') return <p className="hint ws-error">Couldn't open the file: {state.message}</p>

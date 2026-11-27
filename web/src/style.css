@@ -4267,15 +4267,16 @@ li.group.drop-after::after {
 .ws-media audio {
   width: min(100%, 480px);
 }
-/* PDF 폰·터치 (PdfPreview.tsx — pdf.js 가 쪽마다 canvas 에 그린다. 데스크톱은 위 .ws-frame iframe): 위 막대(쪽 번호·확대)는 그대로, 쪽 목록만 스크롤.
-   쪽은 종이라 다크에서도 흰 바탕 (HTML·docx 미리보기와 같은 테마 예외). 쪽 사이·가장자리 8px 는 PdfPreview 의 PAGE_GAP 과 같다 */
-.ws-pdf {
+/* 쪽 단위 미리보기 (PagedView.tsx — 폰·터치 PDF 는 쪽마다 canvas(PdfPreview, 데스크톱은 위 .ws-frame iframe), hwp·hwpx 는 쪽마다 SVG <img>(HwpPreview)):
+   위 막대(쪽 번호·확대)는 그대로, 쪽 목록만 스크롤. 쪽은 종이라 다크에서도 흰 바탕 (HTML·docx 미리보기와 같은 테마 예외).
+   쪽 사이·가장자리 8px 는 PagedView 의 PAGE_GAP 과 같다 */
+.ws-paged {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.ws-pdf-bar {
+.ws-paged-bar {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -4284,7 +4285,7 @@ li.group.drop-after::after {
   font-size: calc(12px * var(--font-scale));
   color: var(--muted);
 }
-.ws-pdf-page-label {
+.ws-paged-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -4292,17 +4293,17 @@ li.group.drop-after::after {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.ws-pdf-bar button {
+.ws-paged-bar button {
   min-width: 28px;
   height: 26px;
   padding: 0 8px;
   font-size: calc(13px * var(--font-scale));
 }
-.ws-pdf-bar .ws-pdf-zoom {
+.ws-paged-bar .ws-paged-zoom {
   min-width: 56px;
   font-variant-numeric: tabular-nums;
 }
-.ws-pdf-scroll {
+.ws-paged-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -4310,21 +4311,22 @@ li.group.drop-after::after {
   background: var(--surface-1);
 }
 /* 확대해 쪽이 칸보다 넓으면 가로로 스크롤 — 가운데 맞춤(flex center)이면 왼쪽 넘친 부분에 못 간다 */
-.ws-pdf-pages {
+.ws-paged-pages {
   box-sizing: border-box;
   width: max-content;
   min-width: 100%;
   padding: 8px;
 }
-.ws-pdf-page {
+.ws-paged-page {
   margin: 0 auto 8px;
   background: #fff;
   box-shadow: var(--shadow-pop);
 }
-.ws-pdf-page:last-child {
+.ws-paged-page:last-child {
   margin-bottom: 0;
 }
-.ws-pdf-page canvas {
+.ws-paged-page > canvas,
+.ws-paged-page > img {
   display: block;
   width: 100%;
   height: 100%;
@@ -9774,10 +9776,10 @@ button.machine-row:hover:not(:disabled) {
   .ws-open-file {
     min-height: 36px;
   }
-  .ws-pdf-bar {
+  .ws-paged-bar {
     padding: 2px 6px;
   }
-  .ws-pdf-bar button {
+  .ws-paged-bar button {
     min-width: 40px;
     height: 40px;
   }

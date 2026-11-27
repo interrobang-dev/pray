@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pdfAssetUrl } from './pdfAssets'
-import { canvasPixelRatio, MAX_CANVAS_PIXELS, nextZoom, pageAt, pageLabel, PDF_ZOOM_STEPS, zoomLabel } from './pdfLayout'
+import { canvasPixelRatio, MAX_CANVAS_PIXELS, nextZoom, pageAt, pageLabel, ZOOM_STEPS, zoomLabel } from './pageLayout'
 
 describe('canvasPixelRatio', () => {
   it('uses the device pixel ratio up to 3', () => {
@@ -30,7 +29,7 @@ describe('nextZoom', () => {
     expect(nextZoom(1, 1)).toBe(1.25)
     expect(nextZoom(1.25, -1)).toBe(1)
     expect(nextZoom(1, -1)).toBe(1)
-    const last = PDF_ZOOM_STEPS[PDF_ZOOM_STEPS.length - 1]
+    const last = ZOOM_STEPS[ZOOM_STEPS.length - 1]
     expect(nextZoom(last, 1)).toBe(last)
   })
 
@@ -59,22 +58,5 @@ describe('labels', () => {
     expect(pageLabel(3, 12)).toBe('Page 3 of 12')
     expect(zoomLabel(1)).toBe('100%')
     expect(zoomLabel(1.25)).toBe('125%')
-  })
-})
-
-describe('pdfAssetUrl', () => {
-  it('finds the bundled CMap, standard font and wasm files', () => {
-    expect(pdfAssetUrl('cMapUrl', 'UniKS-UCS2-H.bcmap')).toBeTruthy()
-    expect(pdfAssetUrl('standardFontDataUrl', 'FoxitSymbol.pfb')).toBeTruthy()
-    expect(pdfAssetUrl('standardFontDataUrl', 'LiberationSans-Regular.ttf')).toBeTruthy()
-    expect(pdfAssetUrl('wasmUrl', 'openjpeg.wasm')).toBeTruthy()
-    expect(pdfAssetUrl('wasmUrl', 'jbig2.wasm')).toBeTruthy()
-  })
-
-  it('returns null for anything else', () => {
-    expect(pdfAssetUrl('cMapUrl', 'Nope.bcmap')).toBeNull()
-    expect(pdfAssetUrl('other', 'openjpeg.wasm')).toBeNull()
-    expect(pdfAssetUrl('wasmUrl', 'quickjs-eval.wasm')).toBeNull()
-    expect(pdfAssetUrl('wasmUrl', 'qcms_bg.wasm')).toBeNull()
   })
 })

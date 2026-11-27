@@ -18,8 +18,8 @@ describe('previewKindOf', () => {
     expect(previewKindOf('old.xls')).toBe('sheet')
     expect(previewKindOf('data.csv')).toBe('csv')
     expect(previewKindOf('data.tsv')).toBe('csv')
-    expect(previewKindOf('a.hwp')).toBe('unsupported')
-    expect(previewKindOf('a.hwpx')).toBe('unsupported')
+    expect(previewKindOf('보고서.HWP')).toBe('hwp')
+    expect(previewKindOf('a.hwpx')).toBe('hwp')
   })
 
   it('has no preview for other files, dot files and folders with dots', () => {
@@ -45,6 +45,7 @@ describe('previewKindOf', () => {
     expect(isRawOnlyKind('docx')).toBe(true)
     expect(isRawOnlyKind('unsupported')).toBe(true)
     expect(isRawOnlyKind('sheet')).toBe(true)
+    expect(isRawOnlyKind('hwp')).toBe(true)
     expect(isRawOnlyKind('csv')).toBe(false)
     expect(isRawOnlyKind('svg')).toBe(false)
     expect(isRawOnlyKind('html')).toBe(false)

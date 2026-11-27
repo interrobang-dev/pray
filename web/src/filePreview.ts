@@ -1,9 +1,9 @@
 /**
  * Files 탭 파일 보기의 미리보기 종류 (확장자로 정한다). 서버 `/file/raw`·`/raw/<경로>` 가 내주는 종류(scratchpad.ts 의 CONTENT_TYPES 중
- * HTML·그림·동영상·소리·PDF·docx·xlsx·xls)와 맞춘다. csv·tsv 는 글로 받아 표로 그린다. 여기 없는 것은 `file?path=` 로 받아 글이면 코드 보기, 아니면 No preview.
- * `unsupported` 는 미리보기가 없다고 알기만 하는 문서(pptx·hwp·hwpx) — 글로 받지 않고 "No preview for this file type"
+ * HTML·그림·동영상·소리·PDF·docx·xlsx·xls·hwp·hwpx)와 맞춘다. csv·tsv 는 글로 받아 표로 그린다. 여기 없는 것은 `file?path=` 로 받아 글이면 코드 보기, 아니면 No preview.
+ * `unsupported` 는 미리보기가 없다고 알기만 하는 문서(pptx) — 글로 받지 않고 "No preview for this file type"
  */
-export type PreviewKind = 'image' | 'svg' | 'html' | 'pdf' | 'docx' | 'sheet' | 'csv' | 'video' | 'audio' | 'unsupported'
+export type PreviewKind = 'image' | 'svg' | 'html' | 'pdf' | 'docx' | 'sheet' | 'csv' | 'hwp' | 'video' | 'audio' | 'unsupported'
 /** 미리보기 ↔ 원본 코드 보기를 바꿀 수 있는 종류 (md 는 markdownDoc.ts 로 따로 본다) */
 export type SourceViewKind = 'svg' | 'html' | 'csv'
 
@@ -26,8 +26,8 @@ const KINDS: Record<string, PreviewKind> = {
   csv: 'csv',
   tsv: 'csv',
   pptx: 'unsupported',
-  hwp: 'unsupported',
-  hwpx: 'unsupported',
+  hwp: 'hwp',
+  hwpx: 'hwp',
   mp4: 'video',
   m4v: 'video',
   webm: 'video',
