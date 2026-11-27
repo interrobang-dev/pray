@@ -18,7 +18,7 @@ import { Chat, type Jump, type JumpTarget } from './Chat'
 import type { RowView } from './chatWindow'
 import { addToComposerDraft } from './composerDraft'
 import { hasUnsavedEdit, confirmDiscardUnsaved, whenLeavingAllowed } from './unsavedEdits'
-import { sessionIdFromHash } from './sessionLink'
+import { RESUME_HASH, sessionIdFromHash, shouldRestoreLastSession } from './sessionLink'
 import { PANEL_STATE, isPanelState, panelHistoryStep, shouldClosePanelOnPop } from './panelHistory'
 import { parseCollapsedGroupIds, statusSummary, summaryLabel, toggleCollapsedGroup, type StatusCount } from './listCollapse'
 import { isBtwShortcut } from './composerText'
@@ -117,6 +117,15 @@ const SIDEBAR_WIDTH_KEY = 'pray.sidebarWidth'
 const COLLAPSED_GROUPS_KEY = 'pray.collapsedGroups'
 const FOCUS_ZONE_COLLAPSED_KEY = 'pray.isFocusZoneCollapsed'
 const OFF_DUTY_OPEN_KEY = 'pray.isOffDutyOpen'
+/** 마지막에 연 세션 ID 를 남기는 localStorage 키 (이 PC 주소·이 브라우저만). PC 칩으로 옮겨 오거나 새로고침하면 되살린다 */
+const LAST_SESSION_KEY = 'pray.lastSession'
+
+/** 처음 그릴 때 되살릴 세션 ID: PC 칩으로 옮겨 왔거나(`#resume`) 새로고침했을 때만 남긴 값. 아니면 null */
+function readRestoreSessionId(): string | null {
+  const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+  if (!shouldRestoreLastSession(window.location.hash, navigation?.type)) return null
+  return readStored(LAST_SESSION_KEY)
+}
 
 /** 저장된 값. 읽지 못하면(저장소가 막힌 브라우저 등) null — 기본값으로 본다 */
 function readStored(key: string): string | null {
@@ -243,6 +252,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   /** 화면 ↻ 로 시작한 재시작 (곧 끊기면 "Restarting …") */
   const restartRequestRef = useRef<{ target: RestartTarget; at: number } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** 첫 세션 목록을 받으면 열 남긴 세션 (PC 칩으로 옮겨 왔거나 새로고침했을 때만). 열거나 알림 해시가 오면 비운다 */
+  const [initialRestoreSessionId] = useState(readRestoreSessionId)
+  const restoreSessionIdRef = useRef(initialRestoreSessionId)
   const [isGroupForm, setIsGroupForm] = useState(false)
   /** 팀 추가 모달. 그룹 헤더의 "+ 팀" 으로 열리며 그 그룹에 고정 */
   const [teamForm, setTeamForm] = useState<{ groupId: string } | null>(null)
@@ -792,8 +804,14 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   selectSessionRef.current = selectSession
   useEffect(() => {
     const onHash = () => {
+      if (window.location.hash === RESUME_HASH) {
+        history.replaceState(history.state, '', window.location.pathname + window.location.search)
+        return
+      }
       const sessionId = sessionIdFromHash(window.location.hash)
       if (!sessionId) return
+      // 알림이 고른 세션이 먼저다
+      restoreSessionIdRef.current = null
       // state 는 그대로 둔다 — 폰 패널 기록(panelHistory.ts)을 알아보는 표시다
       history.replaceState(history.state, '', window.location.pathname + window.location.search)
       selectSessionRef.current(sessionId)
@@ -837,6 +855,27 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
+
+  // 마지막에 연 세션을 남긴다 (닫으면 지운다). 처음 그릴 때의 "안 고름" 은 남기지 않는다 — 평소대로 열었다 옮겨 가도 기억이 남게
+  const hasSelectedOnceRef = useRef(false)
+  useEffect(() => {
+    if (selectedId) hasSelectedOnceRef.current = true
+    if (!hasSelectedOnceRef.current) return
+    try {
+      if (selectedId) localStorage.setItem(LAST_SESSION_KEY, selectedId)
+      else localStorage.removeItem(LAST_SESSION_KEY)
+    } catch {
+      // 저장하지 못하면 되살리지 않을 뿐이다
+    }
+  }, [selectedId])
+
+  // PC 칩으로 옮겨 왔거나 새로고침했으면 첫 세션 목록을 받은 뒤 남긴 세션을 연다 (목록에 없으면 첫 화면 그대로)
+  useEffect(() => {
+    const sessionId = restoreSessionIdRef.current
+    if (!sessionId || !isConnected) return
+    restoreSessionIdRef.current = null
+    if (snapshot.sessions.some((session) => session.id === sessionId)) selectSessionRef.current(sessionId)
+  }, [isConnected, snapshot])
 
   // 트레이 앱이 "그 세션이 지금 열려 있으면 알리지 않기" 에 읽는다
   useEffect(() => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { machineRows, parseMachines, selfMachine, shortcutIndexOf, shortcutLabel, shortcutMachines, type Machine, type MachinesResponse } from './machines'
 import { useDismiss } from './Shells'
 import { alertDialog } from './Dialog'
+import { resumeUrlOf } from './sessionLink'
 
 /**
  * GET /api/machines 를 받아 둔다 (처음 뜰 때 한 번, 그 뒤는 refresh 를 부를 때 — PC 메뉴·커맨드 팔레트를 열 때).
@@ -51,7 +52,7 @@ window.addEventListener('pageshow', (event) => {
 /**
  * 다른 PC 의 Pray 로 옮겨 간다. 트레이 창에서도 같은 창이 그 주소로 간다 (트레이 쪽 허용은 desktop 이 한다).
  * 상대가 응답할 때까지 화면 전체 덮개 "Switching to home…" 를 둔다 — 메뉴·Shift+F·커맨드 팔레트가 모두 여기를 거쳐서
- * React 밖에서 body 에 직접 붙인다. 새 페이지가 뜨면 함께 사라진다
+ * React 밖에서 body 에 직접 붙인다. 새 페이지가 뜨면 함께 사라진다. 주소에 `#resume` 을 붙여 그 PC 에서 마지막에 연 세션을 되살리게 한다 (App.tsx)
  */
 export function openMachine(machine: Machine) {
   if (!machine.url) return
@@ -80,7 +81,7 @@ export function openMachine(machine: Machine) {
     void alertDialog(`Couldn't reach ${machine.name}. Check that Pray is running there.`)
   }, SWITCH_TIMEOUT_MS)
   switchingCover = { element, timer }
-  window.location.assign(machine.url)
+  window.location.assign(resumeUrlOf(machine.url))
 }
 
 /**
