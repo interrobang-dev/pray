@@ -1233,7 +1233,7 @@ const ChatRowView = memo(function ChatRowView({
               className="queued-cancel"
               disabled={cancellingId !== null}
               onClick={() => onCancelQueued(message)}
-              title="Take this message out of the queue before claude gets it"
+              title="Take this message out of the queue before claude gets it (Esc)"
             >
               {cancellingId === message.id ? 'Cancelling…' : 'Cancel'}
             </button>
@@ -2138,11 +2138,19 @@ export function Chat({
     return () => clearTimeout(timer)
   }, [interruptNotice])
 
-  /** Esc 단축키가 부를 최신 interrupt (리스너를 렌더마다 다시 달지 않게) */
-  const interruptRef = useRef(interrupt)
-  interruptRef.current = interrupt
+  /**
+   * Esc 단축키: 취소할 수 있는 대기 메시지가 있으면 마지막 것을 취소(Cancel 버튼과 같다), 취소 중이면 아무것도 안 함(그 사이 중지되지 않게), 없으면 [중지].
+   * 리스너를 렌더마다 다시 달지 않게 ref 로 최신 값을 부른다
+   */
+  const escapeRef = useRef<() => void>(() => {})
+  escapeRef.current = () => {
+    if (cancellingId !== null) return
+    const lastQueued = canCancelQueued && lastQueuedId ? messages.find((message) => message.id === lastQueuedId) : undefined
+    if (lastQueued) void cancelQueued(lastQueued)
+    else void interrupt()
+  }
 
-  // Esc = [중지]. [중지] 가 보일 때만, 포커스가 입력 상자거나 아무 데도 없을 때만 —
+  // Esc = 대기 메시지 취소 또는 [중지]. [중지] 가 보일 때만, 포커스가 입력 상자거나 아무 데도 없을 때만 —
   // 모달(Modal 의 Esc 닫기는 전파를 안 막는다)·검색 막대·곁가지 카드·팝오버의 Esc 와 같이 일어나지 않게
   useEffect(() => {
     if (!canInterrupt || isInterrupting) return
@@ -2154,7 +2162,7 @@ export function Chat({
       const isComposerFocused = active instanceof HTMLTextAreaElement && active.closest('form.composer') !== null
       if (!isComposerFocused && active !== document.body && active !== null) return
       event.preventDefault()
-      void interruptRef.current()
+      escapeRef.current()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
