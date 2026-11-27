@@ -9,6 +9,7 @@ import { copyText } from './copyText'
 import { alertDialog, choiceDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import { FileName } from './FileName'
+import { isRawOnlyKind, previewKindOf } from './filePreview'
 import { formatSize } from './Files'
 import { MarkdownDocument, type DocLinks } from './Markdown'
 import { docImageTarget, isMarkdownPath, resolveDocPath } from './markdownDoc'
@@ -31,15 +32,9 @@ import { apiUrl, fetchJson } from './workspaceApi'
 import { selectionQuery } from './workspaceSearch'
 import { ancestorFolders, nameOf, treeRows, type FolderState } from './workspaceTree'
 
-/** 서버 /file/raw 가 주는 그림 (SVG 는 글자로 본다) */
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif'])
 const FIND_DEBOUNCE_MS = 150
-
-function isImagePath(path: string): boolean {
-  const name = nameOf(path)
-  const dot = name.lastIndexOf('.')
-  return dot > 0 && IMAGE_EXTENSIONS.has(name.slice(dot + 1).toLowerCase())
-}
+/** PDF 를 iframe 으로 못 그리는 화면: 폰 폭(App 의 NARROW_QUERY)·마우스 없는 기기(TOUCH_QUERY). 안드로이드 Chrome·WebView 는 내장 PDF 뷰어가 없다 */
+const NO_PDF_FRAME_QUERY = '(max-width: 768px), (hover: none)'
 
 /** 받은 파일. path 가 지금 고른 파일과 다르면 받는 중으로 본다 (고른 직후 한 번 그릴 때 앞 파일 내용이 보이지 않게) */
 type FileState = { path: string } & ({ status: 'error'; message: string } | { status: 'ok'; file: WorkspaceFile })
@@ -68,6 +63,8 @@ interface SessionView {
   history: HistoryState
   /** md 파일을 원본(줄 번호 코드 보기)으로 보는지. 기본은 문서 미리보기 */
   isMarkdownSource: boolean
+  /** SVG 파일을 원본으로 보는지. 기본은 그림 */
+  isSvgSource: boolean
 }
 type SideMode = 'files' | 'changes' | 'search' | 'history'
 const sessionViews = new Map<string, SessionView>()
@@ -105,6 +102,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const [search, setSearch] = useState<SearchState>(saved?.search ?? EMPTY_SEARCH)
   const [history, setHistory] = useState<HistoryState>(saved?.history ?? EMPTY_HISTORY)
   const [isMarkdownSource, setIsMarkdownSource] = useState(saved?.isMarkdownSource ?? false)
+  const [isSvgSource, setIsSvgSource] = useState(saved?.isSvgSource ?? false)
   /** Ctrl+Shift+F: Search 입력칸에 포커스 (text 가 있으면 그 글로 찾기) */
   const [searchFocus, setSearchFocus] = useState<{ id: number; text: string | null } | null>(null)
   /** Search 결과에서 마지막으로 연 줄 (표시)과 코드 보기를 그 줄로 스크롤할 요청 */
@@ -138,8 +136,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const rootName = nameOf(cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/')) || cwd
 
   useEffect(() => {
-    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState, search, history, isMarkdownSource })
-  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState, search, history, isMarkdownSource])
+    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState, search, history, isMarkdownSource, isSvgSource })
+  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState, search, history, isMarkdownSource, isSvgSource])
 
   const loadFolder = useCallback(
     async (path: string) => {
@@ -160,9 +158,9 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
     for (const path of ['', ...expandedRef.current]) void loadFolder(path)
   }, [loadFolder, reloadId])
 
-  // 고른 파일 받기 (그림은 img 가 직접 받는다). ↻ 로 같은 파일을 다시 받는 동안은 앞 내용을 둔다
+  // 고른 파일 받기 (그림·PDF·동영상·소리는 img·iframe·video·audio 가 직접 받는다). ↻ 로 같은 파일을 다시 받는 동안은 앞 내용을 둔다
   useEffect(() => {
-    if (!selectedPath || isImagePath(selectedPath)) return
+    if (!selectedPath || isRawOnlyKind(previewKindOf(selectedPath))) return
     const controller = new AbortController()
     fetchJson<WorkspaceFile>(apiUrl(sessionId, 'file', { path: selectedPath }), controller.signal).then(
       (file) => {
@@ -356,11 +354,17 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   }, [sessionId, selectedPath, reloadId])
   /** md 글 파일을 문서 미리보기로 보는 중 (편집 중이면 편집기). 줄 번호가 없어 줄 고르기·Ctrl+F 찾기 막대를 쓰지 않는다 */
   const isMarkdownPreview = textFile !== null && !isEditing && !isMarkdownSource && isMarkdownPath(selectedPath)
+  const isSvg = previewKindOf(selectedPath) === 'svg'
+  /** SVG 를 그림으로 보는 중 (글을 받기 전에도). md 미리보기처럼 줄이 없다 */
+  const isSvgPreview = isFileSide && isSvg && !isEditing && !isSvgSource
+  /** 위 막대 미리보기 ↔ 원본 전환이 있는 파일 (md·SVG). 원본 여부는 종류마다 따로 기억한다 */
+  const isSourceShown = isSvg ? isSvgSource : isMarkdownSource
+  const setIsSourceShown = isSvg ? setIsSvgSource : setIsMarkdownSource
   /** 편집을 막는 이유 (서버가 파일마다 준다. 필드가 없는 옛 서버는 저장 API 도 없다) */
   const editBlock = textFile ? (textFile.editBlockReason === undefined ? 'The server needs a restart to support editing' : textFile.editBlockReason) : null
   /** 위 막대가 가리키는 파일과 공유할 줄 (Changes 면 고른 diff 줄의 새 파일 줄 번호, 편집 중이면 누를 때 편집기에서 고른 줄) */
   const shownPath = isChanges ? selectedChange : isHistory ? null : selectedPath
-  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing || isHistory || isMarkdownPreview ? null : lineRange
+  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing || isHistory || isMarkdownPreview || isSvgPreview ? null : lineRange
   /** 경로 표시줄의 파일. History 면 고른 커밋의 파일이고 Add to chat·Copy path 는 없다 (지난 커밋의 줄 번호라 위치로 공유하지 않는다) */
   const navPath = isHistory ? (history.selectedHash ? history.selectedFile : null) : shownPath
   /** Changes 에서 고른 파일이 지운·없어진 것 — Copy file 을 막는다 */
@@ -485,7 +489,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const onFindKeyRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {})
   onFindKeyRef.current = (event) => {
     if (!event.shiftKey) {
-      if (!textFile || isMarkdownPreview) return
+      if (!textFile || isMarkdownPreview || isSvgPreview) return
       event.preventDefault()
       setIsViewing(true)
       if (isEditing) editorRef.current?.openSearch()
@@ -516,6 +520,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
       setOpenedMatch({ path, line, stamp: Date.now() })
       // 미리보기에는 줄이 없어 그 줄을 보이게 원본으로 바꾼다
       if (isMarkdownPath(path)) setIsMarkdownSource(true)
+      if (previewKindOf(path) === 'svg') setIsSvgSource(true)
       openFile(path)
       setLineRanges((previous) => ({ ...previous, [path]: { start: line, end: line } }))
     }
@@ -622,15 +627,15 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
             {isSaving ? 'Saving…' : 'Save'}
           </button>
         )}
-        {textFile && !isEditing && isMarkdownPath(selectedPath) && (
+        {textFile && !isEditing && (isMarkdownPath(selectedPath) || isSvg) && (
           <button
             type="button"
             className="ws-md-toggle"
-            onClick={() => setIsMarkdownSource((previous) => !previous)}
-            title={isMarkdownSource ? 'Show preview' : 'Show source'}
-            aria-label={isMarkdownSource ? 'Show preview' : 'Show source'}
+            onClick={() => setIsSourceShown((previous) => !previous)}
+            title={isSourceShown ? 'Show preview' : 'Show source'}
+            aria-label={isSourceShown ? 'Show preview' : 'Show source'}
           >
-            {isMarkdownSource ? <PreviewIcon /> : <SourceIcon />}
+            {isSourceShown ? <PreviewIcon /> : <SourceIcon />}
           </button>
         )}
         {textFile && (
@@ -856,6 +861,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
               onFindClose={closeCodeFind}
               editor={isEditing ? { ref: editorRef, onDirtyChange: setIsDirty, onSave: () => void saveRef.current() } : null}
               markdown={isMarkdownPreview ? docLinks : null}
+              isSvgPreview={isSvgPreview}
             />
           )}
         </section>
@@ -1048,7 +1054,10 @@ function PencilIcon() {
   )
 }
 
-/** 오른쪽 파일 보기. 글 파일은 CodeView(줄 고르기 포함), 편집 모드면 그 자리에 CodeEditor, md 미리보기면 MarkdownDocument */
+/**
+ * 오른쪽 파일 보기. 글 파일은 CodeView(줄 고르기 포함), 편집 모드면 그 자리에 CodeEditor, md 미리보기면 MarkdownDocument.
+ * 그림·SVG 미리보기·PDF·동영상·소리는 `/file/raw` 를 img·iframe·video·audio 로 (↻ 마다 &v= 로 다시)
+ */
 function FileView({
   sessionId,
   path,
@@ -1062,6 +1071,7 @@ function FileView({
   onFindClose,
   editor,
   markdown,
+  isSvgPreview,
 }: {
   sessionId: string
   path: string | null
@@ -1077,14 +1087,32 @@ function FileView({
   editor: { ref: Ref<CodeEditorHandle>; onDirtyChange: (isDirty: boolean) => void; onSave: () => void } | null
   /** md 문서 미리보기면 그림·링크 처리 (아니면 null — 코드 보기) */
   markdown: DocLinks | null
+  /** SVG 를 그림으로 (아니면 원본 코드 보기) */
+  isSvgPreview: boolean
 }) {
   if (!path) return <p className="hint">Select a file to view it</p>
-  if (isImagePath(path)) {
+  const kind = previewKindOf(path)
+  const rawUrl = `${apiUrl(sessionId, 'file/raw', { path })}&v=${reloadId}`
+  // 글로 못 받은 SVG(1MB 초과 등)는 원본을 보일 수 없어 그림으로
+  const isSvgImage = kind === 'svg' && (isSvgPreview || (state?.status === 'ok' && state.file.kind !== 'text'))
+  if (kind === 'image' || isSvgImage) {
+    // img 로 그려 SVG 안 스크립트는 돌지 않는다 (서버도 CSP sandbox 로 내보낸다)
     return (
       <div className="ws-image">
-        <img src={`${apiUrl(sessionId, 'file/raw', { path })}&v=${reloadId}`} alt={nameOf(path)} />
+        <img src={rawUrl} alt={nameOf(path)} />
       </div>
     )
+  }
+  if (kind === 'pdf') {
+    if (window.matchMedia(NO_PDF_FRAME_QUERY).matches) return <p className="hint">No PDF preview on phone</p>
+    return (
+      <div className="ws-frame">
+        <iframe src={rawUrl} title={nameOf(path)} />
+      </div>
+    )
+  }
+  if (kind === 'video' || kind === 'audio') {
+    return <div className="ws-media">{kind === 'video' ? <video src={rawUrl} controls /> : <audio src={rawUrl} controls />}</div>
   }
   if (!state) return <p className="hint">Loading…</p>
   if (state.status === 'error') return <p className="hint ws-error">Couldn't open the file: {state.message}</p>

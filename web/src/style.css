@@ -4234,6 +4234,33 @@ li.group.drop-after::after {
   max-height: 100%;
   object-fit: contain;
 }
+/* PDF: Chrome 내장 뷰어가 칸 전체를 채운다 (바탕·막대는 뷰어 것) */
+.ws-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.ws-frame iframe {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+}
+/* 동영상·소리: 칸 안에 비율대로 맞춘다 */
+.ws-media {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+.ws-media video {
+  max-width: 100%;
+  max-height: 100%;
+}
+.ws-media audio {
+  width: min(100%, 480px);
+}
 /* 코드 보기 (CodeView.tsx): 줄은 접지 않고 가로 스크롤. 줄 번호는 ::before 라 선택·복사에 끼지 않고, 가로로 스크롤해도 왼쪽에 붙어 있다 */
 .code-view {
   flex: 1;

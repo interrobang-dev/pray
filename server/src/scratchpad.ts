@@ -247,3 +247,8 @@ export function contentTypeOf(path: string): { type: string; isActive: boolean }
   const type = CONTENT_TYPES[extension] ?? (TEXT_EXTENSIONS.has(extension) ? TEXT : 'application/octet-stream')
   return { type, isActive: ACTIVE_TYPES.has(type) }
 }
+
+/** Files 탭 미리보기(`/file/raw`)가 그대로 내주는 종류: 그림·동영상·소리·PDF */
+export function isPreviewType(type: string): boolean {
+  return type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/') || type === 'application/pdf'
+}

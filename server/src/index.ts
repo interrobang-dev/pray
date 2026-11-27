@@ -104,6 +104,7 @@ import { findLiveSession, findTranscript, findTranscriptAnalysis, findTranscript
 import {
   contentTypeOf,
   findScratchpad,
+  isPreviewType,
   isSessionId,
   listScratchpad,
   resolveScratchpadDir,
@@ -1037,15 +1038,15 @@ app.put('/api/sessions/:id/file', async (req, res) => {
 })
 
 /**
- * 작업 폴더의 그림 파일 그대로 (?path=). 그림만 준다 — 그 밖은 404. 응답 머리는 scratchpad raw 와 같다
- * (nosniff, SVG 는 CSP sandbox, 압축을 끄는 no-transform)
+ * 작업 폴더의 파일 그대로 (?path=, Files 탭 미리보기). 그림·동영상·소리·PDF 만 준다 — 그 밖은 404. 응답 머리는 scratchpad raw 와 같다
+ * (nosniff, SVG 는 CSP sandbox, 압축을 끄는 no-transform — 영상 탐색의 Range 는 sendFile 이 206 으로 처리한다)
  */
 app.get('/api/sessions/:id/file/raw', async (req, res) => {
   const resolved = await resolveWorkspaceRequest(req, res, false)
   if (!resolved) return
   const { type, isActive } = contentTypeOf(resolved.target)
-  if (!type.startsWith('image/') || !(await stat(resolved.target).catch(() => null))?.isFile()) {
-    res.status(404).json({ message: 'Not an image' })
+  if (!isPreviewType(type) || !(await stat(resolved.target).catch(() => null))?.isFile()) {
+    res.status(404).json({ message: 'No preview for this file type' })
     return
   }
   res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })

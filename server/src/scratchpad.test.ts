@@ -7,6 +7,7 @@ import {
   contentTypeOf,
   findScratchpad,
   isInside,
+  isPreviewType,
   isSafeRelativePath,
   isSessionId,
   listScratchpad,
@@ -55,6 +56,15 @@ describe('scratchpad path checks', () => {
     expect(contentTypeOf('a.pdf')).toEqual({ type: 'application/pdf', isActive: false })
     expect(contentTypeOf('a.exe')).toEqual({ type: 'application/octet-stream', isActive: false })
     expect(contentTypeOf('Makefile')).toEqual({ type: 'application/octet-stream', isActive: false })
+  })
+
+  it('previews only images, video, audio and PDF', () => {
+    for (const name of ['a.png', 'a.svg', 'a.pdf', 'a.mp4', 'a.MOV', 'a.webm', 'a.mp3', 'a.wav', 'a.flac']) {
+      expect(isPreviewType(contentTypeOf(name).type), name).toBe(true)
+    }
+    for (const name of ['a.html', 'a.xml', 'a.ts', 'a.json', 'a.md', 'a.csv', 'a.exe', 'a.docx', 'Makefile']) {
+      expect(isPreviewType(contentTypeOf(name).type), name).toBe(false)
+    }
   })
 })
 
