@@ -1,8 +1,9 @@
 /**
  * Files 탭 파일 보기의 미리보기 종류 (확장자로 정한다). 서버 `/file/raw`·`/raw/<경로>` 가 내주는 종류(scratchpad.ts 의 CONTENT_TYPES 중
- * HTML·그림·동영상·소리·PDF)와 맞춘다. 여기 없는 것은 `file?path=` 로 받아 글이면 코드 보기, 아니면 No preview
+ * HTML·그림·동영상·소리·PDF·docx)와 맞춘다. 여기 없는 것은 `file?path=` 로 받아 글이면 코드 보기, 아니면 No preview.
+ * `unsupported` 는 미리보기가 없다고 알기만 하는 문서(pptx·hwp·hwpx) — 글로 받지 않고 "No preview for this file type"
  */
-export type PreviewKind = 'image' | 'svg' | 'html' | 'pdf' | 'video' | 'audio'
+export type PreviewKind = 'image' | 'svg' | 'html' | 'pdf' | 'docx' | 'video' | 'audio' | 'unsupported'
 /** 미리보기 ↔ 원본 코드 보기를 바꿀 수 있는 종류 (md 는 markdownDoc.ts 로 따로 본다) */
 export type SourceViewKind = 'svg' | 'html'
 
@@ -19,6 +20,10 @@ const KINDS: Record<string, PreviewKind> = {
   html: 'html',
   htm: 'html',
   pdf: 'pdf',
+  docx: 'docx',
+  pptx: 'unsupported',
+  hwp: 'unsupported',
+  hwpx: 'unsupported',
   mp4: 'video',
   m4v: 'video',
   webm: 'video',

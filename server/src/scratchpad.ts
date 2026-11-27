@@ -200,6 +200,11 @@ export async function saveAttachment(
 }
 
 const TEXT = 'text/plain; charset=utf-8'
+const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+const XLS = 'application/vnd.ms-excel'
+/** Files 탭이 받아 화면에서 풀어 그리는 문서 (docx 는 mammoth, xlsx·xls 는 표) */
+const OFFICE_TYPES = new Set([DOCX, XLSX, XLS])
 /** 확장자 → Content-Type. 코드·로그는 브라우저가 글자로 보이게 text/plain (.ts 를 영상(video/mp2t)으로 보내지 않게) */
 const CONTENT_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -212,6 +217,9 @@ const CONTENT_TYPES: Record<string, string> = {
   '.avif': 'image/avif',
   '.svg': 'image/svg+xml',
   '.pdf': 'application/pdf',
+  '.docx': DOCX,
+  '.xlsx': XLSX,
+  '.xls': XLS,
   '.mp4': 'video/mp4',
   '.m4v': 'video/mp4',
   '.webm': 'video/webm',
@@ -252,9 +260,9 @@ export function contentTypeOf(path: string): { type: string; isActive: boolean }
   return { type, isActive: ACTIVE_TYPES.has(type) }
 }
 
-/** Files 탭 미리보기(`/file/raw`)가 그대로 내주는 종류: 그림·동영상·소리·PDF */
+/** Files 탭 미리보기(`/file/raw`)가 그대로 내주는 종류: 그림·동영상·소리·PDF·docx·xlsx·xls (문서·표는 화면이 받아 그린다) */
 export function isPreviewType(type: string): boolean {
-  return type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/') || type === 'application/pdf'
+  return type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/') || type === 'application/pdf' || OFFICE_TYPES.has(type)
 }
 
 /**

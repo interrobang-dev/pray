@@ -3761,13 +3761,14 @@ li.group.drop-after::after {
   padding: 0;
   overflow: hidden;
 }
-/* HTML 문서는 흰 바탕을 전제하므로 다크에서도 흰색 (작업 파일 미리보기·Files 탭 HTML 미리보기) */
+/* HTML 문서는 흰 바탕을 전제하므로 다크에서도 흰색 (작업 파일 미리보기·Files 탭 HTML·docx 미리보기) */
 .files-preview-body iframe {
   flex: 1;
   border: 0;
 }
 .files-preview-body iframe,
-.ws-frame .ws-html-frame {
+.ws-frame .ws-html-frame,
+.ws-frame .ws-doc-frame {
   background: #fff;
 }
 .files-preview-body.video,

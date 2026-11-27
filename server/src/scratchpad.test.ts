@@ -59,11 +59,14 @@ describe('scratchpad path checks', () => {
     expect(contentTypeOf('Makefile')).toEqual({ type: 'application/octet-stream', isActive: false })
   })
 
-  it('previews only images, video, audio and PDF', () => {
-    for (const name of ['a.png', 'a.svg', 'a.pdf', 'a.mp4', 'a.MOV', 'a.webm', 'a.mp3', 'a.wav', 'a.flac']) {
+  it('previews only images, video, audio, PDF and Word·Excel documents', () => {
+    expect(contentTypeOf('a.docx')).toEqual({ type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', isActive: false })
+    expect(contentTypeOf('a.XLSX')).toEqual({ type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', isActive: false })
+    expect(contentTypeOf('a.xls')).toEqual({ type: 'application/vnd.ms-excel', isActive: false })
+    for (const name of ['a.png', 'a.svg', 'a.pdf', 'a.mp4', 'a.MOV', 'a.webm', 'a.mp3', 'a.wav', 'a.flac', 'a.docx', 'a.xlsx', 'a.xls']) {
       expect(isPreviewType(contentTypeOf(name).type), name).toBe(true)
     }
-    for (const name of ['a.html', 'a.xml', 'a.ts', 'a.json', 'a.md', 'a.csv', 'a.exe', 'a.docx', 'Makefile']) {
+    for (const name of ['a.html', 'a.xml', 'a.ts', 'a.json', 'a.md', 'a.csv', 'a.exe', 'a.doc', 'a.pptx', 'a.hwp', 'a.hwpx', 'Makefile']) {
       expect(isPreviewType(contentTypeOf(name).type), name).toBe(false)
     }
   })

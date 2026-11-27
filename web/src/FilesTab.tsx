@@ -8,6 +8,7 @@ import { CopyMenu } from './CopyMenu'
 import { copyText } from './copyText'
 import { alertDialog, choiceDialog } from './Dialog'
 import { DiffView } from './DiffView'
+import { DocxPreview } from './DocxPreview'
 import { FileName } from './FileName'
 import { hasSourceView, isRawOnlyKind, previewKindOf, rawPathUrl, type SourceViewKind } from './filePreview'
 import { formatSize } from './Files'
@@ -1081,7 +1082,7 @@ function PencilIcon() {
 
 /**
  * 오른쪽 파일 보기. 글 파일은 CodeView(줄 고르기 포함), 편집 모드면 그 자리에 CodeEditor, md 미리보기면 MarkdownDocument.
- * 그림·SVG 미리보기·PDF·동영상·소리는 `/file/raw` 를 img·iframe·video·audio 로 (↻ 마다 &v= 로 다시)
+ * 그림·SVG 미리보기·PDF·동영상·소리는 `/file/raw` 를 img·iframe·video·audio 로, docx 는 받아서 HTML 로 바꿔 iframe srcdoc 으로 (↻ 마다 &v= 로 다시)
  */
 function FileView({
   sessionId,
@@ -1148,6 +1149,8 @@ function FileView({
   if (kind === 'video' || kind === 'audio') {
     return <div className="ws-media">{kind === 'video' ? <video src={rawUrl} controls /> : <audio src={rawUrl} controls />}</div>
   }
+  if (kind === 'docx') return <DocxPreview key={path} url={rawUrl} title={nameOf(path)} />
+  if (kind === 'unsupported') return <p className="hint">No preview for this file type</p>
   if (!state) return <p className="hint">Loading…</p>
   if (state.status === 'error') return <p className="hint ws-error">Couldn't open the file: {state.message}</p>
   const { file } = state
