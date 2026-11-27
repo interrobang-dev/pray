@@ -4267,6 +4267,121 @@ li.group.drop-after::after {
 .ws-media audio {
   width: min(100%, 480px);
 }
+/* 표 미리보기 (csv·tsv·xlsx·xls, SheetTable.tsx·WorkbookPreview.tsx): 위 시트 칩·아래 알림은 그대로, 가운데 표만 스크롤.
+   열 문자 줄(위)·행 번호(왼쪽)·첫 줄(열 문자 줄 아래)이 붙어 있다 — 붙는 칸은 바탕이 비치지 않게 채운다.
+   첫 줄의 top 은 열 문자 줄 높이와 같아야 해서 두 줄 모두 칸 높이를 고정한다 */
+.ws-sheet {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-sheet > .hint {
+  margin: auto;
+}
+.ws-sheet-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.ws-sheet-tabs button {
+  flex-shrink: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+.ws-sheet-tabs button:not(.on):hover {
+  color: var(--text);
+}
+.ws-sheet-tabs button.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.ws-sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.ws-sheet-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: calc(12px * var(--font-scale));
+  line-height: 1.4;
+}
+.ws-sheet-table th,
+.ws-sheet-table td {
+  box-sizing: border-box;
+  height: calc(24px * var(--font-scale));
+  padding: 0 8px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.ws-sheet-table td {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--panel);
+  color: var(--text);
+}
+.ws-sheet-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ws-sheet-table th {
+  background: var(--pre-bg);
+  color: var(--muted);
+  font-weight: 500;
+}
+.ws-sheet-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  text-align: center;
+}
+.ws-sheet-table tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 36px;
+  text-align: right;
+}
+.ws-sheet-table thead .ws-sheet-corner {
+  left: 0;
+  z-index: 4;
+}
+.ws-sheet-first > td,
+.ws-sheet-table tbody .ws-sheet-first > th {
+  position: sticky;
+  top: calc(24px * var(--font-scale));
+  z-index: 1;
+}
+.ws-sheet-first > td {
+  font-weight: 600;
+}
+.ws-sheet-table tbody .ws-sheet-first > th {
+  z-index: 3;
+}
+.ws-sheet-note {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
 /* 코드 보기 (CodeView.tsx): 줄은 접지 않고 가로 스크롤. 줄 번호는 ::before 라 선택·복사에 끼지 않고, 가로로 스크롤해도 왼쪽에 붙어 있다 */
 .code-view {
   flex: 1;

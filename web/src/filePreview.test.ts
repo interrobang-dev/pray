@@ -14,6 +14,10 @@ describe('previewKindOf', () => {
     expect(previewKindOf('sound.wav')).toBe('audio')
     expect(previewKindOf('docs/보고서.DOCX')).toBe('docx')
     expect(previewKindOf('deck.pptx')).toBe('unsupported')
+    expect(previewKindOf('book.XLSX')).toBe('sheet')
+    expect(previewKindOf('old.xls')).toBe('sheet')
+    expect(previewKindOf('data.csv')).toBe('csv')
+    expect(previewKindOf('data.tsv')).toBe('csv')
     expect(previewKindOf('a.hwp')).toBe('unsupported')
     expect(previewKindOf('a.hwpx')).toBe('unsupported')
   })
@@ -28,9 +32,11 @@ describe('previewKindOf', () => {
     expect(previewKindOf(null)).toBeNull()
   })
 
-  it('fetches text only for kinds with a source view (SVG, HTML)', () => {
+  it('fetches text only for kinds with a source view (SVG, HTML, CSV)', () => {
     expect(hasSourceView('svg')).toBe(true)
     expect(hasSourceView('html')).toBe(true)
+    expect(hasSourceView('csv')).toBe(true)
+    expect(hasSourceView('sheet')).toBe(false)
     expect(hasSourceView('image')).toBe(false)
     expect(hasSourceView(null)).toBe(false)
     expect(isRawOnlyKind('image')).toBe(true)
@@ -38,6 +44,8 @@ describe('previewKindOf', () => {
     expect(isRawOnlyKind('video')).toBe(true)
     expect(isRawOnlyKind('docx')).toBe(true)
     expect(isRawOnlyKind('unsupported')).toBe(true)
+    expect(isRawOnlyKind('sheet')).toBe(true)
+    expect(isRawOnlyKind('csv')).toBe(false)
     expect(isRawOnlyKind('svg')).toBe(false)
     expect(isRawOnlyKind('html')).toBe(false)
     expect(isRawOnlyKind(null)).toBe(false)

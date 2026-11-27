@@ -28,7 +28,10 @@ import {
   type WorkspaceFolder,
 } from './types'
 import { SearchPanel, EMPTY_SEARCH, type SearchState } from './SearchPanel'
+import { DelimitedTable } from './SheetTable'
+import { delimiterOf } from './tableData'
 import { setUnsavedEdit, whenLeavingAllowed } from './unsavedEdits'
+import { WorkbookPreview } from './WorkbookPreview'
 import { apiUrl, fetchJson } from './workspaceApi'
 import { selectionQuery } from './workspaceSearch'
 import { ancestorFolders, nameOf, treeRows, type FolderState } from './workspaceTree'
@@ -103,7 +106,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const [search, setSearch] = useState<SearchState>(saved?.search ?? EMPTY_SEARCH)
   const [history, setHistory] = useState<HistoryState>(saved?.history ?? EMPTY_HISTORY)
   const [isMarkdownSource, setIsMarkdownSource] = useState(saved?.isMarkdownSource ?? false)
-  const [sourceViews, setSourceViews] = useState<Record<SourceViewKind, boolean>>(saved?.sourceViews ?? { svg: false, html: false })
+  const [sourceViews, setSourceViews] = useState<Record<SourceViewKind, boolean>>(saved?.sourceViews ?? { svg: false, html: false, csv: false })
   /** Ctrl+Shift+F: Search 입력칸에 포커스 (text 가 있으면 그 글로 찾기) */
   const [searchFocus, setSearchFocus] = useState<{ id: number; text: string | null } | null>(null)
   /** Search 결과에서 마지막으로 연 줄 (표시)과 코드 보기를 그 줄로 스크롤할 요청 */
@@ -356,11 +359,11 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   /** md 글 파일을 문서 미리보기로 보는 중 (편집 중이면 편집기). 줄 번호가 없어 줄 고르기·Ctrl+F 찾기 막대를 쓰지 않는다 */
   const isMarkdownPreview = textFile !== null && !isEditing && !isMarkdownSource && isMarkdownPath(selectedPath)
   const previewKind = previewKindOf(selectedPath)
-  /** 미리보기 ↔ 원본 전환이 있는 SVG·HTML (md 는 위 isMarkdownPreview) */
+  /** 미리보기 ↔ 원본 전환이 있는 SVG·HTML·csv (md 는 위 isMarkdownPreview) */
   const sourceKind = hasSourceView(previewKind) ? previewKind : null
-  /** SVG 그림·HTML 문서로 보는 중 (글을 받기 전에도). md 미리보기처럼 줄이 없다 */
+  /** SVG 그림·HTML 문서·csv 표로 보는 중 (글을 받기 전에도). md 미리보기처럼 줄이 없다 */
   const isRenderedPreview = isFileSide && sourceKind !== null && !isEditing && !sourceViews[sourceKind]
-  /** 위 막대 미리보기 ↔ 원본 전환 (md·SVG·HTML). 원본 여부는 종류마다 따로 기억한다 */
+  /** 위 막대 미리보기 ↔ 원본 전환 (md·SVG·HTML·csv). 원본 여부는 종류마다 따로 기억한다 */
   const isSourceShown = sourceKind ? sourceViews[sourceKind] : isMarkdownSource
   const toggleSourceView = () =>
     sourceKind ? setSourceViews((previous) => ({ ...previous, [sourceKind]: !previous[sourceKind] })) : setIsMarkdownSource((previous) => !previous)
@@ -1082,7 +1085,8 @@ function PencilIcon() {
 
 /**
  * 오른쪽 파일 보기. 글 파일은 CodeView(줄 고르기 포함), 편집 모드면 그 자리에 CodeEditor, md 미리보기면 MarkdownDocument.
- * 그림·SVG 미리보기·PDF·동영상·소리는 `/file/raw` 를 img·iframe·video·audio 로, docx 는 받아서 HTML 로 바꿔 iframe srcdoc 으로 (↻ 마다 &v= 로 다시)
+ * 그림·SVG 미리보기·PDF·동영상·소리는 `/file/raw` 를 img·iframe·video·audio 로, docx 는 받아서 HTML 로 바꿔 iframe srcdoc 으로, xlsx·xls 는 받아서 표로 (↻ 마다 &v= 로 다시).
+ * csv·tsv 는 받은 글을 표로 (원본 전환이 있다)
  */
 function FileView({
   sessionId,
@@ -1113,7 +1117,7 @@ function FileView({
   editor: { ref: Ref<CodeEditorHandle>; onDirtyChange: (isDirty: boolean) => void; onSave: () => void } | null
   /** md 문서 미리보기면 그림·링크 처리 (아니면 null — 코드 보기) */
   markdown: DocLinks | null
-  /** SVG 를 그림으로·HTML 을 문서로 (아니면 원본 코드 보기) */
+  /** SVG 를 그림으로·HTML 을 문서로·csv 를 표로 (아니면 원본 코드 보기) */
   isRenderedPreview: boolean
 }) {
   if (!path) return <p className="hint">Select a file to view it</p>
@@ -1150,12 +1154,15 @@ function FileView({
     return <div className="ws-media">{kind === 'video' ? <video src={rawUrl} controls /> : <audio src={rawUrl} controls />}</div>
   }
   if (kind === 'docx') return <DocxPreview key={path} url={rawUrl} title={nameOf(path)} />
+  if (kind === 'sheet') return <WorkbookPreview key={path} url={rawUrl} />
   if (kind === 'unsupported') return <p className="hint">No preview for this file type</p>
   if (!state) return <p className="hint">Loading…</p>
   if (state.status === 'error') return <p className="hint ws-error">Couldn't open the file: {state.message}</p>
   const { file } = state
   if (file.kind === 'binary') return <p className="hint">Binary file · {formatSize(file.size)} · No preview</p>
   if (file.kind === 'too-large') return <p className="hint">Too large to show · {formatSize(file.size)} (limit 1 MB)</p>
+  // csv·tsv 표: 받아 둔 글을 해석한다 (원본 전환은 같은 글의 CodeView)
+  if (kind === 'csv' && isRenderedPreview) return <DelimitedTable key={path} text={file.text} delimiter={delimiterOf(path)} />
   if (editor) return <CodeEditor key={path} ref={editor.ref} text={file.text} path={path} onDirtyChange={editor.onDirtyChange} onSave={editor.onSave} />
   if (markdown) return <MarkdownDocument key={path} text={file.text} links={markdown} />
   return (
