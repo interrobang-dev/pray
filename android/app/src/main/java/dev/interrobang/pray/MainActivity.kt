@@ -279,6 +279,8 @@ class MainActivity : ComponentActivity() {
                 showError(Machines.machineFor(request.url.toString(), store.machines) ?: currentMachine, error.description?.toString())
             }
         }
+        // 웹 Files 탭의 Download·Share… (→ FileTransfers.kt)
+        FileTransfers(this, web).install()
         web.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
                 fileCallback?.onReceiveValue(null)

@@ -7,7 +7,7 @@ paths:
 
 폰(S26)에서 Pray 를 앱으로 쓴다: 앱을 열면 네이티브 랜딩(Tailscale 상태·PC 카드)이 뜨고, 카드를 누르면 전체 화면 WebView 가 그 PC 의 Pray 웹을 그대로 띄우고, 포그라운드 서비스가 Tailscale 로 각 PC 의 알림 스트림(SSE)을 붙들어 안드로이드 알림을 띄운다. 설계 전문은 `docs/plans/2026-11-26-android-app-design.md`. 서버 쪽 스트림(`GET /api/notifications/stream`)은 `host.md` "알림 이벤트 스트림"·`server-api.md`. 이 영역을 고치면 이 파일의 그 줄을 고쳐 쓴다.
 
-하지 않는 것: 공유하기(다른 앱 → 세션 첨부, 2단계) · 부팅 뒤 자동 시작(앱을 열면 서비스가 시작된다) · 스토어 배포·자동 업데이트 · 알림 판정(서버가 한다. 앱이 따로 판정하면 규칙이 두 벌이 된다) · 음성 입력(키보드 마이크로 된다).
+하지 않는 것: 다른 앱에서 받기(다른 앱의 공유 → 세션 첨부, 2단계. 반대 방향인 Pray 파일 → 다른 앱은 아래 "받기·공유") · 부팅 뒤 자동 시작(앱을 열면 서비스가 시작된다) · 스토어 배포·자동 업데이트 · 알림 판정(서버가 한다. 앱이 따로 판정하면 규칙이 두 벌이 된다) · 음성 입력(키보드 마이크로 된다).
 
 ## 구조
 
@@ -23,7 +23,9 @@ Kotlin 한 모듈 `app`, 패키지 `dev.interrobang.pray`, minSdk 29·targetSdk�
 - `Landing.kt` — (순수) 랜딩 판정·글자: Pray 응답 해석·Tailscale 줄(`TailscaleBanner`)·카드 순서·작은 줄·상태 줄·뒤로 가기(`Screen`·`BackAction`)
 - `LandingScreen.kt` — 랜딩 화면: 보이는 동안 PC 확인·네트워크 콜백·알림 상태 따라 다시 그리기·카드·Open Tailscale
 - `MainActivity.kt` — 화면 셋(랜딩·주소 입력·웹) 오가기·뒤로 가기, WebView·당겨 새로고침·못 붙음 화면·첨부 고르기·권한 한 번 묻기·알림이 넘긴 주소 열기
-- `res/layout/activity_main.xml` — `SwipeRefreshLayout`(`refresh`)로 감싼 WebView 위에 겹친 랜딩(`landing`, 역시 SwipeRefreshLayout)·주소 입력(`setup`)·못 붙음(`error`) 화면 · `landing_machine.xml` — PC 카드 하나 · `values/colors.xml`·`values-night/colors.xml` — 랜딩 색(`landing_*`, 라이트·다크) · `res/drawable/ic_launcher_*`·`ic_notification` — 로고 벡터 · `res/xml/network_security_config.xml` — cleartext 전부 허용
+- `FileTransfer.kt` — (순수) 웹 Files 탭 받기·공유 판정: 공유 주소 검사(`isShareUrl`)·Content-Disposition 파일 이름(`fileNameFromDisposition`, `filename*` 먼저)·받기 주소 `path=` 끝 이름(`fileNameFromUrl`)·저장 이름 다듬기(`safeFileName`)·확장자·브리지 이름 `PrayShare`·공유 상한 100MB
+- `FileTransfers.kt` — WebView 다운로드(`setDownloadListener` → DownloadManager)와 `PrayShare` 브리지(받아서 공유 창). `MainActivity.setupWebView` 가 `install()` 한다
+- `res/layout/activity_main.xml` — `SwipeRefreshLayout`(`refresh`)로 감싼 WebView 위에 겹친 랜딩(`landing`, 역시 SwipeRefreshLayout)·주소 입력(`setup`)·못 붙음(`error`) 화면 · `landing_machine.xml` — PC 카드 하나 · `values/colors.xml`·`values-night/colors.xml` — 랜딩 색(`landing_*`, 라이트·다크) · `res/drawable/ic_launcher_*`·`ic_notification` — 로고 벡터 · `res/xml/network_security_config.xml` — cleartext 전부 허용 · `res/xml/file_paths.xml` — FileProvider(`<패키지>.files`) 경로: cache `camera/`(첨부 사진)·`share/`(공유할 파일)
 
 ## 핵심 개념
 
@@ -41,6 +43,11 @@ Kotlin 한 모듈 `app`, 패키지 `dev.interrobang.pray`, minSdk 29·targetSdk�
 - **당겨 새로고침**: WebView 를 `SwipeRefreshLayout` 으로 감싸 당기면 `web.reload()`, `onPageFinished`·주 프레임 `onReceivedError` 에서 스피너를 멈춘다 (색 `logo_accent`, 바탕 `logo_background`). **함정: Pray 웹은 document 가 아니라 안쪽 요소(목록·대화·xterm `.xterm-viewport`·모달 본문)가 스크롤돼 `WebView.canScrollVertically(-1)` 이 늘 false** — 그대로면 대화 중간에서 아래로 당겨도 새로고침된다. 그래서 저장한 PC 페이지가 끝날 때마다(`onPageFinished`) `PullRefresh.SCRIPT` 를 넣는다(같은 문서엔 한 번): touchstart(capture·passive)에서 손가락 둘 이상·`.modal-overlay`(확인 창 `.dialog-overlay`·팔레트 포함, 창 안 글이 날아가지 않게)·document 가 내려감·터치 대상부터 위로 overflow-y auto/scroll/overlay 이고 `scrollTop > 0` 인 조상·`touch-action: none` 인 요소(목록 ⠿ 끌기 손잡이 — 맨 위 목록에서 아래로 끌면 새로고침됐다) 중 하나라도 있으면 막는다고 `PrayPull.report(boolean)` 로 알린다. `setOnChildScrollUpCallback` 이 그 값을 쓴다. **손짓 맞추기**: `dispatchTouchEvent` 의 ACTION_DOWN 에서 지난 값을 지우고(null = 아직 안 옴 → 막음), DOWN 을 넘기는 동안만은 막지 않는다 — SwipeRefreshLayout 은 DOWN 때 막히면 시작 위치를 안 잡아 그 손짓 전체가 안 된다. 당기기는 MOVE 에서 시작하므로 JS 답이 늦으면 몇 MOVE 늦게 시작할 뿐이다. 스크립트가 없는 페이지(다른 출처·스크립트 실패)는 답이 안 와 당기기가 안 된다. 브리지는 boolean 하나로 당기기를 막을지만 바꿔 다른 출처 frame 이 불러도 해가 없다. 웹 코드(`web/`)에는 이 기능이 없다 — 웹의 스크롤 class 를 바꿔도 조상 계산이라 영향이 없지만 `.modal-overlay` 이름을 바꾸면 창 위 당기기 막기가 빠진다
 - **화면 칸**: targetSdk 35 는 화면이 상태 표시줄·내비 막대 밑까지 그려져서 root 에 그 높이와 키보드 높이만큼 안쪽 여백을 준다 — 웹의 `100dvh` 가 남는 칸이 된다. 테마가 DayNight 라 웹의 `prefers-color-scheme` 이 폰 다크 모드를 따른다. `configChanges` 로 회전·다크 모드 전환 때 Activity 를 다시 만들지 않는다(WebView 를 다시 불러오지 않게)
 - **첨부**: `onShowFileChooser` → 웹 `accept` 대로의 파일 고르기 + 카메라(`ACTION_IMAGE_CAPTURE`, cache `camera/` 의 FileProvider `<패키지>.files` 파일). CAMERA 권한은 선언하지 않는다 (선언하면 받기 전에 카메라 앱 호출이 막힌다)
+- **받기·공유** (웹 Files 탭 Copy 메뉴, 서버·웹 계약): 받기 주소 `GET <PC>/api/sessions/<세션id>/file/download?path=<encoded>` → `Content-Disposition: attachment; filename*=UTF-8''…`·`application/octet-stream`, 인증은 WebView 쿠키 `jk_session`(Tailscale 주소면 쿠키 없이).
+  - **Download** = 웹이 `<a href download>` 를 누른다 → `setDownloadListener` → `DownloadManager.Request` 에 `CookieManager` 쿠키를 `Cookie` 머리로·WebView User-Agent·MIME(서버 값이 octet-stream·없음이면 확장자 `MimeTypeMap`)·공개 Downloads 폴더(`setDestinationInExternalPublicDir`, minSdk 29 라 권한 없음)·끝나면 남는 알림. 시작하면 Toast "Downloading <name>", http(s) 가 아니면(blob: 등) "Can't download <name>". 이름은 Content-Disposition(`filename*` 를 직접 해석 — `URLUtil.guessFileName` 은 못 읽는 버전이 있다) → 주소의 `path=` 끝 → `guessFileName` 순, 그 뒤 `safeFileName`. 받기는 시스템 DownloadManager 가 하므로 주소 검사는 없다 (쿠키는 그 주소의 것만 붙는다)
+  - **Share…** = 웹은 `window.PrayShare` 가 있으면 항목을 보이고 `PrayShare.share(absoluteUrl, fileName)` 를 부른다. 브리지는 모든 페이지·frame 에 노출되니 **메인 스레드에서 `web.url` 과 scheme·host·port 가 똑같고(대소문자 무시·기본 port 채움, 짧은 이름 ↔ MagicDNS 전체 이름은 같게 보지 않는다 — 웹이 `location` 으로 절대 주소를 만들어서) 경로가 정확히 `/api/sessions/<[A-Za-z0-9_-]+>/file/download` 일 때만** 받는다 (`isShareUrl`. 백슬래시·공백·userinfo `@` 가 든 주소는 버린다). 아니면 말없이 무시. 받기는 한 스레드 executor 로 하나씩: cache `share/` 를 비우고 `PrayHttp.open`(쿠키)+User-Agent·redirect 따라가지 않음·읽기 60초로 받아 `share/<safeFileName>` 에 쓴다. 200 이 아니면 "Can't share <name> · HTTP <code>", Content-Length 나 받은 양이 100MB 를 넘으면 끊고 지우고 "<name> is over 100 MB", 네트워크 오류는 "Can't share <name> · <오류>". 받는 동안 Toast "Preparing <name>…". 끝나면 FileProvider URI 로 `ACTION_SEND`(MIME 은 확장자, 모르면 octet-stream·`EXTRA_TITLE`·clipData·`FLAG_GRANT_READ_URI_PERMISSION`) + `createChooser`
+  - **안전한 이름**(`safeFileName`): `/ \ : * ? " < > |`·제어 문자를 `_` 로, 앞뒤 공백·점을 떼고, UTF-8 200바이트를 넘으면 확장자를 남기고 줄인다. 남는 게 없으면 `download`. 이름은 웹이 넘긴 `fileName` → 주소의 `path=` 끝 순
+  - 공유한 파일은 다음 공유 때 지운다 — 받는 앱이 늦게 읽는 사이에 다음 공유를 하면 앞의 것이 사라진다. 같은 PC 의 다른 출처 iframe 도 브리지를 부를 수 있지만 고를 수 있는 건 그 PC 의 받기 주소뿐이고 공유 창은 사람이 고른다 (HTML 미리보기 iframe 은 스크립트가 막혀 있다 → `file-preview.md`)
 - **화면 글자는 영어** (루트 규칙과 같다). 디버그 빌드는 WebView 원격 디버깅이 켜진다 (USB 로 PC Chrome `chrome://inspect`)
 
 ## 빌드·설치
@@ -66,4 +73,5 @@ Kotlin 한 모듈 `app`, 패키지 `dev.interrobang.pray`, minSdk 29·targetSdk�
 - 알림: 권한 묻기·배터리 최적화 요청 창, 채널 소리, 상시 알림 글자, 누르면 그 세션이 열리는지, 같은 PC 를 보고 있을 때 숨는지
 - 오래 두기: 삼성 배터리 관리·Doze 에서 서비스가 살아 있는지, 화면이 꺼진 동안 SSE 로 알림이 바로 오는지, 와이파이 ↔ LTE 전환 뒤 다시 붙는지, 시스템이 서비스를 죽였다 `START_STICKY` 로 되살릴 때 뒤에서 포그라운드 시작이 허용되는지
 - WebView 가 폰 다크 모드 전환을 Activity 재생성 없이 따라가는지 (`configChanges` 에 uiMode)
-- 웹의 파일 내려받기(있다면) — 다운로드 처리를 넣지 않았다
+- 받기·공유: 단위 테스트(`FileTransferTest`)·빌드만 했다. 실제 폰에서 `<a download>` 가 `onDownloadStart` 로 오는지(주 프레임 이동으로 처리돼 `onReceivedError`·못 붙음 화면이 뜨지 않는지)·그때 contentDisposition 이 채워 오는지, DownloadManager 가 cleartext http·Tailscale 주소·쿠키로 받는지(시스템 프로세스가 받는다), 한글 이름·같은 이름이 Downloads 에 어떻게 저장되는지, 완료 알림을 누르면 열리는지, 공유 창·받는 앱(카톡·Gmail 등)이 FileProvider URI 를 읽는지, 100MB 끊기, 실제 서버 받기 API(서버·웹은 다른 팀원이 동시에 만들었다)
+- `lintDebug` 는 `MainActivity.dispatchKeyEvent` 의 RestrictedApi 오류 3개로 실패한다 (뒤로 길게 누르기 때부터 있던 것. 빌드·테스트는 된다). 고치지 않았다

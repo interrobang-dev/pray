@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 첨부 고르기의 카메라 사진을 둘 곳 -->
+<!-- 첨부 고르기의 카메라 사진, 웹 Files 탭 Share… 로 받은 파일을 둘 곳 -->
 <paths>
     <cache-path name="camera" path="camera/" />
+    <cache-path name="share" path="share/" />
 </paths>
