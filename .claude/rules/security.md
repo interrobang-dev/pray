@@ -21,6 +21,7 @@ paths:
 다른 파일에 있는 항목:
 - 저장 API(`PUT /api/sessions/:id/file`)의 거절 순서·`workspaceSave.ts` 의 저장 규칙 → server-api.md (`isLocalPageRequest` 판정 규칙은 아래)
 - AskUserQuestion 질문 훅을 붙잡는 흐름 → server-api.md
+- Files 탭 미리보기 raw 주소(`/file/raw`·`/raw/<경로>`)의 경로 막기·JS 를 내주지 않는 이유·HTML 미리보기 sandbox 가 `allow-same-origin` 하나뿐인 이유(스크립트·폼·팝업 없이 같은 출처라 다른 PC 쿠키가 하위 요청에 붙고 GET 밖은 못 한다) → file-preview.md
 
 ## 구조
 

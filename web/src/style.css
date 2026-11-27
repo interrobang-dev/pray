@@ -3761,10 +3761,13 @@ li.group.drop-after::after {
   padding: 0;
   overflow: hidden;
 }
-/* HTML 문서는 흰 바탕을 전제하므로 다크에서도 흰색 */
+/* HTML 문서는 흰 바탕을 전제하므로 다크에서도 흰색 (작업 파일 미리보기·Files 탭 HTML 미리보기) */
 .files-preview-body iframe {
   flex: 1;
   border: 0;
+}
+.files-preview-body iframe,
+.ws-frame .ws-html-frame {
   background: #fff;
 }
 .files-preview-body.video,
@@ -3938,6 +3941,7 @@ li.group.drop-after::after {
 .ws-add-chat,
 .ws-file-history,
 .ws-reveal,
+.ws-open-chrome,
 .ws-toolbar > .copy-menu > .copy-button {
   width: 32px;
   height: 30px;
@@ -3964,6 +3968,7 @@ li.group.drop-after::after {
 .ws-add-chat,
 .ws-file-history,
 .ws-reveal,
+.ws-open-chrome,
 .ws-md-toggle,
 .ws-edit {
   display: inline-flex;
@@ -9465,6 +9470,7 @@ button.machine-row:hover:not(:disabled) {
   .ws:not(.is-viewing) .ws-add-chat,
   .ws:not(.is-viewing) .ws-file-history,
   .ws:not(.is-viewing) .ws-reveal,
+  .ws:not(.is-viewing) .ws-open-chrome,
   .ws:not(.is-viewing) .ws-toolbar > .copy-menu,
   .ws.is-viewing .ws-find {
     display: none;
@@ -9496,6 +9502,7 @@ button.machine-row:hover:not(:disabled) {
   .ws-add-chat,
   .ws-file-history,
   .ws-reveal,
+  .ws-open-chrome,
   .ws-edit,
   .ws-md-toggle,
   .ws-toolbar > .copy-menu > .copy-button {

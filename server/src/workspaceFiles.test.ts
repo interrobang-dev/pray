@@ -15,6 +15,7 @@ import {
   listFolder,
   makeFileIndexCache,
   matchScore,
+  rawRequestPath,
   readWorkspaceFile,
   resolveWorkspacePath,
 } from './workspaceFiles.js'
@@ -31,6 +32,23 @@ describe('request path shape', () => {
     for (const path of ['a\0b', 'C:\\Windows\\win.ini', 'C:win.ini', 'a.txt:stream', '/etc/passwd', '\\\\server\\share\\x', '\\Windows']) {
       expect(isValidRequestPath(path, true), path).toBe(false)
     }
+  })
+
+  it('joins raw URL segments into a relative path', () => {
+    expect(rawRequestPath(['page.html'])).toBe('page.html')
+    expect(rawRequestPath(['docs', 'css', 'site.css'])).toBe('docs/css/site.css')
+    expect(rawRequestPath(['한글 폴더', 'a b.png'])).toBe('한글 폴더/a b.png')
+    expect(rawRequestPath(['a..b', '.hidden', 'x.html'])).toBe('a..b/.hidden/x.html')
+  })
+
+  it('rejects raw URL segments that are empty, dot, dot-dot or decode into separators', () => {
+    // Express 가 %2e%2e·%2F·%5C 를 푼 뒤의 값이다
+    for (const segments of [[], [''], ['a', ''], ['.'], ['..'], ['a', '..', 'b'], ['a/../../x'], ['..\\x'], ['a\\b'], ['C:', 'x'], ['a\0b'], ['a', '/b']]) {
+      expect(rawRequestPath(segments), JSON.stringify(segments)).toBeNull()
+    }
+    expect(rawRequestPath('page.html')).toBeNull()
+    expect(rawRequestPath([1])).toBeNull()
+    expect(rawRequestPath(undefined)).toBeNull()
   })
 })
 

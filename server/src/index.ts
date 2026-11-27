@@ -105,6 +105,7 @@ import {
   contentTypeOf,
   findScratchpad,
   isPreviewType,
+  isRawAssetType,
   isSessionId,
   listScratchpad,
   resolveScratchpadDir,
@@ -113,7 +114,7 @@ import {
   saveAttachment,
 } from './scratchpad.js'
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
-import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
+import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, rawRequestPath, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
 import { chatImagePathKind, resolveChatImage } from './chatImage.js'
 import { chromeArguments, locateChrome, openInChrome, resolveChatHtml } from './openInChrome.js'
 import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './workspaceChanges.js'
@@ -1052,6 +1053,34 @@ app.get('/api/sessions/:id/file/raw', async (req, res) => {
   res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
   if (isActive) res.set('Content-Security-Policy', 'sandbox')
   res.sendFile(resolved.target, { dotfiles: 'allow' })
+})
+
+/**
+ * 작업 폴더 파일을 경로가 주소에 든 꼴로 (`/raw/<경로>`, Files 탭 HTML 미리보기). 문서 안 상대 경로 CSS·그림·글꼴이 같은 꼴 주소로 풀려 불러와진다.
+ * 경로 꼴(rawRequestPath·isValidRequestPath)·기준 폴더·realpath 범위는 다른 작업 폴더 API 와 같다. 내주는 종류는 isRawAssetType — 그 밖(JS 포함)은 404.
+ * 머리는 /file/raw 와 같다(nosniff·no-cache, no-transform). 단 HTML 은 CSP `sandbox allow-same-origin` — 스크립트·폼·팝업은 막고 출처만 앱과 같게 둔다.
+ * 출처가 null 이면 메일 로그인한 다른 PC 에서 문서가 부르는 CSS·그림에 SameSite=Lax 쿠키가 안 붙어 401 이었다. 스크립트가 없어 같은 출처여도 API 를 못 부른다
+ */
+app.get('/api/sessions/:id/raw/*path', async (req, res) => {
+  const path = rawRequestPath(req.params.path)
+  if (!isSessionId(req.params.id) || path === null || !isValidRequestPath(path, false)) {
+    res.status(400).json({ message: 'Invalid session ID or path' })
+    return
+  }
+  const root = await workspaceRootOf(req.params.id)
+  if (!root) {
+    res.status(404).json({ message: 'Session folder not found' })
+    return
+  }
+  const target = await resolveWorkspacePath(root, path)
+  const { type, isActive } = contentTypeOf(target ?? path)
+  if (!target || !isRawAssetType(type) || !(await stat(target).catch(() => null))?.isFile()) {
+    res.status(404).json({ message: 'Not found' })
+    return
+  }
+  res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
+  if (isActive) res.set('Content-Security-Policy', type.startsWith('text/html') ? 'sandbox allow-same-origin' : 'sandbox')
+  res.sendFile(target, { dotfiles: 'allow' })
 })
 
 /**

@@ -8,6 +8,7 @@ import {
   findScratchpad,
   isInside,
   isPreviewType,
+  isRawAssetType,
   isSafeRelativePath,
   isSessionId,
   listScratchpad,
@@ -64,6 +65,16 @@ describe('scratchpad path checks', () => {
     }
     for (const name of ['a.html', 'a.xml', 'a.ts', 'a.json', 'a.md', 'a.csv', 'a.exe', 'a.docx', 'Makefile']) {
       expect(isPreviewType(contentTypeOf(name).type), name).toBe(false)
+    }
+  })
+
+  it('serves HTML documents with their CSS, fonts and preview kinds by URL path, but not scripts', () => {
+    expect(contentTypeOf('a.woff2')).toEqual({ type: 'font/woff2', isActive: false })
+    for (const name of ['a.html', 'a.HTM', 'a.css', 'a.woff', 'a.woff2', 'a.ttf', 'a.otf', 'a.png', 'a.svg', 'a.pdf', 'a.mp4', 'a.mp3']) {
+      expect(isRawAssetType(contentTypeOf(name).type), name).toBe(true)
+    }
+    for (const name of ['a.js', 'a.mjs', 'a.ts', 'a.json', 'a.xml', 'a.xhtml', 'a.md', 'a.env', 'a.exe', 'Makefile']) {
+      expect(isRawAssetType(contentTypeOf(name).type), name).toBe(false)
     }
   })
 })

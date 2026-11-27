@@ -234,6 +234,10 @@ const CONTENT_TYPES: Record<string, string> = {
   '.md': 'text/markdown; charset=utf-8',
   '.csv': 'text/csv; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
 }
 const TEXT_EXTENSIONS = new Set(
   '.txt .log .jsonl .ndjson .js .mjs .cjs .jsx .ts .mts .cts .tsx .py .sh .bash .ps1 .psm1 .bat .cmd .yml .yaml .toml .ini .cfg .conf .env .sql .go .rs .java .kt .c .h .cpp .hpp .cs .rb .php .lua .diff .patch .tsv .scss .less .vbs'.split(' '),
@@ -251,4 +255,12 @@ export function contentTypeOf(path: string): { type: string; isActive: boolean }
 /** Files 탭 미리보기(`/file/raw`)가 그대로 내주는 종류: 그림·동영상·소리·PDF */
 export function isPreviewType(type: string): boolean {
   return type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/') || type === 'application/pdf'
+}
+
+/**
+ * 경로가 주소에 든 raw 요청(`/raw/<경로>`)이 내주는 종류: HTML 문서(CSP sandbox)와 그 문서가 상대 경로로 부르는 CSS·글꼴, 그리고 미리보기 종류.
+ * JS 는 내주지 않는다 — 미리보기 iframe 은 sandbox 라 어차피 돌지 않고, 내주면 다른 사이트가 `<script src>` 로 이 PC 의 소스를 끼워 넣을 길만 는다
+ */
+export function isRawAssetType(type: string): boolean {
+  return type === 'text/html; charset=utf-8' || type === 'text/css; charset=utf-8' || type.startsWith('font/') || isPreviewType(type)
 }

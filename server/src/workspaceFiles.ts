@@ -32,6 +32,18 @@ export function isValidRequestPath(path: string, allowRoot: boolean): boolean {
   return !path.includes('\0') && !path.includes(':') && !/^[\\/]/.test(path)
 }
 
+/**
+ * 경로가 주소에 그대로 든 raw 요청(`/raw/<경로>`, Files 탭 HTML 미리보기가 상대 경로 CSS·그림을 받는다)의 경로 칸 → 기준 상대 경로.
+ * Express 가 칸마다 % 를 푼 배열을 준다. 푼 뒤(`%2F`·`%5C`·`%2e%2e`)를 이어 다시 `/` 로 나눠, 빈 칸·`.`·`..`·`\`·NUL·콜론이 있으면 null.
+ * 브라우저는 `..` 를 보내기 전에 접어서, 이 꼴이 오는 것은 손으로 만든 요청뿐이다. 밖으로 나가는지(링크·junction)는 resolveWorkspacePath 가 다시 본다
+ */
+export function rawRequestPath(segments: unknown): string | null {
+  if (!Array.isArray(segments) || segments.length === 0 || !segments.every((segment) => typeof segment === 'string')) return null
+  const path = segments.join('/')
+  if (/[\\\0:]/.test(path)) return null
+  return path.split('/').every((part) => part !== '' && part !== '.' && part !== '..') ? path : null
+}
+
 /** 요청 경로 → 기준 폴더 안의 실제 경로(realpath). 기준 밖이거나(링크·junction 포함) 없으면 null. 빈 글이면 기준 폴더 */
 export async function resolveWorkspacePath(root: string, path: string): Promise<string | null> {
   const requested = resolve(root, path)

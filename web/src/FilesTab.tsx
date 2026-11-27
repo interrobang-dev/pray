@@ -9,12 +9,12 @@ import { copyText } from './copyText'
 import { alertDialog, choiceDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import { FileName } from './FileName'
-import { isRawOnlyKind, previewKindOf } from './filePreview'
+import { hasSourceView, isRawOnlyKind, previewKindOf, rawPathUrl, type SourceViewKind } from './filePreview'
 import { formatSize } from './Files'
 import { MarkdownDocument, type DocLinks } from './Markdown'
 import { docImageTarget, isMarkdownPath, resolveDocPath } from './markdownDoc'
 import { CommitDiffView, EMPTY_HISTORY, HistoryPanel, type HistoryState } from './HistoryPanel'
-import type { FilesOpenRequest } from './openPath'
+import { openInChrome, type FilesOpenRequest } from './openPath'
 import {
   formatAgo,
   formatDateTime,
@@ -63,8 +63,8 @@ interface SessionView {
   history: HistoryState
   /** md 파일을 원본(줄 번호 코드 보기)으로 보는지. 기본은 문서 미리보기 */
   isMarkdownSource: boolean
-  /** SVG 파일을 원본으로 보는지. 기본은 그림 */
-  isSvgSource: boolean
+  /** SVG·HTML 파일을 원본으로 보는지 (종류마다). 기본은 그림·문서 미리보기 */
+  sourceViews: Record<SourceViewKind, boolean>
 }
 type SideMode = 'files' | 'changes' | 'search' | 'history'
 const sessionViews = new Map<string, SessionView>()
@@ -102,7 +102,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const [search, setSearch] = useState<SearchState>(saved?.search ?? EMPTY_SEARCH)
   const [history, setHistory] = useState<HistoryState>(saved?.history ?? EMPTY_HISTORY)
   const [isMarkdownSource, setIsMarkdownSource] = useState(saved?.isMarkdownSource ?? false)
-  const [isSvgSource, setIsSvgSource] = useState(saved?.isSvgSource ?? false)
+  const [sourceViews, setSourceViews] = useState<Record<SourceViewKind, boolean>>(saved?.sourceViews ?? { svg: false, html: false })
   /** Ctrl+Shift+F: Search 입력칸에 포커스 (text 가 있으면 그 글로 찾기) */
   const [searchFocus, setSearchFocus] = useState<{ id: number; text: string | null } | null>(null)
   /** Search 결과에서 마지막으로 연 줄 (표시)과 코드 보기를 그 줄로 스크롤할 요청 */
@@ -136,8 +136,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const rootName = nameOf(cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/')) || cwd
 
   useEffect(() => {
-    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState, search, history, isMarkdownSource, isSvgSource })
-  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState, search, history, isMarkdownSource, isSvgSource])
+    sessionViews.set(sessionId, { folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changes: changesState, search, history, isMarkdownSource, sourceViews })
+  }, [sessionId, folders, expanded, selectedPath, lineRanges, sideMode, selectedChange, diffRanges, changesState, search, history, isMarkdownSource, sourceViews])
 
   const loadFolder = useCallback(
     async (path: string) => {
@@ -354,17 +354,20 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   }, [sessionId, selectedPath, reloadId])
   /** md 글 파일을 문서 미리보기로 보는 중 (편집 중이면 편집기). 줄 번호가 없어 줄 고르기·Ctrl+F 찾기 막대를 쓰지 않는다 */
   const isMarkdownPreview = textFile !== null && !isEditing && !isMarkdownSource && isMarkdownPath(selectedPath)
-  const isSvg = previewKindOf(selectedPath) === 'svg'
-  /** SVG 를 그림으로 보는 중 (글을 받기 전에도). md 미리보기처럼 줄이 없다 */
-  const isSvgPreview = isFileSide && isSvg && !isEditing && !isSvgSource
-  /** 위 막대 미리보기 ↔ 원본 전환이 있는 파일 (md·SVG). 원본 여부는 종류마다 따로 기억한다 */
-  const isSourceShown = isSvg ? isSvgSource : isMarkdownSource
-  const setIsSourceShown = isSvg ? setIsSvgSource : setIsMarkdownSource
+  const previewKind = previewKindOf(selectedPath)
+  /** 미리보기 ↔ 원본 전환이 있는 SVG·HTML (md 는 위 isMarkdownPreview) */
+  const sourceKind = hasSourceView(previewKind) ? previewKind : null
+  /** SVG 그림·HTML 문서로 보는 중 (글을 받기 전에도). md 미리보기처럼 줄이 없다 */
+  const isRenderedPreview = isFileSide && sourceKind !== null && !isEditing && !sourceViews[sourceKind]
+  /** 위 막대 미리보기 ↔ 원본 전환 (md·SVG·HTML). 원본 여부는 종류마다 따로 기억한다 */
+  const isSourceShown = sourceKind ? sourceViews[sourceKind] : isMarkdownSource
+  const toggleSourceView = () =>
+    sourceKind ? setSourceViews((previous) => ({ ...previous, [sourceKind]: !previous[sourceKind] })) : setIsMarkdownSource((previous) => !previous)
   /** 편집을 막는 이유 (서버가 파일마다 준다. 필드가 없는 옛 서버는 저장 API 도 없다) */
   const editBlock = textFile ? (textFile.editBlockReason === undefined ? 'The server needs a restart to support editing' : textFile.editBlockReason) : null
   /** 위 막대가 가리키는 파일과 공유할 줄 (Changes 면 고른 diff 줄의 새 파일 줄 번호, 편집 중이면 누를 때 편집기에서 고른 줄) */
   const shownPath = isChanges ? selectedChange : isHistory ? null : selectedPath
-  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing || isHistory || isMarkdownPreview || isSvgPreview ? null : lineRange
+  const shownRange = isChanges ? diffLineRange(diffRows, diffRange) : isEditing || isHistory || isMarkdownPreview || isRenderedPreview ? null : lineRange
   /** 경로 표시줄의 파일. History 면 고른 커밋의 파일이고 Add to chat·Copy path 는 없다 (지난 커밋의 줄 번호라 위치로 공유하지 않는다) */
   const navPath = isHistory ? (history.selectedHash ? history.selectedFile : null) : shownPath
   /** Changes 에서 고른 파일이 지운·없어진 것 — Copy file 을 막는다 */
@@ -489,7 +492,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   const onFindKeyRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {})
   onFindKeyRef.current = (event) => {
     if (!event.shiftKey) {
-      if (!textFile || isMarkdownPreview || isSvgPreview) return
+      if (!textFile || isMarkdownPreview || isRenderedPreview) return
       event.preventDefault()
       setIsViewing(true)
       if (isEditing) editorRef.current?.openSearch()
@@ -520,7 +523,8 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
       setOpenedMatch({ path, line, stamp: Date.now() })
       // 미리보기에는 줄이 없어 그 줄을 보이게 원본으로 바꾼다
       if (isMarkdownPath(path)) setIsMarkdownSource(true)
-      if (previewKindOf(path) === 'svg') setIsSvgSource(true)
+      const kind = previewKindOf(path)
+      if (hasSourceView(kind)) setSourceViews((previous) => ({ ...previous, [kind]: true }))
       openFile(path)
       setLineRanges((previous) => ({ ...previous, [path]: { start: line, end: line } }))
     }
@@ -627,11 +631,11 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
             {isSaving ? 'Saving…' : 'Save'}
           </button>
         )}
-        {textFile && !isEditing && (isMarkdownPath(selectedPath) || isSvg) && (
+        {textFile && !isEditing && (isMarkdownPath(selectedPath) || sourceKind !== null) && (
           <button
             type="button"
             className="ws-md-toggle"
-            onClick={() => setIsSourceShown((previous) => !previous)}
+            onClick={toggleSourceView}
             title={isSourceShown ? 'Show preview' : 'Show source'}
             aria-label={isSourceShown ? 'Show preview' : 'Show source'}
           >
@@ -702,6 +706,17 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
                   : []),
               ]}
             />
+            {isLocal && previewKind === 'html' && isFileSide && (
+              <button
+                type="button"
+                className="ws-open-chrome"
+                onClick={() => void openInChrome(sessionId, shownPath)}
+                title={`Open in Chrome: ${fullPathOf(cwd, shownPath)}`}
+                aria-label="Open in Chrome"
+              >
+                <OpenExternalIcon />
+              </button>
+            )}
             {isLocal && (
               <button
                 type="button"
@@ -861,7 +876,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
               onFindClose={closeCodeFind}
               editor={isEditing ? { ref: editorRef, onDirtyChange: setIsDirty, onSave: () => void saveRef.current() } : null}
               markdown={isMarkdownPreview ? docLinks : null}
-              isSvgPreview={isSvgPreview}
+              isRenderedPreview={isRenderedPreview}
             />
           )}
         </section>
@@ -1016,6 +1031,16 @@ function HistoryIcon() {
   )
 }
 
+/** 이 PC 의 Chrome 으로 열기: 상자 밖으로 나가는 화살표 */
+function OpenExternalIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path d="M12.5 9v3.75c0 .41-.34.75-.75.75h-8.5a.75.75 0 0 1-.75-.75v-8.5c0-.41.34-.75.75-.75H7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M9.5 2.5h4v4M13.25 2.75 7.5 8.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 /** 탐색기에서 보기: 폴더 */
 function FolderIcon() {
   return (
@@ -1071,7 +1096,7 @@ function FileView({
   onFindClose,
   editor,
   markdown,
-  isSvgPreview,
+  isRenderedPreview,
 }: {
   sessionId: string
   path: string | null
@@ -1087,19 +1112,28 @@ function FileView({
   editor: { ref: Ref<CodeEditorHandle>; onDirtyChange: (isDirty: boolean) => void; onSave: () => void } | null
   /** md 문서 미리보기면 그림·링크 처리 (아니면 null — 코드 보기) */
   markdown: DocLinks | null
-  /** SVG 를 그림으로 (아니면 원본 코드 보기) */
-  isSvgPreview: boolean
+  /** SVG 를 그림으로·HTML 을 문서로 (아니면 원본 코드 보기) */
+  isRenderedPreview: boolean
 }) {
   if (!path) return <p className="hint">Select a file to view it</p>
   const kind = previewKindOf(path)
   const rawUrl = `${apiUrl(sessionId, 'file/raw', { path })}&v=${reloadId}`
-  // 글로 못 받은 SVG(1MB 초과 등)는 원본을 보일 수 없어 그림으로
-  const isSvgImage = kind === 'svg' && (isSvgPreview || (state?.status === 'ok' && state.file.kind !== 'text'))
-  if (kind === 'image' || isSvgImage) {
+  // 글로 못 받은 SVG·HTML(1MB 초과 등)은 원본을 보일 수 없어 그림·문서로
+  const isRendered = hasSourceView(kind) && (isRenderedPreview || (state?.status === 'ok' && state.file.kind !== 'text'))
+  if (kind === 'image' || (kind === 'svg' && isRendered)) {
     // img 로 그려 SVG 안 스크립트는 돌지 않는다 (서버도 CSP sandbox 로 내보낸다)
     return (
       <div className="ws-image">
         <img src={rawUrl} alt={nameOf(path)} />
+      </div>
+    )
+  }
+  if (kind === 'html' && isRendered) {
+    // sandbox="allow-same-origin" 만 (allow-scripts·allow-forms 등 없음): 문서 스크립트가 돌지 않아 같은 출처여도 앱 API 를 못 부른다 (서버도 CSP sandbox allow-same-origin).
+    // 같은 출처라야 메일 로그인한 다른 PC 에서 하위 요청에 쿠키가 붙는다. 경로가 주소에 든 raw 주소라 문서 안 상대 경로 CSS·그림·글꼴이 같은 폴더에서 불러와진다
+    return (
+      <div className="ws-frame">
+        <iframe className="ws-html-frame" src={`${rawPathUrl(sessionId, path)}?v=${reloadId}`} sandbox="allow-same-origin" title={nameOf(path)} />
       </div>
     )
   }
