@@ -9,6 +9,7 @@ import { copyText } from './copyText'
 import { alertDialog, choiceDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import { DocxPreview } from './DocxPreview'
+import { absoluteDownloadUrl, downloadUrl, shareBridge, startDownload } from './fileDownload'
 import { FileName } from './FileName'
 import { hasSourceView, isRawOnlyKind, previewKindOf, rawPathUrl, type SourceViewKind } from './filePreview'
 import { formatSize } from './Files'
@@ -707,6 +708,30 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
                         title: isShownFileGone ? 'The file is gone from the working copy' : 'Copy the file to paste it in Explorer or a messenger',
                         isDisabled: isShownFileGone,
                         copy: () => copyFileToClipboard(sessionId, shownPath),
+                      },
+                    ]
+                  : []),
+                {
+                  label: 'Download',
+                  title: isShownFileGone ? 'The file is gone from the working copy' : `Download ${nameOf(shownPath)}`,
+                  isDisabled: isShownFileGone,
+                  copy: async () => {
+                    startDownload(downloadUrl(sessionId, shownPath), nameOf(shownPath))
+                    return true
+                  },
+                },
+                ...(shareBridge()
+                  ? [
+                      {
+                        label: 'Share…',
+                        title: isShownFileGone ? 'The file is gone from the working copy' : `Share ${nameOf(shownPath)} to another app`,
+                        isDisabled: isShownFileGone,
+                        copy: async () => {
+                          const bridge = shareBridge()
+                          if (!bridge) return false
+                          bridge.share(absoluteDownloadUrl(window.location.origin, sessionId, shownPath), nameOf(shownPath))
+                          return true
+                        },
                       },
                     ]
                   : []),

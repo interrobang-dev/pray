@@ -7,6 +7,7 @@ import {
   buildFileIndex,
   compareEntries,
   decodeText,
+  downloadHeaders,
   findFiles,
   isBinaryBuffer,
   isHiddenDir,
@@ -216,5 +217,34 @@ describe('quick find', () => {
     clock = 1000
     await indexOf('C:\\Repo')
     expect(builds).toBe(2)
+  })
+})
+
+describe('downloadHeaders', () => {
+  it('ASCII 이름은 그대로 두 칸에 싣고 받기 머리를 붙인다', () => {
+    expect(downloadHeaders('web/src/App.tsx')).toEqual({
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="App.tsx"; filename*=UTF-8''App.tsx`,
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': 'sandbox',
+      'Cache-Control': 'no-cache, no-transform',
+    })
+  })
+
+  it('한글·따옴표·공백·% 이름은 ASCII 대체와 percent-encoding 으로', () => {
+    expect(downloadHeaders('docs/보고서 "최종" 100%.hwp')['Content-Disposition']).toBe(
+      `attachment; filename="___ ____ 100_.hwp"; filename*=UTF-8''%EB%B3%B4%EA%B3%A0%EC%84%9C%20%22%EC%B5%9C%EC%A2%85%22%20100%25.hwp`,
+    )
+  })
+
+  it("attr-char 가 아닌 '()* 는 인코딩하고, 이름은 \\ 뒤 마지막 칸이다", () => {
+    expect(downloadHeaders("a/it's (1)*.txt")['Content-Disposition']).toBe(
+      `attachment; filename="it's (1)*.txt"; filename*=UTF-8''it%27s%20%281%29%2A.txt`,
+    )
+    expect(downloadHeaders('a\\b.txt')['Content-Disposition']).toContain(`filename="b.txt"`)
+  })
+
+  it('이름 칸이 없으면 download', () => {
+    expect(downloadHeaders('')['Content-Disposition']).toBe(`attachment; filename="download"; filename*=UTF-8''download`)
   })
 })

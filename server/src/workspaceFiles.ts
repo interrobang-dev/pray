@@ -44,6 +44,25 @@ export function rawRequestPath(segments: unknown): string | null {
   return path.split('/').every((part) => part !== '' && part !== '.' && part !== '..') ? path : null
 }
 
+/**
+ * 받기(`/file/download`) 응답 머리. 파일 이름은 요청 경로의 마지막 칸(realpath 가 아니라 사람이 고른 이름).
+ * `filename` 은 ASCII 대체(인쇄 가능한 ASCII 밖·`"`·`\`·`%` 는 `_`), `filename*` 은 RFC 5987 UTF-8 percent-encoding
+ * (`encodeURIComponent` 가 남기는 `'()*` 도 attr-char 가 아니라 인코딩한다). 종류와 상관없이 octet-stream·nosniff·CSP sandbox 라
+ * 주소를 새 탭으로 열어도 문서로 그려지지 않고 받기만 된다. no-transform 은 압축을 꺼 Range·Content-Length 를 지킨다
+ */
+export function downloadHeaders(path: string): Record<string, string> {
+  const name = path.split(/[\\/]/).filter(Boolean).pop() || 'download'
+  const asciiName = name.replace(/[^\x20-\x7e]|["\\%]/g, '_')
+  const encodedName = encodeURIComponent(name).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
+  return {
+    'Content-Type': 'application/octet-stream',
+    'Content-Disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`,
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': 'sandbox',
+    'Cache-Control': 'no-cache, no-transform',
+  }
+}
+
 /** 요청 경로 → 기준 폴더 안의 실제 경로(realpath). 기준 밖이거나(링크·junction 포함) 없으면 null. 빈 글이면 기준 폴더 */
 export async function resolveWorkspacePath(root: string, path: string): Promise<string | null> {
   const requested = resolve(root, path)

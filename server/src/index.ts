@@ -114,7 +114,7 @@ import {
   saveAttachment,
 } from './scratchpad.js'
 import { hasWakingTask, parseShells, readTail, runningBackgroundTasks, runningShells } from './shells.js'
-import { findFiles, isValidRequestPath, listFolder, makeFileIndexCache, rawRequestPath, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
+import { downloadHeaders, findFiles, isValidRequestPath, listFolder, makeFileIndexCache, rawRequestPath, readWorkspaceFile, resolveWorkspacePath } from './workspaceFiles.js'
 import { chatImagePathKind, resolveChatImage } from './chatImage.js'
 import { chromeArguments, locateChrome, openInChrome, resolveChatHtml } from './openInChrome.js'
 import { diffChange, listChanges, makeChangesCache, VcsCommandError } from './workspaceChanges.js'
@@ -1052,6 +1052,21 @@ app.get('/api/sessions/:id/file/raw', async (req, res) => {
   }
   res.set({ 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache, no-transform' })
   if (isActive) res.set('Content-Security-Policy', 'sandbox')
+  res.sendFile(resolved.target, { dotfiles: 'allow' })
+})
+
+/**
+ * 작업 폴더 파일 하나(?path=)를 받기로 (Files 탭 Download·안드로이드 앱 Share). 종류·크기 상관없이 준다.
+ * 경로 막기는 다른 작업 폴더 API 와 같다(기준 밖·링크·junction 404). 머리는 downloadHeaders — octet-stream·attachment·nosniff·CSP sandbox
+ */
+app.get('/api/sessions/:id/file/download', async (req, res) => {
+  const resolved = await resolveWorkspaceRequest(req, res, false)
+  if (!resolved) return
+  if (!(await stat(resolved.target).catch(() => null))?.isFile()) {
+    res.status(404).json({ message: 'Not a file' })
+    return
+  }
+  res.set(downloadHeaders(String(req.query.path)))
   res.sendFile(resolved.target, { dotfiles: 'allow' })
 })
 
