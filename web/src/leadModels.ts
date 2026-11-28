@@ -1,4 +1,4 @@
-import { blockReason, initialChoice, isChanged, type ModelChoice } from './modelSetting'
+import { blockReason, initialChoice, isChanged, modelLabel, nextLabel, type ModelChoice } from './modelSetting'
 import { attendanceOf, type Session, type Team } from './types'
 
 /** 근무 중인 웹 세션의 팀장·파트장 (role lead). 휴식·퇴근·외부 세션은 다시 띄울 수 없어 뺀다. 순서는 서버 순서(생성순) */
@@ -46,6 +46,17 @@ export function modelSwitchImpact(rows: LeadRow[], sessions: Pick<Session, 'id' 
     if (typeof contextTokens === 'number') tokens += contextTokens
   }
   return { count, tokens }
+}
+
+/**
+ * 줄 설명의 모델 글자: 지금 응답의 "Opus 5.5 · medium", 저장된 다음 값이 다르면 뒤에 " → Sonnet · high (next)".
+ * select 처음 값(initialChoice)은 다음 값을 쓰므로 둘이 엇갈려 보이지 않게 같이 보인다
+ */
+export function leadModelText(session: Pick<Session, 'model' | 'effort' | 'modelSetting'>): string | null {
+  const current = modelLabel(session)
+  const next = nextLabel(session)
+  if (!next) return current
+  return current ? `${current} → ${next} (next)` : `→ ${next} (next)`
 }
 
 /** 줄에 미리 보이는 막는 이유 (화면이 아는 상태만. 대기 메시지는 몰라서 서버 409 로 본다) */

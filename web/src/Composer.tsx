@@ -8,6 +8,8 @@ import type { ScheduledMessage } from './types'
 
 /** 터치 기기(마우스 없음). style.css 의 터치 기기 스타일과 같은 기준. 이 기기에서는 세션을 열 때 입력칸에 포커스하지 않는다 (가상 키보드가 바로 떠 대화를 가린다) */
 const TOUCH_QUERY = '(hover: none)'
+/** 짧은 placeholder 를 쓰는 화면: 터치 기기 또는 폰 폭(App.tsx 의 NARROW_QUERY 와 같은 값) */
+const COMPACT_QUERY = `${TOUCH_QUERY}, (max-width: 768px)`
 
 /** 첨부 한도. 서버 첨부 API(server/src/index.ts MAX_ATTACHMENT_BYTES)와 같다. 넘으면 올리지 않고 칩에 알린다 */
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
@@ -404,7 +406,12 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
           onBlur={(e) => saveSelection(e.currentTarget)}
           onKeyDown={onComposerKeyDown}
           onPaste={onComposerPaste}
-          placeholder={composerPlaceholder({ hasSuggestion: Boolean(suggestion), isAsking, isHandingOver })}
+          placeholder={composerPlaceholder({
+            hasSuggestion: Boolean(suggestion),
+            isAsking,
+            isHandingOver,
+            isCompact: window.matchMedia(COMPACT_QUERY).matches,
+          })}
           rows={composerRows(draft)}
           disabled={isLocked}
           autoFocus={!window.matchMedia(TOUCH_QUERY).matches}

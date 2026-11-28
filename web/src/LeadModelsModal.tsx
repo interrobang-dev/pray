@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { tokenLabel } from './accountLabels'
-import { initialRows, leadBlockReason, leadPlaceOf, leadSessions, modelRequestBody, modelSwitchImpact, rowsToApply, type LeadRow } from './leadModels'
+import { initialRows, leadBlockReason, leadModelText, leadPlaceOf, leadSessions, modelRequestBody, modelSwitchImpact, rowsToApply, type LeadRow } from './leadModels'
 import { Modal } from './Modal'
-import { EFFORT_OPTIONS, modelLabel, MODEL_OPTIONS, type EffortChoice, type ModelAlias } from './modelSetting'
+import { EFFORT_OPTIONS, MODEL_OPTIONS, type EffortChoice, type ModelAlias } from './modelSetting'
 import { PositionChip } from './PositionChip'
 import { nameOf, positionOf } from './sessionPosition'
 import type { Session, Team } from './types'
@@ -146,7 +146,7 @@ export function LeadModelsModal({ sessions, teams, onClose, onRestarted }: Props
             const session = byId.get(row.sessionId)!
             const result = results.get(row.sessionId)
             const reason = leadBlockReason(session)
-            const current = [modelLabel(session), typeof session.contextTokens === 'number' ? tokenLabel(session.contextTokens) : null].filter(Boolean).join(' · ')
+            const current = [leadModelText(session), typeof session.contextTokens === 'number' ? tokenLabel(session.contextTokens) : null].filter(Boolean).join(' · ')
             const checkboxId = `lead-model-${row.sessionId}`
             return (
               <li key={row.sessionId} className="lead-models-row">

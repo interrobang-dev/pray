@@ -44,6 +44,12 @@ describe('composerPlaceholder', () => {
     expect(composerPlaceholder(plain)).toBe('Type an instruction (Shift+Enter for a new line)')
   })
 
+  it('터치 기기·좁은 화면은 짧게 (Shift+Enter 안내 없음)', () => {
+    expect(composerPlaceholder({ ...plain, isCompact: true })).toBe('Type an instruction')
+    expect(composerPlaceholder({ ...plain, isCompact: true, isAsking: true })).toBe('Answer the question above first')
+    expect(composerPlaceholder({ ...plain, isCompact: true, hasSuggestion: true })).toBe('')
+  })
+
   it('제안이 보이면 비운다', () => {
     expect(composerPlaceholder({ ...plain, hasSuggestion: true })).toBe('')
   })

@@ -13,10 +13,12 @@ export const MAX_BTW_ROWS = 4
 export const HANDOVER_BLOCK_TEXT = "Handing over — wait for the new lead's reply"
 
 /** 입력칸 placeholder: 제안이 보이면 빈 글(흐린 제안과 겹치지 않게), 질문 중, 인계 중, 평소 */
-export function composerPlaceholder(state: { hasSuggestion: boolean; isAsking: boolean; isHandingOver: boolean }): string {
+export function composerPlaceholder(state: { hasSuggestion: boolean; isAsking: boolean; isHandingOver: boolean; isCompact?: boolean }): string {
   if (state.hasSuggestion) return ''
   if (state.isAsking) return 'Answer the question above first'
   if (state.isHandingOver) return HANDOVER_BLOCK_TEXT
+  // 터치 기기·좁은 화면: 긴 글은 잘리고, 터치 기기는 Enter 가 줄바꿈이라 Shift+Enter 안내가 틀린다
+  if (state.isCompact) return 'Type an instruction'
   return 'Type an instruction (Shift+Enter for a new line)'
 }
 

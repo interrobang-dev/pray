@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initialRows, leadBlockReason, leadPlaceOf, leadSessions, modelRequestBody, modelSwitchImpact, rowsToApply } from './leadModels'
+import { initialRows, leadBlockReason, leadModelText, leadPlaceOf, leadSessions, modelRequestBody, modelSwitchImpact, rowsToApply } from './leadModels'
 import type { Session, Team } from './types'
 
 function session(id: string, overrides: Partial<Session> = {}): Session {
@@ -89,5 +89,22 @@ describe('leadBlockReason', () => {
     expect(leadBlockReason(session('a', { status: 'working' }))).toBe('Wait until claude finishes')
     expect(leadBlockReason(session('b', { status: 'waiting' }))).toBe('Wait until background tasks finish')
     expect(leadBlockReason(session('c'))).toBeNull()
+  })
+})
+
+describe('leadModelText', () => {
+  it('shows only the current model when nothing is pending', () => {
+    expect(leadModelText(session('a'))).toBe('Opus 5.5 · high')
+    expect(leadModelText(session('a', { modelSetting: { model: 'opus', effort: 'high' } }))).toBe('Opus 5.5 · high')
+  })
+
+  it('adds the next value when the saved setting differs (same value the select starts with)', () => {
+    const lead = session('a', { effort: 'medium', modelSetting: { model: 'opus', effort: 'high' } })
+    expect(leadModelText(lead)).toBe('Opus 5.5 · medium → Opus · high (next)')
+    expect(initialRows([lead])[0].initial).toEqual({ model: 'opus', effort: 'high' })
+  })
+
+  it('shows the next value even when the current model is unknown', () => {
+    expect(leadModelText(session('a', { model: null, effort: null, modelSetting: { model: 'sonnet', effort: null } }))).toBe('→ Sonnet (next)')
   })
 })

@@ -1575,8 +1575,9 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     return reorderDrag.dropIndex === count && index === count - 1 ? 'drop-after' : ''
   }
 
-  /** 끌기 손잡이. "+"·"⋯" 와 같은 head-actions 안에 두어 보이는 규칙(hover·터치 기기)이 같다 */
+  /** 끌기 손잡이. "+"·"⋯" 와 같은 head-actions 안에 두어 보이는 규칙(hover·터치 기기)이 같다. 폰은 머리줄을 줄이려고 그리지 않는다 (폰에서는 순서를 못 바꾼다) */
   function renderDragHandle(scope: ReorderScope, id: string) {
+    if (isNarrow) return null
     return (
       <button className="drag-handle" onPointerDown={(event) => startReorder(event, scope, id)} title="Drag to reorder">
         ⠿
@@ -1586,6 +1587,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
 
   /** 끌 수 없는 팀(그룹이 지워진 팀)의 빈 ⠿ 칸. 손잡이와 같은 폭이라 버튼 열이 그룹·팀 줄과 세로로 맞는다 */
   function renderDragSpacer() {
+    if (isNarrow) return null
     return (
       <button className="drag-handle drag-spacer" tabIndex={-1} aria-hidden="true" disabled>
         ⠿
@@ -1728,13 +1730,23 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     )
   }
 
+  /** 폰 팀·파트 ⋯ 메뉴 맨 위 "Add session…" (데스크톱 머리줄 "+" 와 같은 창). 호스트가 끊기면 비활성 */
+  function addSessionMenuItem(teamId: string, partId: string | null, title: string): MenuItem {
+    return snapshot.isHostReachable
+      ? { label: 'Add session…', onClick: () => openSessionForm(teamId, partId), title }
+      : { label: 'Add session…', onClick: () => undefined, isDisabled: true, title: 'Session host disconnected' }
+  }
+
   /** 팀 카드: 헤더(이름·SVN 칩·hover 버튼) + 팀 직속 세션 + 파트별(소제목 + 세션). 폴더·형상관리 종류는 툴팁. position 은 그룹 안 순번 (그룹이 없는 팀은 없어 끌기 손잡이도 없다) */
   function renderTeam(team: Team, position?: { index: number; count: number }) {
     const scope: ReorderScope = { kind: 'team', groupId: team.groupId }
     // 근무·휴식 세션. 순서는 서버가 준 그대로 (생성순)
     const members = snapshot.sessions.filter((s) => s.teamId === team.id && attendanceOf(s) !== 'off')
     const vcsName = team.vcs ? (team.vcs.kind === 'git' ? 'git' : 'SVN') : null
+    const isEmpty = members.length === 0 && team.parts.length === 0
     const menuItems: MenuItem[] = [
+      // 폰은 머리줄 "+" 대신 메뉴 맨 위 (팀마다 반복되는 버튼을 줄인다)
+      ...(isNarrow ? [addSessionMenuItem(team.id, null, 'Add session to team')] : []),
       isLocal
         ? { label: 'Open folder', onClick: () => void openTeamFolder(team) }
         : { label: 'Copy folder path', onClick: () => void copyTeamFolder(team) },
@@ -1749,7 +1761,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
     return (
       <div
         key={team.id}
-        className={['team', position ? reorderClass(scope, team.id, position.index, position.count) : ''].join(' ')}
+        className={['team', isEmpty ? 'is-empty' : '', position ? reorderClass(scope, team.id, position.index, position.count) : ''].join(' ')}
         title={vcsName ? `${team.cwd} · ${vcsName}` : team.cwd}
         data-team-id={position ? team.id : undefined}
         data-list-team={team.id}
@@ -1766,9 +1778,11 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           )}
           {renderTodoButton(team)}
           <span className="head-actions">
-            <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="Add session to team">
-              +
-            </button>
+            {!isNarrow && (
+              <button onClick={() => openSessionForm(team.id)} disabled={!snapshot.isHostReachable} title="Add session to team">
+                +
+              </button>
+            )}
             <MoreMenu items={menuItems} />
             {position ? renderDragHandle(scope, team.id) : renderDragSpacer()}
           </span>
@@ -1782,6 +1796,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
   /** 파트 소제목(worktree 아이콘·이름·hover 버튼) + 파트 세션. 브랜치 이름은 아이콘 툴팁 */
   function renderPart(team: Team, part: Part, members: Session[]) {
     const menuItems: MenuItem[] = [
+      ...(isNarrow ? [addSessionMenuItem(team.id, part.id, 'Add session to part')] : []),
       { label: 'Rename', onClick: () => void editPart(team, part) },
       ...(part.leadSessionId ? [{ label: 'Remove part lead', onClick: () => void releasePartLead(team, part) }] : []),
       'separator',
@@ -1798,9 +1813,11 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           )}
           <span className="name">{part.name}</span>
           <span className="head-actions">
-            <button onClick={() => openSessionForm(team.id, part.id)} disabled={!snapshot.isHostReachable} title="Add session to part">
-              +
-            </button>
+            {!isNarrow && (
+              <button onClick={() => openSessionForm(team.id, part.id)} disabled={!snapshot.isHostReachable} title="Add session to part">
+                +
+              </button>
+            )}
             <MoreMenu items={menuItems} />
           </span>
         </div>

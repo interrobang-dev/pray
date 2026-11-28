@@ -86,6 +86,8 @@
   /* Changes: diff hunk 머리 바탕, 상태 글자 M(수정) */
   --diff-hunk-bg: #e8f0fb;
   --vcs-modified: #9a6700;
+  /* Files 탭 트리 폴더 아이콘 (옅은 면 --surface-1 위 3:1 이상) */
+  --folder-icon: #a8781c;
   --caution-text: #9a6700;
   /* 면 단계: 구분은 1px 선 대신 바탕 톤 차이로 한다. 1 = 옅은 면(줄 hover·조용한 카드), 2 = 채운 입력칸·기본 버튼·칩·세그먼트 바탕, 3 = 2 위의 hover·눌림.
      다른 팔레트는 appearance.ts 의 expandPalette 가 --text 를 --panel 에 섞어 만든다 */
@@ -181,6 +183,7 @@
   --hl-deletion-bg: #67060c;
   --diff-hunk-bg: #243049;
   --vcs-modified: #d29922;
+  --folder-icon: #d9a945;
   --caution-text: #d29922;
   --surface-1: #262a31;
   --surface-2: #2c3039;
@@ -265,6 +268,11 @@ select {
 }
 textarea {
   border-radius: var(--radius-md);
+}
+/* 체크박스·라디오도 브라우저 기본 파랑 대신 강조색 */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
 }
 input::placeholder,
 textarea::placeholder {
@@ -720,10 +728,6 @@ header h1 {
   overflow: hidden;
   overflow-wrap: anywhere;
   font-size: calc(13px * var(--font-scale));
-}
-/* Reminders 줄 (RemindersButton.tsx): 아무것도 없으면 흐리지만 눌린다 (등록하러 들어가야 해서) */
-.toolbar .reminders-toggle:not(.has-reminders) {
-  opacity: 0.5;
 }
 /* Reminders 창: 안의 칸은 사이드바 보기였을 때의 좌우 12px 여백을 뺀다. 길면 창 안에서 스크롤 */
 .modal.reminders-modal {
@@ -2575,8 +2579,10 @@ li.group.drop-after::after {
   border-radius: 0;
   background: transparent;
   color: var(--muted);
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 400;
 }
-
+/* 제목(15px·650)보다 한 단 아래: 탭은 13px 회색, 지금 탭만 본문색 */
 .appearance-tabs button[aria-selected='true'] {
   border-bottom-color: var(--accent);
   color: var(--text);
@@ -3072,7 +3078,7 @@ li.group.drop-after::after {
 .login-needed-signin:hover {
   background: var(--accent-soft);
 }
-/* 답변 전 작업 묶음 (Chat.tsx). 알림 한 줄처럼 가운데 작은 회색, 길면 말줄임(올리면 옅은 알약 면). 누르면 아래에 설명 글·도구 줄이 패널 면의 둥근 상자로 펼쳐진다 */
+/* 답변 전 작업 묶음 (Chat.tsx). 답 글처럼 왼쪽에 작은 회색 한 줄, 길면 말줄임(올리면 옅은 알약 면). 누르면 아래에 설명 글·도구 줄이 패널 면의 둥근 상자로 펼쳐진다 */
 .work {
   display: flex;
   flex-direction: column;
@@ -3080,8 +3086,8 @@ li.group.drop-after::after {
   min-width: 0;
 }
 .work-summary {
-  align-self: center;
-  max-width: 95%;
+  align-self: flex-start;
+  max-width: 100%;
   padding: 1px 10px;
   border: 0;
   background: transparent;
@@ -3936,6 +3942,18 @@ li.group.drop-after::after {
       display: none;
     }
   }
+  /* 좁은 패널에서 Files 쪽 파일을 안 골랐으면 트리가 폭을 다 쓴다 (빈 보기 칸 "Select a file…" 를 숨긴다) */
+  @container ws (max-width: 600px) {
+    .ws.is-tree-only .ws-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .ws.is-tree-only .ws-side {
+      margin-right: 8px;
+    }
+    .ws.is-tree-only .ws-view {
+      display: none;
+    }
+  }
 }
 .ws-reload,
 .ws-back,
@@ -4110,9 +4128,17 @@ li.group.drop-after::after {
 }
 .ws-chevron {
   flex: 0 0 14px;
-  color: var(--muted);
-  font-size: calc(12px * var(--font-scale));
+  color: var(--text);
+  font-size: calc(14px * var(--font-scale));
+  line-height: 1;
   text-align: center;
+}
+/* 폴더 아이콘 자리 (파일은 같은 폭 빈칸이라 이름 열이 맞는다) */
+.ws-kind-icon {
+  flex: 0 0 16px;
+  display: flex;
+  align-items: center;
+  color: var(--folder-icon);
 }
 .ws-row-name {
   min-width: 0;
@@ -5318,6 +5344,11 @@ li.group.drop-after::after {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-radius: 3px;
+}
+/* 고정폭 글꼴에 한글이 없어 한글은 본문 글꼴로 넘긴다 (지정이 없으면 브라우저 기본 고정폭 글꼴이라 한글 간격이 깨졌다) */
+.markdown code,
+.markdown pre {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, 'Pretendard Variable', Pretendard, 'Malgun Gothic', monospace;
 }
 .markdown code {
   font-size: calc(12px * var(--font-scale));
@@ -7916,7 +7947,7 @@ button.machine-row:hover:not(:disabled) {
 .daily-timeline {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 .daily-lane {
   display: grid;
@@ -7931,7 +7962,8 @@ button.machine-row:hover:not(:disabled) {
   text-overflow: ellipsis;
   font-size: calc(12px * var(--font-scale));
 }
-/* 칸 줄 위 6px 는 커밋 눈금 자리 — 칸 위에 겹치면 커밋이 많은 날 진하기가 가려져서 띠를 따로 둔다 */
+/* 칸 줄 위 8px 는 커밋 눈금 자리 — 칸 위에 겹치면 커밋이 많은 날 진하기가 가려져서 띠를 따로 둔다.
+   눈금은 자기 칸 줄 윗변에 붙이고(아래 끝 = 칸 줄 위) 팀 줄 사이는 10px 띄워 어느 팀 것인지 읽히게 한다 */
 .daily-track {
   position: relative;
   height: 24px;
@@ -7955,7 +7987,7 @@ button.machine-row:hover:not(:disabled) {
 }
 .daily-commit-tick {
   position: absolute;
-  top: 0;
+  top: 2px;
   height: 6px;
   width: 1.5px;
   margin-left: -0.75px;
@@ -9053,6 +9085,21 @@ button.machine-row:hover:not(:disabled) {
   :is(.team-head, .part-head) :is(.head-actions button, .todo-button) {
     margin-block: -8px;
   }
+  /* 세션·파트 없는 팀 카드는 얇은 한 줄 (36 + 여백 → 32px): 실제 세션 줄을 아래로 덜 민다. 이름은 회색 */
+  .team.is-empty {
+    padding-bottom: 0;
+  }
+  .team.is-empty .team-head {
+    min-height: 32px;
+    padding-block: 0;
+    box-sizing: border-box;
+  }
+  .team.is-empty .team-head .name {
+    color: var(--muted);
+  }
+  .team.is-empty .team-head :is(.head-actions button, .todo-button) {
+    margin-block: -4px;
+  }
   /* 헤더 아이콘 버튼(테마): 손가락으로 누르기 쉽게 40×36. 음수 위아래 여백으로 헤더 높이는 그대로 (헤더 위아래 padding 10px 안에 든다) */
   header button.icon {
     min-width: 40px;
@@ -9388,7 +9435,7 @@ button.machine-row:hover:not(:disabled) {
   .task-text {
     max-height: 50dvh;
   }
-  /* Today 창: 화면 폭(.modal 폰 폭을 다시 덮는다 — 760px 가 더 구체적이라), 날짜 버튼 40px, 숫자 칸 2×2, 타임라인은 팀 이름을 칸 위 줄로 올려 가로 폭을 다 쓴다 */
+  /* Today 창: 화면 폭(.modal 폰 폭을 다시 덮는다 — 760px 가 더 구체적이라), 날짜 버튼 40px, 숫자 칸 넷을 작게 한 줄, 타임라인은 팀 이름을 칸 위 줄로 올려 가로 폭을 다 쓴다 */
   .modal.daily-modal {
     width: calc(100vw - 32px);
     max-height: calc(100dvh - var(--titlebar-height, 0px) - 32px);
@@ -9398,7 +9445,19 @@ button.machine-row:hover:not(:disabled) {
     min-height: 40px;
   }
   .daily-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .daily-stat {
+    align-items: center;
+    padding: 6px 4px;
+    text-align: center;
+  }
+  .daily-stat b {
+    font-size: calc(16px * var(--font-scale));
+  }
+  .daily-stat span {
+    font-size: calc(10px * var(--font-scale));
+    white-space: nowrap;
   }
   .daily-lane {
     grid-template-columns: minmax(0, 1fr);
@@ -9991,31 +10050,51 @@ button.machine-row:hover:not(:disabled) {
   .terminal-keys button:active {
     background: var(--surface-3);
   }
-  /* 말풍선 복사·마크·인용 버튼: 터치 폰은 40px (위 hover: none 블록의 32px 자리 규칙을 40px 간격으로 다시 쓴다).
-     마우스 기기의 좁은 창은 위 모서리 hover 버튼 그대로 둔다 (40px 이면 글을 가린다) */
+  /* 말풍선 복사·마크·인용 버튼: 터치 폰은 바탕·테두리 없는 흐린 아이콘 32px 를 간격 없이 답 바로 아래에 붙인다
+     (위 hover: none 블록의 자리 규칙을 다시 쓴다. 40px 채운 버튼일 때는 답마다 44px 를 차지해 무거웠다).
+     마우스 기기의 좁은 창은 위 모서리 hover 버튼 그대로 둔다 */
   @media (hover: none) {
     .msg > .copy-button,
     .msg > .mark-button,
     .msg > .quote-button {
-      width: 40px;
-      height: 40px;
+      width: 32px;
+      height: 32px;
+      border-color: transparent;
+      background: transparent;
+      opacity: 0.6;
+    }
+    .msg > .copy-button:hover,
+    .msg > .mark-button:hover,
+    .msg > .quote-button:hover {
+      background: transparent;
+    }
+    .msg > .copy-button[data-status='copied'],
+    .msg > .copy-button[data-status='failed'],
+    .msg > .mark-button[aria-pressed='true'] {
+      opacity: 1;
     }
     .msg.assistant:has(> .copy-button, > .mark-button) {
-      margin-bottom: 44px;
+      margin-bottom: 32px;
+    }
+    .msg.assistant > .copy-button,
+    .msg.assistant > .mark-button,
+    .msg.assistant > .quote-button {
+      top: 100%;
     }
     .msg.assistant > .copy-button + .mark-button {
-      left: 44px;
+      left: 32px;
     }
     .msg.assistant > .quote-button {
-      left: 88px;
+      left: 64px;
     }
     :root:not([data-chat-reply='card']) .chat-scope .msg.assistant > .msg-time,
     :root[data-chat-reply='card'] .chat-scope .msg.assistant > .msg-time {
-      left: 88px;
-      line-height: 40px;
+      top: 100%;
+      left: 64px;
+      line-height: 32px;
     }
     :root .chat-scope .msg.assistant:has(> .quote-button) > .msg-time {
-      left: 132px;
+      left: 100px;
     }
   }
 }

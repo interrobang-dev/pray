@@ -19,7 +19,15 @@ export function Terminal({ sessionId }: Props) {
     const container = containerRef.current
     if (!container) return
 
-    const term = new XTerm({ convertEol: false, fontSize: 13, scrollback: 5000 })
+    // 시스템 글꼴만 쓴다 (글꼴 파일을 묶지 않는다). 칸 폭은 첫 글꼴의 영문 폭으로 재고 한글은 두 칸에 그린다.
+    // D2Coding(깔려 있으면)은 한글이 영문 두 칸과 같아 딱 맞는다. 없으면 Consolas(영문 0.55em → 두 칸 1.1em, 맑은 고딕 한글 1em 이라 글자마다 약 1.3px 틈)
+    // — Cascadia Mono 는 영문이 넓어(0.59em) 틈이 2.2px 로 더 커서 뒤에 둔다. 안드로이드는 Noto Sans CJK 로 넘어간다
+    const term = new XTerm({
+      convertEol: false,
+      fontSize: 13,
+      fontFamily: "D2Coding, Consolas, 'Cascadia Mono', 'Malgun Gothic', 'Noto Sans Mono CJK KR', 'Noto Sans CJK KR', monospace",
+      scrollback: 5000,
+    })
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(container)

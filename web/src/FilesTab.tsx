@@ -641,7 +641,7 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   )
 
   return (
-    <div className={`ws${isViewing ? ' is-viewing' : ''}${isEditing ? ' is-editing' : ''}`} ref={wsRef}>
+    <div className={`ws${isViewing ? ' is-viewing' : ''}${isEditing ? ' is-editing' : ''}${sideMode === 'files' && !selectedPath ? ' is-tree-only' : ''}`} ref={wsRef}>
       <div className="ws-toolbar">
         <button
           type="button"
@@ -935,6 +935,10 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
                 >
                   <span className="ws-chevron" aria-hidden="true">
                     {row.entry.kind === 'dir' ? (row.isExpanded ? '▾' : '▸') : ''}
+                  </span>
+                  {/* 폴더 아이콘(파일은 같은 폭 빈칸 — 이름 열이 맞는다) */}
+                  <span className="ws-kind-icon" aria-hidden="true">
+                    {row.entry.kind === 'dir' && <TreeFolderIcon isOpen={row.isExpanded} />}
                   </span>
                   {row.entry.kind === 'dir' ? <span className="ws-row-name">{row.entry.name}</span> : <FileName name={row.entry.name} className="ws-row-name" />}
                 </button>
@@ -1420,5 +1424,18 @@ function QuickFind({ sessionId, focusId, onOpen }: { sessionId: string; focusId:
         </div>
       )}
     </div>
+  )
+}
+
+/** 트리 폴더 아이콘 (인라인 SVG, 색은 CSS --folder-icon). 펼치면 열린 폴더 모양 */
+function TreeFolderIcon({ isOpen }: { isOpen: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+      {isOpen ? (
+        <path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.2l1.5 1.5H13a1.5 1.5 0 0 1 1.5 1.5V6H4.4a1.5 1.5 0 0 0-1.4 1L1.5 11.2V3.5Zm1.9 3.8A1 1 0 0 1 4.3 6.7H15a.6.6 0 0 1 .56.8l-1.9 5.3a1 1 0 0 1-.94.7H1.6a.5.5 0 0 1-.47-.67l2.27-5.53Z" />
+      ) : (
+        <path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.2l1.5 1.5H13a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12V3.5Z" />
+      )}
+    </svg>
   )
 }
