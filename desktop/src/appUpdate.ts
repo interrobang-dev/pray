@@ -25,6 +25,37 @@ export function updateConfirmMessage(version: string, working: number, needsAppr
   return `${lead}Pray installs ${version} and starts again. The host and server stop, and web sessions come back with --resume.`
 }
 
+/** before-input-event 의 키 입력 중 판정에 쓰는 것 (Electron Input 의 일부) */
+export interface KeyInput {
+  type: string
+  key: string
+  code: string
+  control: boolean
+  shift: boolean
+  alt: boolean
+  meta: boolean
+}
+
+/**
+ * 트레이 창의 새로고침 키: 조합 키 없는 F5, Ctrl+R (숨긴 기본 메뉴 View → Reload 단축키 — 받아 둔 업데이트가 있으면 설치 확인을 띄워야 해서 같이 가로챈다).
+ * Ctrl+R 은 한글 입력 상태에서도 잡히게 `code` 로도 본다. Ctrl+Shift+R(Force Reload)은 메뉴에 그대로 둔다
+ */
+export function isRefreshKey(input: KeyInput): boolean {
+  if (input.type !== 'keyDown' || input.shift || input.alt || input.meta) return false
+  if (input.key === 'F5') return !input.control
+  return input.control && (input.code === 'KeyR' || input.key.toLowerCase() === 'r')
+}
+
+/**
+ * 트레이 창에서 돌릴 스크립트: 받아 둔 업데이트 버전을 `<html data-update-ready>` 로 알린다 (null 이면 지운다).
+ * 웹(web/src/UpdateBand.tsx)이 이 속성을 보고 화면 위쪽 띠를 띄운다. 페이지를 다시 읽으면 속성이 없어지므로 읽을 때마다 다시 부른다
+ */
+export function updateBandScript(version: string | null): string {
+  return version === null
+    ? 'delete document.documentElement.dataset.updateReady'
+    : `document.documentElement.dataset.updateReady = ${JSON.stringify(version)}`
+}
+
 /** 호스트·서버를 띄우는 방법 */
 export interface ChildLaunch {
   /** 실행 파일 (node.exe 또는 Pray.exe) */

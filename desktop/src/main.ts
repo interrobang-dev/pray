@@ -5,7 +5,16 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { packagedLaunch, sourceLaunch, updateConfirmMessage, updateMenuLabel, updateReadyToast, type ChildLaunch } from './appUpdate'
+import {
+  isRefreshKey,
+  packagedLaunch,
+  sourceLaunch,
+  updateBandScript,
+  updateConfirmMessage,
+  updateMenuLabel,
+  updateReadyToast,
+  type ChildLaunch,
+} from './appUpdate'
 import { Child } from './children'
 import { confirmDialog } from './confirmDialog'
 import { moveAppDataOnce, resolveDataDir } from './dataDir'
@@ -281,11 +290,15 @@ function createWindow(): BrowserWindow {
     event.preventDefault()
     handleNavigation(win, event.url)
   })
-  // F5 새로고침: Ctrl+R 은 숨긴 기본 메뉴(View → Reload)에 있지만 F5 는 없어 따로 받는다 (브라우저처럼 조합 키 없는 F5 만)
+  // 새로고침 F5·Ctrl+R: F5 는 숨긴 기본 메뉴에 없어 따로 받고, Ctrl+R(메뉴 Reload)도 받아 둔 업데이트가 있으면 설치 확인을 띄워야 해서 같이 가로챈다
   win.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown' || input.key !== 'F5' || input.control || input.shift || input.alt || input.meta) return
+    if (!isRefreshKey(input)) return
     event.preventDefault()
-    win.webContents.reload()
+    void refreshWindow(win)
+  })
+  // 받아 둔 업데이트가 있으면 웹 화면 위쪽 띠로 알린다 (페이지를 다시 읽으면 속성이 없어져 읽을 때마다)
+  win.webContents.on('did-finish-load', () => {
+    if (downloadedUpdate) void win.webContents.executeJavaScript(updateBandScript(downloadedUpdate)).catch(() => undefined)
   })
   win.on('close', (event) => {
     if (isQuitting) return
@@ -782,7 +795,7 @@ async function quit(): Promise<void> {
 /** 받아 둔 업데이트 버전 (메뉴 맨 위 "Restart to update"). 없으면 null */
 let downloadedUpdate: string | null = null
 /** 업데이트 확인 주기. 받기는 뒤에서 하고 적용은 사람이 누를 때(또는 다음 Quit 때 autoInstallOnAppQuit) */
-const UPDATE_CHECK_MS = 6 * 60 * 60_000
+const UPDATE_CHECK_MS = 10 * 60_000
 
 /** 설치판만: GitHub Releases 에서 새 버전을 확인해 뒤에서 받는다. 받으면 알림과 메뉴 줄. 실패는 로그만 (오프라인·GitHub 장애) */
 function setupUpdater(): void {
@@ -793,6 +806,7 @@ function setupUpdater(): void {
     if (downloadedUpdate === info.version) return
     downloadedUpdate = info.version
     refreshTray()
+    if (window && !window.isDestroyed()) void window.webContents.executeJavaScript(updateBandScript(info.version)).catch(() => undefined)
     if (Notification.isSupported() && isNoticeAllowed(notificationSettings())) showNotification(updateReadyToast(info.version))
   })
   autoUpdater.on('error', (error) => console.warn(`업데이트 확인 실패: ${String(error)}`))
@@ -801,9 +815,15 @@ function setupUpdater(): void {
   setInterval(check, UPDATE_CHECK_MS)
 }
 
-/** 받아 둔 업데이트를 적용한다: 확인 창 → 호스트·서버를 끄고 설치 프로그램을 조용히 돌린 뒤 다시 띄운다 */
-async function installUpdate(): Promise<void> {
-  if (!downloadedUpdate) return
+/** 트레이 창 새로고침(F5·Ctrl+R): 받아 둔 업데이트가 있으면 메뉴 "Restart to update" 와 같은 확인 창을 띄우고, 취소하면(또는 없으면) 그냥 새로고침 */
+async function refreshWindow(win: BrowserWindow): Promise<void> {
+  if (downloadedUpdate && (await installUpdate())) return
+  if (!win.isDestroyed()) win.webContents.reload()
+}
+
+/** 받아 둔 업데이트를 적용한다: 확인 창 → 호스트·서버를 끄고 설치 프로그램을 조용히 돌린 뒤 다시 띄운다. 설치로 갔으면 true */
+async function installUpdate(): Promise<boolean> {
+  if (!downloadedUpdate) return false
   const isYes = await confirmDialog(
     {
       title: `Update to ${downloadedUpdate}?`,
@@ -812,10 +832,11 @@ async function installUpdate(): Promise<void> {
     },
     window,
   )
-  if (!isYes) return
+  if (!isYes) return false
   isQuitting = true
   if (children) await Promise.all([children.server.stop(), children.host.stop()])
   autoUpdater.quitAndInstall(true, true)
+  return true
 }
 
 /** 설치판의 "Run host & server from source": 켤 때 저장소 폴더를 고르게 하고, 바꾸면 트레이를 다시 띄운다 (자식을 띄우는 방법이 바뀌어서) */

@@ -6943,6 +6943,26 @@ li.group.drop-after::after {
   border-radius: 50%;
   animation: reconnect-spin 0.8s linear infinite;
 }
+/* 트레이 창(설치판)이 업데이트를 다 받았을 때의 위쪽 띠 (UpdateBand.tsx). 끊김 띠처럼 자리를 차지해 layout 을 민다. 강조색 옅은 바탕 */
+.update-band {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 3px 12px;
+  box-sizing: border-box;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--accent-line);
+}
+.update-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* 다른 PC 로 옮겨 가는 동안의 화면 전체 덮개 (MachineSwitcher.tsx openMachine). 그동안 아래는 눌리지 않는다.
    모달·대화 창 위. 트레이 창이면 제목 띠 아래부터 */
 .switching-overlay {

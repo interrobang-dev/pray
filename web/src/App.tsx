@@ -74,6 +74,7 @@ import { contextSizeOf, turnCacheOf } from './contextSize'
 import { handOverUnit } from './handOver'
 import { HomePanel } from './HomePanel'
 import { hasTitleBar } from './TitleBar'
+import { UpdateBand } from './UpdateBand'
 import { NeedsYouTab, NeedsYouView } from './NeedsYouButton'
 import { AllTodosTab, AllTodosView } from './AllTodosButton'
 import { RemindersButton, RemindersModal } from './RemindersButton'
@@ -2033,6 +2034,7 @@ export function App({ isLocal, titleBarActions = null }: { isLocal: boolean; tit
           <span className="reconnect-text">{connectionBanner.text}</span>
         </div>
       )}
+      {hasTitleBar && <UpdateBand />}
       <main
         ref={layoutRef}
         className={`layout${hasPanel ? ' with-panel' : ''}${isOfficeHiddenLayout ? ' office-hidden' : ''}${isPanelResizing ? ' panel-resizing' : ''}${isSidebarResizing ? ' sidebar-resizing' : ''}`}
