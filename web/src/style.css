@@ -3966,6 +3966,18 @@ li.group.drop-after::after {
 .copy-menu > .menu-list button {
   white-space: nowrap;
 }
+/* Files 탭 트리 우클릭 메뉴: body 에 portal 로 마우스 자리에 뜬다 (left·top 은 ContextMenu 가 잰 뒤 인라인) */
+.menu-list.context-menu {
+  position: fixed;
+  right: auto;
+  left: 0;
+  top: 0;
+  z-index: 15;
+  min-width: 160px;
+}
+.context-menu button {
+  white-space: nowrap;
+}
 .ws-add-chat,
 .ws-file-history,
 .ws-reveal,
@@ -4088,6 +4100,13 @@ li.group.drop-after::after {
 }
 .ws-row.selected {
   background: var(--accent-soft);
+}
+/* 우클릭 메뉴가 떠 있는 줄 */
+.ws-row.is-context {
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.ws-row.is-context:not(.selected) {
+  background: var(--surface-2);
 }
 .ws-chevron {
   flex: 0 0 14px;
@@ -9738,9 +9757,13 @@ button.machine-row:hover:not(:disabled) {
   .ws:not(.is-viewing) .ws-view {
     display: none;
   }
+  /* 길게 눌러 우클릭 메뉴를 띄울 때 글자 선택·iOS 링크 풍선이 생기지 않게 */
   .ws-row {
     min-height: 40px;
     font-size: calc(14px * var(--font-scale));
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
   .ws-side-tabs button,
   .ws-change,

@@ -4,6 +4,7 @@ import { diffLineRange, diffRowsOf, isOpenable, STATUS_LABELS, STATUS_LETTERS } 
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor'
 import { CodeView, type CodeFindState } from './CodeView'
 import { chatLocationText, clampLineRange, fullPathOf, lineCountOf, locationText, type LineRange } from './codeSelection'
+import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 import { CopyMenu } from './CopyMenu'
 import { copyText } from './copyText'
 import { alertDialog, choiceDialog } from './Dialog'
@@ -37,9 +38,12 @@ import { setUnsavedEdit, whenLeavingAllowed } from './unsavedEdits'
 import { WorkbookPreview } from './WorkbookPreview'
 import { apiUrl, fetchJson } from './workspaceApi'
 import { selectionQuery } from './workspaceSearch'
+import { treeMenuEntries, type TreeMenuEntry } from './treeMenu'
 import { ancestorFolders, nameOf, treeRows, type FolderState } from './workspaceTree'
 
 const FIND_DEBOUNCE_MS = 150
+/** 트리 줄 contextmenu 뒤 이만큼은 그 줄 click 을 무시한다 (폰 길게 누르기 뒤 이어지는 click 으로 파일이 열리지 않게) */
+const LONG_PRESS_CLICK_GUARD_MS = 800
 /** PDF 를 iframe 으로 못 그리는 화면: 폰 폭(App 의 NARROW_QUERY)·마우스 없는 기기(TOUCH_QUERY). 안드로이드 Chrome·WebView 는 내장 PDF 뷰어가 없어 pdf.js 로 그린다 (PdfPreview) */
 const NO_PDF_FRAME_QUERY = '(max-width: 768px), (hover: none)'
 
@@ -138,6 +142,10 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
   /** 찾기로 연 파일: 트리에 그 줄이 그려지면 보이게 스크롤한다 */
   const [revealPath, setRevealPath] = useState<string | null>(null)
   const treeRef = useRef<HTMLDivElement>(null)
+  /** 트리 줄 우클릭(폰은 길게 누르기) 메뉴: 그 줄과 띄울 자리 */
+  const [treeMenu, setTreeMenu] = useState<{ path: string; kind: 'file' | 'dir'; x: number; y: number } | null>(null)
+  /** 마지막 contextmenu 시각 — 폰 길게 누르기 뒤 이어지는 click 으로 파일이 열리지 않게 */
+  const contextMenuAtRef = useRef(0)
   const expandedRef = useRef(expanded)
   expandedRef.current = expanded
   const rootName = nameOf(cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/')) || cwd
@@ -581,6 +589,50 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
     })
   }
 
+  /** 트리 줄 메뉴 항목: 위 막대와 같은 동작·막는 조건 (다른 파일로 바뀌는 것은 저장 안 한 편집 확인 뒤) */
+  function treeMenuItems(kind: 'file' | 'dir', path: string): ContextMenuItem[] {
+    const bridge = shareBridge()
+    const item = (entry: Exclude<TreeMenuEntry, 'separator'>): ContextMenuItem => {
+      switch (entry) {
+        case 'open':
+          return { label: 'Open', onSelect: () => (path === selectedPath ? openFile(path) : guardEdit(() => openFile(path))) }
+        case 'add-to-chat':
+          return {
+            label: 'Add to chat',
+            isDisabled: addToChatBlockReason !== null,
+            title: addToChatBlockReason ? `Can't add to chat: ${addToChatBlockReason}` : `Add to chat: ${path}`,
+            onSelect: () => onAddToChat(chatLocationText(path, null)),
+          }
+        case 'copy-path':
+          return { label: 'Copy path', title: path, onSelect: () => void copyOrAlert(path) }
+        case 'copy-full-path':
+          return { label: 'Copy full path', title: fullPathOf(cwd, path), onSelect: () => void copyOrAlert(fullPathOf(cwd, path)) }
+        case 'copy-file':
+          return { label: 'Copy file', title: 'Copy the file to paste it in Explorer or a messenger', onSelect: () => void copyFileToClipboard(sessionId, path) }
+        case 'download':
+          return { label: 'Download', title: `Download ${nameOf(path)}`, onSelect: () => startDownload(downloadUrl(sessionId, path), nameOf(path)) }
+        case 'share':
+          return {
+            label: 'Share…',
+            title: `Share ${nameOf(path)} to another app`,
+            onSelect: () => bridge?.share(absoluteDownloadUrl(window.location.origin, sessionId, path), nameOf(path)),
+          }
+        case 'open-in-chrome':
+          return { label: 'Open in Chrome', title: `Open in Chrome: ${fullPathOf(cwd, path)}`, onSelect: () => void openInChrome(sessionId, path) }
+        case 'history':
+          return {
+            label: 'History',
+            isDisabled: fileHistoryBlock !== null,
+            title: fileHistoryBlock ? `Can't show history: ${fileHistoryBlock}` : `History of ${path}`,
+            onSelect: () => openFileHistory(path),
+          }
+        case 'reveal':
+          return { label: 'Show in folder', title: `Show in Explorer: ${fullPathOf(cwd, path)}`, onSelect: () => void revealInExplorer(sessionId, path) }
+      }
+    }
+    return treeMenuEntries({ kind, path, isLocal, hasShareBridge: bridge !== null }).map((entry) => (entry === 'separator' ? entry : item(entry)))
+  }
+
   const closeCodeFind = useCallback(() => setCodeFind((previous) => ({ ...previous, isOpen: false })), [])
   const changeCodeFind = useCallback(
     (query: string, isCaseSensitive: boolean) =>
@@ -857,10 +909,29 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
                   aria-expanded={row.entry.kind === 'dir' ? row.isExpanded : undefined}
                   aria-selected={row.path === selectedPath}
                   data-path={row.path}
-                  className={`ws-row${row.path === selectedPath ? ' selected' : ''}`}
+                  className={`ws-row${row.path === selectedPath ? ' selected' : ''}${treeMenu && sideMode === 'files' && treeMenu.path === row.path ? ' is-context' : ''}`}
                   style={{ '--depth': row.depth } as CSSProperties}
                   title={row.path}
-                  onClick={() => (row.entry.kind === 'dir' ? toggleFolder(row.path) : row.path === selectedPath ? openFile(row.path) : guardEdit(() => openFile(row.path)))}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    // 마우스 우클릭 뒤 바로 그 줄을 누르는 것은 막지 않는다 (contextmenu 는 PointerEvent 라 pointerType 이 있다)
+                    if ((event.nativeEvent as PointerEvent).pointerType !== 'mouse') contextMenuAtRef.current = performance.now()
+                    // 키보드(Shift+F10·메뉴 키)는 좌표가 0 이라 줄 아래에 띄운다
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    const isKeyboard = event.clientX === 0 && event.clientY === 0
+                    setTreeMenu({
+                      path: row.path,
+                      kind: row.entry.kind === 'dir' ? 'dir' : 'file',
+                      x: isKeyboard ? rect.left + 16 : event.clientX,
+                      y: isKeyboard ? rect.bottom : event.clientY,
+                    })
+                  }}
+                  onClick={() => {
+                    if (performance.now() - contextMenuAtRef.current < LONG_PRESS_CLICK_GUARD_MS) return
+                    if (row.entry.kind === 'dir') toggleFolder(row.path)
+                    else if (row.path === selectedPath) openFile(row.path)
+                    else guardEdit(() => openFile(row.path))
+                  }}
                 >
                   <span className="ws-chevron" aria-hidden="true">
                     {row.entry.kind === 'dir' ? (row.isExpanded ? '▾' : '▸') : ''}
@@ -879,6 +950,16 @@ export function FilesTab({ sessionId, cwd, onAddToChat, addToChatBlockReason, is
               ),
             )}
           </div>
+          )}
+          {treeMenu && sideMode === 'files' && (
+            <ContextMenu
+              key={`${treeMenu.path}|${treeMenu.x}|${treeMenu.y}`}
+              x={treeMenu.x}
+              y={treeMenu.y}
+              label={nameOf(treeMenu.path)}
+              items={treeMenuItems(treeMenu.kind, treeMenu.path)}
+              onClose={() => setTreeMenu(null)}
+            />
           )}
         </div>
         <section className="ws-view" ref={viewRef}>
@@ -941,6 +1022,12 @@ async function copyFileToClipboard(sessionId: string, path: string): Promise<boo
   const reason = body?.message ?? (response.status === 404 ? 'the server needs a restart to support this' : `HTTP ${response.status}`)
   await alertDialog(`Couldn't copy the file: ${reason}`, { title: 'Copy failed' })
   return false
+}
+
+/** 클립보드에 글을 넣고, 못 넣으면 그 글을 알림 창으로 보인다 (트리 메뉴는 ✓·✕ 를 보일 버튼이 없다) */
+async function copyOrAlert(text: string): Promise<void> {
+  if (!(await copyText(text))) await alertDialog(`Couldn't copy:
+${text}`, { title: 'Copy failed' })
 }
 
 /** 서버가 이 PC 의 탐색기를 그 파일을 고른 채 연다. 실패하면 서버 문구를 창으로 보인다 */
