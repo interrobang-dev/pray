@@ -167,13 +167,17 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
     if (composerDraft.quote && composerDraft.quote.sessionId !== sessionId) setQuote(null)
   }, [sessionId])
 
-  /** 입력칸에 채우고 커서를 끝에 둔다. 보내지 않는다 (사람이 확인하고 Enter) */
-  function fill(text: string) {
+  /**
+   * 입력칸에 채우고 커서를 끝에 둔다. 보내지 않는다 (사람이 확인하고 Enter).
+   * 터치 기기에서 칩을 누른 것이면 포커스를 주지 않는다 — 화면 키보드가 올라와 번거롭다 (고치려면 입력칸을 누른다)
+   */
+  function fill(text: string, isChipTap = false) {
     flushSync(() => changeDraft(text))
+    composerDraft.selection = { start: text.length, end: text.length }
+    if (isChipTap && window.matchMedia(TOUCH_QUERY).matches) return
     const textarea = composerRef.current
     textarea?.focus()
     textarea?.setSelectionRange(text.length, text.length)
-    composerDraft.selection = { start: text.length, end: text.length }
   }
   /** 저장소에 넣은 글을 그린다. 입력칸이 없으면(쓸 수 없는 동안) 포커스는 다시 그려질 때 위 효과가 한다 */
   function reload() {
@@ -415,7 +419,7 @@ export function Composer({ ref, sessionId, isWritable, isAsking, isHandingOver, 
         <button
           type="button"
           className="suggestion-tab"
-          onClick={() => fill(suggestion)}
+          onClick={() => fill(suggestion, true)}
           title={`Fill the input with the suggestion: ${suggestion}`}
           aria-label={`Fill the input with the suggestion: ${suggestion}`}
         >
