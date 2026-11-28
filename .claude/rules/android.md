@@ -52,11 +52,11 @@ Kotlin 한 모듈 `app`, 패키지 `dev.interrobang.pray`, minSdk 29·targetSdk�
 
 ## 빌드·설치
 
-- JDK 21 `C:\Programs\jdk-21.0.7`(`JAVA_HOME`). Android SDK 명령줄 도구 `%LOCALAPPDATA%\Android\Sdk` (platform-tools·platforms;android-35·build-tools;35.0.0). `android/local.properties` 의 `sdk.dir` (gitignore, 이 PC 경로. properties 꼴이라 `C\:\\Users\\…` 로 이스케이프 — 안 하면 lint 오류)
+- JDK 21 `C:\Programs\jdk-21.0.13.1+2` (시스템 `JAVA_HOME` 은 비어 있다 — 빌드하는 셸에서 `JAVA_HOME` 과 Path 앞에 그 `bin` 을 준다). Android SDK 명령줄 도구 `%LOCALAPPDATA%\Android\Sdk` (platform-tools·platforms;android-35·build-tools;35.0.0). `android/local.properties` 의 `sdk.dir` (gitignore, 이 PC 경로. properties 꼴이라 `C\:\\Users\\…` 로 이스케이프 — 안 하면 lint 오류)
 - Gradle 8.14 wrapper(저장소에 jar·properties 있음) · AGP 8.10.1 · Kotlin 2.1.21
 - `npm run android` (= `android\gradlew.bat -p android assembleDebug`. npm 스크립트 셸이 cmd 라 `/`·현재 폴더 실행이 안 되어 이 꼴) → `android/app/build/outputs/apk/debug/app-debug.apk`
 - 테스트: `android\gradlew.bat -p android testDebugUnitTest` (루트 `npm test` 에는 없다). lint: `lintDebug`
-- **서명은 이 PC 의 debug 키**(`~/.android/debug.keystore`, AGP 가 처음 빌드 때 만든다. 저장소에 넣지 않는다). 다른 PC 에서 빌드하면 키가 달라 덮어 설치가 안 되므로 **이 PC 에서만 빌드한다**
+- **서명은 이 PC(Tailscale 이름 1-home)의 debug 키**(`~/.android/debug.keystore`, AGP 가 처음 빌드 때 만든다. 저장소에 넣지 않는다). 다른 PC 에서 빌드하면 키가 달라 덮어 설치가 안 되므로 **이 PC 에서만 빌드한다**
 - 설치·업데이트: `tailscale file cp <apk> 3-mobile:`(Taildrop, 실행 전 매번 승인) → 폰에서 받은 파일을 눌러 설치. 덮어 설치하려면 `app/build.gradle.kts` 의 `versionCode` 를 올린다. 자동 업데이트 없음
 - 화면·알림은 에뮬레이터 없이 사용자가 실제 폰에서 본다
 
